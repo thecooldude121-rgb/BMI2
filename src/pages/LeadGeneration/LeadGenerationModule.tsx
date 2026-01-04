@@ -23,6 +23,7 @@ import ProspectDetailPage from './ProspectDetailPage';
 import CompanyDetailPage from './CompanyDetailPage';
 import DealDetailPage from './DealDetailPage';
 import SavedSearchesPage from '../Discovery/SavedSearchesPage';
+import AddImportLeadsPage from './AddImportLeadsPage';
 
 const LeadGenerationModule: React.FC = () => {
   return (
@@ -32,6 +33,7 @@ const LeadGenerationModule: React.FC = () => {
         <Route path="/" element={<Navigate to="/lead-generation/dashboard" replace />} />
         <Route path="/dashboard" element={<LeadGenerationDashboard />} />
         <Route path="/leads" element={<LeadsListPage />} />
+        <Route path="/leads/add-import" element={<AddImportLeadsPage />} />
         <Route path="/leads/:id" element={<LeadDetailPage />} />
         <Route path="/intelligence" element={<IntelligencePage />} />
         <Route path="/intelligence/:id" element={<ProspectDetailPage />} />
