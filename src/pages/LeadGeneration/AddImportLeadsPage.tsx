@@ -8,17 +8,10 @@ import {
   RefreshCw,
   CheckCircle,
   AlertCircle,
-  Users,
   Settings,
-  ExternalLink,
   Search,
   ChevronDown,
-  Plus,
-  BarChart3,
-  Target,
-  Mail,
-  LayoutDashboard,
-  Zap
+  Plus
 } from 'lucide-react';
 
 type TabType = 'manual' | 'csv' | 'apollo' | 'zoominfo' | 'linkedin';
@@ -342,54 +335,6 @@ const AddImportLeadsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Module Navigation */}
-      <div className="bg-white border-b border-gray-200 px-8">
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={() => navigate('/lead-generation/dashboard')}
-            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
-          </button>
-          <button
-            onClick={() => navigate('/lead-generation/leads')}
-            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-blue-600 bg-blue-50 border-b-2 border-blue-600"
-          >
-            <Users className="h-4 w-4" />
-            Leads
-          </button>
-          <button
-            onClick={() => navigate('/lead-generation/intelligence')}
-            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
-          >
-            <Zap className="h-4 w-4" />
-            Intelligence
-          </button>
-          <button
-            onClick={() => navigate('/lead-generation/campaigns')}
-            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
-          >
-            <Mail className="h-4 w-4" />
-            Campaigns
-          </button>
-          <button
-            onClick={() => navigate('/lead-generation/analytics')}
-            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
-          >
-            <BarChart3 className="h-4 w-4" />
-            Analytics
-          </button>
-          <button
-            onClick={() => navigate('/lead-generation/settings')}
-            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </button>
-        </div>
-      </div>
-
       {/* Breadcrumb */}
       <div className="bg-white border-b border-gray-200 px-8 py-3">
         <div className="flex items-center space-x-2 text-sm text-gray-600">
