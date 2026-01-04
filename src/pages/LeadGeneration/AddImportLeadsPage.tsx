@@ -13,7 +13,12 @@ import {
   ExternalLink,
   Search,
   ChevronDown,
-  Plus
+  Plus,
+  BarChart3,
+  Target,
+  Mail,
+  LayoutDashboard,
+  Zap
 } from 'lucide-react';
 
 type TabType = 'manual' | 'csv' | 'apollo' | 'zoominfo' | 'linkedin';
@@ -65,6 +70,9 @@ const AddImportLeadsPage: React.FC = () => {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selectedApolloLeads, setSelectedApolloLeads] = useState<string[]>([]);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const [selectedSequence, setSelectedSequence] = useState('');
+  const [linkedInUrl, setLinkedInUrl] = useState('');
 
   const [manualForm, setManualForm] = useState<ManualFormData>({
     firstName: '',
@@ -197,7 +205,40 @@ const AddImportLeadsPage: React.FC = () => {
       alert('Please enter an email address first');
       return;
     }
-    alert('Auto-enriching from email... This will fetch company data, social profiles, and more.');
+    setIsEnriching(true);
+    setTimeout(() => {
+      setManualForm({
+        ...manualForm,
+        firstName: manualForm.firstName || 'John',
+        lastName: manualForm.lastName || 'Smith',
+        phone: manualForm.phone || '+1 555-0123',
+        title: manualForm.title || 'VP Sales',
+        linkedin: manualForm.linkedin || 'linkedin.com/in/johnsmith',
+        company: manualForm.company || 'Acme Corp',
+        website: manualForm.website || 'acme.com',
+        industry: manualForm.industry || 'SaaS',
+        companySize: manualForm.companySize || '51-200 employees'
+      });
+      setIsEnriching(false);
+      alert('Successfully enriched lead data from email!');
+    }, 1500);
+  };
+
+  const handleViewExistingLead = () => {
+    window.open('/lead-generation/leads/existing-lead-id', '_blank');
+  };
+
+  const handleMergeUpdate = () => {
+    alert('Merging lead data with existing record...');
+    setTimeout(() => {
+      alert('Lead successfully merged and updated!');
+      navigate('/lead-generation/leads');
+    }, 1000);
+  };
+
+  const handleSaveDraft = () => {
+    alert('Lead saved as draft. You can complete it later from the Drafts section.');
+    navigate('/lead-generation/leads');
   };
 
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,6 +250,10 @@ const AddImportLeadsPage: React.FC = () => {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    alert('Downloading CSV template with example data...');
+  };
+
   const handleCSVImport = () => {
     setImporting(true);
     setImportProgress(0);
@@ -218,8 +263,10 @@ const AddImportLeadsPage: React.FC = () => {
         if (prev >= 100) {
           clearInterval(interval);
           setImporting(false);
-          alert('Import completed! 245 leads created successfully.');
-          navigate('/lead-generation/leads');
+          setTimeout(() => {
+            alert('Import completed! 245 leads created successfully. Click OK to view imported leads.');
+            navigate('/lead-generation/leads?filter=source:csv-import');
+          }, 500);
           return 100;
         }
         return prev + 10;
@@ -238,23 +285,119 @@ const AddImportLeadsPage: React.FC = () => {
       alert('Please select at least one lead to import');
       return;
     }
-    alert(`Importing ${selectedApolloLeads.length} leads from Apollo.io...`);
+    alert(`Importing ${selectedApolloLeads.length} leads from Apollo.io...\nDeducting ${selectedApolloLeads.length} credits...`);
     setTimeout(() => {
       alert('Import completed successfully!');
-      navigate('/lead-generation/leads');
+      navigate('/lead-generation/leads?filter=source:apollo');
     }, 1500);
+  };
+
+  const handleConfigureAPI = (service: string) => {
+    navigate(`/lead-generation/settings?section=integrations&service=${service}`);
+  };
+
+  const handleApolloSearch = () => {
+    alert('Searching Apollo.io database with current filters...');
+  };
+
+  const handleClearFilters = () => {
+    alert('Filters cleared');
+  };
+
+  const handleSelectAllApollo = () => {
+    if (selectedApolloLeads.length === apolloResults.length) {
+      setSelectedApolloLeads([]);
+    } else {
+      setSelectedApolloLeads(apolloResults.map(lead => lead.id));
+    }
+  };
+
+  const handleFetchLinkedInProfile = (url: string) => {
+    if (!url) {
+      alert('Please enter a LinkedIn profile URL');
+      return;
+    }
+    alert('Fetching LinkedIn profile data...\n\nThis will:\n- Extract contact information\n- Get job history\n- Pull company details\n- Find mutual connections');
+    setTimeout(() => {
+      alert('Profile data fetched! Opening manual entry form with pre-filled data...');
+      setActiveTab('manual');
+    }, 1500);
+  };
+
+  const handleLinkedInCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      alert(`LinkedIn Sales Navigator CSV uploaded: ${file.name}\n\nProcessing ${file.name}...`);
+      setTimeout(() => {
+        alert('CSV processed! Opening import wizard...');
+        setActiveTab('csv');
+        setCSVStep(2);
+      }, 1000);
+    }
+  };
+
+  const handleConnectLinkedIn = () => {
+    alert('LinkedIn OAuth connection coming soon!\n\nThis will enable:\n- Import from Connections\n- Import from Saved Leads\n- Import from Sales Navigator Lists');
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Module Navigation */}
+      <div className="bg-white border-b border-gray-200 px-8">
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={() => navigate('/lead-generation/dashboard')}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            Dashboard
+          </button>
+          <button
+            onClick={() => navigate('/lead-generation/leads')}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-blue-600 bg-blue-50 border-b-2 border-blue-600"
+          >
+            <Users className="h-4 w-4" />
+            Leads
+          </button>
+          <button
+            onClick={() => navigate('/lead-generation/intelligence')}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
+          >
+            <Zap className="h-4 w-4" />
+            Intelligence
+          </button>
+          <button
+            onClick={() => navigate('/lead-generation/campaigns')}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
+          >
+            <Mail className="h-4 w-4" />
+            Campaigns
+          </button>
+          <button
+            onClick={() => navigate('/lead-generation/analytics')}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
+          >
+            <BarChart3 className="h-4 w-4" />
+            Analytics
+          </button>
+          <button
+            onClick={() => navigate('/lead-generation/settings')}
+            className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 border-b-2 border-transparent"
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </button>
+        </div>
+      </div>
+
       {/* Breadcrumb */}
       <div className="bg-white border-b border-gray-200 px-8 py-3">
         <div className="flex items-center space-x-2 text-sm text-gray-600">
-          <button onClick={() => navigate('/lead-generation/dashboard')} className="hover:text-blue-600">
+          <button onClick={() => navigate('/lead-generation/dashboard')} className="hover:text-blue-600 transition-colors">
             Dashboard
           </button>
           <span>&gt;</span>
-          <button onClick={() => navigate('/lead-generation/leads')} className="hover:text-blue-600">
+          <button onClick={() => navigate('/lead-generation/leads')} className="hover:text-blue-600 transition-colors">
             Leads
           </button>
           <span>&gt;</span>
@@ -382,15 +525,21 @@ const AddImportLeadsPage: React.FC = () => {
                     type="email"
                     value={manualForm.email}
                     onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })}
+                    onBlur={() => {
+                      if (manualForm.email && !manualForm.skipDuplicateCheck && manualForm.email.toLowerCase().includes('john@acme')) {
+                        setShowDuplicateWarning(true);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="john@example.com"
                   />
                   <button
                     onClick={handleAutoEnrich}
-                    className="mt-2 text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                    disabled={isEnriching}
+                    className="mt-2 text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <RefreshCw className="h-4 w-4" />
-                    <span>🤖 Auto-enrich from Email</span>
+                    <RefreshCw className={`h-4 w-4 ${isEnriching ? 'animate-spin' : ''}`} />
+                    <span>{isEnriching ? 'Enriching...' : '🤖 Auto-enrich from Email'}</span>
                   </button>
                 </div>
                 <div>
@@ -584,13 +733,25 @@ const AddImportLeadsPage: React.FC = () => {
                         </p>
                       </div>
                       <div className="flex space-x-3">
-                        <button className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50">
+                        <button
+                          onClick={handleViewExistingLead}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                        >
                           View Existing Lead
                         </button>
-                        <button className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50">
+                        <button
+                          onClick={() => {
+                            setShowDuplicateWarning(false);
+                            handleManualSubmit();
+                          }}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+                        >
                           Add Anyway
                         </button>
-                        <button className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+                        <button
+                          onClick={handleMergeUpdate}
+                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                        >
                           Merge & Update
                         </button>
                       </div>
@@ -622,23 +783,30 @@ const AddImportLeadsPage: React.FC = () => {
                       Auto-enrich after creation (Apollo.io + ZoomInfo)
                     </span>
                   </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={manualForm.addToSequence}
-                      onChange={(e) => setManualForm({ ...manualForm, addToSequence: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700">Add to email sequence:</span>
-                    <select
-                      disabled={!manualForm.addToSequence}
-                      className="ml-2 px-2 py-1 text-sm border border-gray-300 rounded"
-                    >
-                      <option>Select Sequence...</option>
-                      <option>HRMS Warm Lead</option>
-                      <option>New Customer Outreach</option>
-                    </select>
-                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={manualForm.addToSequence}
+                        onChange={(e) => setManualForm({ ...manualForm, addToSequence: e.target.checked })}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Add to email sequence</span>
+                    </label>
+                    {manualForm.addToSequence && (
+                      <select
+                        value={selectedSequence}
+                        onChange={(e) => setSelectedSequence(e.target.value)}
+                        className="ml-6 w-64 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select Sequence...</option>
+                        <option value="hrms-warm">HRMS Warm Lead</option>
+                        <option value="new-customer">New Customer Outreach</option>
+                        <option value="product-demo">Product Demo Follow-up</option>
+                        <option value="re-engagement">Re-engagement Campaign</option>
+                      </select>
+                    )}
+                  </div>
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -665,20 +833,21 @@ const AddImportLeadsPage: React.FC = () => {
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => navigate('/lead-generation/leads')}
-                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={() => alert('Lead saved as draft')}
-                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                onClick={handleSaveDraft}
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
               >
                 Save as Draft
               </button>
               <button
                 onClick={handleManualSubmit}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
               >
+                <Plus className="h-4 w-4" />
                 Create Lead
               </button>
             </div>
@@ -718,8 +887,8 @@ const AddImportLeadsPage: React.FC = () => {
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <Download className="h-4 w-4" />
                   <button
-                    onClick={() => alert('Downloading CSV template...')}
-                    className="text-blue-600 hover:underline"
+                    onClick={handleDownloadTemplate}
+                    className="text-blue-600 hover:underline transition-colors"
                   >
                     📄 Download Sample CSV Template
                   </button>
@@ -993,7 +1162,10 @@ const AddImportLeadsPage: React.FC = () => {
                   <span className="text-gray-600">Last Sync: Nov 15, 2024 at 2:30 PM</span>
                 </div>
               </div>
-              <button className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+              <button
+                onClick={() => handleConfigureAPI('apollo')}
+                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors"
+              >
                 <Settings className="h-4 w-4" />
                 <span>⚙️ Configure API</span>
               </button>
@@ -1070,10 +1242,16 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex justify-end space-x-2 mt-4">
-                <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-white text-sm">
+                <button
+                  onClick={handleClearFilters}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-white text-sm transition-colors"
+                >
                   Clear
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2">
+                <button
+                  onClick={handleApolloSearch}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2 transition-colors"
+                >
                   <Search className="h-4 w-4" />
                   <span>Search</span>
                 </button>
@@ -1136,8 +1314,13 @@ const AddImportLeadsPage: React.FC = () => {
               </div>
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                  <span>Select All</span>
+                  <input
+                    type="checkbox"
+                    checked={selectedApolloLeads.length === apolloResults.length && apolloResults.length > 0}
+                    onChange={handleSelectAllApollo}
+                    className="rounded border-gray-300 cursor-pointer"
+                  />
+                  <span className="cursor-pointer" onClick={handleSelectAllApollo}>Select All</span>
                   <span className="ml-4 font-medium">
                     {selectedApolloLeads.length} of 125 selected
                   </span>
@@ -1228,7 +1411,10 @@ const AddImportLeadsPage: React.FC = () => {
                   <span className="text-gray-600">Last Sync: Nov 14, 2024 at 10:15 AM</span>
                 </div>
               </div>
-              <button className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+              <button
+                onClick={() => handleConfigureAPI('zoominfo')}
+                className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors"
+              >
                 <Settings className="h-4 w-4" />
                 <span>⚙️ Configure API</span>
               </button>
@@ -1272,10 +1458,15 @@ const AddImportLeadsPage: React.FC = () => {
                   <div className="flex space-x-2">
                     <input
                       type="url"
+                      value={linkedInUrl}
+                      onChange={(e) => setLinkedInUrl(e.target.value)}
                       placeholder="https://linkedin.com/in/sarah-lee-cfo"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <button
+                      onClick={() => handleFetchLinkedInProfile(linkedInUrl)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
                       Fetch Profile
                     </button>
                   </div>
@@ -1294,7 +1485,8 @@ const AddImportLeadsPage: React.FC = () => {
                   <input
                     type="file"
                     accept=".csv"
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    onChange={handleLinkedInCSVUpload}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                   />
                 </div>
                 <div className="bg-gray-50 rounded p-4">
@@ -1314,8 +1506,9 @@ const AddImportLeadsPage: React.FC = () => {
                   3️⃣ Connect LinkedIn Account (Coming Soon)
                 </h3>
                 <button
+                  onClick={handleConnectLinkedIn}
                   disabled
-                  className="w-full px-4 py-3 bg-gray-100 text-gray-400 rounded-lg font-medium mb-4 cursor-not-allowed"
+                  className="w-full px-4 py-3 bg-gray-100 text-gray-400 rounded-lg font-medium mb-4 cursor-not-allowed transition-colors"
                 >
                   🔗 Connect LinkedIn Account
                 </button>
