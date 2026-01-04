@@ -45,30 +45,24 @@ const App = () => {
             <SettingsProvider>
               <IntegrationsProvider>
                 <Routes>
-                <Route path="/login" element={<Login />} />
-                <Route path="/login/wireframe" element={<LoginWireframe />} />
-                <Route path="/*" element={
-                  <Layout>
-                    <Routes>
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                      <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/crm/*" element={<CRMModule />} />
-                      <Route path="/accounts/*" element={<AccountsModule />} />
-                      <Route path="/hrms/*" element={<HRMSModule />} />
-                      <Route path="/analytics" element={<Analytics />} />
-                      <Route path="/calendar" element={<Calendar />} />
-                      <Route path="/lead-generation/*" element={<LeadGenerationModule />} />
-                      <Route path="/sequences" element={<SequencesAutomationPage />} />
-                      <Route path="/integrations" element={<IntegrationsHub />} />
-                      <Route path="/team" element={<TeamPerformancePage />} />
-                      <Route path="/team/:id" element={<TeamMemberDetailPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/settings/integrations" element={<IntegrationsPage />} />
-                      <Route path="/settings/workflows" element={<WorkflowAutomationPage />} />
-                      <Route path="/settings/notifications" element={<NotificationsManagementPage />} />
-                    </Routes>
-                  </Layout>
-                } />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/login/wireframe" element={<LoginWireframe />} />
+                  <Route path="/" element={<Layout><Navigate to="/dashboard" replace /></Layout>} />
+                  <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+                  <Route path="/crm/*" element={<Layout><CRMModule /></Layout>} />
+                  <Route path="/accounts/*" element={<Layout><AccountsModule /></Layout>} />
+                  <Route path="/hrms/*" element={<Layout><HRMSModule /></Layout>} />
+                  <Route path="/analytics" element={<Layout><Analytics /></Layout>} />
+                  <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
+                  <Route path="/lead-generation/*" element={<Layout><LeadGenerationModule /></Layout>} />
+                  <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
+                  <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
+                  <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />
+                  <Route path="/team/:id" element={<Layout><TeamMemberDetailPage /></Layout>} />
+                  <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+                  <Route path="/settings/integrations" element={<Layout><IntegrationsPage /></Layout>} />
+                  <Route path="/settings/workflows" element={<Layout><WorkflowAutomationPage /></Layout>} />
+                  <Route path="/settings/notifications" element={<Layout><NotificationsManagementPage /></Layout>} />
                 </Routes>
               </IntegrationsProvider>
             </SettingsProvider>
