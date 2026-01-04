@@ -60,7 +60,7 @@ export const companySignals: CompanySignal[] = [
     title: 'Emma Wilson hired at DataFlow Inc as VP Marketing',
     company: 'DataFlow Inc',
     description: 'New executive hire with strong B2B SaaS background',
-    source: 'HRMS Integration',
+    source: 'HRMS Module',
     aiScore: 92,
     timeAgo: '3 hours ago',
     isAutoAdded: true
@@ -99,7 +99,7 @@ export const recentLeads: RecentLead[] = [
     source: 'intent',
     score: 85,
     status: 'new',
-    statusDetail: '2h ago',
+    statusDetail: '2 hours ago',
     timeAgo: '2h ago'
   },
   {
@@ -130,7 +130,7 @@ export const recentLeads: RecentLead[] = [
     id: '5',
     name: 'Michael Torres',
     title: 'CTO',
-    company: 'BigCo Enter',
+    company: 'BigCo Enterprise',
     industry: 'Manufacturing',
     source: 'apollo',
     score: 68,
@@ -147,7 +147,7 @@ export const recentLeads: RecentLead[] = [
     source: 'manual',
     score: 55,
     status: 'new',
-    statusDetail: '30m ago',
+    statusDetail: '30 minutes ago',
     timeAgo: '30m ago'
   },
   {
@@ -171,7 +171,7 @@ export const recentLeads: RecentLead[] = [
     source: 'intent',
     score: 88,
     status: 'new',
-    statusDetail: '4h ago',
+    statusDetail: '4 hours ago',
     timeAgo: '4h ago'
   },
   {
@@ -195,7 +195,7 @@ export const recentLeads: RecentLead[] = [
     source: 'apollo',
     score: 65,
     status: 'new',
-    statusDetail: '1h ago',
+    statusDetail: '1 hour ago',
     timeAgo: '1h ago'
   }
 ];
@@ -205,6 +205,7 @@ export const dashboardStats = {
   newToday: 35,
   newTodayChange: '+12%',
   hrmsLeads: 45,
+  hrmsDescription: 'Warm leads from recruitment',
   qualifiedLeads: 180,
   qualifiedPercentage: '40%',
   syncedToCRM: 150,
