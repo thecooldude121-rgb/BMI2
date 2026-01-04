@@ -1,6 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import LeadGenNavigation from '../../components/LeadGeneration/LeadGenNavigation';
 import LeadGenerationDashboard from './LeadGenerationDashboard';
+import LeadsListPage from './LeadsListPage';
+import IntelligencePage from './IntelligencePage';
+import CampaignsPage from './CampaignsPage';
 import ProspectDiscovery from './ProspectDiscovery';
 import ProspectsDiscovery from './ProspectsDiscovery';
 import ProspectsPage from './ProspectsPage';
@@ -22,9 +26,16 @@ import SavedSearchesPage from '../Discovery/SavedSearchesPage';
 const LeadGenerationModule: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
+      <LeadGenNavigation />
       <Routes>
         <Route path="/" element={<Navigate to="/lead-generation/dashboard" replace />} />
         <Route path="/dashboard" element={<LeadGenerationDashboard />} />
+        <Route path="/leads" element={<LeadsListPage />} />
+        <Route path="/leads/:id" element={<ProspectDetailPage />} />
+        <Route path="/intelligence" element={<IntelligencePage />} />
+        <Route path="/intelligence/:id" element={<ProspectDetailPage />} />
+        <Route path="/campaigns" element={<CampaignsPage />} />
+        <Route path="/campaigns/:id" element={<SequencesPage />} />
         <Route path="/discovery" element={<ProspectDiscovery />} />
         <Route path="/discovery/saved-searches" element={<SavedSearchesPage />} />
         <Route path="/ai-discovery" element={<ProspectsDiscovery />} />
