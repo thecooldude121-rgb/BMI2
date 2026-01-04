@@ -112,7 +112,7 @@ const AddImportLeadsPage: React.FC = () => {
     { value: 'referral', label: '📧 Referral', icon: '📧' },
     { value: 'conference', label: '📱 Conference', icon: '📱' }
   ];
-  const owners = ['Unassigned', 'Me (Sarah C.)', 'Alex T.', 'Mike J.', 'Round-robin (Auto)'];
+  const owners = ['Unassigned', 'Me (Sarah C.)', 'Alex T.', 'Mike J.', 'Round-robin'];
 
   const apolloResults = [
     {
@@ -120,10 +120,11 @@ const AddImportLeadsPage: React.FC = () => {
       name: 'Sarah Lee',
       title: 'CFO',
       company: 'TechStart Inc',
-      industry: 'FinTech, 45 emp',
+      industry: 'FinTech',
+      employees: '45 employees',
       revenue: '$8M revenue',
       location: 'San Francisco, CA',
-      email: 'sarah@tech.com',
+      email: 'sarah@techstart.com',
       verified: true,
       score: 85
     },
@@ -132,7 +133,8 @@ const AddImportLeadsPage: React.FC = () => {
       name: 'John Smith',
       title: 'VP Sales',
       company: 'Acme Corp',
-      industry: 'SaaS, 75 emp',
+      industry: 'SaaS',
+      employees: '75 employees',
       revenue: '$12M revenue',
       location: 'New York, NY',
       email: 'john@acme.com',
@@ -144,10 +146,11 @@ const AddImportLeadsPage: React.FC = () => {
       name: 'Emma Wilson',
       title: 'VP Marketing',
       company: 'InnovateLabs',
-      industry: 'HealthTech, 30 emp',
+      industry: 'HealthTech',
+      employees: '30 employees',
       revenue: '$5M revenue',
       location: 'Austin, TX',
-      email: 'emma@innov.com',
+      email: 'emma@innovatelabs.com',
       verified: true,
       score: 82
     },
@@ -156,10 +159,11 @@ const AddImportLeadsPage: React.FC = () => {
       name: 'Michael Torres',
       title: 'CTO',
       company: 'BigCo Enterprise',
-      industry: 'Manufacturing, 500 emp',
+      industry: 'Manufacturing',
+      employees: '500 employees',
       revenue: '$50M revenue',
       location: 'Chicago, IL',
-      email: 'michael@big.com',
+      email: 'michael@bigco.com',
       verified: true,
       score: 68
     },
@@ -168,10 +172,11 @@ const AddImportLeadsPage: React.FC = () => {
       name: 'Lisa Anderson',
       title: 'Director',
       company: 'StartCo',
-      industry: 'E-commerce, 20 emp',
+      industry: 'E-commerce',
+      employees: '20 employees',
       revenue: '$3M revenue',
       location: 'Seattle, WA',
-      email: 'lisa@start.com',
+      email: 'lisa@startco.com',
       verified: true,
       score: 71
     }
@@ -537,12 +542,35 @@ const AddImportLeadsPage: React.FC = () => {
                   placeholder="Met at SaaS Summit 2024. Interested in our HRMS integration. Follow up within 2 weeks."
                 />
               </div>
+              {!manualForm.skipDuplicateCheck && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => {
+                      if (manualForm.email) {
+                        setShowDuplicateWarning(true);
+                      } else {
+                        alert('Please enter an email to check for duplicates');
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    <Search className="h-4 w-4" />
+                    Check for Duplicates
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Duplicate Detection */}
             {showDuplicateWarning && (
               <div className="mb-8">
-                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4 relative">
+                  <button
+                    onClick={() => setShowDuplicateWarning(false)}
+                    className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                   <div className="flex items-start space-x-3">
                     <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
                     <div className="flex-1">
@@ -757,21 +785,35 @@ const AddImportLeadsPage: React.FC = () => {
                           <td className="px-4 py-2 text-sm text-gray-600">john@acme.com</td>
                           <td className="px-4 py-2 text-sm text-gray-900">Acme Corp</td>
                           <td className="px-4 py-2 text-sm text-gray-600">VP Sales</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">+1...</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">+1 555-0123</td>
                         </tr>
                         <tr>
                           <td className="px-4 py-2 text-sm text-gray-900">Sarah Lee</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">sarah@tech.com</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">TechStart</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">sarah@techstart.com</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">TechStart Inc</td>
                           <td className="px-4 py-2 text-sm text-gray-600">CFO</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">+1...</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">+1 555-0456</td>
                         </tr>
                         <tr>
                           <td className="px-4 py-2 text-sm text-gray-900">Mike Chen</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">mike@big.com</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">BigCo Enter</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">mike@bigco.com</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">BigCo Enterprise</td>
                           <td className="px-4 py-2 text-sm text-gray-600">Director Ops</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">+1...</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">+1 555-0789</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2 text-sm text-gray-900">Lisa Wong</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">lisa@startco.com</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">StartCo</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">CEO</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">+1 555-0321</td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-2 text-sm text-gray-900">David Kumar</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">david@innovatelabs.com</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">InnovateLabs</td>
+                          <td className="px-4 py-2 text-sm text-gray-600">CTO</td>
+                          <td className="px-4 py-2 text-sm text-gray-600 italic">(no phone)</td>
                         </tr>
                       </tbody>
                     </table>
@@ -999,10 +1041,32 @@ const AddImportLeadsPage: React.FC = () => {
                   <label className="block text-sm text-gray-700 mb-1">Company Size</label>
                   <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option>Select Size...</option>
-                    <option>1-10 employees</option>
-                    <option>11-50 employees</option>
-                    <option>51-200 employees</option>
+                    <option>1-10</option>
+                    <option>11-50</option>
+                    <option>51-200</option>
+                    <option>201-500</option>
+                    <option>501-1000</option>
+                    <option>1000+</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Revenue Range</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option>Select Revenue...</option>
+                    <option>$0-$1M</option>
+                    <option>$1M-$10M</option>
+                    <option>$10M-$50M</option>
+                    <option>$50M-$100M</option>
+                    <option>$100M+</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm text-gray-700 mb-1">Technologies Used</label>
+                  <input
+                    type="text"
+                    placeholder="Salesforce, HubSpot, AWS"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
                 </div>
               </div>
               <div className="flex justify-end space-x-2 mt-4">
@@ -1052,7 +1116,7 @@ const AddImportLeadsPage: React.FC = () => {
                         </td>
                         <td className="px-4 py-3">
                           <p className="text-sm text-gray-900">{lead.company}</p>
-                          <p className="text-xs text-gray-600">{lead.industry}</p>
+                          <p className="text-xs text-gray-600">{lead.industry}, {lead.employees}</p>
                           <p className="text-xs text-gray-500">{lead.revenue}</p>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{lead.location}</td>
