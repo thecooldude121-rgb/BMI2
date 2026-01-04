@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Upload, Plus, MoreVertical, Mail, Phone,
   User, Calendar, FileText, Zap, CheckCircle, XCircle, ArrowRight,
-  ChevronDown, ChevronUp, TrendingUp, Target, Users, Activity
+  ChevronDown, ChevronUp, TrendingUp, Target, Users, Activity,
+  ArrowLeft, Bell, Home, Trash2, Copy, Clock, UserPlus, Edit,
+  Eye, Grid, List, Columns, RefreshCw, Share2, Archive
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -244,24 +246,128 @@ const mockLeads: LeadDetail[] = [
 const LeadsListPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'kanban'>('list');
+
   const [filters, setFilters] = useState({
     status: 'all',
     source: 'all',
     score: 'all',
     owner: 'all'
   });
+
   const [sortBy, setSortBy] = useState('recent');
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showSequenceMenu, setShowSequenceMenu] = useState<string | null>(null);
+  const [showAssignMenu, setShowAssignMenu] = useState<string | null>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState<string | null>(null);
+
+  const filteredLeads = useMemo(() => {
+    let result = [...mockLeads];
+
+    if (filters.status !== 'all') {
+      result = result.filter(lead => lead.status === filters.status);
+    }
+
+    if (filters.source !== 'all') {
+      const sourceMap: Record<string, string> = {
+        '🎯 apollo': 'apollo',
+        '🏢 hrms': 'hrms',
+        '🔔 intelligence': 'intent',
+        '✍️ manual': 'manual'
+      };
+      const mappedSource = sourceMap[filters.source] || filters.source;
+      result = result.filter(lead => lead.source === mappedSource);
+    }
+
+    if (filters.score !== 'all') {
+      const scoreRanges: Record<string, [number, number]> = {
+        '90-100': [90, 100],
+        '80-89': [80, 89],
+        '70-79': [70, 79],
+        '60-69': [60, 69],
+        'below 60': [0, 59]
+      };
+      const range = scoreRanges[filters.score];
+      if (range) {
+        result = result.filter(lead => lead.score >= range[0] && lead.score <= range[1]);
+      }
+    }
+
+    if (filters.owner !== 'all' && filters.owner !== 'assigned to me') {
+      if (filters.owner === 'unassigned') {
+        result = result.filter(lead => lead.owner === 'Unassigned');
+      } else {
+        result = result.filter(lead => lead.owner.toLowerCase().includes(filters.owner));
+      }
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(lead =>
+        lead.name.toLowerCase().includes(query) ||
+        lead.email.toLowerCase().includes(query) ||
+        lead.company.toLowerCase().includes(query) ||
+        lead.title.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [filters, searchQuery]);
 
   const stats = [
-    { label: 'Total Leads', value: '450', icon: Target, color: 'text-blue-600' },
-    { label: 'New Leads', value: '150', percentage: '33%', icon: TrendingUp, color: 'text-green-600' },
-    { label: 'Contacted Leads', value: '180', percentage: '40%', icon: Mail, color: 'text-orange-600' },
-    { label: '🏢 HRMS Warm!', value: '45', percentage: '10%', icon: Zap, color: 'text-purple-600' },
-    { label: 'Qualified Leads', value: '80', percentage: '18%', icon: CheckCircle, color: 'text-emerald-600' },
-    { label: 'Avg Score', value: '72', icon: Activity, color: 'text-indigo-600' }
+    {
+      label: 'Total Leads',
+      value: '450',
+      icon: Target,
+      color: 'text-blue-600',
+      filter: () => setFilters({ status: 'all', source: 'all', score: 'all', owner: 'all' })
+    },
+    {
+      label: 'New Leads',
+      value: '150',
+      percentage: '33%',
+      icon: TrendingUp,
+      color: 'text-green-600',
+      filter: () => setFilters({ ...filters, status: 'new' })
+    },
+    {
+      label: 'Contacted Leads',
+      value: '180',
+      percentage: '40%',
+      icon: Mail,
+      color: 'text-orange-600',
+      filter: () => setFilters({ ...filters, status: 'contacted' })
+    },
+    {
+      label: '🏢 HRMS Warm!',
+      value: '45',
+      percentage: '10%',
+      icon: Zap,
+      color: 'text-purple-600',
+      filter: () => setFilters({ ...filters, source: '🏢 hrms' })
+    },
+    {
+      label: 'Qualified Leads',
+      value: '80',
+      percentage: '18%',
+      icon: CheckCircle,
+      color: 'text-emerald-600',
+      filter: () => setFilters({ ...filters, status: 'qualified' })
+    },
+    {
+      label: 'Avg Score',
+      value: '72',
+      icon: Activity,
+      color: 'text-indigo-600',
+      filter: () => setSortBy('score')
+    }
   ];
 
   const getSourceIcon = (source: string) => {
@@ -329,19 +435,246 @@ const LeadsListPage: React.FC = () => {
   };
 
   const handleSelectAll = () => {
-    if (selectedLeads.length === mockLeads.length) {
+    if (selectedLeads.length === filteredLeads.length) {
       setSelectedLeads([]);
     } else {
-      setSelectedLeads(mockLeads.map(lead => lead.id));
+      setSelectedLeads(filteredLeads.map(lead => lead.id));
     }
   };
 
-  const handleAction = (action: string, leadName?: string) => {
-    showToast(`${action}${leadName ? ` for ${leadName}` : ''}`, 'success');
+  const handleLeadAction = (action: string, lead: LeadDetail) => {
+    switch (action) {
+      case 'View':
+        navigate(`/lead-generation/leads/${lead.id}`);
+        break;
+      case 'Enrich':
+      case 'Enrich Now':
+        showToast(`Enriching ${lead.name} with Apollo/ZoomInfo data...`, 'info');
+        setTimeout(() => showToast(`${lead.name} enriched successfully!`, 'success'), 2000);
+        break;
+      case 'Qualify':
+      case 'Score':
+        navigate(`/lead-generation/qualify/${lead.id}`);
+        break;
+      case 'Email':
+        showToast(`Opening email composer for ${lead.name}...`, 'info');
+        break;
+      case 'Call':
+        showToast(`Opening call logging modal for ${lead.name}...`, 'info');
+        break;
+      case 'Sync Now':
+        showToast(`Syncing ${lead.name} to CRM...`, 'info');
+        setTimeout(() => showToast('Synced to CRM!', 'success'), 1500);
+        break;
+      case 'Edit':
+        showToast(`Opening quick edit for ${lead.name}...`, 'info');
+        break;
+      case 'Add Note':
+        showToast(`Opening note modal for ${lead.name}...`, 'info');
+        break;
+      case 'View Sequence':
+        navigate('/lead-generation/campaigns');
+        break;
+      case 'Requalify':
+        showToast(`${lead.name} reopened and marked as New`, 'success');
+        break;
+      case 'Archive':
+        showToast(`${lead.name} archived`, 'success');
+        break;
+      case 'Delete':
+        if (confirm(`Delete ${lead.name}? This cannot be undone.`)) {
+          showToast(`${lead.name} deleted`, 'success');
+        }
+        break;
+      case 'Add to Deal':
+        showToast(`Creating deal for ${lead.name}...`, 'info');
+        break;
+      case 'Assign to Rep':
+        setShowAssignMenu(lead.id);
+        break;
+      default:
+        showToast(`${action} for ${lead.name}`, 'info');
+    }
+  };
+
+  const handleBulkAction = (action: string) => {
+    const count = selectedLeads.length;
+    switch (action) {
+      case 'enrich':
+        showToast(`Enriching ${count} leads...`, 'info');
+        setTimeout(() => showToast(`${count} leads enriched!`, 'success'), 2000);
+        break;
+      case 'export':
+        showToast(`Exporting ${count} leads to CSV...`, 'success');
+        break;
+      case 'delete':
+        if (confirm(`Delete ${count} leads? This cannot be undone.`)) {
+          showToast(`${count} leads deleted`, 'success');
+          setSelectedLeads([]);
+        }
+        break;
+      default:
+        showToast(`${action} applied to ${count} leads`, 'success');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-8">
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Navigation Bar */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-[1600px] mx-auto px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors"
+              >
+                <Home className="h-6 w-6" />
+                <span>BMI</span>
+              </button>
+
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200">
+                <Target className="h-4 w-4" />
+                <span className="font-medium">Lead Gen</span>
+              </div>
+
+              <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="text-sm">Back to All Modules</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <Search className="h-5 w-5" />
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                    3
+                  </span>
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="p-4 border-b border-gray-200">
+                      <h3 className="font-semibold text-gray-900">Notifications</h3>
+                    </div>
+                    <div className="p-2">
+                      <div className="p-3 hover:bg-gray-50 rounded cursor-pointer">
+                        <p className="text-sm text-gray-900">5 HRMS leads added today</p>
+                        <p className="text-xs text-gray-500 mt-1">Just now</p>
+                      </div>
+                      <div className="p-3 hover:bg-gray-50 rounded cursor-pointer">
+                        <p className="text-sm text-gray-900">8 email replies received</p>
+                        <p className="text-xs text-gray-500 mt-1">1 hour ago</p>
+                      </div>
+                      <div className="p-3 hover:bg-gray-50 rounded cursor-pointer">
+                        <p className="text-sm text-gray-900">New Customer Outreach: 65% open rate</p>
+                        <p className="text-xs text-gray-500 mt-1">2 hours ago</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="flex items-center gap-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <User className="h-5 w-5" />
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+
+                {showProfileMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                      My Profile
+                    </button>
+                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                      Settings
+                    </button>
+                    <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
+                      Switch Module (CRM, HRMS)
+                    </button>
+                    <div className="border-t border-gray-200"></div>
+                    <button className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50">
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Module Navigation Tabs */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-[1600px] mx-auto px-8">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigate('/lead-generation/dashboard')}
+              className="px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Dashboard
+            </button>
+            <button className="px-4 py-3 text-blue-600 border-b-2 border-blue-600 font-medium">
+              Leads
+            </button>
+            <button
+              onClick={() => navigate('/lead-generation/intelligence')}
+              className="px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Intelligence
+            </button>
+            <button
+              onClick={() => navigate('/lead-generation/campaigns')}
+              className="px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Campaigns
+            </button>
+            <button
+              onClick={() => navigate('/lead-generation/analytics')}
+              className="px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Analytics
+            </button>
+            <button
+              onClick={() => navigate('/lead-generation/settings')}
+              className="px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Settings
+            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => showToast('Opening import modal...', 'info')}
+                className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <Upload className="h-4 w-4" />
+                Import Leads
+              </button>
+              <button
+                onClick={() => showToast('Opening add lead form...', 'info')}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Add Lead
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="max-w-[1600px] mx-auto px-8 py-6">
         {/* Header Section */}
         <div className="flex items-center justify-between mb-6">
@@ -353,39 +686,78 @@ const LeadsListPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => showToast('Export started', 'success')}
+              onClick={() => showToast('Exporting filtered leads to CSV...', 'success')}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <Download className="h-4 w-4" />
               Export
             </button>
-            <button className="flex items-center gap-2 px-2 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              <MoreVertical className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+            <div className="relative">
+              <button
+                onClick={() => setShowActionsMenu(!showActionsMenu)}
+                className="flex items-center gap-2 px-2 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
 
-        <div className="flex items-center justify-end gap-3 mb-6">
-          <button
-            onClick={() => showToast('Import leads modal opened', 'info')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-          >
-            <Upload className="h-4 w-4" />
-            Import Leads
-          </button>
-          <button
-            onClick={() => showToast('Add lead modal opened', 'info')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            <Plus className="h-4 w-4" />
-            Add Lead
-          </button>
+              {showActionsMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <button
+                    onClick={() => { showToast('Exporting all leads...', 'success'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Export all leads
+                  </button>
+                  <button
+                    onClick={() => { showToast('Opening Apollo.io import...', 'info'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Import from Apollo.io
+                  </button>
+                  <button
+                    onClick={() => { showToast('Opening ZoomInfo import...', 'info'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Import from ZoomInfo
+                  </button>
+                  <button
+                    onClick={() => { showToast('Opening column configuration...', 'info'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Configure columns
+                  </button>
+                  <button
+                    onClick={() => { showToast('Current view saved!', 'success'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Save current view
+                  </button>
+                  <button
+                    onClick={() => { showToast('Opening bulk assign...', 'info'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Bulk assign
+                  </button>
+                  <button
+                    onClick={() => { showToast('Opening bulk delete...', 'info'); setShowActionsMenu(false); }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
+                  >
+                    Bulk delete
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Stats Bar */}
         <div className="grid grid-cols-6 gap-4 mb-6">
           {stats.map((stat, index) => (
-            <div key={index} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+            <button
+              key={index}
+              onClick={stat.filter}
+              className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left"
+            >
               <div className="flex items-center justify-between mb-2">
                 <stat.icon className={`h-5 w-5 ${stat.color}`} />
               </div>
@@ -394,7 +766,7 @@ const LeadsListPage: React.FC = () => {
               {stat.percentage && (
                 <div className="text-xs text-gray-500 mt-1">{stat.percentage}</div>
               )}
-            </div>
+            </button>
           ))}
         </div>
 
@@ -403,7 +775,7 @@ const LeadsListPage: React.FC = () => {
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700 w-20">Status:</span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {['All', 'New', 'Contacted', 'Qualified', 'Disqualified', 'Synced'].map((status) => (
                   <button
                     key={status}
@@ -422,7 +794,7 @@ const LeadsListPage: React.FC = () => {
 
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700 w-20">Source:</span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {['All', '🎯 Apollo', '🏢 HRMS', '🔔 Intelligence', '✍️ Manual'].map((source) => (
                   <button
                     key={source}
@@ -441,7 +813,7 @@ const LeadsListPage: React.FC = () => {
 
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700 w-20">Score:</span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {['All', '90-100', '80-89', '70-79', '60-69', 'Below 60'].map((score) => (
                   <button
                     key={score}
@@ -460,7 +832,7 @@ const LeadsListPage: React.FC = () => {
 
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-700 w-20">Owner:</span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {['All', 'Assigned to Me', 'Unassigned', 'Alex', 'Sarah', 'Mike'].map((owner) => (
                   <button
                     key={owner}
@@ -496,15 +868,20 @@ const LeadsListPage: React.FC = () => {
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="recent">Sort: Most Recent</option>
+                <option value="oldest">Sort: Oldest First</option>
                 <option value="score">Sort: Highest Score</option>
                 <option value="name">Sort: Name A-Z</option>
+                <option value="company">Sort: Company A-Z</option>
               </select>
-              <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-                Bulk Actions ▼
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
-                List View 📋 ▼
-              </button>
+              <select
+                value={viewMode}
+                onChange={(e) => setViewMode(e.target.value as 'list' | 'grid' | 'kanban')}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="list">📋 List View</option>
+                <option value="grid">📊 Grid View</option>
+                <option value="kanban">📌 Kanban View</option>
+              </select>
             </div>
           </div>
         </div>
@@ -515,32 +892,81 @@ const LeadsListPage: React.FC = () => {
             <span className="text-sm font-medium text-blue-900">
               {selectedLeads.length} leads selected
             </span>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowAssignMenu('bulk')}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+              >
+                Assign to... ▼
+              </button>
+              {showAssignMenu === 'bulk' && (
+                <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  {['Alex T.', 'Sarah C.', 'Mike J.', 'Round-robin', 'Territory rules'].map(owner => (
+                    <button
+                      key={owner}
+                      onClick={() => {
+                        showToast(`Assigned ${selectedLeads.length} leads to ${owner}`, 'success');
+                        setShowAssignMenu(null);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {owner}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowSequenceMenu('bulk')}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+              >
+                Add to Sequence ▼
+              </button>
+              {showSequenceMenu === 'bulk' && (
+                <div className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  {['New Customer Outreach', 'Product Launch Follow-up', 'Re-engagement Campaign'].map(seq => (
+                    <button
+                      key={seq}
+                      onClick={() => {
+                        showToast(`Added ${selectedLeads.length} leads to ${seq}`, 'success');
+                        setShowSequenceMenu(null);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {seq}
+                    </button>
+                  ))}
+                  <div className="border-t border-gray-200"></div>
+                  <button
+                    onClick={() => {
+                      showToast('Creating new sequence...', 'info');
+                      setShowSequenceMenu(null);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-gray-50"
+                  >
+                    + Create New Sequence
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
-              onClick={() => handleAction('Assigned to')}
-              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-            >
-              Assign to... ▼
-            </button>
-            <button
-              onClick={() => handleAction('Added to sequence')}
-              className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-            >
-              Add to Sequence ▼
-            </button>
-            <button
-              onClick={() => handleAction('Enriched')}
+              onClick={() => handleBulkAction('enrich')}
               className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 text-sm rounded hover:bg-blue-50 transition-colors"
             >
               Enrich
             </button>
             <button
-              onClick={() => handleAction('Exported')}
+              onClick={() => handleBulkAction('export')}
               className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 text-sm rounded hover:bg-blue-50 transition-colors"
             >
               Export
             </button>
             <button
-              onClick={() => handleAction('Deleted')}
+              onClick={() => handleBulkAction('delete')}
               className="px-3 py-1.5 bg-white border border-red-300 text-red-700 text-sm rounded hover:bg-red-50 transition-colors"
             >
               Delete
@@ -562,7 +988,7 @@ const LeadsListPage: React.FC = () => {
                 <th className="px-4 py-3 text-left w-10">
                   <input
                     type="checkbox"
-                    checked={selectedLeads.length === mockLeads.length}
+                    checked={selectedLeads.length === filteredLeads.length && filteredLeads.length > 0}
                     onChange={handleSelectAll}
                     className="rounded border-gray-300"
                   />
@@ -577,7 +1003,7 @@ const LeadsListPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {mockLeads.map((lead) => {
+              {filteredLeads.map((lead) => {
                 const isExpanded = expandedRows.includes(lead.id);
                 const statusBadge = getStatusBadge(lead.status);
                 const statusIndicator = getStatusIndicatorBadge(lead.statusIndicator);
@@ -599,7 +1025,7 @@ const LeadsListPage: React.FC = () => {
                           className="text-left w-full group"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900 group-hover:text-blue-600">
+                            <span className="font-semibold text-gray-900 group-hover:text-blue-600 cursor-pointer">
                               {lead.name}
                             </span>
                             {isExpanded ? (
@@ -608,17 +1034,28 @@ const LeadsListPage: React.FC = () => {
                               <ChevronDown className="h-4 w-4 text-gray-400" />
                             )}
                           </div>
-                          <div className="text-sm text-gray-600">{lead.company}</div>
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/lead-generation/leads/${lead.id}`);
+                            }}
+                            className="text-sm text-gray-600 hover:text-blue-600 cursor-pointer"
+                          >
+                            {lead.company}
+                          </div>
                           <div className="text-xs text-gray-500">{lead.title}</div>
                         </button>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setFilters({ ...filters, source: lead.source })}
+                          className="flex items-center gap-2 hover:bg-gray-100 px-2 py-1 rounded transition-colors"
+                        >
                           <span className="text-lg">{getSourceIcon(lead.source)}</span>
                           <span className="text-sm font-medium text-gray-700">
                             {getSourceLabel(lead.source)}
                           </span>
-                        </div>
+                        </button>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-bold border ${getScoreColor(lead.score)}`}>
@@ -642,39 +1079,190 @@ const LeadsListPage: React.FC = () => {
                         <div className="text-sm text-gray-600">{lead.lastActivity}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <button className="p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors">
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowMoreMenu(showMoreMenu === lead.id ? null : lead.id)}
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          {showMoreMenu === lead.id && (
+                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                              <button
+                                onClick={() => {
+                                  handleLeadAction('Edit', lead);
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                Edit lead
+                              </button>
+                              <button
+                                onClick={() => {
+                                  showToast(`Duplicating ${lead.name}...`, 'info');
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                Duplicate lead
+                              </button>
+                              {lead.status === 'qualified' && (
+                                <button
+                                  onClick={() => {
+                                    showToast(`Converting ${lead.name} to contact...`, 'info');
+                                    setShowMoreMenu(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                  Convert to contact
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  handleLeadAction('Add to Deal', lead);
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                Add to deal
+                              </button>
+                              <button
+                                onClick={() => {
+                                  showToast(`Sharing ${lead.name}...`, 'info');
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                Send to colleague
+                              </button>
+                              <button
+                                onClick={() => {
+                                  showToast(`Exporting ${lead.name} data...`, 'success');
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                Export lead data
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigate(`/lead-generation/leads/${lead.id}/activity`);
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                View activity history
+                              </button>
+                              <div className="border-t border-gray-200"></div>
+                              <button
+                                onClick={() => {
+                                  handleLeadAction('Delete', lead);
+                                  setShowMoreMenu(null);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {isExpanded && (
                       <tr>
                         <td colSpan={8} className="px-4 py-4 bg-gray-50">
                           <div className="space-y-3">
-                            {/* Contact Information */}
                             <div className="flex items-center gap-4 text-sm">
-                              <span className="text-gray-700">{lead.email}</span>
-                              {lead.phone && <span className="text-gray-700">{lead.phone}</span>}
+                              <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline">{lead.email}</a>
+                              {lead.phone && <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">{lead.phone}</a>}
                             </div>
 
-                            {/* Context and Insights */}
                             <div className="space-y-2">
                               <div className="text-sm text-gray-700">{lead.sourceContext}</div>
                               <div className="text-sm text-gray-700">{lead.aiInsight}</div>
                               <div className="text-sm text-gray-700">{lead.nextAction}</div>
                             </div>
 
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-2">
-                              {lead.actionButtons.map((action, index) => (
-                                <button
-                                  key={index}
-                                  onClick={() => handleAction(action, lead.name)}
-                                  className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
-                                >
-                                  {action}
-                                </button>
-                              ))}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {lead.actionButtons.map((action, index) => {
+                                if (action === 'Add to Sequence') {
+                                  return (
+                                    <div key={index} className="relative">
+                                      <button
+                                        onClick={() => setShowSequenceMenu(lead.id)}
+                                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
+                                      >
+                                        {action} ▼
+                                      </button>
+                                      {showSequenceMenu === lead.id && (
+                                        <div className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                          {['New Customer Outreach', 'Product Launch Follow-up', 'Re-engagement Campaign'].map(seq => (
+                                            <button
+                                              key={seq}
+                                              onClick={() => {
+                                                showToast(`Added ${lead.name} to ${seq}`, 'success');
+                                                setShowSequenceMenu(null);
+                                              }}
+                                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                            >
+                                              {seq}
+                                            </button>
+                                          ))}
+                                          <div className="border-t border-gray-200"></div>
+                                          <button
+                                            onClick={() => {
+                                              showToast('Creating new sequence...', 'info');
+                                              setShowSequenceMenu(null);
+                                            }}
+                                            className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-gray-50"
+                                          >
+                                            + Create New Sequence
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                if (action === 'Assign to Rep') {
+                                  return (
+                                    <div key={index} className="relative">
+                                      <button
+                                        onClick={() => setShowAssignMenu(lead.id)}
+                                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
+                                      >
+                                        Assign ▼
+                                      </button>
+                                      {showAssignMenu === lead.id && (
+                                        <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                          {['Alex T.', 'Sarah C.', 'Mike J.'].map(owner => (
+                                            <button
+                                              key={owner}
+                                              onClick={() => {
+                                                showToast(`Assigned ${lead.name} to ${owner}`, 'success');
+                                                setShowAssignMenu(null);
+                                              }}
+                                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                                            >
+                                              {owner}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    key={index}
+                                    onClick={() => handleLeadAction(action, lead)}
+                                    className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
+                                  >
+                                    {action}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
                         </td>
@@ -686,25 +1274,69 @@ const LeadsListPage: React.FC = () => {
             </tbody>
           </table>
 
-          {/* Pagination */}
-          <div className="px-4 py-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              Showing 10 of 450 leads
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm">
-                ← Previous
-              </button>
-              <button className="px-3 py-1 bg-blue-600 text-white rounded text-sm">1</button>
-              <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm">2</button>
-              <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm">3</button>
-              <span className="px-2 text-gray-600">...</span>
-              <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm">45</button>
-              <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm">
-                Next →
+          {filteredLeads.length === 0 && (
+            <div className="px-4 py-12 text-center">
+              <p className="text-gray-500">No leads found matching your filters.</p>
+              <button
+                onClick={() => {
+                  setFilters({ status: 'all', source: 'all', score: 'all', owner: 'all' });
+                  setSearchQuery('');
+                }}
+                className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Clear all filters
               </button>
             </div>
-          </div>
+          )}
+
+          {filteredLeads.length > 0 && (
+            <div className="px-4 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {filteredLeads.length} of 450 leads
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ← Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  className={`px-3 py-1 rounded text-sm ${currentPage === 1 ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'}`}
+                >
+                  1
+                </button>
+                <button
+                  onClick={() => setCurrentPage(2)}
+                  className={`px-3 py-1 rounded text-sm ${currentPage === 2 ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'}`}
+                >
+                  2
+                </button>
+                <button
+                  onClick={() => setCurrentPage(3)}
+                  className={`px-3 py-1 rounded text-sm ${currentPage === 3 ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'}`}
+                >
+                  3
+                </button>
+                <span className="px-2 text-gray-600">...</span>
+                <button
+                  onClick={() => setCurrentPage(45)}
+                  className={`px-3 py-1 rounded text-sm ${currentPage === 45 ? 'bg-blue-600 text-white' : 'border border-gray-300 hover:bg-gray-50'}`}
+                >
+                  45
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(45, currentPage + 1))}
+                  disabled={currentPage === 45}
+                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
