@@ -91,13 +91,33 @@ export const generateSampleData = () => {
   const leads: Lead[] = [
     {
       id: '1',
+      name: 'Sarah Lee',
+      email: 'sarah@techstart.com',
+      phone: '+1-555-0456',
+      company: 'TechStart Inc',
+      position: 'CFO',
+      stage: 'new',
+      score: 92,
+      source: 'HRMS',
+      assignedTo: 'user1',
+      value: 42000,
+      probability: 67,
+      status: 'active',
+      industry: 'FinTech',
+      tags: ['hrms-warm-lead', 'decision-maker', 'high-priority', 'hot'],
+      notes: 'High priority HRMS lead - Contact ASAP. CFO at TechStart Inc. Recruited Nov 2024 through HRMS. Company raised $10M Series A funding. Strong buying intent with recent VP Sales hire and expansion plans. HRMS bonus applied: +33% score boost.',
+      createdAt: new Date('2024-11-15'),
+      lastContact: '2024-11-15'
+    },
+    {
+      id: '2',
       name: 'Sarah Chen',
       email: 'sarah.chen@techcorp.com',
       phone: '+1-555-2001',
       company: 'TechCorp Solutions',
       position: 'CTO',
       stage: 'qualified',
-      score: 92,
+      score: 85,
       source: 'LinkedIn',
       assignedTo: 'user1',
       value: 85000,
@@ -110,7 +130,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-20'
     },
     {
-      id: '2',
+      id: '3',
       name: 'Michael Rodriguez',
       email: 'michael.rodriguez@healthplus.com',
       phone: '+1-555-2002',
@@ -130,7 +150,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-19'
     },
     {
-      id: '3',
+      id: '4',
       name: 'Jennifer Kim',
       email: 'jennifer.kim@financegroup.com',
       phone: '+1-555-2003',
@@ -150,7 +170,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-21'
     },
     {
-      id: '4',
+      id: '5',
       name: 'David Thompson',
       email: 'david.thompson@manufacturing.com',
       phone: '+1-555-2004',
@@ -170,7 +190,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-16'
     },
     {
-      id: '5',
+      id: '6',
       name: 'Emily Watson',
       email: 'emily.watson@retailchain.com',
       phone: '+1-555-2005',
@@ -190,7 +210,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-20'
     },
     {
-      id: '6',
+      id: '7',
       name: 'Robert Chang',
       email: 'robert.chang@edutech.com',
       phone: '+1-555-2006',
@@ -210,7 +230,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-22'
     },
     {
-      id: '7',
+      id: '8',
       name: 'Lisa Park',
       email: 'lisa.park@realestate.com',
       phone: '+1-555-2007',
@@ -230,7 +250,7 @@ export const generateSampleData = () => {
       lastContact: '2024-01-18'
     },
     {
-      id: '8',
+      id: '9',
       name: 'James Wilson',
       email: 'james.wilson@consulting.com',
       phone: '+1-555-2008',

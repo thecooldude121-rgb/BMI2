@@ -11,7 +11,7 @@ export interface Contact {
   status: 'active' | 'inactive';
   lastContact: {
     date: string;
-    type: 'meeting' | 'email' | 'call';
+    type: 'meeting' | 'email' | 'call' | 'note';
     details?: string;
   };
   aiEnriched?: boolean;
@@ -26,6 +26,16 @@ export interface Contact {
     dueDate: string;
   };
   warningMessage?: string;
+  aiScore?: number;
+  conversionProbability?: number;
+  hrmsBonus?: boolean;
+  enrichmentData?: {
+    companySize?: string;
+    companyRevenue?: string;
+    recentFunding?: string;
+    fundingDate?: string;
+    industry?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

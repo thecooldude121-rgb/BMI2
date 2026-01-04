@@ -35,20 +35,30 @@ export const sampleContacts: Contact[] = [
     phone: '+1 555-0456',
     source: 'hrms',
     sourceDetails: '🏢 From HRMS: Recruited Nov 2024',
-    tags: ['Hot Lead'],
+    tags: ['Hot Lead', 'HRMS Warm Lead', 'Decision Maker', 'FinTech'],
     status: 'active',
     lastContact: {
-      date: 'Nov 14',
-      type: 'email',
-      details: 'Email sent'
+      date: 'Nov 15',
+      type: 'note',
+      details: 'Note added - High priority'
     },
     activeDeal: {
       title: 'TechStart - $42K',
       value: 42000,
       stage: 'Negotiation'
     },
-    createdAt: '2024-10-20',
-    updatedAt: '2024-11-14'
+    aiScore: 92,
+    conversionProbability: 67,
+    hrmsBonus: true,
+    enrichmentData: {
+      companySize: '45 employees',
+      companyRevenue: '$8M',
+      recentFunding: '$10M Series A',
+      fundingDate: 'Nov 2024',
+      industry: 'FinTech'
+    },
+    createdAt: '2024-11-15',
+    updatedAt: '2024-11-15'
   },
   {
     id: '3',

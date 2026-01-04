@@ -29,10 +29,11 @@ export const companySignals: CompanySignal[] = [
     type: 'funding',
     title: 'TechStart Inc raised $10M Series A',
     company: 'TechStart Inc',
-    description: 'Series A funding round led by Accel Partners',
+    description: 'Series A funding round led by Sequoia Capital. Participants: Andreessen Horowitz, Y Combinator. High buying intent - budget confirmed for growth initiatives.',
     source: 'Crunchbase',
     aiScore: 88,
-    timeAgo: '2 hours ago'
+    timeAgo: '3 days ago',
+    isAutoAdded: true
   },
   {
     id: '2',
@@ -57,16 +58,47 @@ export const companySignals: CompanySignal[] = [
   {
     id: '4',
     type: 'hrms_event',
-    title: 'Emma Wilson hired at DataFlow Inc as VP Marketing',
-    company: 'DataFlow Inc',
-    description: 'New executive hire with strong B2B SaaS background',
+    title: 'Sarah Lee recruited from TechStart Inc as CFO',
+    company: 'TechStart Inc',
+    description: 'CFO recruited by your company in Nov 2024. Created warm B2B lead opportunity with +33% score bonus.',
     source: 'HRMS Module',
     aiScore: 92,
-    timeAgo: '3 hours ago',
+    timeAgo: 'Just now',
     isAutoAdded: true
   },
   {
     id: '5',
+    type: 'hrms_event',
+    title: 'Emma Wilson hired at DataFlow Inc as VP Marketing',
+    company: 'DataFlow Inc',
+    description: 'New executive hire with strong B2B SaaS background',
+    source: 'HRMS Module',
+    aiScore: 90,
+    timeAgo: '3 hours ago',
+    isAutoAdded: true
+  },
+  {
+    id: '6',
+    type: 'hiring',
+    title: 'TechStart Inc hired VP of Sales',
+    company: 'TechStart Inc',
+    description: 'Sales leadership expansion. Posted 3 additional sales engineer positions.',
+    source: 'LinkedIn',
+    aiScore: 85,
+    timeAgo: '1 month ago'
+  },
+  {
+    id: '7',
+    type: 'expansion',
+    title: 'TechStart Inc expanding to NYC office',
+    company: 'TechStart Inc',
+    description: 'Opening new office in New York City to support east coast growth',
+    source: 'Company Blog',
+    aiScore: 78,
+    timeAgo: '2 weeks ago'
+  },
+  {
+    id: '8',
     type: 'expansion',
     title: 'InnovateLabs opened new office in Austin, TX',
     company: 'InnovateLabs',
