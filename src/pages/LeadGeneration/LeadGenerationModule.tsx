@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import LeadGenNavigation from '../../components/LeadGeneration/LeadGenNavigation';
 import LeadGenerationDashboard from './LeadGenerationDashboard';
 import LeadsListPage from './LeadsListPage';
+import LeadDetailPage from './LeadDetailPage';
 import IntelligencePage from './IntelligencePage';
 import CampaignsPage from './CampaignsPage';
 import ProspectDiscovery from './ProspectDiscovery';
@@ -31,7 +32,7 @@ const LeadGenerationModule: React.FC = () => {
         <Route path="/" element={<Navigate to="/lead-generation/dashboard" replace />} />
         <Route path="/dashboard" element={<LeadGenerationDashboard />} />
         <Route path="/leads" element={<LeadsListPage />} />
-        <Route path="/leads/:id" element={<ProspectDetailPage />} />
+        <Route path="/leads/:id" element={<LeadDetailPage />} />
         <Route path="/intelligence" element={<IntelligencePage />} />
         <Route path="/intelligence/:id" element={<ProspectDetailPage />} />
         <Route path="/campaigns" element={<CampaignsPage />} />

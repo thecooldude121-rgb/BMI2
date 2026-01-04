@@ -153,6 +153,22 @@ const leadData: Record<string, LeadData> = {
       placementFee: 15000
     },
 
+    intelligenceSignal: {
+      type: '💰 Funding',
+      event: 'Raised $10M Series A',
+      date: 'Nov 12, 2024',
+      source: 'Crunchbase',
+      aiAnalysis: [
+        'High buying intent',
+        'Budget confirmed',
+        'Growth mode active'
+      ],
+      relatedSignals: [
+        'Hired VP of Sales',
+        'Posted 3 sales jobs'
+      ]
+    },
+
     conversionProbability: 67,
 
     whyThisScore: {
