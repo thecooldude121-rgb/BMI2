@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import { LeadProvider } from './contexts/LeadContext';
@@ -25,10 +25,13 @@ import { IntegrationsHub } from './pages/Integrations';
 import { TeamPerformancePage, TeamMemberDetailPage } from './pages/Team';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
+  const location = useLocation();
+  const isLeadGenPage = location.pathname.startsWith('/lead-generation');
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-      <main className="pt-2">
+      {!isLeadGenPage && <Header />}
+      <main className={!isLeadGenPage ? "pt-2" : ""}>
         {children}
       </main>
     </div>
