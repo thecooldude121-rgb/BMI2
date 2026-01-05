@@ -545,8 +545,333 @@ const acmeSignal: IntelligenceSignal = {
   }
 };
 
+const innovateLabsSignal: IntelligenceSignal = {
+  id: '4',
+  type: 'expansion',
+  title: 'InnovateLabs opened new office in Austin, TX',
+  company: 'InnovateLabs',
+  industry: 'HealthTech',
+  employees: 30,
+  location: 'Boston, MA',
+  detectedAt: '2024-11-12T14:00:00Z',
+  timeAgo: '3 days ago',
+  source: 'Google News + LinkedIn',
+  aiScore: 72,
+  status: 'new',
+  buyingIntent: 65,
+
+  companyDetails: {
+    founded: '2021',
+    website: 'https://innovatelabs.com',
+    revenue: '$3M ARR',
+    techStack: ['React', 'Python', 'GCP', 'Firebase'],
+    social: {
+      linkedin: 'https://linkedin.com/company/innovatelabs'
+    }
+  },
+
+  aiAnalysis: {
+    whyThisMatters: [
+      'Geographic expansion signals growth',
+      'New office needs infrastructure',
+      'Hiring 15 new employees',
+      'Setting up new location'
+    ],
+    recommendedActions: [
+      'Contact HR about office setup',
+      'Offer onboarding solutions',
+      'Mention multi-location management',
+      'Reference other HealthTech clients'
+    ],
+    similarCompaniesConverted: [
+      'HealthHub',
+      'MedTech Solutions',
+      'CareConnect'
+    ]
+  },
+
+  article: {
+    title: 'InnovateLabs Expands to Austin',
+    published: 'Nov 12, 2024',
+    source: 'Google News',
+    summary: 'InnovateLabs announces new Austin office opening in December 2024, planning to hire 15 employees for the new location.',
+    fullTextUrl: 'https://news.google.com/innovatelabs-austin'
+  },
+
+  decisionMakers: [
+    {
+      name: 'David Kim',
+      title: 'CEO',
+      email: 'david@innovatelabs.com',
+      phone: '+1 555-0900',
+      linkedin: 'https://linkedin.com/in/davidkim',
+      role: 'decision_maker'
+    }
+  ],
+
+  scoreBreakdown: {
+    funding: 12,
+    growthSignals: 20,
+    decisionMakers: 10,
+    techStackFit: 15,
+    companySize: 15
+  },
+
+  conversionProbability: 55,
+  expectedCloseRate: 35,
+
+  relatedSignals: [],
+
+  timeline: [
+    {
+      date: 'Nov 12, 2024 - 2:00 PM',
+      event: 'Signal detected',
+      source: 'Google News'
+    }
+  ],
+
+  resources: {
+    companyWebsite: 'https://innovatelabs.com',
+    linkedinPage: 'https://linkedin.com/company/innovatelabs',
+    crunchbasePage: 'https://crunchbase.com/organization/innovatelabs',
+    recentNews: []
+  }
+};
+
+const cloudNineSignal: IntelligenceSignal = {
+  id: '5',
+  type: 'funding',
+  title: 'CloudNine Inc raised $18M Series B',
+  company: 'CloudNine Inc',
+  industry: 'Cloud Services',
+  employees: 90,
+  location: 'Seattle, WA',
+  detectedAt: '2024-11-08T09:00:00Z',
+  timeAgo: '1 week ago',
+  source: 'Crunchbase API',
+  aiScore: 88,
+  status: 'converted',
+  buyingIntent: 82,
+
+  companyDetails: {
+    founded: '2018',
+    website: 'https://cloudnine.com',
+    revenue: '$12M ARR',
+    techStack: ['Kubernetes', 'Docker', 'AWS', 'Terraform'],
+    social: {
+      linkedin: 'https://linkedin.com/company/cloudnine',
+      twitter: 'https://twitter.com/cloudnine'
+    }
+  },
+
+  fundingDetails: {
+    roundType: 'Series B',
+    amount: '$18 million',
+    announcedDate: 'Nov 8, 2024',
+    leadInvestor: 'Sequoia Capital',
+    participatingInvestors: ['Andreessen Horowitz', 'Index Ventures'],
+    valuation: 'Post-money: $75M',
+    useOfFunds: [
+      { category: 'Engineering team expansion', percentage: 45 },
+      { category: 'Sales & marketing', percentage: 30 },
+      { category: 'Product development', percentage: 15 },
+      { category: 'Operations', percentage: 10 }
+    ],
+    pressReleaseUrl: 'https://cloudnine.com/press/series-b',
+    crunchbaseUrl: 'https://crunchbase.com/organization/cloudnine'
+  },
+
+  aiAnalysis: {
+    whyThisMatters: [
+      'Mature funding round',
+      'Established company with traction',
+      'Cloud infrastructure focus',
+      'Already converted to lead!'
+    ],
+    recommendedActions: [
+      'Follow up on converted lead',
+      'Nurture relationship',
+      'Track deal progress',
+      'Monitor for expansion opportunities'
+    ],
+    similarCompaniesConverted: [
+      'AWS Partners',
+      'CloudFlare',
+      'DigitalOcean'
+    ]
+  },
+
+  article: {
+    title: 'CloudNine Raises $18M Series B',
+    published: 'Nov 8, 2024',
+    source: 'TechCrunch',
+    summary: 'CloudNine Inc announced $18M Series B funding led by Sequoia Capital to expand cloud infrastructure platform.',
+    fullTextUrl: 'https://techcrunch.com/cloudnine-series-b'
+  },
+
+  decisionMakers: [
+    {
+      name: 'Jessica Park',
+      title: 'CEO',
+      email: 'jessica@cloudnine.com',
+      phone: '+1 555-1000',
+      linkedin: 'https://linkedin.com/in/jessicapark',
+      role: 'decision_maker'
+    }
+  ],
+
+  scoreBreakdown: {
+    funding: 25,
+    growthSignals: 20,
+    decisionMakers: 15,
+    techStackFit: 15,
+    companySize: 13
+  },
+
+  conversionProbability: 68,
+  expectedCloseRate: 45,
+
+  relatedSignals: [],
+
+  timeline: [
+    {
+      date: 'Nov 8, 2024 - 9:00 AM',
+      event: 'Signal detected',
+      source: 'Crunchbase API'
+    },
+    {
+      date: 'Nov 8, 2024 - 3:00 PM',
+      event: 'Converted to Lead',
+      user: 'Sarah C.'
+    }
+  ],
+
+  resources: {
+    companyWebsite: 'https://cloudnine.com',
+    linkedinPage: 'https://linkedin.com/company/cloudnine',
+    crunchbasePage: 'https://crunchbase.com/organization/cloudnine',
+    recentNews: [
+      {
+        title: 'CloudNine Raises $18M',
+        source: 'TechCrunch',
+        url: 'https://techcrunch.com/cloudnine-series-b'
+      }
+    ]
+  }
+};
+
+const smallBizSignal: IntelligenceSignal = {
+  id: '6',
+  type: 'hiring',
+  title: 'SmallBiz Inc posted 2 marketing jobs',
+  company: 'SmallBiz Inc',
+  industry: 'E-commerce',
+  employees: 5,
+  location: 'Remote',
+  detectedAt: '2024-11-01T11:00:00Z',
+  timeAgo: '2 weeks ago',
+  source: 'LinkedIn Jobs API',
+  aiScore: 45,
+  status: 'dismissed',
+  buyingIntent: 30,
+
+  companyDetails: {
+    founded: '2023',
+    website: 'https://smallbiz.com',
+    revenue: '$500K ARR',
+    techStack: ['Shopify', 'WordPress'],
+    social: {
+      linkedin: 'https://linkedin.com/company/smallbiz'
+    }
+  },
+
+  hiringDetails: {
+    jobTitles: ['Marketing Specialist (2 positions)'],
+    positionsCount: 2,
+    location: 'Remote',
+    postedDate: 'Nov 1, 2024',
+    jobPostingUrls: [
+      'https://linkedin.com/jobs/smallbiz-marketing'
+    ]
+  },
+
+  aiAnalysis: {
+    whyThisMatters: [
+      'Company too small for ICP',
+      'Marketing roles not sales focused',
+      'Limited budget indicated',
+      'Signal dismissed - low priority'
+    ],
+    recommendedActions: [
+      'Monitor for future growth',
+      'Re-evaluate in 6 months',
+      'Track funding announcements',
+      'Consider for SMB product line'
+    ],
+    similarCompaniesConverted: []
+  },
+
+  article: {
+    title: 'SmallBiz Hiring Marketing Team',
+    published: 'Nov 1, 2024',
+    source: 'LinkedIn',
+    summary: 'SmallBiz Inc is looking to expand its marketing efforts with 2 new marketing specialist positions.',
+    fullTextUrl: 'https://linkedin.com/jobs/smallbiz'
+  },
+
+  decisionMakers: [
+    {
+      name: 'Tom Wilson',
+      title: 'Founder',
+      email: 'tom@smallbiz.com',
+      linkedin: 'https://linkedin.com/in/tomwilson',
+      role: 'decision_maker'
+    }
+  ],
+
+  scoreBreakdown: {
+    funding: 5,
+    growthSignals: 10,
+    decisionMakers: 10,
+    techStackFit: 10,
+    companySize: 10
+  },
+
+  conversionProbability: 25,
+  expectedCloseRate: 15,
+
+  relatedSignals: [],
+
+  timeline: [
+    {
+      date: 'Nov 1, 2024 - 11:00 AM',
+      event: 'Signal detected',
+      source: 'LinkedIn Jobs API'
+    },
+    {
+      date: 'Nov 1, 2024 - 4:00 PM',
+      event: 'Dismissed',
+      user: 'Mike J.'
+    }
+  ],
+
+  resources: {
+    companyWebsite: 'https://smallbiz.com',
+    linkedinPage: 'https://linkedin.com/company/smallbiz',
+    crunchbasePage: '',
+    recentNews: []
+  }
+};
+
 export const getAllIntelligenceSignals = (): IntelligenceSignal[] => {
-  return [techStartSignal, dataFlowSignal, acmeSignal];
+  return [
+    techStartSignal,
+    dataFlowSignal,
+    acmeSignal,
+    innovateLabsSignal,
+    cloudNineSignal,
+    smallBizSignal
+  ];
 };
 
 export const getIntelligenceSignalById = (id: string): IntelligenceSignal | undefined => {
