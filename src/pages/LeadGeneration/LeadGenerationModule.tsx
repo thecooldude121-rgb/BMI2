@@ -5,6 +5,7 @@ import LeadGenerationDashboard from './LeadGenerationDashboard';
 import LeadsListPage from './LeadsListPage';
 import LeadDetailPage from './LeadDetailPage';
 import SalesIntelligenceFeed from './SalesIntelligenceFeed';
+import IntelligenceDetailView from './IntelligenceDetailView';
 import CampaignsPage from './CampaignsPage';
 import ProspectDiscovery from './ProspectDiscovery';
 import ProspectsDiscovery from './ProspectsDiscovery';
@@ -36,7 +37,7 @@ const LeadGenerationModule: React.FC = () => {
         <Route path="/leads/add-import" element={<AddImportLeadsPage />} />
         <Route path="/leads/:id" element={<LeadDetailPage />} />
         <Route path="/intelligence" element={<SalesIntelligenceFeed />} />
-        <Route path="/intelligence/:id" element={<ProspectDetailPage />} />
+        <Route path="/intelligence/:id" element={<IntelligenceDetailView />} />
         <Route path="/campaigns" element={<CampaignsPage />} />
         <Route path="/campaigns/:id" element={<SequencesPage />} />
         <Route path="/discovery" element={<ProspectDiscovery />} />
