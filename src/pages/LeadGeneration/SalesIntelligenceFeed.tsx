@@ -257,13 +257,13 @@ const SalesIntelligenceFeed: React.FC = () => {
   const getSignalColor = (type: SignalType) => {
     switch (type) {
       case 'funding':
-        return 'text-green-600 bg-green-50';
-      case 'hiring':
-        return 'text-blue-600 bg-blue-50';
-      case 'product':
-        return 'text-pink-600 bg-pink-50';
-      case 'expansion':
         return 'text-orange-600 bg-orange-50';
+      case 'hiring':
+        return 'text-green-600 bg-green-50';
+      case 'product':
+        return 'text-blue-600 bg-blue-50';
+      case 'expansion':
+        return 'text-purple-600 bg-purple-50';
     }
   };
 
@@ -412,11 +412,11 @@ const SalesIntelligenceFeed: React.FC = () => {
           </button>
           <button
             onClick={() => handleStatClick('leads')}
-            className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-6 border border-pink-200 hover:shadow-md transition-all text-left"
+            className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200 hover:shadow-md transition-all text-left"
           >
-            <div className="text-3xl font-bold text-pink-900 mb-1">15</div>
-            <div className="text-sm font-medium text-pink-700 mb-1">Leads Created</div>
-            <div className="text-xs text-pink-600">from Feed</div>
+            <div className="text-3xl font-bold text-purple-900 mb-1">15</div>
+            <div className="text-sm font-medium text-purple-700 mb-1">Leads Created</div>
+            <div className="text-xs text-purple-600">from Feed</div>
           </button>
           <button
             onClick={() => handleStatClick('conversion')}
@@ -449,7 +449,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               onClick={() => setSelectedSignalType('funding')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
                 selectedSignalType === 'funding'
-                  ? 'bg-green-600 text-white'
+                  ? 'bg-orange-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -460,7 +460,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               onClick={() => setSelectedSignalType('hiring')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
                 selectedSignalType === 'hiring'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-green-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -471,7 +471,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               onClick={() => setSelectedSignalType('product')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
                 selectedSignalType === 'product'
-                  ? 'bg-pink-600 text-white'
+                  ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -482,7 +482,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               onClick={() => setSelectedSignalType('expansion')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
                 selectedSignalType === 'expansion'
-                  ? 'bg-orange-600 text-white'
+                  ? 'bg-purple-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -1117,13 +1117,13 @@ const SalesIntelligenceFeed: React.FC = () => {
                   <ChevronDown className="h-6 w-6 text-gray-400" />
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-pink-50 border border-pink-200 rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-purple-50 border border-purple-200 rounded-lg">
                   <div>
                     <p className="text-sm text-gray-600">Converted to Contacts</p>
                     <p className="text-2xl font-bold text-gray-900">13</p>
                     <p className="text-xs text-gray-600">86.7% conversion</p>
                   </div>
-                  <Users className="h-8 w-8 text-pink-600" />
+                  <Users className="h-8 w-8 text-purple-600" />
                 </div>
 
                 <div className="flex items-center justify-center">
