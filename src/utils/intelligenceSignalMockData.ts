@@ -319,8 +319,234 @@ The funding will enable TechStart to double its sales team over the next 12 mont
   }
 };
 
+const dataFlowSignal: IntelligenceSignal = {
+  id: '2',
+  type: 'hiring',
+  title: 'DataFlow Inc posted 5 Sales Engineer jobs',
+  company: 'DataFlow Inc',
+  industry: 'Data Analytics',
+  employees: 120,
+  location: 'Austin, TX',
+  detectedAt: '2024-11-15T10:00:00Z',
+  timeAgo: '5 hours ago',
+  source: 'LinkedIn Jobs API',
+  aiScore: 85,
+  status: 'new',
+  buyingIntent: 78,
+
+  companyDetails: {
+    founded: '2019',
+    website: 'https://dataflow.com',
+    revenue: '$8M ARR',
+    techStack: ['Python', 'AWS', 'Snowflake', 'Tableau'],
+    social: {
+      linkedin: 'https://linkedin.com/company/dataflow',
+      twitter: 'https://twitter.com/dataflow'
+    }
+  },
+
+  hiringDetails: {
+    jobTitles: ['Sales Engineer (5 positions)'],
+    positionsCount: 5,
+    location: 'Remote + Austin HQ',
+    postedDate: 'Nov 15, 2024',
+    jobPostingUrls: [
+      'https://linkedin.com/jobs/dataflow-sales-engineer-1',
+      'https://linkedin.com/jobs/dataflow-sales-engineer-2'
+    ]
+  },
+
+  aiAnalysis: {
+    whyThisMatters: [
+      'Scaling sales team rapidly',
+      'High buying intent - Need tools for new hires',
+      'Growth stage company',
+      'Technical sales focus'
+    ],
+    recommendedActions: [
+      'Contact VP Sales immediately',
+      'Highlight onboarding solutions',
+      'Mention sales enablement tools',
+      'Reference similar data companies'
+    ],
+    similarCompaniesConverted: [
+      'Tableau',
+      'Looker',
+      'Mode Analytics'
+    ]
+  },
+
+  article: {
+    title: 'DataFlow Expands Sales Team with 5 New Hires',
+    published: 'Nov 15, 2024',
+    source: 'LinkedIn',
+    summary: 'DataFlow Inc is rapidly expanding its sales engineering team with 5 new positions. The company is looking for technical sales professionals to help scale their data analytics platform.',
+    fullTextUrl: 'https://linkedin.com/jobs/dataflow'
+  },
+
+  decisionMakers: [
+    {
+      name: 'Robert Chang',
+      title: 'CEO',
+      email: 'robert@dataflow.com',
+      phone: '+1 555-0789',
+      linkedin: 'https://linkedin.com/in/robertchang',
+      role: 'decision_maker'
+    },
+    {
+      name: 'Emma Wilson',
+      title: 'VP Sales',
+      email: 'emma@dataflow.com',
+      phone: '+1 555-0790',
+      linkedin: 'https://linkedin.com/in/emmawilson',
+      role: 'decision_maker'
+    }
+  ],
+
+  scoreBreakdown: {
+    funding: 18,
+    growthSignals: 25,
+    decisionMakers: 15,
+    techStackFit: 15,
+    companySize: 12
+  },
+
+  conversionProbability: 62,
+  expectedCloseRate: 40,
+
+  relatedSignals: [],
+
+  timeline: [
+    {
+      date: 'Nov 15, 2024 - 10:00 AM',
+      event: 'Signal detected',
+      source: 'LinkedIn Jobs API'
+    }
+  ],
+
+  resources: {
+    companyWebsite: 'https://dataflow.com',
+    linkedinPage: 'https://linkedin.com/company/dataflow',
+    crunchbasePage: 'https://crunchbase.com/organization/dataflow',
+    recentNews: []
+  }
+};
+
+const acmeSignal: IntelligenceSignal = {
+  id: '3',
+  type: 'product',
+  title: 'Acme Corp launched new enterprise product line',
+  company: 'Acme Corp',
+  industry: 'SaaS',
+  employees: 75,
+  location: 'New York, NY',
+  detectedAt: '2024-11-14T09:00:00Z',
+  timeAgo: '1 day ago',
+  source: 'Company Blog + TechCrunch',
+  aiScore: 78,
+  status: 'in_review',
+  buyingIntent: 70,
+
+  companyDetails: {
+    founded: '2018',
+    website: 'https://acme.com',
+    revenue: '$15M ARR',
+    techStack: ['React', 'Node.js', 'PostgreSQL', 'AWS'],
+    social: {
+      linkedin: 'https://linkedin.com/company/acme',
+      twitter: 'https://twitter.com/acmecorp',
+      blog: 'https://acme.com/blog'
+    }
+  },
+
+  aiAnalysis: {
+    whyThisMatters: [
+      'Product expansion indicates growth',
+      'Enterprise focus - Higher deal sizes',
+      'Integration opportunities',
+      'New product needs supporting tools'
+    ],
+    recommendedActions: [
+      'Contact CTO about integrations',
+      'Highlight enterprise features',
+      'Mention API capabilities',
+      'Reference similar SaaS companies'
+    ],
+    similarCompaniesConverted: [
+      'Salesforce',
+      'HubSpot',
+      'Zendesk'
+    ]
+  },
+
+  article: {
+    title: 'Acme Corp Launches Enterprise Analytics Platform',
+    published: 'Nov 14, 2024',
+    source: 'TechCrunch',
+    summary: 'Acme Corp today announced the launch of its new Enterprise Analytics Platform, targeting Fortune 500 companies with advanced data visualization and reporting capabilities.',
+    fullTextUrl: 'https://techcrunch.com/acme-enterprise-launch'
+  },
+
+  decisionMakers: [
+    {
+      name: 'John Smith',
+      title: 'CTO',
+      email: 'john@acme.com',
+      phone: '+1 555-0800',
+      linkedin: 'https://linkedin.com/in/johnsmith',
+      role: 'decision_maker'
+    },
+    {
+      name: 'Lisa Anderson',
+      title: 'VP Product',
+      email: 'lisa@acme.com',
+      linkedin: 'https://linkedin.com/in/lisaanderson',
+      role: 'champion'
+    }
+  ],
+
+  scoreBreakdown: {
+    funding: 15,
+    growthSignals: 22,
+    decisionMakers: 15,
+    techStackFit: 14,
+    companySize: 12
+  },
+
+  conversionProbability: 58,
+  expectedCloseRate: 38,
+
+  relatedSignals: [],
+
+  timeline: [
+    {
+      date: 'Nov 14, 2024 - 9:00 AM',
+      event: 'Signal detected',
+      source: 'Company Blog'
+    },
+    {
+      date: 'Nov 14, 2024 - 2:00 PM',
+      event: 'Moved to In Review',
+      user: 'Mike J.'
+    }
+  ],
+
+  resources: {
+    companyWebsite: 'https://acme.com',
+    linkedinPage: 'https://linkedin.com/company/acme',
+    crunchbasePage: 'https://crunchbase.com/organization/acme',
+    recentNews: [
+      {
+        title: 'Acme Launches Enterprise Platform',
+        source: 'TechCrunch',
+        url: 'https://techcrunch.com/acme-enterprise-launch'
+      }
+    ]
+  }
+};
+
 export const getAllIntelligenceSignals = (): IntelligenceSignal[] => {
-  return [techStartSignal];
+  return [techStartSignal, dataFlowSignal, acmeSignal];
 };
 
 export const getIntelligenceSignalById = (id: string): IntelligenceSignal | undefined => {

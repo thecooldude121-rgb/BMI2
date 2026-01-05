@@ -26,35 +26,10 @@ import {
   BarChart3,
   ChevronDown
 } from 'lucide-react';
+import { getAllIntelligenceSignals, type IntelligenceSignal } from '../../utils/intelligenceSignalMockData';
 
 type SignalType = 'funding' | 'hiring' | 'product' | 'expansion';
 type SignalStatus = 'new' | 'in_review' | 'converted' | 'dismissed';
-
-interface IntelligenceSignal {
-  id: string;
-  type: SignalType;
-  title: string;
-  company: string;
-  industry: string;
-  employees: number;
-  location: string;
-  timeAgo: string;
-  aiAnalysis: string[];
-  leadScore: number;
-  keyDetails: Array<{ label: string; value: string }>;
-  relatedSignals?: string[];
-  decisionMakers?: Array<{ name: string; title: string; email: string }>;
-  opportunity?: string[];
-  status: SignalStatus;
-  statusDetails?: {
-    convertedTo?: string;
-    convertedBy?: string;
-    convertedDate?: string;
-    dismissedBy?: string;
-    dismissedDate?: string;
-    dismissReason?: string;
-  };
-}
 
 const SalesIntelligenceFeed: React.FC = () => {
   const navigate = useNavigate();
@@ -76,8 +51,11 @@ const SalesIntelligenceFeed: React.FC = () => {
   const [dismissReason, setDismissReason] = useState('');
   const [dismissNote, setDismissNote] = useState('');
 
-  // Mock data for intelligence signals
-  const signals: IntelligenceSignal[] = [
+  // Get signals from centralized mock data
+  const signals = getAllIntelligenceSignals();
+
+  // Legacy signals for reference (keeping for filter compatibility)
+  const legacySignals = [
     {
       id: '1',
       type: 'funding',
