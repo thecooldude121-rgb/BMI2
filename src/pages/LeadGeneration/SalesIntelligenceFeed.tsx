@@ -4,19 +4,27 @@ import {
   Bell,
   Settings,
   Search,
-  TrendingUp,
   DollarSign,
   Users,
   Rocket,
   Globe,
-  ChevronDown,
   Plus,
   Eye,
   BellOff,
   MoreHorizontal,
   ExternalLink,
   Undo,
-  Filter
+  TrendingUp,
+  Filter,
+  X,
+  Calendar,
+  Star,
+  Share2,
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+  BarChart3,
+  ChevronDown
 } from 'lucide-react';
 
 type SignalType = 'funding' | 'hiring' | 'product' | 'expansion';
@@ -33,9 +41,9 @@ interface IntelligenceSignal {
   timeAgo: string;
   aiAnalysis: string[];
   leadScore: number;
-  keyDetails: { label: string; value: string }[];
+  keyDetails: Array<{ label: string; value: string }>;
   relatedSignals?: string[];
-  decisionMakers?: { name: string; title: string; email: string }[];
+  decisionMakers?: Array<{ name: string; title: string; email: string }>;
   opportunity?: string[];
   status: SignalStatus;
   statusDetails?: {
@@ -57,6 +65,16 @@ const SalesIntelligenceFeed: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('list');
+
+  // Modal states
+  const [showAddToLeadsModal, setShowAddToLeadsModal] = useState(false);
+  const [showDismissModal, setShowDismissModal] = useState(false);
+  const [showCompanyPreviewModal, setShowCompanyPreviewModal] = useState(false);
+  const [showConversionFunnelModal, setShowConversionFunnelModal] = useState(false);
+  const [showMoreActionsMenu, setShowMoreActionsMenu] = useState<string | null>(null);
+  const [selectedSignal, setSelectedSignal] = useState<IntelligenceSignal | null>(null);
+  const [dismissReason, setDismissReason] = useState('');
+  const [dismissNote, setDismissNote] = useState('');
 
   // Mock data for intelligence signals
   const signals: IntelligenceSignal[] = [
@@ -243,7 +261,7 @@ const SalesIntelligenceFeed: React.FC = () => {
       case 'hiring':
         return 'text-blue-600 bg-blue-50';
       case 'product':
-        return 'text-purple-600 bg-purple-50';
+        return 'text-pink-600 bg-pink-50';
       case 'expansion':
         return 'text-orange-600 bg-orange-50';
     }
@@ -276,24 +294,63 @@ const SalesIntelligenceFeed: React.FC = () => {
   };
 
   const handleAddToLeads = (signal: IntelligenceSignal) => {
-    alert(`Adding "${signal.company}" to leads with score ${signal.leadScore}/100`);
-    // Would navigate to add lead form with pre-filled data
+    setSelectedSignal(signal);
+    setShowAddToLeadsModal(true);
+  };
+
+  const handleCreateLead = (createMultiple: boolean) => {
+    setShowAddToLeadsModal(false);
+    if (selectedSignal) {
+      navigate(`/lead-generation/leads/new?from=intelligence&signalId=${selectedSignal.id}`);
+    }
   };
 
   const handleViewDetails = (signalId: string) => {
     navigate(`/lead-generation/intelligence/${signalId}`);
   };
 
-  const handleDismiss = (signalId: string) => {
-    alert(`Signal dismissed. Reason: Not a fit for current strategy`);
+  const handleDismiss = (signal: IntelligenceSignal) => {
+    setSelectedSignal(signal);
+    setShowDismissModal(true);
+  };
+
+  const confirmDismiss = () => {
+    setShowDismissModal(false);
+    setDismissReason('');
+    setDismissNote('');
+    alert(`Signal dismissed: ${dismissReason}`);
   };
 
   const handleUndoDismiss = (signalId: string) => {
     alert(`Signal restored to active feed`);
   };
 
-  const handleViewLead = (leadId: string) => {
-    navigate(`/lead-generation/leads/${leadId}`);
+  const handleViewLead = (signalId: string) => {
+    navigate(`/lead-generation/leads/${signalId}`);
+  };
+
+  const handleCompanyClick = (signal: IntelligenceSignal) => {
+    setSelectedSignal(signal);
+    setShowCompanyPreviewModal(true);
+  };
+
+  const handleStatClick = (stat: string) => {
+    switch (stat) {
+      case 'total':
+        setSelectedSignalType('all');
+        setSelectedDateRange('7days');
+        setSearchQuery('');
+        break;
+      case 'new':
+        setSelectedDateRange('7days');
+        break;
+      case 'leads':
+        navigate('/lead-generation/leads?source=intelligence');
+        break;
+      case 'conversion':
+        setShowConversionFunnelModal(true);
+        break;
+    }
   };
 
   return (
@@ -318,7 +375,7 @@ const SalesIntelligenceFeed: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center space-x-3">
               <Bell className="h-8 w-8 text-blue-600" />
-              <span>🔔 Sales Intelligence Feed</span>
+              <span>Sales Intelligence Feed</span>
             </h1>
             <p className="text-gray-600">
               Automated company signals: funding, hiring, product launches
@@ -329,34 +386,46 @@ const SalesIntelligenceFeed: React.FC = () => {
             className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Settings className="h-4 w-4" />
-            <span>⚙️ Configure</span>
+            <span>Configure</span>
           </button>
         </div>
       </div>
 
-      {/* Stats Bar */}
+      {/* Stats Bar - Clickable */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="grid grid-cols-4 gap-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
+          <button
+            onClick={() => handleStatClick('total')}
+            className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200 hover:shadow-md transition-all text-left"
+          >
             <div className="text-3xl font-bold text-blue-900 mb-1">450</div>
             <div className="text-sm font-medium text-blue-700 mb-1">Total Signals</div>
             <div className="text-xs text-blue-600">Monitored</div>
-          </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+          </button>
+          <button
+            onClick={() => handleStatClick('new')}
+            className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200 hover:shadow-md transition-all text-left"
+          >
             <div className="text-3xl font-bold text-green-900 mb-1">50</div>
             <div className="text-sm font-medium text-green-700 mb-1">New This Week</div>
             <div className="text-xs text-green-600">+12%</div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
-            <div className="text-3xl font-bold text-purple-900 mb-1">15</div>
-            <div className="text-sm font-medium text-purple-700 mb-1">Leads Created</div>
-            <div className="text-xs text-purple-600">from Feed</div>
-          </div>
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200">
+          </button>
+          <button
+            onClick={() => handleStatClick('leads')}
+            className="bg-gradient-to-br from-pink-50 to-pink-100 rounded-lg p-6 border border-pink-200 hover:shadow-md transition-all text-left"
+          >
+            <div className="text-3xl font-bold text-pink-900 mb-1">15</div>
+            <div className="text-sm font-medium text-pink-700 mb-1">Leads Created</div>
+            <div className="text-xs text-pink-600">from Feed</div>
+          </button>
+          <button
+            onClick={() => handleStatClick('conversion')}
+            className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-6 border border-orange-200 hover:shadow-md transition-all text-left"
+          >
             <div className="text-3xl font-bold text-orange-900 mb-1">85%</div>
             <div className="text-sm font-medium text-orange-700 mb-1">Conversion Rate</div>
             <div className="text-xs text-orange-600">(High!)</div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -402,7 +471,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               onClick={() => setSelectedSignalType('product')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1 ${
                 selectedSignalType === 'product'
-                  ? 'bg-purple-600 text-white'
+                  ? 'bg-pink-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -448,7 +517,9 @@ const SalesIntelligenceFeed: React.FC = () => {
                 <option value="fintech">FinTech</option>
                 <option value="healthtech">HealthTech</option>
                 <option value="saas">SaaS</option>
+                <option value="manufacturing">Manufacturing</option>
                 <option value="ecommerce">E-commerce</option>
+                <option value="other">Other</option>
               </select>
             </div>
             <div>
@@ -459,10 +530,10 @@ const SalesIntelligenceFeed: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Sizes</option>
-                <option value="1-50">1-50</option>
-                <option value="51-200">51-200</option>
-                <option value="201-500">201-500</option>
-                <option value="500+">500+</option>
+                <option value="1-50">1-50 employees</option>
+                <option value="51-200">51-200 employees</option>
+                <option value="201-500">201-500 employees</option>
+                <option value="500+">500+ employees</option>
               </select>
             </div>
             <div>
@@ -490,8 +561,9 @@ const SalesIntelligenceFeed: React.FC = () => {
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="recent">Most Recent</option>
+                <option value="oldest">Oldest First</option>
                 <option value="score">Highest Score</option>
-                <option value="company">Company A-Z</option>
+                <option value="type">Signal Type</option>
               </select>
             </div>
             <div className="flex items-center space-x-2">
@@ -503,7 +575,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               >
                 <option value="list">📋 List View</option>
                 <option value="grid">🔲 Grid View</option>
-                <option value="compact">📊 Compact View</option>
+                <option value="table">📊 Table View</option>
               </select>
             </div>
           </div>
@@ -534,10 +606,21 @@ const SalesIntelligenceFeed: React.FC = () => {
 
               <div className="border-t border-gray-200 pt-4">
                 {/* Signal Title */}
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{signal.title}</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  {signal.industry} | {signal.employees} employees | {signal.location}
-                </p>
+                <button
+                  onClick={() => handleViewDetails(signal.id)}
+                  className="text-lg font-bold text-gray-900 mb-2 hover:text-blue-600 transition-colors text-left"
+                >
+                  {signal.title}
+                </button>
+                <div className="text-sm text-gray-600 mb-4">
+                  <button
+                    onClick={() => handleCompanyClick(signal)}
+                    className="font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    {signal.company}
+                  </button>
+                  <span> | {signal.industry} | {signal.employees} employees | {signal.location}</span>
+                </div>
 
                 {/* AI Analysis */}
                 <div className="mb-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
@@ -567,7 +650,12 @@ const SalesIntelligenceFeed: React.FC = () => {
                 {/* Related Signals */}
                 {signal.relatedSignals && (
                   <div className="mb-4">
-                    <p className="text-sm font-semibold text-gray-900 mb-2">Related Signals:</p>
+                    <button
+                      onClick={() => handleCompanyClick(signal)}
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-700 mb-2"
+                    >
+                      Related Signals: →
+                    </button>
                     <ul className="space-y-1">
                       {signal.relatedSignals.map((related, idx) => (
                         <li key={idx} className="text-sm text-gray-700">
@@ -662,15 +750,44 @@ const SalesIntelligenceFeed: React.FC = () => {
                         <span>View Details</span>
                       </button>
                       <button
-                        onClick={() => handleDismiss(signal.id)}
+                        onClick={() => handleDismiss(signal)}
                         className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                       >
                         <BellOff className="h-4 w-4" />
                         <span>Dismiss</span>
                       </button>
-                      <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowMoreActionsMenu(showMoreActionsMenu === signal.id ? null : signal.id)}
+                          className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                        {showMoreActionsMenu === signal.id && (
+                          <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                            <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2">
+                              <Star className="h-4 w-4" />
+                              <span>Add to Watch List</span>
+                            </button>
+                            <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2">
+                              <Clock className="h-4 w-4" />
+                              <span>Set Reminder</span>
+                            </button>
+                            <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2">
+                              <Share2 className="h-4 w-4" />
+                              <span>Share with Team</span>
+                            </button>
+                            <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2">
+                              <ExternalLink className="h-4 w-4" />
+                              <span>Export Signal</span>
+                            </button>
+                            <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50 flex items-center space-x-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              <span>Report Inaccurate</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </>
                   ) : signal.status === 'converted' ? (
                     <>
@@ -714,38 +831,333 @@ const SalesIntelligenceFeed: React.FC = () => {
         </div>
 
         {/* Pagination */}
-        <div className="mt-8 flex items-center justify-between">
-          <p className="text-sm text-gray-600">Showing 6 of 450 signals</p>
+        <div className="mt-8 flex items-center justify-between max-w-7xl">
+          <div className="text-sm text-gray-600">
+            Showing 6 of 450 signals
+          </div>
           <div className="flex items-center space-x-2">
-            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors">
+            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               ← Previous
             </button>
-            <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
               1
             </button>
-            <button className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors">
+            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               2
             </button>
-            <button className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors">
+            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               3
             </button>
-            <span className="px-2 text-sm text-gray-600">...</span>
-            <button className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors">
+            <span className="px-2 text-gray-600">...</span>
+            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               75
             </button>
-            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium transition-colors">
+            <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               Next →
             </button>
           </div>
         </div>
-
-        {/* Load More Button */}
-        <div className="mt-6 text-center">
-          <button className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium">
-            Load More...
-          </button>
-        </div>
       </div>
+
+      {/* Add to Leads Modal */}
+      {showAddToLeadsModal && selectedSignal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Add to Leads</h2>
+              <button
+                onClick={() => setShowAddToLeadsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-gray-900 mb-2">Company: {selectedSignal.company}</p>
+                <p className="text-sm text-gray-700">Industry: {selectedSignal.industry}</p>
+                <p className="text-sm text-gray-700">AI Score: {selectedSignal.leadScore}/100</p>
+              </div>
+
+              {selectedSignal.decisionMakers && (
+                <div>
+                  <p className="text-sm font-medium text-gray-900 mb-2">Decision Makers:</p>
+                  <div className="space-y-2">
+                    {selectedSignal.decisionMakers.map((maker, idx) => (
+                      <div key={idx} className="flex items-center space-x-2 text-sm">
+                        <input type="checkbox" id={`dm-${idx}`} defaultChecked className="rounded" />
+                        <label htmlFor={`dm-${idx}`} className="text-gray-700">
+                          {maker.name} ({maker.title}) - {maker.email}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Add to Sequence (Optional):
+                </label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">No sequence</option>
+                  <option value="1">Cold Outreach Sequence</option>
+                  <option value="2">Warm Introduction Sequence</option>
+                  <option value="3">Product Demo Sequence</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowAddToLeadsModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleCreateLead(false)}
+                className="px-4 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 text-sm font-medium"
+              >
+                Create Single Lead
+              </button>
+              <button
+                onClick={() => handleCreateLead(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                Create Multiple Leads
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dismiss Modal */}
+      {showDismissModal && selectedSignal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
+            <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Dismiss Signal</h2>
+              <button
+                onClick={() => setShowDismissModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                Why are you dismissing "{selectedSignal.company}"?
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Reason:
+                </label>
+                <select
+                  value={dismissReason}
+                  onChange={(e) => setDismissReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select a reason...</option>
+                  <option value="not_interested">Not Interested</option>
+                  <option value="too_small">Company Too Small</option>
+                  <option value="wrong_industry">Wrong Industry</option>
+                  <option value="already_contacted">Already Contacted</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Note (Optional):
+                </label>
+                <textarea
+                  value={dismissNote}
+                  onChange={(e) => setDismissNote(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Add any additional notes..."
+                />
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDismissModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDismiss}
+                disabled={!dismissReason}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                Dismiss Signal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Company Preview Modal */}
+      {showCompanyPreviewModal && selectedSignal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">{selectedSignal.company}</h2>
+              <button
+                onClick={() => setShowCompanyPreviewModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600">Industry</p>
+                  <p className="text-base font-medium text-gray-900">{selectedSignal.industry}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Employees</p>
+                  <p className="text-base font-medium text-gray-900">{selectedSignal.employees}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Location</p>
+                  <p className="text-base font-medium text-gray-900">{selectedSignal.location}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">Lead Score</p>
+                  <p className="text-base font-medium text-gray-900">{selectedSignal.leadScore}/100</p>
+                </div>
+              </div>
+
+              {selectedSignal.relatedSignals && (
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-2">All Signals for this Company:</h3>
+                  <div className="space-y-2">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-gray-900">{selectedSignal.title}</p>
+                      <p className="text-xs text-gray-600">{selectedSignal.timeAgo}</p>
+                    </div>
+                    {selectedSignal.relatedSignals.map((related, idx) => (
+                      <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm text-gray-700">{related}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end space-x-3">
+              <button
+                onClick={() => setShowCompanyPreviewModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowCompanyPreviewModal(false);
+                  handleViewDetails(selectedSignal.id);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                View Full Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conversion Funnel Modal */}
+      {showConversionFunnelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+            <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Conversion Funnel</h2>
+              <button
+                onClick={() => setShowConversionFunnelModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Signals Monitored</p>
+                    <p className="text-2xl font-bold text-gray-900">450</p>
+                  </div>
+                  <BarChart3 className="h-8 w-8 text-blue-600" />
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <ChevronDown className="h-6 w-6 text-gray-400" />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Leads Created</p>
+                    <p className="text-2xl font-bold text-gray-900">15</p>
+                    <p className="text-xs text-gray-600">3.3% conversion</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-green-600" />
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <ChevronDown className="h-6 w-6 text-gray-400" />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-pink-50 border border-pink-200 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Converted to Contacts</p>
+                    <p className="text-2xl font-bold text-gray-900">13</p>
+                    <p className="text-xs text-gray-600">86.7% conversion</p>
+                  </div>
+                  <Users className="h-8 w-8 text-pink-600" />
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <ChevronDown className="h-6 w-6 text-gray-400" />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div>
+                    <p className="text-sm text-gray-600">Deals Created</p>
+                    <p className="text-2xl font-bold text-gray-900">8</p>
+                    <p className="text-xs text-gray-600">61.5% conversion</p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-orange-600" />
+                </div>
+
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm font-medium text-gray-900 mb-2">Overall Conversion Rate</p>
+                  <p className="text-3xl font-bold text-green-600">85%</p>
+                  <p className="text-xs text-gray-600">Leads to Deals conversion</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setShowConversionFunnelModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
