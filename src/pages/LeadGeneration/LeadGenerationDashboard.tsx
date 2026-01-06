@@ -525,7 +525,7 @@ const LeadGenerationDashboard: React.FC = () => {
                     <tr key={lead.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                       <td className="py-4 px-4">
                         <button
-                          onClick={() => navigate(`/lead-generation/prospects/${lead.id}`)}
+                          onClick={() => navigate(`/lead-generation/leads/${lead.id}`)}
                           className="text-left hover:text-blue-600 transition-colors"
                         >
                           <div className="font-medium text-gray-900">{lead.name}</div>
@@ -534,7 +534,7 @@ const LeadGenerationDashboard: React.FC = () => {
                       </td>
                       <td className="py-4 px-4">
                         <button
-                          onClick={() => navigate(`/lead-generation/prospects/${lead.id}`)}
+                          onClick={() => navigate(`/lead-generation/leads/${lead.id}`)}
                           className="text-left hover:text-blue-600 transition-colors"
                         >
                           <div className="font-medium text-gray-900">{lead.company}</div>
@@ -569,7 +569,7 @@ const LeadGenerationDashboard: React.FC = () => {
                       <td className="py-4 px-4">
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => navigate(`/lead-generation/prospects/${lead.id}`)}
+                            onClick={() => navigate(`/lead-generation/leads/${lead.id}`)}
                             className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                           >
                             View
