@@ -9,9 +9,10 @@ export default function JohnSmithEnrichmentPage() {
   const data = johnSmithEnrichmentData;
 
   const [isEnriching, setIsEnriching] = useState(true);
-  const [enrichProgress, setEnrichProgress] = useState(45);
+  const [enrichProgress, setEnrichProgress] = useState(0);
   const [dataSources, setDataSources] = useState(data.dataSources);
-  const [estimatedTime, setEstimatedTime] = useState(3);
+  const [estimatedTime, setEstimatedTime] = useState(5);
+  const [enrichedFieldsCount, setEnrichedFieldsCount] = useState(0);
 
   useEffect(() => {
     if (!isEnriching) return;
@@ -21,26 +22,28 @@ export default function JohnSmithEnrichmentPage() {
         if (prev >= 100) {
           clearInterval(interval);
           setIsEnriching(false);
-          addToast('✅ Successfully enriched John Smith\'s data', 'success');
+          addToast('✅ Successfully enriched 15 fields for John Smith', 'success');
           setTimeout(() => {
             navigate('/lead-generation/leads/lead_002/enrichment');
           }, 1500);
           return 100;
         }
-        return prev + 2;
+        return Math.min(100, prev + 2.5);
       });
 
-      setEstimatedTime(prev => Math.max(0, prev - 0.1));
+      setEstimatedTime(prev => Math.max(0, prev - 0.12));
 
       setDataSources(current => current.map(source => {
         if (source.status === 'fetching') {
-          const newProgress = Math.min(100, source.progress + 3);
+          const newProgress = Math.min(100, source.progress + 3.5);
           if (newProgress >= 100) {
+            const fieldsEnriched = source.id === 'apollo' ? 9 : 6;
+            setEnrichedFieldsCount(prev => prev + fieldsEnriched);
             return { ...source, status: 'success' as const, progress: 100 };
           }
           return { ...source, progress: newProgress };
         }
-        if ((source.status === 'waiting' || source.status === 'queued') && enrichProgress > 60) {
+        if ((source.status === 'waiting' || source.status === 'queued') && enrichProgress > 55) {
           return { ...source, status: 'fetching' as const, progress: 5 };
         }
         return source;
@@ -65,8 +68,20 @@ export default function JohnSmithEnrichmentPage() {
 
   const handleCancel = () => {
     setIsEnriching(false);
-    addToast('Enrichment cancelled', 'info');
+    addToast('⚠️ Enrichment cancelled', 'info');
     navigate('/lead-generation/leads');
+  };
+
+  const getStatusMessage = () => {
+    if (enrichProgress === 0) {
+      return '🔄 Starting enrichment...';
+    } else if (enrichProgress < 50) {
+      return '🔄 Enriching... (Fetching from Apollo.io)';
+    } else if (enrichProgress < 100) {
+      return '🔄 Enriching... (Fetching from ZoomInfo)';
+    } else {
+      return '✅ Enrichment complete!';
+    }
   };
 
   return (
@@ -109,7 +124,13 @@ export default function JohnSmithEnrichmentPage() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-gray-700">Status:</span>
                 <span className="flex items-center gap-1 text-sm text-blue-600 font-medium">
-                  🔄 Enriching... (Initial enrichment in progress)
+                  {getStatusMessage()}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-700">Fields Enriched:</span>
+                <span className="text-sm text-gray-900 font-semibold">
+                  {enrichedFieldsCount} / 15
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -146,7 +167,7 @@ export default function JohnSmithEnrichmentPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
             <span>📋</span>
-            <span>ENRICHED FIELDS ({data.enrichedFields} fields) - Loading...</span>
+            <span>ENRICHED FIELDS ({enrichedFieldsCount} / 15 fields) {enrichedFieldsCount < 15 ? '- Loading...' : '- Complete!'}</span>
           </h3>
 
           <div className="border border-gray-200 rounded-lg p-8">
