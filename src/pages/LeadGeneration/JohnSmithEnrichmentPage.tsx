@@ -40,7 +40,7 @@ export default function JohnSmithEnrichmentPage() {
           }
           return { ...source, progress: newProgress };
         }
-        if (source.status === 'waiting' && enrichProgress > 60) {
+        if ((source.status === 'waiting' || source.status === 'queued') && enrichProgress > 60) {
           return { ...source, status: 'fetching' as const, progress: 5 };
         }
         return source;
@@ -229,6 +229,7 @@ function DataSourceCard({
           </>
         );
       case 'waiting':
+      case 'queued':
         return (
           <>
             <span className="text-gray-500 font-medium">⏳ Waiting...</span>
