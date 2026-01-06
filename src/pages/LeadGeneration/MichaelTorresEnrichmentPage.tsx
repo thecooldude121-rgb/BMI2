@@ -21,6 +21,8 @@ export default function MichaelTorresEnrichmentPage() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showRetryModal, setShowRetryModal] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [retryingField, setRetryingField] = useState<string | null>(null);
+  const [enrichmentComplete, setEnrichmentComplete] = useState(false);
 
   const { contactInfo, companyInfo, professionalDetails } = getMichaelTorresFieldsByCategory();
   const missingFields = getMichaelTorresMissingFields();
@@ -31,8 +33,31 @@ export default function MichaelTorresEnrichmentPage() {
 
     setTimeout(() => {
       setIsRetrying(false);
-      addToast('✅ ZoomInfo enrichment completed successfully', 'success');
+      const success = Math.random() > 0.5;
+
+      if (success) {
+        setEnrichmentComplete(true);
+        addToast('✅ ZoomInfo enrichment successful (3 fields added)', 'success');
+      } else {
+        addToast('❌ ZoomInfo still failing - Check API settings', 'error');
+      }
     }, 3000);
+  };
+
+  const handleRetryField = (fieldId: string) => {
+    setRetryingField(fieldId);
+    addToast('🔄 Retrying field enrichment...', 'info');
+
+    setTimeout(() => {
+      setRetryingField(null);
+      const success = Math.random() > 0.3;
+
+      if (success) {
+        addToast('✓ Field updated', 'success');
+      } else {
+        addToast('Failed to enrich field - retry again', 'error');
+      }
+    }, 2000);
   };
 
   const handleEnrichNow = () => {
@@ -222,6 +247,8 @@ export default function MichaelTorresEnrichmentPage() {
                     ['email', 'direct_phone', 'linkedin'].includes(f.id)
                   )}
                   onRetry={handleRetryZoomInfo}
+                  onRetryField={handleRetryField}
+                  retryingField={retryingField}
                 />
                 <FieldSection
                   title="COMPANY INFORMATION"
@@ -229,6 +256,8 @@ export default function MichaelTorresEnrichmentPage() {
                     ['company_size', 'annual_revenue', 'industry', 'company_website', 'company_phone'].includes(f.id)
                   )}
                   onRetry={handleRetryZoomInfo}
+                  onRetryField={handleRetryField}
+                  retryingField={retryingField}
                 />
                 <FieldSection
                   title="PROFESSIONAL DETAILS"
@@ -236,6 +265,8 @@ export default function MichaelTorresEnrichmentPage() {
                     ['job_title', 'seniority_level', 'department'].includes(f.id)
                   )}
                   onRetry={handleRetryZoomInfo}
+                  onRetryField={handleRetryField}
+                  retryingField={retryingField}
                 />
               </>
             ) : (
@@ -261,7 +292,10 @@ export default function MichaelTorresEnrichmentPage() {
       </div>
 
       {showErrorModal && (
-        <ErrorModal onClose={() => setShowErrorModal(false)} />
+        <ErrorModal
+          onClose={() => setShowErrorModal(false)}
+          onRetry={handleRetryZoomInfo}
+        />
       )}
     </div>
   );
@@ -275,7 +309,7 @@ function DataSourceCard({
   onRetry: () => void;
 }) {
   const getStatusDisplay = () => {
-    if (source.status === 'success') {
+    if (source.status === 'connected' || source.status === 'success') {
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -283,16 +317,26 @@ function DataSourceCard({
           </div>
           <div className="text-sm text-gray-600">Last Sync: {source.lastSync}</div>
           <div className="text-sm font-medium text-gray-900">{source.fieldsEnriched} fields enriched</div>
+          <div className="text-sm text-gray-600">Confidence: {source.confidence}%</div>
+          <div className="text-sm text-gray-600">Response Time: {source.responseTime}</div>
         </div>
       );
-    } else if (source.status === 'error') {
+    } else if (source.status === 'failed' || source.status === 'error') {
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-red-600 font-medium">❌ Failed</span>
           </div>
-          <div className="text-sm text-red-600">Error: {source.errorMessage?.split('-')[0]}</div>
+          <div className="text-sm text-red-600 mb-1">Last Sync: {source.lastSync}</div>
           <div className="text-sm font-medium text-gray-900">{source.fieldsEnriched} fields enriched</div>
+          {source.responseTime && (
+            <div className="text-sm text-red-600">Response Time: {source.responseTime}</div>
+          )}
+          <div className="bg-red-50 border border-red-200 rounded p-2 mt-2">
+            <p className="text-xs text-red-800">
+              ⚠️ {source.errorMessage || source.error}
+            </p>
+          </div>
         </div>
       );
     }
@@ -308,7 +352,7 @@ function DataSourceCard({
       {getStatusDisplay()}
 
       <div className="mt-3 flex items-center gap-2">
-        {source.status === 'error' && (
+        {(source.status === 'failed' || source.status === 'error') && (
           <button
             onClick={onRetry}
             className="text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1"
@@ -328,11 +372,15 @@ function DataSourceCard({
 function FieldSection({
   title,
   fields,
-  onRetry
+  onRetry,
+  onRetryField,
+  retryingField
 }: {
   title: string;
   fields: MichaelTorresEnrichedField[];
   onRetry: () => void;
+  onRetryField: (fieldId: string) => void;
+  retryingField: string | null;
 }) {
   if (fields.length === 0) return null;
 
@@ -346,7 +394,13 @@ function FieldSection({
       </h4>
       <div className="space-y-3">
         {fields.map((field) => (
-          <FieldCard key={field.id} field={field} onRetry={onRetry} />
+          <FieldCard
+            key={field.id}
+            field={field}
+            onRetry={onRetry}
+            onRetryField={onRetryField}
+            isRetrying={retryingField === field.id}
+          />
         ))}
       </div>
     </div>
@@ -355,10 +409,14 @@ function FieldSection({
 
 function FieldCard({
   field,
-  onRetry
+  onRetry,
+  onRetryField,
+  isRetrying
 }: {
   field: MichaelTorresEnrichedField;
   onRetry: () => void;
+  onRetryField: (fieldId: string) => void;
+  isRetrying: boolean;
 }) {
   const getSourceBadge = () => {
     if (field.status === 'missing') {
@@ -394,20 +452,21 @@ function FieldCard({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-600">After:</span>
-            <span className="text-gray-400">(empty)</span>
+            <span className="text-gray-400">{isRetrying ? '🔄 Retrying...' : '(empty)'}</span>
           </div>
         </div>
         <div className="bg-orange-100 border border-orange-200 rounded p-2 mb-2">
           <p className="text-xs text-orange-800">
-            ⚠️ {field.errorReason} - retry to enrich this field
+            ⚠️ {field.errorReason}
           </p>
         </div>
         <button
-          onClick={onRetry}
-          className="text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center gap-1"
+          onClick={() => onRetryField(field.id)}
+          disabled={isRetrying}
+          className={`text-sm ${isRetrying ? 'text-gray-400' : 'text-orange-600 hover:text-orange-700'} font-medium flex items-center gap-1`}
         >
           <span>🔄</span>
-          <span>Retry ZoomInfo</span>
+          <span>{isRetrying ? 'Retrying...' : 'Retry ZoomInfo'}</span>
         </button>
       </div>
     );
@@ -487,47 +546,68 @@ function HistoryCard({
   );
 }
 
-function ErrorModal({ onClose }: { onClose: () => void }) {
+function ErrorModal({ onClose, onRetry }: { onClose: () => void; onRetry: () => void }) {
+  const handleRetryNow = () => {
+    onClose();
+    onRetry();
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-gray-900">Error Details</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">ERROR DETAILS</h3>
 
-        <div className="space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h4 className="font-bold text-red-900 mb-2">ZoomInfo API Timeout</h4>
-            <p className="text-sm text-red-800 mb-2">
-              The ZoomInfo API did not respond within the expected 10-second timeout period.
+        <div className="space-y-3 mb-6">
+          <div className="flex items-start gap-2">
+            <span className="text-sm font-medium text-gray-700 w-28">Service:</span>
+            <span className="text-sm text-gray-900">ZoomInfo API</span>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <span className="text-sm font-medium text-gray-700 w-28">Error Code:</span>
+            <span className="text-sm text-gray-900">TIMEOUT</span>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <span className="text-sm font-medium text-gray-700 w-28">Timestamp:</span>
+            <span className="text-sm text-gray-900">Jan 5, 2025 2:15:10 PM</span>
+          </div>
+
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-sm font-medium text-gray-700 mb-2">Error Message:</p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              "ZoomInfo API did not respond within 10 seconds. This may be due to high API load or network issues."
             </p>
-            <div className="text-xs font-mono bg-red-100 p-2 rounded">
-              Error Code: ETIMEDOUT<br />
-              Endpoint: api.zoominfo.com/v2/enrich<br />
-              Timestamp: 2025-01-05T14:15:23Z<br />
-              Duration: 10.8 seconds
+          </div>
+
+          <div className="border-t border-gray-200 pt-3">
+            <div className="flex items-start gap-2">
+              <span className="text-sm font-medium text-gray-700 w-28">Retry Attempts:</span>
+              <span className="text-sm text-gray-900">1</span>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <h4 className="font-bold text-gray-900">Troubleshooting Steps:</h4>
-            <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-              <li>Check your internet connection</li>
-              <li>Verify ZoomInfo API status at status.zoominfo.com</li>
-              <li>Retry the enrichment after a few minutes</li>
-              <li>Contact support if the issue persists</li>
+          <div className="border-t border-gray-200 pt-3">
+            <p className="text-sm font-medium text-gray-700 mb-2">Suggested Actions:</p>
+            <ul className="text-sm text-gray-600 space-y-1">
+              <li>• Retry after 5 minutes</li>
+              <li>• Check ZoomInfo API status page</li>
+              <li>• Verify API key is valid</li>
             </ul>
           </div>
+        </div>
 
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRetryNow}
+            className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium flex items-center justify-center gap-2"
+          >
+            <span>🔄</span>
+            <span>Retry Now</span>
+          </button>
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium"
           >
             Close
           </button>
