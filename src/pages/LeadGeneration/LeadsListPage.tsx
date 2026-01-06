@@ -140,6 +140,25 @@ const mockLeads: LeadDetail[] = [
     }
   },
   {
+    id: 'lead_005',
+    name: 'Robert Chang',
+    title: 'CEO',
+    company: 'StartCo',
+    email: 'robert@startco.io',
+    phone: '',
+    industry: '',
+    source: 'manual',
+    score: 65,
+    status: 'new',
+    statusIndicator: 'active',
+    owner: 'Alex T.',
+    lastActivity: 'Just now',
+    sourceContext: '✍️ Manual Entry - Small startup',
+    aiInsight: '❌ Enrichment Failed - No data found',
+    nextAction: 'Not in Apollo/ZoomInfo - Manual research needed',
+    actionButtons: ['Try Again', 'Manual Entry', 'View']
+  },
+  {
     id: '6',
     name: 'Lisa Anderson',
     title: 'Director',

@@ -171,6 +171,18 @@ export const recentLeads: RecentLead[] = [
     timeAgo: '1 day ago'
   },
   {
+    id: 'lead_005',
+    name: 'Robert Chang',
+    title: 'CEO',
+    company: 'StartCo',
+    industry: '',
+    source: 'manual',
+    score: 65,
+    status: 'new',
+    statusDetail: 'Enrichment failed',
+    timeAgo: 'Just now'
+  },
+  {
     id: '6',
     name: 'Lisa Anderson',
     title: 'Director',
