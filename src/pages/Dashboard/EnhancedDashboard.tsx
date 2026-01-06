@@ -567,7 +567,7 @@ export const EnhancedDashboard: React.FC = () => {
                   <div
                     key={activity.id}
                     className={`flex items-start space-x-3 p-3 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} rounded-lg cursor-pointer transition-colors group`}
-                    onClick={() => alert(`View ${activity.lead} details`)}
+                    onClick={() => navigate('/lead-generation/leads')}
                     role="button"
                     tabIndex={0}
                   >

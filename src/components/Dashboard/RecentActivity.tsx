@@ -47,13 +47,43 @@ const RecentActivity: React.FC = () => {
     }))
   ].sort(() => Math.random() - 0.5).slice(0, 8);
 
+  const handleActivityClick = (activity: any) => {
+    const idParts = activity.id.split('-');
+    const type = idParts[0];
+    const id = idParts[1];
+
+    switch (type) {
+      case 'lead':
+        navigate(`/lead-generation/leads/${id}`);
+        break;
+      case 'deal':
+        navigate(`/crm/deals/${id}`);
+        break;
+      case 'task':
+        navigate(`/crm/tasks`);
+        break;
+      case 'meeting':
+        navigate(`/crm/meetings/${id}`);
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-6">Recent Activity</h3>
-      
+
       <div className="space-y-4">
         {activities.map(activity => (
-          <div key={activity.id} className="flex items-start space-x-3 p-3 hover:bg-gray-50 rounded-md transition-colors">
+          <div
+            key={activity.id}
+            className="flex items-start space-x-3 p-3 hover:bg-gray-50 rounded-md transition-colors cursor-pointer"
+            onClick={() => handleActivityClick(activity)}
+            role="button"
+            tabIndex={0}
+            onKeyPress={(e) => e.key === 'Enter' && handleActivityClick(activity)}
+          >
             <div className={`flex-shrink-0 p-2 rounded-full bg-gray-100`}>
               <activity.icon className={`h-4 w-4 ${activity.color}`} />
             </div>
