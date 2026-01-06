@@ -65,19 +65,19 @@ export const michaelTorresLead = {
   id: "lead_003",
   firstName: "Michael",
   lastName: "Torres",
-  email: "m.torres@bigco.com",
-  phone: "+1 (555) 789-0123",
-  title: "CTO",
+  email: "michael.torres@bigco.com",
+  phone: null,
+  title: "Chief Technology Officer",
   company: "BigCo",
-  website: "bigco.com",
-  industry: "Technology",
-  companySize: "1000+",
+  website: "https://www.bigco.com",
+  industry: "Enterprise Cloud Computing & Infrastructure",
+  companySize: "1,250 employees",
   source: "zoominfo",
   aiScore: 82,
-  status: "new",
+  status: "contacted",
   ownerId: "user_123",
   tags: ["Enterprise", "Tech Leader"],
-  notes: "Interested in cloud infrastructure solutions",
+  notes: "Interested in cloud migration solutions",
   enrichmentStatus: "partial",
   lastEnriched: "2025-01-05T14:15:00Z",
   createdAt: "2025-01-04T09:00:00Z",
@@ -111,8 +111,8 @@ export const michaelTorresEnrichmentData: MichaelTorresEnrichmentData = {
       estimatedTime: '2.5s',
       lastSync: '1 day ago',
       fieldsEnriched: 8,
-      confidence: 97,
-      responseTime: '2.4s'
+      confidence: 96,
+      responseTime: '2.3s'
     },
     {
       id: 'zoominfo',
@@ -121,14 +121,14 @@ export const michaelTorresEnrichmentData: MichaelTorresEnrichmentData = {
       status: 'error',
       progress: 0,
       estimatedTime: '3s',
-      lastSync: null,
+      lastSync: '1 day ago (failed)',
       fieldsEnriched: 0,
       confidence: null,
-      responseTime: null,
-      errorMessage: 'API Timeout - No response after 10 seconds'
+      responseTime: '10.8s (timeout)',
+      errorMessage: 'API timeout - did not respond within 10 seconds'
     }
   ],
-  totalFields: 15,
+  totalFields: 11,
   enrichedFields: 8,
   estimatedCompletion: 'Incomplete - Retry needed'
 };
@@ -155,7 +155,7 @@ export const michaelTorresEnrichedFields: MichaelTorresEnrichedField[] = [
     confidence: null,
     enrichedAt: null,
     status: "missing",
-    errorReason: "ZoomInfo API timeout"
+    errorReason: "ZoomInfo failed - retry to enrich this field"
   },
   {
     id: "linkedin",
@@ -189,7 +189,7 @@ export const michaelTorresEnrichedFields: MichaelTorresEnrichedField[] = [
     confidence: null,
     enrichedAt: null,
     status: "missing",
-    errorReason: "ZoomInfo API timeout"
+    errorReason: "ZoomInfo failed - retry to enrich this field"
   },
   {
     id: "industry",
@@ -214,6 +214,17 @@ export const michaelTorresEnrichedFields: MichaelTorresEnrichedField[] = [
     status: "updated"
   },
   {
+    id: "company_phone",
+    label: "Company Phone",
+    icon: "📞",
+    before: null,
+    after: "+1 (415) 555-0199",
+    source: "apollo",
+    confidence: 92,
+    enrichedAt: "1 day ago",
+    status: "added"
+  },
+  {
     id: "job_title",
     label: "Job Title",
     icon: "💼",
@@ -234,39 +245,16 @@ export const michaelTorresEnrichedFields: MichaelTorresEnrichedField[] = [
     confidence: null,
     enrichedAt: null,
     status: "missing",
-    errorReason: "ZoomInfo API timeout"
+    errorReason: "ZoomInfo failed - retry to enrich this field"
   },
   {
-    id: "company_hq",
-    label: "Company HQ",
-    icon: "📍",
+    id: "department",
+    label: "Department",
+    icon: "🏢",
     before: null,
-    after: "San Francisco, CA",
+    after: "Technology & Engineering",
     source: "apollo",
-    confidence: 98,
-    enrichedAt: "1 day ago",
-    status: "added"
-  },
-  {
-    id: "technologies",
-    label: "Technologies Used",
-    icon: "⚙️",
-    before: null,
-    after: null,
-    source: null,
-    confidence: null,
-    enrichedAt: null,
-    status: "missing",
-    errorReason: "ZoomInfo API timeout"
-  },
-  {
-    id: "funding",
-    label: "Funding Stage",
-    icon: "💵",
-    before: null,
-    after: "Series C",
-    source: "apollo",
-    confidence: 95,
+    confidence: 94,
     enrichedAt: "1 day ago",
     status: "added"
   }
@@ -274,33 +262,33 @@ export const michaelTorresEnrichedFields: MichaelTorresEnrichedField[] = [
 
 export const michaelTorresEnrichmentHistory: MichaelTorresEnrichmentHistory[] = [
   {
-    id: "enrich_003_002",
+    id: "enrich_002",
     timestamp: "Jan 5, 2025 2:15 PM",
     status: "partial",
     fieldsEnriched: 8,
     sources: [
       { name: "Apollo.io", fields: 8, status: "success" },
-      { name: "ZoomInfo", fields: 0, status: "error" }
+      { name: "ZoomInfo", fields: 0, status: "failed" }
     ],
-    duration: "10.8 seconds (timeout after 10s)",
-    triggeredBy: "Manual",
-    triggeredByUser: "Sarah Chen",
-    errorMessage: "ZoomInfo API timeout",
+    duration: "10.8s",
+    triggeredBy: "manual",
+    triggeredByUser: "John Smith",
+    errorMessage: "API timeout - did not respond within 10 seconds",
     errorDetails: "ZoomInfo API did not respond within 10 seconds. Apollo.io data was saved successfully. Please retry ZoomInfo enrichment."
   },
   {
-    id: "enrich_003_001",
+    id: "enrich_001",
     timestamp: "Jan 4, 2025 9:00 AM",
     status: "partial",
     fieldsEnriched: 8,
     sources: [
       { name: "Apollo.io", fields: 8, status: "success" },
-      { name: "ZoomInfo", fields: 0, status: "error" }
+      { name: "ZoomInfo", fields: 0, status: "failed" }
     ],
-    duration: "11.2 seconds (ZoomInfo timeout)",
-    triggeredBy: "Auto",
+    duration: "11.2s",
+    triggeredBy: "auto",
     triggeredByUser: null,
-    errorMessage: "ZoomInfo API timeout",
+    errorMessage: "Connection timeout",
     errorDetails: "Initial enrichment attempt failed for ZoomInfo. Connection timeout after 10 seconds."
   }
 ];
@@ -311,11 +299,11 @@ export const getMichaelTorresFieldsByCategory = () => {
   );
 
   const companyInfo = michaelTorresEnrichedFields.filter(f =>
-    ['company_size', 'annual_revenue', 'industry', 'company_website', 'company_hq', 'funding'].includes(f.id)
+    ['company_size', 'annual_revenue', 'industry', 'company_website', 'company_phone'].includes(f.id)
   );
 
   const professionalDetails = michaelTorresEnrichedFields.filter(f =>
-    ['job_title', 'seniority_level', 'technologies'].includes(f.id)
+    ['job_title', 'seniority_level', 'department'].includes(f.id)
   );
 
   return { contactInfo, companyInfo, professionalDetails };

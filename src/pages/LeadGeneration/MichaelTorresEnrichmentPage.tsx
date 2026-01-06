@@ -226,14 +226,14 @@ export default function MichaelTorresEnrichmentPage() {
                 <FieldSection
                   title="COMPANY INFORMATION"
                   fields={filteredFields.filter(f =>
-                    ['company_size', 'annual_revenue', 'industry', 'company_website', 'company_hq', 'funding'].includes(f.id)
+                    ['company_size', 'annual_revenue', 'industry', 'company_website', 'company_phone'].includes(f.id)
                   )}
                   onRetry={handleRetryZoomInfo}
                 />
                 <FieldSection
                   title="PROFESSIONAL DETAILS"
                   fields={filteredFields.filter(f =>
-                    ['job_title', 'seniority_level', 'technologies'].includes(f.id)
+                    ['job_title', 'seniority_level', 'department'].includes(f.id)
                   )}
                   onRetry={handleRetryZoomInfo}
                 />
