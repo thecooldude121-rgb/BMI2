@@ -131,6 +131,12 @@ export default function LeadEnrichmentPage() {
                   <div className="text-sm text-gray-600">
                     <span className="font-medium">{source.fieldsEnriched} fields enriched</span>
                   </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Confidence:</span> {source.confidence}%
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Response Time:</span> {source.responseTime}
+                  </div>
                 </div>
 
                 <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
@@ -258,9 +264,20 @@ export default function LeadEnrichmentPage() {
                       {entry.status === 'partial' && <span className="text-yellow-600">⚠️</span>}
                       {entry.status === 'failed' && <span className="text-red-600">❌</span>}
                       <span className="font-bold text-gray-900">{entry.timestamp}</span>
+                      {entry.triggeredBy === 'auto' && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
+                          AUTO
+                        </span>
+                      )}
+                      {entry.triggeredBy === 'manual' && entry.triggeredByUser && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                          MANUAL - {entry.triggeredByUser}
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-1 text-sm text-gray-600">
                       <p>{entry.message}</p>
+                      <p><span className="font-medium">Fields Enriched:</span> {entry.fieldsEnriched}</p>
                       <p><span className="font-medium">Sources:</span> {entry.sources}</p>
                       <p><span className="font-medium">Duration:</span> {entry.duration}</p>
                     </div>
@@ -291,6 +308,16 @@ function EnrichedFieldCard({
         <div className="flex items-center gap-2">
           <span className="text-xl">{field.icon}</span>
           <span className="font-medium text-gray-900">{field.fieldName}</span>
+          {field.status === 'added' && (
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
+              NEW
+            </span>
+          )}
+          {field.status === 'updated' && (
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+              UPDATED
+            </span>
+          )}
         </div>
         <span className="flex items-center gap-1 text-sm font-medium text-gray-700">
           <span>🎯</span>
@@ -301,7 +328,7 @@ function EnrichedFieldCard({
       <div className="space-y-2 mb-3">
         <div className="flex items-start gap-2">
           <span className="text-sm font-medium text-gray-500 whitespace-nowrap">Before:</span>
-          <span className="text-sm text-gray-600">{field.before}</span>
+          <span className="text-sm text-gray-600">{field.before || '(empty)'}</span>
         </div>
         <div className="flex items-start gap-2">
           <span className="text-sm font-medium text-gray-500 whitespace-nowrap">After:</span>
