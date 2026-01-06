@@ -441,6 +441,12 @@ const LeadsListPage: React.FC = () => {
   };
 
   const handleLeadAction = (action: string, lead: LeadDetail) => {
+    // Clear all menu states to prevent interference
+    setShowSequenceMenu(null);
+    setShowAssignMenu(null);
+    setShowMoreMenu(null);
+    setShowActionsMenu(false);
+
     switch (action) {
       case 'View':
         navigate(`/lead-generation/leads/${lead.id}`);
@@ -1112,7 +1118,11 @@ const LeadsListPage: React.FC = () => {
                                 return (
                                   <button
                                     key={index}
-                                    onClick={() => handleLeadAction(action, lead)}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleLeadAction(action, lead);
+                                    }}
                                     className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-100 transition-colors"
                                   >
                                     {action}
