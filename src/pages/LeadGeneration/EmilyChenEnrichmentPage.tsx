@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   emilyChenEnrichmentData,
@@ -15,35 +15,79 @@ export default function EmilyChenEnrichmentPage() {
   const { addToast } = useToast();
   const data = emilyChenEnrichmentData;
   const history = emilyChenEnrichmentHistory;
+  const lowConfidenceSectionRef = useRef<HTMLDivElement>(null);
 
   const [activeFilter, setActiveFilter] = useState<string>('low_confidence');
   const [showHighConfidence, setShowHighConfidence] = useState(false);
   const [acceptedFields, setAcceptedFields] = useState<string[]>([]);
   const [rejectedFields, setRejectedFields] = useState<string[]>([]);
   const [editingField, setEditingField] = useState<string | null>(null);
+  const [editedValues, setEditedValues] = useState<{ [key: string]: string }>({});
 
   const lowConfidenceFields = getEmilyChenLowConfidenceFields();
   const highConfidenceFields = getEmilyChenHighConfidenceFields();
 
+  const scrollToLowConfidence = () => {
+    if (lowConfidenceSectionRef.current) {
+      lowConfidenceSectionRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+    setActiveFilter('low_confidence');
+  };
+
   const handleAcceptField = (fieldId: string) => {
-    setAcceptedFields([...acceptedFields, fieldId]);
-    addToast('✅ Field accepted', 'success');
+    if (acceptedFields.includes(fieldId)) {
+      setAcceptedFields(acceptedFields.filter(id => id !== fieldId));
+      addToast('Undo: Field marked as pending', 'info');
+    } else {
+      setAcceptedFields([...acceptedFields, fieldId]);
+      setRejectedFields(rejectedFields.filter(id => id !== fieldId));
+      addToast('✓ Field accepted', 'success');
+    }
   };
 
   const handleRejectField = (fieldId: string) => {
-    setRejectedFields([...rejectedFields, fieldId]);
-    addToast('❌ Field rejected', 'info');
+    if (rejectedFields.includes(fieldId)) {
+      setRejectedFields(rejectedFields.filter(id => id !== fieldId));
+      addToast('Undo: Field marked as pending', 'info');
+    } else {
+      setRejectedFields([...rejectedFields, fieldId]);
+      setAcceptedFields(acceptedFields.filter(id => id !== fieldId));
+      addToast('✗ Field rejected', 'info');
+    }
   };
 
   const handleEditField = (fieldId: string) => {
-    setEditingField(fieldId);
-    addToast('✏️ Opening editor...', 'info');
+    const field = lowConfidenceFields.find(f => f.id === fieldId);
+    if (field && editingField !== fieldId) {
+      setEditingField(fieldId);
+      setEditedValues({ ...editedValues, [fieldId]: field.after });
+    }
+  };
+
+  const handleSaveEdit = (fieldId: string) => {
+    setEditingField(null);
+    setAcceptedFields([...acceptedFields, fieldId]);
+    addToast('✓ Field saved and accepted', 'success');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingField(null);
+    addToast('Edit cancelled', 'info');
+  };
+
+  const handleEditValueChange = (fieldId: string, value: string) => {
+    setEditedValues({ ...editedValues, [fieldId]: value });
   };
 
   const handleAcceptAll = () => {
     const remainingLowConfidence = lowConfidenceFields
       .filter(f => !acceptedFields.includes(f.id) && !rejectedFields.includes(f.id))
       .map(f => f.id);
+
+    if (remainingLowConfidence.length === 0) return;
 
     setAcceptedFields([...acceptedFields, ...remainingLowConfidence]);
     addToast(`✅ Accepted ${remainingLowConfidence.length} fields`, 'success');
@@ -53,6 +97,8 @@ export default function EmilyChenEnrichmentPage() {
     const remainingLowConfidence = lowConfidenceFields
       .filter(f => !acceptedFields.includes(f.id) && !rejectedFields.includes(f.id))
       .map(f => f.id);
+
+    if (remainingLowConfidence.length === 0) return;
 
     setRejectedFields([...rejectedFields, ...remainingLowConfidence]);
     addToast(`❌ Rejected ${remainingLowConfidence.length} fields`, 'info');
@@ -87,15 +133,27 @@ export default function EmilyChenEnrichmentPage() {
   };
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 85) return 'text-green-600';
+    if (confidence >= 90) return 'text-green-600';
+    if (confidence >= 80) return 'text-green-500';
     if (confidence >= 70) return 'text-yellow-600';
+    if (confidence >= 60) return 'text-orange-600';
     return 'text-red-600';
   };
 
   const getConfidenceBadge = (confidence: number) => {
-    if (confidence >= 85) return '✅ HIGH';
+    if (confidence >= 90) return '✅ HIGH';
+    if (confidence >= 80) return '🟢 HIGH';
     if (confidence >= 70) return '🟡 MEDIUM';
+    if (confidence >= 60) return '🟠 MEDIUM';
     return '🔴 LOW';
+  };
+
+  const getConfidenceBgColor = (confidence: number) => {
+    if (confidence >= 90) return 'bg-green-100 text-green-700';
+    if (confidence >= 80) return 'bg-green-50 text-green-600';
+    if (confidence >= 70) return 'bg-yellow-100 text-yellow-700';
+    if (confidence >= 60) return 'bg-orange-100 text-orange-700';
+    return 'bg-red-100 text-red-700';
   };
 
   const pendingReviewCount = lowConfidenceFields.filter(
@@ -184,7 +242,7 @@ export default function EmilyChenEnrichmentPage() {
               </p>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setActiveFilter('low_confidence')}
+                  onClick={scrollToLowConfidence}
                   className="px-3 py-1.5 bg-orange-600 text-white rounded text-sm font-medium hover:bg-orange-700"
                 >
                   View Low Confidence Fields
@@ -242,7 +300,7 @@ export default function EmilyChenEnrichmentPage() {
 
           <div className="space-y-6">
             {activeFilter !== 'high_confidence' && (
-              <div>
+              <div ref={lowConfidenceSectionRef}>
                 <h4 className="text-sm font-bold text-orange-700 mb-3 flex items-center gap-2">
                   <span>⚠️</span>
                   <span>REVIEW REQUIRED ({pendingReviewCount} fields below 70% confidence)</span>
@@ -254,9 +312,14 @@ export default function EmilyChenEnrichmentPage() {
                       field={field}
                       isAccepted={acceptedFields.includes(field.id)}
                       isRejected={rejectedFields.includes(field.id)}
+                      isEditing={editingField === field.id}
+                      editedValue={editedValues[field.id] || field.after}
                       onAccept={() => handleAcceptField(field.id)}
                       onReject={() => handleRejectField(field.id)}
                       onEdit={() => handleEditField(field.id)}
+                      onSave={() => handleSaveEdit(field.id)}
+                      onCancel={handleCancelEdit}
+                      onEditValueChange={(value) => handleEditValueChange(field.id, value)}
                     />
                   ))}
                 </div>
@@ -318,18 +381,21 @@ export default function EmilyChenEnrichmentPage() {
 }
 
 function DataSourceCard({ source }: { source: any }) {
+  const hasLowConfidence = source.status === 'connected_low_confidence' || source.lowConfidenceFields > 0;
+
   const getStatusDisplay = () => {
-    if (source.status === 'low_confidence') {
+    if (hasLowConfidence) {
       return (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-orange-600 font-medium">⚠️ Low Confidence</span>
+            <span className="text-orange-600 font-medium">⚠️ Low Confidence Data</span>
           </div>
           <div className="text-sm text-gray-600">Last Sync: {source.lastSync}</div>
           <div className="text-sm font-medium text-gray-900">
-            {source.fieldsEnriched} fields ({source.lowConfidenceCount} low)
+            {source.fieldsEnriched} fields enriched ({source.lowConfidenceFields} low confidence)
           </div>
-          <div className="text-sm text-orange-600">Avg: {source.avgConfidence}% confidence</div>
+          <div className="text-sm text-orange-600">Avg: {source.confidence}% confidence</div>
+          <div className="text-xs text-gray-500">Response: {source.responseTime}</div>
         </div>
       );
     } else {
@@ -340,7 +406,8 @@ function DataSourceCard({ source }: { source: any }) {
           </div>
           <div className="text-sm text-gray-600">Last Sync: {source.lastSync}</div>
           <div className="text-sm font-medium text-gray-900">{source.fieldsEnriched} fields enriched</div>
-          <div className="text-sm text-green-600">Avg: {source.avgConfidence}% confidence</div>
+          <div className="text-sm text-green-600">Avg: {source.confidence}% confidence</div>
+          <div className="text-xs text-gray-500">Response: {source.responseTime}</div>
         </div>
       );
     }
@@ -357,7 +424,7 @@ function DataSourceCard({ source }: { source: any }) {
 
       <div className="mt-3">
         <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-          View Details
+          View Details →
         </button>
       </div>
     </div>
@@ -368,25 +435,49 @@ function ReviewFieldCard({
   field,
   isAccepted,
   isRejected,
+  isEditing,
+  editedValue,
   onAccept,
   onReject,
-  onEdit
+  onEdit,
+  onSave,
+  onCancel,
+  onEditValueChange
 }: {
   field: EmilyChenEnrichedField;
   isAccepted: boolean;
   isRejected: boolean;
+  isEditing: boolean;
+  editedValue: string;
   onAccept: () => void;
   onReject: () => void;
   onEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  onEditValueChange: (value: string) => void;
 }) {
   const getConfidenceColor = (confidence: number) => {
+    if (confidence >= 90) return 'text-green-600';
+    if (confidence >= 80) return 'text-green-500';
     if (confidence >= 70) return 'text-yellow-600';
+    if (confidence >= 60) return 'text-orange-600';
     return 'text-red-600';
   };
 
-  const getConfidenceIcon = (confidence: number) => {
-    if (confidence >= 70) return '🟡';
-    return '🔴';
+  const getConfidenceBadge = (confidence: number) => {
+    if (confidence >= 90) return '✅ HIGH';
+    if (confidence >= 80) return '🟢 HIGH';
+    if (confidence >= 70) return '🟡 MEDIUM';
+    if (confidence >= 60) return '🟠 MEDIUM';
+    return '🔴 LOW';
+  };
+
+  const getConfidenceBgColor = (confidence: number) => {
+    if (confidence >= 90) return 'bg-green-100 text-green-700';
+    if (confidence >= 80) return 'bg-green-50 text-green-600';
+    if (confidence >= 70) return 'bg-yellow-100 text-yellow-700';
+    if (confidence >= 60) return 'bg-orange-100 text-orange-700';
+    return 'bg-red-100 text-red-700';
   };
 
   if (isAccepted) {
@@ -401,12 +492,12 @@ function ReviewFieldCard({
             ✅ Accepted
           </span>
         </div>
-        <div className="text-sm text-gray-600 mb-2">
-          Value: {field.after}
+        <div className="text-sm text-gray-900 font-medium mb-2">
+          Value: {editedValue}
         </div>
         <button
           onClick={onAccept}
-          className="text-sm text-gray-500 hover:text-gray-700"
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
         >
           Undo
         </button>
@@ -431,7 +522,7 @@ function ReviewFieldCard({
         </div>
         <button
           onClick={onReject}
-          className="text-sm text-gray-500 hover:text-gray-700"
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
         >
           Undo
         </button>
@@ -439,36 +530,89 @@ function ReviewFieldCard({
     );
   }
 
+  if (isEditing) {
+    return (
+      <div className="border-2 border-blue-300 bg-blue-50 rounded-lg p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{field.icon}</span>
+            <span className="font-medium text-gray-900">{field.label}</span>
+          </div>
+          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+            ✏️ Editing
+          </span>
+        </div>
+        <div className="mb-3">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Edit Value:
+          </label>
+          <input
+            type="text"
+            value={editedValue}
+            onChange={(e) => onEditValueChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Enter value..."
+            autoFocus
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onSave}
+            className="px-3 py-1.5 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 flex items-center gap-1"
+          >
+            <span>✓</span>
+            <span>Save</span>
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-sm font-medium hover:bg-gray-300 flex items-center gap-1"
+          >
+            <span>✕</span>
+            <span>Cancel</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="border border-orange-200 bg-orange-50 rounded-lg p-4">
-      <div className="flex items-start justify-between mb-2">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-xl">{field.icon}</span>
           <span className="font-medium text-gray-900">{field.label}</span>
         </div>
-        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium flex items-center gap-1">
-          <span>🎯</span>
-          <span>{field.source === 'apollo' ? 'Apollo.io' : 'ZoomInfo'}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBgColor(field.confidence)}`}>
+            {getConfidenceBadge(field.confidence)} {field.confidence}%
+          </span>
+          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium flex items-center gap-1">
+            <span>🎯</span>
+            <span>{field.source === 'apollo' ? 'Apollo.io' : 'ZoomInfo'}</span>
+          </span>
+        </div>
       </div>
       <div className="space-y-1 text-sm mb-3">
         <div className="flex items-start gap-2">
-          <span className="text-gray-600 whitespace-nowrap">Before:</span>
-          <span className="text-gray-500">{field.before}</span>
+          <span className="text-gray-600 whitespace-nowrap font-medium">Before:</span>
+          <span className="text-gray-500">{field.before || '(empty)'}</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-gray-600 whitespace-nowrap">After:</span>
+          <span className="text-gray-600 whitespace-nowrap font-medium">After:</span>
           <span className="text-gray-900 font-medium flex items-center gap-1">
             {field.after}
             <span className="text-orange-600">⚠️</span>
           </span>
         </div>
       </div>
-      <div className={`text-sm ${getConfidenceColor(field.confidence)} font-medium mb-3`}>
-        Confidence: {field.confidence}% {getConfidenceIcon(field.confidence)} {field.confidenceNote}
-      </div>
+      {field.warningMessage && (
+        <div className={`text-sm ${getConfidenceColor(field.confidence)} font-medium mb-3 flex items-center gap-1`}>
+          <span>⚠️</span>
+          <span>{field.warningMessage}</span>
+        </div>
+      )}
       <div className="text-xs text-gray-500 mb-3">
-        Enriched: {field.enrichedAt}
+        Enriched: {new Date(field.enrichedAt).toLocaleString()}
       </div>
       <div className="flex items-center gap-2">
         <button
@@ -498,6 +642,18 @@ function ReviewFieldCard({
 }
 
 function HighConfidenceFieldCard({ field }: { field: EmilyChenEnrichedField }) {
+  const getConfidenceBadge = (confidence: number) => {
+    if (confidence >= 90) return '✅ HIGH';
+    if (confidence >= 80) return '🟢 HIGH';
+    return '✓ APPROVED';
+  };
+
+  const getConfidenceBgColor = (confidence: number) => {
+    if (confidence >= 90) return 'bg-green-100 text-green-700';
+    if (confidence >= 80) return 'bg-green-50 text-green-600';
+    return 'bg-gray-100 text-gray-700';
+  };
+
   return (
     <div className="border border-gray-200 rounded-lg p-4 hover:border-green-300 transition-colors">
       <div className="flex items-start justify-between mb-2">
@@ -505,59 +661,100 @@ function HighConfidenceFieldCard({ field }: { field: EmilyChenEnrichedField }) {
           <span className="text-xl">{field.icon}</span>
           <span className="font-medium text-gray-900">{field.label}</span>
         </div>
-        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium flex items-center gap-1">
-          <span>🎯</span>
-          <span>{field.source === 'apollo' ? 'Apollo.io' : 'ZoomInfo'}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBgColor(field.confidence)}`}>
+            {getConfidenceBadge(field.confidence)} {field.confidence}%
+          </span>
+          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium flex items-center gap-1">
+            <span>🎯</span>
+            <span>{field.source === 'apollo' ? 'Apollo.io' : 'ZoomInfo'}</span>
+          </span>
+        </div>
       </div>
       <div className="space-y-1 text-sm mb-2">
         <div className="flex items-start gap-2">
-          <span className="text-gray-600 whitespace-nowrap">Before:</span>
-          <span className="text-gray-500">{field.before}</span>
+          <span className="text-gray-600 whitespace-nowrap font-medium">Before:</span>
+          <span className="text-gray-500">{field.before || '(empty)'}</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-gray-600 whitespace-nowrap">After:</span>
+          <span className="text-gray-600 whitespace-nowrap font-medium">After:</span>
           <span className="text-green-700 font-medium flex items-center gap-1">
             {field.after}
             <span className="text-green-600">✓</span>
           </span>
         </div>
       </div>
-      <div className="text-sm text-green-600 font-medium">
-        Confidence: {field.confidence}% ✅ HIGH
-      </div>
       <div className="text-xs text-gray-500 mt-1">
-        Enriched: {field.enrichedAt} • Auto-approved
+        Enriched: {new Date(field.enrichedAt).toLocaleString()} • Auto-approved
       </div>
     </div>
   );
 }
 
 function HistoryCard({ entry }: { entry: any }) {
+  const getStatusIcon = () => {
+    if (entry.status === 'success_low_confidence') return '⚠️';
+    if (entry.status === 'success') return '✅';
+    return '❌';
+  };
+
+  const getStatusColor = () => {
+    if (entry.status === 'success_low_confidence') return 'text-orange-600';
+    if (entry.status === 'success') return 'text-green-600';
+    return 'text-red-600';
+  };
+
   return (
     <div className="border border-gray-200 rounded-lg p-4">
-      <div className="flex items-start justify-between mb-2">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xl">⚠️</span>
-          <span className="font-medium text-gray-900">{entry.timestamp}</span>
+          <span className="text-xl">{getStatusIcon()}</span>
+          <span className="font-medium text-gray-900">
+            {new Date(entry.timestamp).toLocaleString()}
+          </span>
         </div>
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${entry.status === 'success_low_confidence' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+          {entry.status === 'success_low_confidence' ? 'Low Confidence' : 'Success'}
+        </span>
       </div>
-      <div className="space-y-1 text-sm text-gray-600 mb-3">
-        <p>{entry.message}</p>
-        <p>
-          Sources: {entry.sources.map((s: any) => `${s.name} (${s.fields} fields, avg ${s.avgConfidence}%)`).join(', ')}
-        </p>
-        <p>Duration: {entry.duration}</p>
-        <p className="text-orange-600 font-medium">
-          Status: Pending review ({entry.fieldsNeedingReview} fields need manual verification)
-        </p>
+      <div className="space-y-2 text-sm text-gray-600 mb-3">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-700">Fields Enriched:</span>
+          <span>{entry.fieldsEnriched} fields</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-700">Sources:</span>
+          <span>
+            {entry.sources.map((s: any) =>
+              `${s.name} (${s.fields} fields, ${s.avgConfidence}% avg)`
+            ).join(', ')}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-700">Duration:</span>
+          <span>{entry.duration}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-700">Triggered By:</span>
+          <span>{entry.triggeredBy === 'auto' ? 'Automatic' : entry.triggeredByUser}</span>
+        </div>
+        {entry.lowConfidenceFields > 0 && (
+          <div className={`flex items-center gap-2 ${getStatusColor()} font-medium`}>
+            <span>⚠️</span>
+            <span>
+              {entry.lowConfidenceFields} fields need manual review
+            </span>
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2">
-        <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">
-          Review Now
-        </button>
+        {entry.lowConfidenceFields > 0 && (
+          <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">
+            Review Now →
+          </button>
+        )}
         <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-          View Details
+          View Details →
         </button>
       </div>
     </div>
