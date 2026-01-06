@@ -27,6 +27,8 @@ import SavedSearchesPage from '../Discovery/SavedSearchesPage';
 import AddImportLeadsPage from './AddImportLeadsPage';
 import LeadEnrichmentPage from './LeadEnrichmentPage';
 import JohnSmithEnrichmentPage from './JohnSmithEnrichmentPage';
+import MichaelTorresEnrichmentPage from './MichaelTorresEnrichmentPage';
+import EmilyChenEnrichmentPage from './EmilyChenEnrichmentPage';
 
 const LeadGenerationModule: React.FC = () => {
   return (
@@ -39,6 +41,8 @@ const LeadGenerationModule: React.FC = () => {
         <Route path="/leads/add-import" element={<AddImportLeadsPage />} />
         <Route path="/leads/:id" element={<LeadDetailPage />} />
         <Route path="/leads/lead_002/enrichment" element={<JohnSmithEnrichmentPage />} />
+        <Route path="/leads/lead_003/enrichment" element={<MichaelTorresEnrichmentPage />} />
+        <Route path="/leads/lead_004/enrichment" element={<EmilyChenEnrichmentPage />} />
         <Route path="/leads/:id/enrichment" element={<LeadEnrichmentPage />} />
         <Route path="/intelligence" element={<SalesIntelligenceFeed />} />
         <Route path="/intelligence/:id" element={<IntelligenceDetailView />} />
