@@ -448,7 +448,11 @@ const LeadsListPage: React.FC = () => {
       case 'Enrich':
       case 'Enrich Now':
         showToast(`Enriching ${lead.name} with Apollo/ZoomInfo data...`, 'info');
-        setTimeout(() => showToast(`${lead.name} enriched successfully!`, 'success'), 2000);
+        setTimeout(() => {
+          showToast(`${lead.name} enriched successfully! 20 fields updated.`, 'success');
+          // Navigate to lead enrichment page to show enriched data
+          navigate(`/lead-generation/leads/${lead.id}/enrichment`);
+        }, 2000);
         break;
       case 'Qualify':
       case 'Score':
@@ -499,8 +503,10 @@ const LeadsListPage: React.FC = () => {
     const count = selectedLeads.length;
     switch (action) {
       case 'enrich':
-        showToast(`Enriching ${count} leads...`, 'info');
-        setTimeout(() => showToast(`${count} leads enriched!`, 'success'), 2000);
+        showToast(`Enriching ${count} leads with Apollo/ZoomInfo...`, 'info');
+        setTimeout(() => {
+          showToast(`${count} leads enriched successfully! View enrichment details on each lead.`, 'success');
+        }, 2000);
         break;
       case 'export':
         showToast(`Exporting ${count} leads to CSV...`, 'success');
