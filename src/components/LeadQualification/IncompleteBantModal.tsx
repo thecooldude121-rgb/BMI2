@@ -4,7 +4,7 @@ import { X, AlertCircle, Edit, Save } from 'lucide-react';
 interface IncompleteBantModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCompleteBant: () => void;
+  onCompleteBant: (specificField?: string) => void;
   onSaveDraft: () => void;
   bantScore: number;
   missingFields: {
@@ -26,6 +26,16 @@ const IncompleteBantModal: React.FC<IncompleteBantModalProps> = ({
   if (!isOpen) return null;
 
   const missingCount = Object.values(missingFields).filter(Boolean).length;
+
+  const getFirstMissingField = (): string => {
+    if (missingFields.budget) return 'Budget';
+    if (missingFields.authority) return 'Authority';
+    if (missingFields.need) return 'Need';
+    if (missingFields.timeline) return 'Timeline';
+    return 'Budget';
+  };
+
+  const firstMissingField = getFirstMissingField();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -120,7 +130,7 @@ const IncompleteBantModal: React.FC<IncompleteBantModalProps> = ({
 
         <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
           <button
-            onClick={onCompleteBant}
+            onClick={() => onCompleteBant(firstMissingField)}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <Edit className="h-5 w-5" />

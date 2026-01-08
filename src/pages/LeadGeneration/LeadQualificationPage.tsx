@@ -193,10 +193,50 @@ const LeadQualificationPage: React.FC = () => {
     setShowQualifyModal(true);
   };
 
-  const handleCompleteBant = () => {
+  const scrollToAndHighlightField = (fieldName: string) => {
+    const fieldId = `bant-${fieldName.toLowerCase()}`;
+    const element = document.getElementById(fieldId);
+
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      element.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.5)';
+      element.style.backgroundColor = 'rgba(239, 246, 255, 0.5)';
+
+      setTimeout(() => {
+        element.style.boxShadow = '';
+        element.style.backgroundColor = '';
+      }, 2000);
+
+      setTimeout(() => {
+        const firstInput = element.querySelector('input[type="radio"]') as HTMLInputElement;
+        if (firstInput) {
+          firstInput.focus();
+        }
+      }, 500);
+    }
+  };
+
+  const handleCompleteBant = (specificField?: string) => {
     setShowIncompleteBantModal(false);
     setShowPartialBantModal(false);
-    bantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (specificField) {
+      setTimeout(() => {
+        scrollToAndHighlightField(specificField);
+      }, 100);
+    } else {
+      const missingFields = bantValidation.getMissingFields(qualificationData.bantData);
+      const firstMissingField = missingFields[0];
+
+      if (firstMissingField) {
+        setTimeout(() => {
+          scrollToAndHighlightField(firstMissingField);
+        }, 100);
+      } else {
+        bantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   };
 
   const handleQualifyAnywayFromPartial = () => {
@@ -234,7 +274,9 @@ const LeadQualificationPage: React.FC = () => {
 
   const handleSaveDraft = async () => {
     try {
-      showToast('💾 Draft saved', 'success');
+      setShowIncompleteBantModal(false);
+      setShowPartialBantModal(false);
+      showToast('💾 Draft saved - Complete BANT when ready', 'success');
     } catch (error) {
       showToast('Failed to save draft', 'error');
     }

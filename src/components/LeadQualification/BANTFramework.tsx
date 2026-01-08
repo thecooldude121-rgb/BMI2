@@ -116,7 +116,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
         </p>
 
         <div className="space-y-6">
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div id="bant-budget" className="border border-gray-200 rounded-lg p-4 transition-all duration-300">
             <div className="flex items-center gap-2 mb-4">
               <DollarSign className="h-5 w-5 text-green-600" />
               <h3 className="font-semibold text-gray-900">
@@ -192,7 +192,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
             </div>
           </div>
 
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div id="bant-authority" className="border border-gray-200 rounded-lg p-4 transition-all duration-300">
             <div className="flex items-center gap-2 mb-4">
               <User className="h-5 w-5 text-blue-600" />
               <h3 className="font-semibold text-gray-900">
@@ -266,7 +266,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
             </div>
           </div>
 
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div id="bant-need" className="border border-gray-200 rounded-lg p-4 transition-all duration-300">
             <div className="flex items-center gap-2 mb-4">
               <Target className="h-5 w-5 text-orange-600" />
               <h3 className="font-semibold text-gray-900">
@@ -335,7 +335,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
             </div>
           </div>
 
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div id="bant-timeline" className="border border-gray-200 rounded-lg p-4 transition-all duration-300">
             <div className="flex items-center gap-2 mb-4">
               <Clock className="h-5 w-5 text-blue-600" />
               <h3 className="font-semibold text-gray-900">
