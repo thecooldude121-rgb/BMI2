@@ -51,6 +51,14 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
     notes: false
   });
 
+  const [selectedFields, setSelectedFields] = useState<Record<string, Record<string, boolean>>>({
+    contact: Object.fromEntries(crmSyncConfig.fieldsToSync.contactInfo.fields.map(f => [f.name, f.selected])),
+    company: Object.fromEntries(crmSyncConfig.fieldsToSync.companyInfo.fields.map(f => [f.name, f.selected])),
+    bant: Object.fromEntries(crmSyncConfig.fieldsToSync.bantAssessment.fields.map(f => [f.name, f.selected])),
+    professional: Object.fromEntries(crmSyncConfig.fieldsToSync.professionalDetails.fields.map(f => [f.name, f.selected])),
+    notes: Object.fromEntries(crmSyncConfig.fieldsToSync.qualificationNotes.fields.map(f => [f.name, f.selected]))
+  });
+
   if (!isOpen) return null;
 
   const toggleSection = (section: string) => {
@@ -58,6 +66,43 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
       ...prev,
       [section]: !prev[section]
     }));
+  };
+
+  const toggleFieldSelection = (section: string, fieldName: string) => {
+    setSelectedFields(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [fieldName]: !prev[section][fieldName]
+      }
+    }));
+  };
+
+  const getSelectedFieldCount = (section: string) => {
+    return Object.values(selectedFields[section] || {}).filter(Boolean).length;
+  };
+
+  const getTotalFieldCount = (section: string) => {
+    return Object.keys(selectedFields[section] || {}).length;
+  };
+
+  const criticalFields = ['Email', 'Budget', 'Authority', 'AI Score'];
+
+  const handleConfirm = () => {
+    const deselectedCritical = criticalFields.filter(field => {
+      return Object.entries(selectedFields).some(([section, fields]) => {
+        return fields[field] === false;
+      });
+    });
+
+    if (deselectedCritical.length > 0) {
+      const proceed = window.confirm(
+        `Warning: You have deselected critical fields (${deselectedCritical.join(', ')}). This may affect lead quality in CRM. Continue anyway?`
+      );
+      if (!proceed) return;
+    }
+
+    onConfirm();
   };
 
   const getAIScoreLabel = (score: number): string => {
@@ -276,21 +321,35 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                   ) : (
                     <ChevronRight className="h-4 w-4 text-gray-600" />
                   )}
-                  <span className="text-sm font-medium text-gray-900">Contact Information (5 fields)</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    Contact Information ({getSelectedFieldCount('contact')}/{getTotalFieldCount('contact')} selected)
+                  </span>
                 </div>
               </button>
               {expandedSections.contact && (
                 <div className="px-4 py-3 bg-gray-50">
                   <div className="space-y-2">
-                    {crmSyncConfig.fieldsToSync.contactInfo.fields.map((field, idx) => (
-                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
-                          <span className="text-gray-700 truncate">{field.value}</span>
+                    {crmSyncConfig.fieldsToSync.contactInfo.fields.map((field, idx) => {
+                      const isSelected = selectedFields.contact[field.name];
+                      const isCritical = criticalFields.includes(field.name);
+                      return (
+                        <div key={idx} className="flex items-start justify-between gap-4 text-xs group">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFieldSelection('contact', field.name)}
+                              className="h-3.5 w-3.5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                            />
+                            <CheckCircle className={`h-3.5 w-3.5 flex-shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-300'}`} />
+                            <span className={`font-medium flex-shrink-0 ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {field.name}:{isCritical && <span className="ml-1 text-red-500">*</span>}
+                            </span>
+                            <span className={`truncate ${isSelected ? 'text-gray-700' : 'text-gray-400'}`}>{field.value}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -305,21 +364,35 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                   ) : (
                     <ChevronRight className="h-4 w-4 text-gray-600" />
                   )}
-                  <span className="text-sm font-medium text-gray-900">Company Information (8 fields)</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    Company Information ({getSelectedFieldCount('company')}/{getTotalFieldCount('company')} selected)
+                  </span>
                 </div>
               </button>
               {expandedSections.company && (
                 <div className="px-4 py-3 bg-gray-50">
                   <div className="space-y-2">
-                    {crmSyncConfig.fieldsToSync.companyInfo.fields.map((field, idx) => (
-                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
-                          <span className="text-gray-700 truncate">{field.value}</span>
+                    {crmSyncConfig.fieldsToSync.companyInfo.fields.map((field, idx) => {
+                      const isSelected = selectedFields.company[field.name];
+                      const isCritical = criticalFields.includes(field.name);
+                      return (
+                        <div key={idx} className="flex items-start justify-between gap-4 text-xs group">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFieldSelection('company', field.name)}
+                              className="h-3.5 w-3.5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                            />
+                            <CheckCircle className={`h-3.5 w-3.5 flex-shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-300'}`} />
+                            <span className={`font-medium flex-shrink-0 ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {field.name}:{isCritical && <span className="ml-1 text-red-500">*</span>}
+                            </span>
+                            <span className={`truncate ${isSelected ? 'text-gray-700' : 'text-gray-400'}`}>{field.value}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -334,21 +407,35 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                   ) : (
                     <ChevronRight className="h-4 w-4 text-gray-600" />
                   )}
-                  <span className="text-sm font-medium text-gray-900">BANT Assessment (4 components)</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    BANT Assessment ({getSelectedFieldCount('bant')}/{getTotalFieldCount('bant')} selected)
+                  </span>
                 </div>
               </button>
               {expandedSections.bant && (
                 <div className="px-4 py-3 bg-gray-50">
                   <div className="space-y-2">
-                    {crmSyncConfig.fieldsToSync.bantAssessment.fields.map((field, idx) => (
-                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
-                          <span className="text-gray-700 truncate">{field.value}</span>
+                    {crmSyncConfig.fieldsToSync.bantAssessment.fields.map((field, idx) => {
+                      const isSelected = selectedFields.bant[field.name];
+                      const isCritical = criticalFields.includes(field.name);
+                      return (
+                        <div key={idx} className="flex items-start justify-between gap-4 text-xs group">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFieldSelection('bant', field.name)}
+                              className="h-3.5 w-3.5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                            />
+                            <CheckCircle className={`h-3.5 w-3.5 flex-shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-300'}`} />
+                            <span className={`font-medium flex-shrink-0 ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {field.name}:{isCritical && <span className="ml-1 text-red-500">*</span>}
+                            </span>
+                            <span className={`truncate ${isSelected ? 'text-gray-700' : 'text-gray-400'}`}>{field.value}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -363,21 +450,35 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                   ) : (
                     <ChevronRight className="h-4 w-4 text-gray-600" />
                   )}
-                  <span className="text-sm font-medium text-gray-900">Professional Details (7 fields)</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    Professional Details ({getSelectedFieldCount('professional')}/{getTotalFieldCount('professional')} selected)
+                  </span>
                 </div>
               </button>
               {expandedSections.professional && (
                 <div className="px-4 py-3 bg-gray-50">
                   <div className="space-y-2">
-                    {crmSyncConfig.fieldsToSync.professionalDetails.fields.map((field, idx) => (
-                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
-                          <span className="text-gray-700 truncate">{field.value}</span>
+                    {crmSyncConfig.fieldsToSync.professionalDetails.fields.map((field, idx) => {
+                      const isSelected = selectedFields.professional[field.name];
+                      const isCritical = criticalFields.includes(field.name);
+                      return (
+                        <div key={idx} className="flex items-start justify-between gap-4 text-xs group">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFieldSelection('professional', field.name)}
+                              className="h-3.5 w-3.5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                            />
+                            <CheckCircle className={`h-3.5 w-3.5 flex-shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-300'}`} />
+                            <span className={`font-medium flex-shrink-0 ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {field.name}:{isCritical && <span className="ml-1 text-red-500">*</span>}
+                            </span>
+                            <span className={`truncate ${isSelected ? 'text-gray-700' : 'text-gray-400'}`}>{field.value}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -392,21 +493,35 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                   ) : (
                     <ChevronRight className="h-4 w-4 text-gray-600" />
                   )}
-                  <span className="text-sm font-medium text-gray-900">Qualification Notes & History</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    Qualification Notes & History ({getSelectedFieldCount('notes')}/{getTotalFieldCount('notes')} selected)
+                  </span>
                 </div>
               </button>
               {expandedSections.notes && (
                 <div className="px-4 py-3 bg-gray-50">
                   <div className="space-y-2">
-                    {crmSyncConfig.fieldsToSync.qualificationNotes.fields.map((field, idx) => (
-                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
-                          <span className="text-gray-700 truncate">{field.value}</span>
+                    {crmSyncConfig.fieldsToSync.qualificationNotes.fields.map((field, idx) => {
+                      const isSelected = selectedFields.notes[field.name];
+                      const isCritical = criticalFields.includes(field.name);
+                      return (
+                        <div key={idx} className="flex items-start justify-between gap-4 text-xs group">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleFieldSelection('notes', field.name)}
+                              className="h-3.5 w-3.5 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer flex-shrink-0"
+                            />
+                            <CheckCircle className={`h-3.5 w-3.5 flex-shrink-0 ${isSelected ? 'text-emerald-600' : 'text-gray-300'}`} />
+                            <span className={`font-medium flex-shrink-0 ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}>
+                              {field.name}:{isCritical && <span className="ml-1 text-red-500">*</span>}
+                            </span>
+                            <span className={`truncate ${isSelected ? 'text-gray-700' : 'text-gray-400'}`}>{field.value}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -416,7 +531,7 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
 
         <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex gap-3">
           <button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
           >
             <CheckCircle className="h-5 w-5" />
