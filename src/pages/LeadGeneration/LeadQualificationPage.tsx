@@ -5,11 +5,12 @@ import AIScoreBreakdown from '../../components/LeadQualification/AIScoreBreakdow
 import BANTFramework from '../../components/LeadQualification/BANTFramework';
 import QualificationDecision from '../../components/LeadQualification/QualificationDecision';
 import QualificationHistory from '../../components/LeadQualification/QualificationHistory';
-import QualifyLeadModal from '../../components/LeadQualification/QualifyLeadModal';
 import DisqualifyLeadModal from '../../components/LeadQualification/DisqualifyLeadModal';
 import AddNotesModal from '../../components/LeadQualification/AddNotesModal';
 import IncompleteBantModal from '../../components/LeadQualification/IncompleteBantModal';
 import PartialBantModal from '../../components/LeadQualification/PartialBantModal';
+import CRMSyncConfirmationModal from '../../components/LeadQualification/CRMSyncConfirmationModal';
+import CRMSyncProgressModal from '../../components/LeadQualification/CRMSyncProgressModal';
 import { useToast } from '../../contexts/ToastContext';
 import * as bantValidation from '../../services/bantValidationService';
 
@@ -18,6 +19,8 @@ interface Lead {
   name: string;
   title: string;
   company: string;
+  email: string;
+  phone: string;
   source: string;
   status: string;
   score: number;
@@ -50,6 +53,7 @@ const LeadQualificationPage: React.FC = () => {
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [showQualifyModal, setShowQualifyModal] = useState(false);
+  const [showSyncProgressModal, setShowSyncProgressModal] = useState(false);
   const [showDisqualifyModal, setShowDisqualifyModal] = useState(false);
   const [showAddNotesModal, setShowAddNotesModal] = useState(false);
   const [showIncompleteBantModal, setShowIncompleteBantModal] = useState(false);
@@ -162,8 +166,10 @@ const LeadQualificationPage: React.FC = () => {
       setLead({
         id: id || 'sarah-lee',
         name: 'Sarah Lee',
-        title: 'CFO',
+        title: 'Chief Financial Officer',
         company: 'TechStart Inc',
+        email: 'sarah.lee@techstart.com',
+        phone: '+1 (415) 234-5678',
         source: 'HRMS',
         status: 'Contacted',
         score: 92,
@@ -247,13 +253,18 @@ const LeadQualificationPage: React.FC = () => {
   const handleConfirmQualify = async () => {
     try {
       setShowQualifyModal(false);
-      showToast('✅ Lead qualified and synced to CRM', 'success');
-      setTimeout(() => {
-        navigate('/lead-gen/leads');
-      }, 1000);
+      setShowSyncProgressModal(true);
     } catch (error) {
       showToast('Failed to qualify lead', 'error');
     }
+  };
+
+  const handleSyncComplete = () => {
+    setShowSyncProgressModal(false);
+    showToast('✅ Lead qualified and synced to CRM', 'success');
+    setTimeout(() => {
+      navigate('/lead-gen/leads');
+    }, 1000);
   };
 
   const handleDisqualify = () => {
@@ -462,18 +473,35 @@ const LeadQualificationPage: React.FC = () => {
         <QualificationHistory leadId={lead.id} />
       </div>
 
-      <QualifyLeadModal
+      <CRMSyncConfirmationModal
         isOpen={showQualifyModal}
         onClose={() => setShowQualifyModal(false)}
         onConfirm={handleConfirmQualify}
-        lead={{
+        leadInfo={{
           name: lead?.name || '',
-          company: lead?.company || ''
+          company: lead?.company || '',
+          title: lead?.title || '',
+          email: lead?.email || '',
+          phone: lead?.phone || ''
         }}
         aiScore={qualificationData.aiScore}
         bantScore={calculateBANTScore()}
-        assignedTo={qualificationData.assignedTo}
+        maxBantScore={20}
+        opportunityPreview={{
+          opportunityName: `${lead?.company || 'Company'} - ${lead?.title || 'Lead'}`,
+          amount: 75000,
+          closeDate: 'Feb 15, 2025',
+          stage: 'Discovery',
+          probability: 40,
+          type: 'New Business',
+          owner: qualificationData.assignedTo
+        }}
         hasIncompleteBANT={calculateBANTScore() < 15}
+      />
+
+      <CRMSyncProgressModal
+        isOpen={showSyncProgressModal}
+        onComplete={handleSyncComplete}
       />
 
       <DisqualifyLeadModal
