@@ -11,6 +11,7 @@ import AddNotesModal from '../../components/LeadQualification/AddNotesModal';
 import IncompleteBantModal from '../../components/LeadQualification/IncompleteBantModal';
 import PartialBantModal from '../../components/LeadQualification/PartialBantModal';
 import { useToast } from '../../contexts/ToastContext';
+import * as bantValidation from '../../services/bantValidationService';
 
 interface Lead {
   id: string;
@@ -176,140 +177,15 @@ const LeadQualificationPage: React.FC = () => {
     }
   };
 
-  const calculateBANTScore = () => {
-    let score = 0;
-    if (qualificationData.bantData.budget.status === 'confirmed') score += 5;
-    else if (qualificationData.bantData.budget.status === 'likely') score += 4;
-    else if (qualificationData.bantData.budget.status === 'unknown') score += 2;
-
-    if (qualificationData.bantData.authority.status === 'decision_maker') score += 5;
-    else if (qualificationData.bantData.authority.status === 'influencer') score += 4;
-    else if (qualificationData.bantData.authority.status === 'end_user') score += 2;
-
-    if (qualificationData.bantData.need.status === 'urgent') score += 5;
-    else if (qualificationData.bantData.need.status === 'important') score += 4;
-    else if (qualificationData.bantData.need.status === 'nice_to_have') score += 2;
-
-    if (qualificationData.bantData.timeline.status === 'immediate') score += 5;
-    else if (qualificationData.bantData.timeline.status === 'short_term') score += 4;
-    else if (qualificationData.bantData.timeline.status === 'long_term') score += 2;
-
-    return score;
-  };
-
-  const getMissingBANTFields = () => {
-    return {
-      budget: !qualificationData.bantData.budget.status || qualificationData.bantData.budget.status === '',
-      authority: !qualificationData.bantData.authority.status || qualificationData.bantData.authority.status === '',
-      need: !qualificationData.bantData.need.status || qualificationData.bantData.need.status === '',
-      timeline: !qualificationData.bantData.timeline.status || qualificationData.bantData.timeline.status === ''
-    };
-  };
-
-  const getBANTFieldScore = (field: string, status: string) => {
-    if (!status) return 0;
-
-    const scoreMap: { [key: string]: { [status: string]: number } } = {
-      budget: { confirmed: 5, likely: 4, unknown: 2 },
-      authority: { decision_maker: 5, influencer: 4, end_user: 2 },
-      need: { urgent: 5, important: 4, nice_to_have: 2 },
-      timeline: { immediate: 5, short_term: 4, long_term: 2 }
-    };
-
-    return scoreMap[field]?.[status] || 0;
-  };
-
-  const getBANTFieldDisplayValue = (field: string, status: string, data: any) => {
-    const displayMap: { [key: string]: { [status: string]: string } } = {
-      budget: {
-        confirmed: data.range || 'Confirmed',
-        likely: 'Likely',
-        unknown: 'Unknown'
-      },
-      authority: {
-        decision_maker: 'Decision Maker',
-        influencer: 'Influencer',
-        end_user: 'End User'
-      },
-      need: {
-        urgent: 'Urgent',
-        important: 'Important',
-        nice_to_have: 'Nice to have'
-      },
-      timeline: {
-        immediate: 'Immediate (0-30 days)',
-        short_term: 'Short-term (1-3 mo)',
-        long_term: 'Long-term (3-6 mo)'
-      }
-    };
-
-    return displayMap[field]?.[status] || status;
-  };
-
-  const getDetailedBANTFields = () => {
-    const fields = [
-      {
-        name: 'budget',
-        label: 'Budget',
-        status: qualificationData.bantData.budget.status,
-        data: qualificationData.bantData.budget
-      },
-      {
-        name: 'authority',
-        label: 'Authority',
-        status: qualificationData.bantData.authority.status,
-        data: qualificationData.bantData.authority
-      },
-      {
-        name: 'need',
-        label: 'Need',
-        status: qualificationData.bantData.need.status,
-        data: qualificationData.bantData.need
-      },
-      {
-        name: 'timeline',
-        label: 'Timeline',
-        status: qualificationData.bantData.timeline.status,
-        data: qualificationData.bantData.timeline
-      }
-    ];
-
-    const completed = fields
-      .filter(f => f.status && f.status !== '')
-      .map(f => ({
-        name: f.name,
-        label: f.label,
-        completed: true,
-        score: getBANTFieldScore(f.name, f.status),
-        maxScore: 5,
-        displayValue: getBANTFieldDisplayValue(f.name, f.status, f.data)
-      }));
-
-    const missing = fields
-      .filter(f => !f.status || f.status === '')
-      .map(f => ({
-        name: f.name,
-        label: f.label,
-        completed: false,
-        score: 0,
-        maxScore: 5
-      }));
-
-    return { completed, missing };
-  };
-
   const handleQualify = () => {
-    const missingFields = getMissingBANTFields();
-    const allFieldsMissing = Object.values(missingFields).every(missing => missing);
-    const someFieldsMissing = Object.values(missingFields).some(missing => missing);
-    const bantScore = calculateBANTScore();
+    const validation = bantValidation.validateQualification(qualificationData.bantData);
 
-    if (allFieldsMissing) {
+    if (validation.validationType === 'noBantFilled') {
       setShowIncompleteBantModal(true);
       return;
     }
 
-    if (someFieldsMissing) {
+    if (validation.validationType === 'partialBant') {
       setShowPartialBantModal(true);
       return;
     }
@@ -583,8 +459,13 @@ const LeadQualificationPage: React.FC = () => {
         onClose={() => setShowIncompleteBantModal(false)}
         onCompleteBant={handleCompleteBant}
         onSaveDraft={handleSaveDraft}
-        bantScore={calculateBANTScore()}
-        missingFields={getMissingBANTFields()}
+        bantScore={bantValidation.calculateBantScore(qualificationData.bantData)}
+        missingFields={{
+          budget: !qualificationData.bantData.budget.status,
+          authority: !qualificationData.bantData.authority.status,
+          need: !qualificationData.bantData.need.status,
+          timeline: !qualificationData.bantData.timeline.status
+        }}
       />
 
       <PartialBantModal
@@ -593,10 +474,10 @@ const LeadQualificationPage: React.FC = () => {
         onQualifyAnyway={handleQualifyAnywayFromPartial}
         onCompleteBant={handleCompleteBant}
         onSaveDraft={handleSaveDraft}
-        bantScore={calculateBANTScore()}
-        maxScore={20}
-        completedFields={getDetailedBANTFields().completed}
-        missingFields={getDetailedBANTFields().missing}
+        bantScore={bantValidation.calculateBantScore(qualificationData.bantData)}
+        maxScore={bantValidation.validationRules.maxScore}
+        completedFields={bantValidation.getDetailedBantFields(qualificationData.bantData).completed}
+        missingFields={bantValidation.getDetailedBantFields(qualificationData.bantData).missing}
       />
     </div>
   );
