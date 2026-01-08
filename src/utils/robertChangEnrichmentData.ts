@@ -338,3 +338,36 @@ export const getProfessionalFields = () => robertChangFields.filter(f => f.categ
 
 export const getAvailableFields = () => robertChangFields.filter(f => f.status === 'available');
 export const getMissingFields = () => robertChangFields.filter(f => f.status === 'missing');
+
+export const robertChangQualificationData = {
+  lead: {
+    id: "lead_005",
+    firstName: "Robert",
+    lastName: "Chang",
+    email: "robert@startco.io",
+    title: "CEO",
+    company: "StartCo",
+    source: "manual",
+    status: "new",
+  },
+  aiScore: {
+    overall: 65,
+    baseScore: 65,
+    hrmsBonus: 0,
+    grade: "C+",
+  },
+  bant: {
+    budget: { status: "no_budget", score: 0, range: "Bootstrap startup" },
+    authority: { status: "decision_maker", score: 5, role: "Final Decision Maker" },
+    need: { status: "none", score: 0 },
+    timeline: { status: "no_timeline", score: 0, timeframe: "No immediate plans" },
+    overallScore: 5,
+    maxScore: 20,
+    recommendation: "DISQUALIFY"
+  },
+  qualificationDecision: {
+    status: "pending",
+    recommendation: "disqualify",
+    disqualificationReason: "No budget, no immediate need, early-stage startup"
+  }
+};

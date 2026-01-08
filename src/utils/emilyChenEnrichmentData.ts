@@ -362,3 +362,35 @@ export function getEmilyChenFieldsByCategory() {
     )
   };
 }
+
+export const emilyChenQualificationData = {
+  lead: {
+    id: "lead_004",
+    firstName: "Emily",
+    lastName: "Chen",
+    email: "emily.chen@dataflow.com",
+    title: "Director of Marketing",
+    company: "DataFlow",
+    source: "intelligence",
+    status: "new",
+  },
+  aiScore: {
+    overall: 88,
+    baseScore: 88,
+    hrmsBonus: 0,
+    grade: "A",
+  },
+  bant: {
+    budget: { status: "confirmed", score: 5, range: "$40K - $60K", specificAmount: "$50K" },
+    authority: { status: "influencer", score: 3, role: "Department Head" },
+    need: { status: "urgent", score: 5 },
+    timeline: { status: "immediate", score: 5, timeframe: "0-30 days" },
+    overallScore: 18,
+    maxScore: 20,
+    recommendation: "QUALIFIED"
+  },
+  qualificationDecision: {
+    status: "pending",
+    recommendation: "qualify"
+  }
+};

@@ -325,3 +325,35 @@ export const johnSmithEnrichmentHistory: EnrichmentHistoryEntry[] = [
     triggeredByUser: null
   }
 ];
+
+export const johnSmithQualificationData = {
+  lead: {
+    id: "lead_002",
+    firstName: "John",
+    lastName: "Smith",
+    email: "john.smith@acme.com",
+    title: "VP Sales",
+    company: "Acme Corp",
+    source: "apollo",
+    status: "new",
+  },
+  aiScore: {
+    overall: 78,
+    baseScore: 78,
+    hrmsBonus: 0,
+    grade: "B+",
+  },
+  bant: {
+    budget: { status: "likely", score: 4, range: "$30K - $50K" },
+    authority: { status: "influencer", score: 3, role: "Recommender" },
+    need: { status: "important", score: 4 },
+    timeline: { status: "short_term", score: 4, timeframe: "1-3 months" },
+    overallScore: 15,
+    maxScore: 20,
+    recommendation: "QUALIFIED"
+  },
+  qualificationDecision: {
+    status: "pending",
+    recommendation: "qualify"
+  }
+};

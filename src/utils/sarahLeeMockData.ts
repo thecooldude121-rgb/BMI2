@@ -501,3 +501,36 @@ export const techStartDecisionMakers = [
     canCreateLead: true
   }
 ];
+
+export const sarahLeeQualificationData = {
+  lead: {
+    id: "LEAD-2024-1567",
+    firstName: "Sarah",
+    lastName: "Lee",
+    email: "sarah@techstart.com",
+    title: "CFO",
+    company: "TechStart Inc",
+    source: "hrms",
+    status: "new",
+  },
+  aiScore: {
+    overall: 92,
+    baseScore: 69,
+    hrmsBonus: 33,
+    grade: "A+",
+  },
+  bant: {
+    budget: { status: "confirmed", score: 5, range: "$50K - $75K", specificAmount: "$60K" },
+    authority: { status: "decision_maker", score: 5, role: "Financial Decision Maker" },
+    need: { status: "urgent", score: 5 },
+    timeline: { status: "immediate", score: 5, timeframe: "0-30 days" },
+    overallScore: 20,
+    maxScore: 20,
+    recommendation: "HIGHLY QUALIFIED"
+  },
+  qualificationDecision: {
+    status: "pending",
+    recommendation: "qualify",
+    notes: "Perfect BANT score with HRMS warm lead advantage"
+  }
+};

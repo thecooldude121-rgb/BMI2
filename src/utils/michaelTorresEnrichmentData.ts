@@ -316,3 +316,35 @@ export const getMichaelTorresFieldsBySource = (source: string) => {
 export const getMichaelTorresMissingFields = () => {
   return michaelTorresEnrichedFields.filter(f => f.status === 'missing');
 };
+
+export const michaelTorresQualificationData = {
+  lead: {
+    id: "lead_003",
+    firstName: "Michael",
+    lastName: "Torres",
+    email: "michael.torres@bigco.com",
+    title: "CTO",
+    company: "BigCo",
+    source: "zoominfo",
+    status: "contacted",
+  },
+  aiScore: {
+    overall: 82,
+    baseScore: 82,
+    hrmsBonus: 0,
+    grade: "A-",
+  },
+  bant: {
+    budget: { status: "unknown", score: 2, range: "Not discussed" },
+    authority: { status: "decision_maker", score: 5, role: "Technical Decision Maker" },
+    need: { status: "nice_to_have", score: 2 },
+    timeline: { status: "long_term", score: 2, timeframe: "3-6 months" },
+    overallScore: 11,
+    maxScore: 20,
+    recommendation: "NEEDS MORE INFO"
+  },
+  qualificationDecision: {
+    status: "pending",
+    recommendation: "needs_more_info"
+  }
+};
