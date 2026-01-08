@@ -14,7 +14,8 @@ import {
   Clock,
   User,
   Building2,
-  Lightbulb
+  Lightbulb,
+  Download
 } from 'lucide-react';
 import {
   getQualificationSuccessData,
@@ -23,10 +24,12 @@ import {
   formatDateTime,
   formatDateWithTime
 } from '../../utils/qualificationSuccessMockData';
+import { useToast } from '../../contexts/ToastContext';
 
 const LeadQualificationSuccessPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { showToast } = useToast();
 
   const successData = getQualificationSuccessData(id || 'lead_001');
   const [countdown, setCountdown] = useState(successData.redirectSettings.delay);
@@ -37,12 +40,169 @@ const LeadQualificationSuccessPage: React.FC = () => {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (autoRedirect && countdown === 0) {
-      navigate(successData.redirectSettings.destination);
+      navigate(successData.redirectSettings.destination, {
+        state: { qualifiedLeadId: successData.lead.id }
+      });
     }
-  }, [countdown, autoRedirect, navigate, successData.redirectSettings.destination]);
+  }, [countdown, autoRedirect, navigate, successData.redirectSettings.destination, successData.lead.id]);
 
   const handleCancelAutoRedirect = () => {
     setAutoRedirect(false);
+    showToast('info', 'Auto-redirect cancelled');
+  };
+
+  const generateCalendarEvent = (step: typeof successData.nextSteps[0]) => {
+    const startDate = new Date(step.date);
+    if (step.time) {
+      const [time, period] = step.time.split(' ');
+      const [hours, minutes] = time.split(':');
+      let hour = parseInt(hours);
+      if (period === 'PM' && hour !== 12) hour += 12;
+      if (period === 'AM' && hour === 12) hour = 0;
+      startDate.setHours(hour, parseInt(minutes || '0'));
+    }
+
+    const endDate = new Date(startDate);
+    endDate.setHours(endDate.getHours() + 1);
+
+    const formatICSDate = (date: Date) => {
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    };
+
+    const icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Lead Generation System//EN',
+      'BEGIN:VEVENT',
+      `DTSTART:${formatICSDate(startDate)}`,
+      `DTEND:${formatICSDate(endDate)}`,
+      `SUMMARY:${step.title} - ${successData.lead.name} (${successData.lead.company})`,
+      `DESCRIPTION:${step.description}\\n\\nLead: ${successData.lead.name}\\nCompany: ${successData.lead.company}\\nEmail: ${successData.lead.email}\\nPhone: ${successData.lead.phone}`,
+      `LOCATION:Zoom Meeting`,
+      `ATTENDEE:mailto:${successData.lead.email}`,
+      `ORGANIZER:mailto:${successData.crmOpportunity.owner.split(' ')[0].toLowerCase()}@company.com`,
+      `STATUS:CONFIRMED`,
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.setAttribute('download', `${step.title.replace(/\s+/g, '_')}_${successData.lead.name.replace(/\s+/g, '_')}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast('success', `Calendar event "${step.title}" downloaded`);
+  };
+
+  const handleContactLead = () => {
+    const subject = encodeURIComponent('Following up on our recent conversation');
+    const body = encodeURIComponent(
+      `Hi ${successData.lead.name.split(' ')[0]},\n\n` +
+      `Thank you for your time today. I'm excited about the opportunity to work with ${successData.lead.company}.\n\n` +
+      `Based on our conversation, I believe our solution can help address your needs, particularly around:\n` +
+      `• ${successData.nextSteps[0]?.description || 'Your business objectives'}\n\n` +
+      `I've scheduled our demo for ${formatDateWithTime(successData.nextSteps[0]?.date, successData.nextSteps[0]?.time)}. ` +
+      `Please let me know if you need to adjust the timing.\n\n` +
+      `Looking forward to speaking with you!\n\n` +
+      `Best regards,\n${successData.crmOpportunity.owner}`
+    );
+
+    window.location.href = `mailto:${successData.lead.email}?subject=${subject}&body=${body}`;
+    showToast('success', 'Email client opened');
+  };
+
+  const handleViewInCRM = () => {
+    window.open(successData.crmOpportunity.crmUrl, '_blank');
+    showToast('info', 'Opening CRM opportunity in new tab');
+  };
+
+  const handleBackToLeadList = () => {
+    showToast('success', 'Lead qualified successfully');
+    navigate(successData.redirectSettings.destination, {
+      state: {
+        qualifiedLeadId: successData.lead.id,
+        highlightLead: true
+      }
+    });
+  };
+
+  const handleStartProposal = () => {
+    navigate(`/proposals/new`, {
+      state: {
+        leadId: successData.lead.id,
+        clientName: successData.lead.company,
+        contactName: successData.lead.name,
+        contactEmail: successData.lead.email,
+        amount: successData.crmOpportunity.amount,
+        closeDate: successData.crmOpportunity.closeDate,
+        opportunityId: successData.crmOpportunity.id
+      }
+    });
+    showToast('info', 'Opening proposal builder...');
+  };
+
+  const handleViewTemplate = () => {
+    navigate('/templates/proposals');
+    showToast('info', 'Opening proposal templates...');
+  };
+
+  const handleSendInvite = (step: typeof successData.nextSteps[0]) => {
+    const subject = encodeURIComponent(`Invitation: ${step.title} - ${successData.lead.company}`);
+    const body = encodeURIComponent(
+      `Hi ${successData.lead.name.split(' ')[0]},\n\n` +
+      `You're invited to: ${step.title}\n` +
+      `When: ${formatDateWithTime(step.date, step.time)}\n` +
+      `Description: ${step.description}\n\n` +
+      `Meeting details:\n` +
+      `• Zoom link will be provided\n` +
+      `• Duration: 1 hour\n` +
+      `• Please confirm your attendance\n\n` +
+      `Looking forward to meeting with you!\n\n` +
+      `Best regards,\n${successData.crmOpportunity.owner}`
+    );
+
+    window.location.href = `mailto:${successData.lead.email}?subject=${subject}&body=${body}`;
+    showToast('success', 'Invitation email opened');
+  };
+
+  const handleScheduleMeeting = (step: typeof successData.nextSteps[0]) => {
+    navigate('/calendar/schedule', {
+      state: {
+        title: step.title,
+        description: step.description,
+        leadId: successData.lead.id,
+        leadName: successData.lead.name,
+        leadEmail: successData.lead.email,
+        company: successData.lead.company,
+        suggestedDate: step.date
+      }
+    });
+    showToast('info', 'Opening meeting scheduler...');
+  };
+
+  const handleActionClick = (actionType: string, step?: typeof successData.nextSteps[0]) => {
+    switch (actionType) {
+      case 'add_to_calendar':
+        if (step) generateCalendarEvent(step);
+        break;
+      case 'send_invite':
+        if (step) handleSendInvite(step);
+        break;
+      case 'start_proposal':
+        handleStartProposal();
+        break;
+      case 'view_template':
+        handleViewTemplate();
+        break;
+      case 'schedule_meeting':
+        if (step) handleScheduleMeeting(step);
+        break;
+      default:
+        showToast('info', `Action "${actionType}" triggered`);
+    }
   };
 
   const getScoreColor = (score: number) => {
@@ -145,7 +305,7 @@ const LeadQualificationSuccessPage: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={() => window.open(successData.crmOpportunity.crmUrl, '_blank')}
+            onClick={handleViewInCRM}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <ExternalLink className="h-4 w-4" />
@@ -188,6 +348,7 @@ const LeadQualificationSuccessPage: React.FC = () => {
                     {step.actions.map((action, actionIndex) => (
                       <button
                         key={actionIndex}
+                        onClick={() => handleActionClick(action.action, step)}
                         className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
                           actionIndex === 0
                             ? 'bg-blue-600 text-white hover:bg-blue-700'
@@ -251,7 +412,7 @@ const LeadQualificationSuccessPage: React.FC = () => {
 
         <div className="flex items-center justify-between pt-6 border-t border-gray-200">
           <button
-            onClick={() => navigate(successData.redirectSettings.destination)}
+            onClick={handleBackToLeadList}
             className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -259,14 +420,14 @@ const LeadQualificationSuccessPage: React.FC = () => {
           </button>
           <div className="flex gap-3">
             <button
-              onClick={() => window.open(successData.crmOpportunity.crmUrl, '_blank')}
+              onClick={handleViewInCRM}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               <ExternalLink className="h-4 w-4" />
               View in CRM
             </button>
             <button
-              onClick={() => window.location.href = `mailto:${successData.lead.email}`}
+              onClick={handleContactLead}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
             >
               <Mail className="h-4 w-4" />
