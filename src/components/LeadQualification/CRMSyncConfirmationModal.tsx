@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, AlertCircle, ChevronDown, ChevronRight, User, Briefcase, DollarSign, Calendar, TrendingUp } from 'lucide-react';
+import { crmSyncConfig } from '../../utils/crmSyncMockData';
 
 interface LeadInfo {
   name: string;
@@ -279,10 +280,17 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                 </div>
               </button>
               {expandedSections.contact && (
-                <div className="px-4 py-3 bg-gray-50 text-sm text-gray-700">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
-                    <span>Email, Phone, LinkedIn, Mobile, Office Location</span>
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="space-y-2">
+                    {crmSyncConfig.fieldsToSync.contactInfo.fields.map((field, idx) => (
+                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
+                          <span className="text-gray-700 truncate">{field.value}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -301,10 +309,17 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                 </div>
               </button>
               {expandedSections.company && (
-                <div className="px-4 py-3 bg-gray-50 text-sm text-gray-700">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
-                    <span>Company Name, Industry, Size, Revenue, Location, Website, Founded Year, Description</span>
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="space-y-2">
+                    {crmSyncConfig.fieldsToSync.companyInfo.fields.map((field, idx) => (
+                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
+                          <span className="text-gray-700 truncate">{field.value}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -323,10 +338,17 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                 </div>
               </button>
               {expandedSections.bant && (
-                <div className="px-4 py-3 bg-gray-50 text-sm text-gray-700">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
-                    <span>Budget Status, Authority Level, Need Assessment, Timeline Details</span>
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="space-y-2">
+                    {crmSyncConfig.fieldsToSync.bantAssessment.fields.map((field, idx) => (
+                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
+                          <span className="text-gray-700 truncate">{field.value}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -345,10 +367,17 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                 </div>
               </button>
               {expandedSections.professional && (
-                <div className="px-4 py-3 bg-gray-50 text-sm text-gray-700">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
-                    <span>Title, Department, Seniority, Skills, Education, Years of Experience, Certifications</span>
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="space-y-2">
+                    {crmSyncConfig.fieldsToSync.professionalDetails.fields.map((field, idx) => (
+                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
+                          <span className="text-gray-700 truncate">{field.value}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -367,10 +396,17 @@ const CRMSyncConfirmationModal: React.FC<CRMSyncConfirmationModalProps> = ({
                 </div>
               </button>
               {expandedSections.notes && (
-                <div className="px-4 py-3 bg-gray-50 text-sm text-gray-700">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" />
-                    <span>All qualification notes, activity history, and engagement timeline</span>
+                <div className="px-4 py-3 bg-gray-50">
+                  <div className="space-y-2">
+                    {crmSyncConfig.fieldsToSync.qualificationNotes.fields.map((field, idx) => (
+                      <div key={idx} className="flex items-start justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-900 flex-shrink-0">{field.name}:</span>
+                          <span className="text-gray-700 truncate">{field.value}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
