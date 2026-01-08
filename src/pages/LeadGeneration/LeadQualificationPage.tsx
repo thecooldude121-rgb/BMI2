@@ -263,8 +263,8 @@ const LeadQualificationPage: React.FC = () => {
     setShowSyncProgressModal(false);
     showToast('✅ Lead qualified and synced to CRM', 'success');
     setTimeout(() => {
-      navigate('/lead-gen/leads');
-    }, 1000);
+      navigate(`/lead-generation/leads/${id}/qualification-success`);
+    }, 500);
   };
 
   const handleDisqualify = () => {

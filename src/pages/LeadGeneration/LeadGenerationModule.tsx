@@ -31,6 +31,7 @@ import MichaelTorresEnrichmentPage from './MichaelTorresEnrichmentPage';
 import EmilyChenEnrichmentPage from './EmilyChenEnrichmentPage';
 import RobertChangEnrichmentPage from './RobertChangEnrichmentPage';
 import LeadQualificationPage from './LeadQualificationPage';
+import LeadQualificationSuccessPage from './LeadQualificationSuccessPage';
 
 const LeadGenerationModule: React.FC = () => {
   return (
@@ -43,6 +44,7 @@ const LeadGenerationModule: React.FC = () => {
         <Route path="/leads/add-import" element={<AddImportLeadsPage />} />
         <Route path="/leads/:id" element={<LeadDetailPage />} />
         <Route path="/qualify/:id" element={<LeadQualificationPage />} />
+        <Route path="/leads/:id/qualification-success" element={<LeadQualificationSuccessPage />} />
         <Route path="/leads/lead_002/enrichment" element={<JohnSmithEnrichmentPage />} />
         <Route path="/leads/lead_003/enrichment" element={<MichaelTorresEnrichmentPage />} />
         <Route path="/leads/lead_004/enrichment" element={<EmilyChenEnrichmentPage />} />
