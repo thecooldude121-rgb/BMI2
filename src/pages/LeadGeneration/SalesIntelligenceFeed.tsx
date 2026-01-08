@@ -601,32 +601,65 @@ const SalesIntelligenceFeed: React.FC = () => {
                 </div>
 
                 {/* AI Analysis */}
-                <div className="mb-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">🤖 AI Analysis:</p>
-                  <ul className="space-y-1">
-                    {signal.aiAnalysis.map((analysis, idx) => (
-                      <li key={idx} className="text-sm text-gray-700">
-                        • {analysis}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Key Details */}
-                <div className="mb-4">
-                  <p className="text-sm font-semibold text-gray-900 mb-2">Key Details:</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {signal.keyDetails.map((detail, idx) => (
-                      <div key={idx} className="text-sm">
-                        <span className="text-gray-600">• {detail.label}:</span>{' '}
-                        <span className="text-gray-900">{detail.value}</span>
-                      </div>
-                    ))}
+                {signal.aiAnalysis && (
+                  <div className="mb-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <p className="text-sm font-semibold text-gray-900 mb-2">🤖 AI Analysis:</p>
+                    <div className="space-y-2">
+                      {signal.aiAnalysis.whyThisMatters && signal.aiAnalysis.whyThisMatters.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Why This Matters:</p>
+                          <ul className="space-y-1">
+                            {signal.aiAnalysis.whyThisMatters.map((matter, idx) => (
+                              <li key={idx} className="text-sm text-gray-700">
+                                • {matter}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {signal.aiAnalysis.recommendedActions && signal.aiAnalysis.recommendedActions.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-700 mb-1">Recommended Actions:</p>
+                          <ul className="space-y-1">
+                            {signal.aiAnalysis.recommendedActions.map((action, idx) => (
+                              <li key={idx} className="text-sm text-gray-700">
+                                • {action}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Score Breakdown */}
+                {signal.scoreBreakdown && (
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-gray-900 mb-2">Score Breakdown:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="text-sm">
+                        <span className="text-gray-600">• Funding:</span>{' '}
+                        <span className="text-gray-900">{signal.scoreBreakdown.funding}/20</span>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600">• Growth Signals:</span>{' '}
+                        <span className="text-gray-900">{signal.scoreBreakdown.growthSignals}/20</span>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600">• Decision Makers:</span>{' '}
+                        <span className="text-gray-900">{signal.scoreBreakdown.decisionMakers}/20</span>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600">• Tech Stack Fit:</span>{' '}
+                        <span className="text-gray-900">{signal.scoreBreakdown.techStackFit}/20</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Related Signals */}
-                {signal.relatedSignals && (
+                {signal.relatedSignals && signal.relatedSignals.length > 0 && (
                   <div className="mb-4">
                     <button
                       onClick={() => handleCompanyClick(signal)}
@@ -637,7 +670,7 @@ const SalesIntelligenceFeed: React.FC = () => {
                     <ul className="space-y-1">
                       {signal.relatedSignals.map((related, idx) => (
                         <li key={idx} className="text-sm text-gray-700">
-                          • {related}
+                          • {related.title} ({related.timeAgo})
                         </li>
                       ))}
                     </ul>
@@ -645,7 +678,7 @@ const SalesIntelligenceFeed: React.FC = () => {
                 )}
 
                 {/* Decision Makers */}
-                {signal.decisionMakers && (
+                {signal.decisionMakers && signal.decisionMakers.length > 0 && (
                   <div className="mb-4">
                     <p className="text-sm font-semibold text-gray-900 mb-2">
                       Decision Makers Identified:
@@ -654,22 +687,6 @@ const SalesIntelligenceFeed: React.FC = () => {
                       {signal.decisionMakers.map((maker, idx) => (
                         <li key={idx} className="text-sm text-gray-700">
                           • {maker.name} ({maker.title}) - {maker.email}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Opportunity */}
-                {signal.opportunity && (
-                  <div className="mb-4">
-                    <p className="text-sm font-semibold text-gray-900 mb-2">
-                      {signal.type === 'product' ? 'Why This Matters:' : 'Opportunity:'}
-                    </p>
-                    <ul className="space-y-1">
-                      {signal.opportunity.map((opp, idx) => (
-                        <li key={idx} className="text-sm text-gray-700">
-                          • {opp}
                         </li>
                       ))}
                     </ul>
@@ -855,7 +872,7 @@ const SalesIntelligenceFeed: React.FC = () => {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm font-medium text-gray-900 mb-2">Company: {selectedSignal.company}</p>
                 <p className="text-sm text-gray-700">Industry: {selectedSignal.industry}</p>
-                <p className="text-sm text-gray-700">AI Score: {selectedSignal.leadScore}/100</p>
+                <p className="text-sm text-gray-700">AI Score: {selectedSignal.aiScore}/100</p>
               </div>
 
               {selectedSignal.decisionMakers && (
@@ -1011,11 +1028,11 @@ const SalesIntelligenceFeed: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">Lead Score</p>
-                  <p className="text-base font-medium text-gray-900">{selectedSignal.leadScore}/100</p>
+                  <p className="text-base font-medium text-gray-900">{selectedSignal.aiScore}/100</p>
                 </div>
               </div>
 
-              {selectedSignal.relatedSignals && (
+              {selectedSignal.relatedSignals && selectedSignal.relatedSignals.length > 0 && (
                 <div>
                   <h3 className="text-base font-semibold text-gray-900 mb-2">All Signals for this Company:</h3>
                   <div className="space-y-2">
@@ -1025,7 +1042,8 @@ const SalesIntelligenceFeed: React.FC = () => {
                     </div>
                     {selectedSignal.relatedSignals.map((related, idx) => (
                       <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <p className="text-sm text-gray-700">{related}</p>
+                        <p className="text-sm font-medium text-gray-900">{related.title}</p>
+                        <p className="text-xs text-gray-600">{related.timeAgo} • Score: {related.score}/100</p>
                       </div>
                     ))}
                   </div>
