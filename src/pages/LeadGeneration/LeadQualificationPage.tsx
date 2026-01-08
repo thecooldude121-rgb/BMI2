@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, XCircle, FileText } from 'lucide-react';
 import AIScoreBreakdown from '../../components/LeadQualification/AIScoreBreakdown';
@@ -8,6 +8,7 @@ import QualificationHistory from '../../components/LeadQualification/Qualificati
 import QualifyLeadModal from '../../components/LeadQualification/QualifyLeadModal';
 import DisqualifyLeadModal from '../../components/LeadQualification/DisqualifyLeadModal';
 import AddNotesModal from '../../components/LeadQualification/AddNotesModal';
+import IncompleteBantModal from '../../components/LeadQualification/IncompleteBantModal';
 import { useToast } from '../../contexts/ToastContext';
 
 interface Lead {
@@ -49,6 +50,8 @@ const LeadQualificationPage: React.FC = () => {
   const [showQualifyModal, setShowQualifyModal] = useState(false);
   const [showDisqualifyModal, setShowDisqualifyModal] = useState(false);
   const [showAddNotesModal, setShowAddNotesModal] = useState(false);
+  const [showIncompleteBantModal, setShowIncompleteBantModal] = useState(false);
+  const bantSectionRef = useRef<HTMLDivElement>(null);
   const [qualificationData, setQualificationData] = useState<QualificationData>({
     aiScore: 92,
     baseScore: 69,
@@ -171,14 +174,52 @@ const LeadQualificationPage: React.FC = () => {
     }
   };
 
+  const calculateBANTScore = () => {
+    let score = 0;
+    if (qualificationData.bantData.budget.status === 'confirmed') score += 5;
+    else if (qualificationData.bantData.budget.status === 'likely') score += 4;
+    else if (qualificationData.bantData.budget.status === 'unknown') score += 2;
+
+    if (qualificationData.bantData.authority.status === 'decision_maker') score += 5;
+    else if (qualificationData.bantData.authority.status === 'influencer') score += 4;
+    else if (qualificationData.bantData.authority.status === 'end_user') score += 2;
+
+    if (qualificationData.bantData.need.status === 'urgent') score += 5;
+    else if (qualificationData.bantData.need.status === 'important') score += 4;
+    else if (qualificationData.bantData.need.status === 'nice_to_have') score += 2;
+
+    if (qualificationData.bantData.timeline.status === 'immediate') score += 5;
+    else if (qualificationData.bantData.timeline.status === 'short_term') score += 4;
+    else if (qualificationData.bantData.timeline.status === 'long_term') score += 2;
+
+    return score;
+  };
+
+  const getMissingBANTFields = () => {
+    return {
+      budget: !qualificationData.bantData.budget.status || qualificationData.bantData.budget.status === '',
+      authority: !qualificationData.bantData.authority.status || qualificationData.bantData.authority.status === '',
+      need: !qualificationData.bantData.need.status || qualificationData.bantData.need.status === '',
+      timeline: !qualificationData.bantData.timeline.status || qualificationData.bantData.timeline.status === ''
+    };
+  };
+
   const handleQualify = () => {
-    const hasIncompleteBANT =
-      !qualificationData.bantData.budget.status ||
-      !qualificationData.bantData.authority.status ||
-      !qualificationData.bantData.need.status ||
-      !qualificationData.bantData.timeline.status;
+    const missingFields = getMissingBANTFields();
+    const allFieldsMissing = Object.values(missingFields).every(missing => missing);
+    const bantScore = calculateBANTScore();
+
+    if (allFieldsMissing) {
+      setShowIncompleteBantModal(true);
+      return;
+    }
 
     setShowQualifyModal(true);
+  };
+
+  const handleCompleteBant = () => {
+    setShowIncompleteBantModal(false);
+    bantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleConfirmQualify = async () => {
@@ -373,14 +414,16 @@ const LeadQualificationPage: React.FC = () => {
           onScoreAdjust={handleScoreAdjust}
         />
 
-        <BANTFramework
-          bantData={qualificationData.bantData}
-          onUpdate={handleUpdateBANT}
-        />
+        <div ref={bantSectionRef}>
+          <BANTFramework
+            bantData={qualificationData.bantData}
+            onUpdate={handleUpdateBANT}
+          />
+        </div>
 
         <QualificationDecision
           aiScore={qualificationData.aiScore}
-          bantScore={20}
+          bantScore={calculateBANTScore()}
           finalStatus={qualificationData.finalStatus}
           assignedTo={qualificationData.assignedTo}
           notes={qualificationData.notes}
@@ -404,8 +447,9 @@ const LeadQualificationPage: React.FC = () => {
           company: lead?.company || ''
         }}
         aiScore={qualificationData.aiScore}
-        bantScore={20}
+        bantScore={calculateBANTScore()}
         assignedTo={qualificationData.assignedTo}
+        hasIncompleteBANT={calculateBANTScore() < 15}
       />
 
       <DisqualifyLeadModal
@@ -426,6 +470,15 @@ const LeadQualificationPage: React.FC = () => {
           name: lead?.name || '',
           company: lead?.company || ''
         }}
+      />
+
+      <IncompleteBantModal
+        isOpen={showIncompleteBantModal}
+        onClose={() => setShowIncompleteBantModal(false)}
+        onCompleteBant={handleCompleteBant}
+        onSaveDraft={handleSaveDraft}
+        bantScore={calculateBANTScore()}
+        missingFields={getMissingBANTFields()}
       />
     </div>
   );

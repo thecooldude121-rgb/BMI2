@@ -46,13 +46,13 @@ const QualifyLeadModal: React.FC<QualifyLeadModalProps> = ({
           {hasIncompleteBANT && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <AlertCircle className="h-5 w-5 text-yellow-500 mt-0.5" />
                 <div>
                   <p className="font-medium text-gray-900 mb-1">
-                    Warning: Incomplete BANT Assessment
+                    Warning: Low BANT Score
                   </p>
                   <p className="text-sm text-gray-700">
-                    Some BANT fields are not fully completed. It's recommended to complete the assessment before qualifying.
+                    BANT score is below 15/20. Leads with scores below 15 have 30% lower conversion rates. Consider completing more BANT assessment fields before qualifying.
                   </p>
                 </div>
               </div>
