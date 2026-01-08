@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Target, Settings, CheckCircle } from 'lucide-react';
+import AdjustScoreModal from './AdjustScoreModal';
 
 interface ScoreComponents {
   jobTitle: { score: number; max: number; details: string };
@@ -16,6 +17,7 @@ interface AIScoreBreakdownProps {
   hrmsBonusPoints: number;
   scoreComponents: ScoreComponents;
   aiInsights: string[];
+  onScoreAdjust?: (newScore: number, reason: string) => void;
 }
 
 const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
@@ -24,9 +26,17 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
   hrmsBonus,
   hrmsBonusPoints,
   scoreComponents,
-  aiInsights
+  aiInsights,
+  onScoreAdjust
 }) => {
   const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [hoveredScore, setHoveredScore] = useState<string | null>(null);
+
+  const handleScoreAdjust = (newScore: number, reason: string) => {
+    if (onScoreAdjust) {
+      onScoreAdjust(newScore, reason);
+    }
+  };
 
   const getScoreRating = (score: number): string => {
     if (score >= 90) return 'Excellent';
@@ -57,26 +67,38 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm mb-6">
-      <div className="border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center gap-2">
-          <Target className="h-5 w-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-gray-900">
-            AI LEAD SCORE BREAKDOWN
-          </h2>
-        </div>
-      </div>
-
-      <div className="p-6">
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-8 mb-6 text-center">
-          <div className="mb-2">
-            <div className="text-4xl font-bold text-gray-900 mb-2">
-              OVERALL SCORE: {aiScore}/100
-            </div>
-            <div className="text-2xl mb-4 space-x-1">
-              {getScoreDots(aiScore)} ({getScoreRating(aiScore)})
-            </div>
+    <>
+      <div className="bg-white rounded-lg shadow-sm mb-6">
+        <div className="border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Target className="h-5 w-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900">
+              AI LEAD SCORE BREAKDOWN
+            </h2>
           </div>
+        </div>
+
+        <div className="p-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-8 mb-6 text-center">
+            <div className="mb-2">
+              <div
+                className="text-4xl font-bold text-gray-900 mb-2 cursor-pointer hover:text-blue-600 transition-colors"
+                onMouseEnter={() => setHoveredScore('overall')}
+                onMouseLeave={() => setHoveredScore(null)}
+                onClick={() => setShowAdjustModal(true)}
+                title="Click to adjust score"
+              >
+                OVERALL SCORE: {aiScore}/100
+              </div>
+              {hoveredScore === 'overall' && (
+                <div className="text-sm text-blue-600 font-medium mb-2">
+                  Click to adjust manually
+                </div>
+              )}
+              <div className="text-2xl mb-4 space-x-1">
+                {getScoreDots(aiScore)} ({getScoreRating(aiScore)})
+              </div>
+            </div>
 
           <div className="space-y-2 text-sm text-gray-700 mb-6">
             <div>Base Score: {baseScore}/100</div>
@@ -260,6 +282,14 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
         </div>
       </div>
     </div>
+
+    <AdjustScoreModal
+      isOpen={showAdjustModal}
+      onClose={() => setShowAdjustModal(false)}
+      currentScore={aiScore}
+      onSave={handleScoreAdjust}
+    />
+  </>
   );
 };
 

@@ -3,11 +3,19 @@ import { History, FileText, RefreshCw, Plus, Eye } from 'lucide-react';
 
 interface HistoryEvent {
   id: string;
-  type: 'note' | 'status_change' | 'created';
+  type: 'note' | 'status_change' | 'created' | 'score_adjusted' | 'bant_updated';
   timestamp: string;
   user: string;
+  userRole?: string;
   description: string;
   details?: string;
+  metadata?: {
+    callDuration?: string;
+    callType?: string;
+    keyTopics?: string[];
+    previousValue?: string;
+    newValue?: string;
+  };
 }
 
 interface QualificationHistoryProps {
@@ -29,11 +37,43 @@ const QualificationHistory: React.FC<QualificationHistoryProps> = ({ leadId }) =
         type: 'note',
         timestamp: 'Jan 5, 2025 3:45 PM',
         user: 'John Smith',
+        userRole: 'Senior AE',
         description: 'Notes Added',
-        details: 'Had discovery call. Strong interest. Budget confirmed.'
+        details: 'Had discovery call. Strong interest. Budget confirmed at $75K. Sarah is evaluating 2 other vendors but likes our HRMS relationship advantage.',
+        metadata: {
+          callDuration: '45 minutes',
+          callType: 'Discovery',
+          keyTopics: ['Budget', 'Timeline', 'Pain Points']
+        }
       },
       {
         id: '2',
+        type: 'bant_updated',
+        timestamp: 'Jan 5, 2025 2:30 PM',
+        user: 'John Smith',
+        userRole: 'Senior AE',
+        description: 'BANT Assessment Updated',
+        details: 'Updated budget and timeline information',
+        metadata: {
+          previousValue: 'Budget: Unknown',
+          newValue: 'Budget: $50K-$100K (Confirmed)'
+        }
+      },
+      {
+        id: '3',
+        type: 'score_adjusted',
+        timestamp: 'Jan 5, 2025 1:15 PM',
+        user: 'Emily Chen',
+        userRole: 'Sales Manager',
+        description: 'AI Score Manually Adjusted',
+        details: 'Adjusted score based on warm introduction from CEO',
+        metadata: {
+          previousValue: '85',
+          newValue: '92'
+        }
+      },
+      {
+        id: '4',
         type: 'status_change',
         timestamp: 'Jan 4, 2025 11:20 AM',
         user: 'System',
@@ -41,7 +81,7 @@ const QualificationHistory: React.FC<QualificationHistoryProps> = ({ leadId }) =
         details: 'Status: New → Contacted'
       },
       {
-        id: '3',
+        id: '5',
         type: 'created',
         timestamp: 'Oct 15, 2024 9:00 AM',
         user: 'HRMS System',
@@ -61,6 +101,10 @@ const QualificationHistory: React.FC<QualificationHistoryProps> = ({ leadId }) =
         return <RefreshCw className="h-5 w-5 text-orange-600" />;
       case 'created':
         return <Plus className="h-5 w-5 text-green-600" />;
+      case 'score_adjusted':
+        return <RefreshCw className="h-5 w-5 text-purple-600" />;
+      case 'bant_updated':
+        return <FileText className="h-5 w-5 text-green-600" />;
       default:
         return <History className="h-5 w-5 text-gray-600" />;
     }
@@ -74,6 +118,10 @@ const QualificationHistory: React.FC<QualificationHistoryProps> = ({ leadId }) =
         return '🔄';
       case 'created':
         return '➕';
+      case 'score_adjusted':
+        return '🎯';
+      case 'bant_updated':
+        return '✏️';
       default:
         return '📋';
     }
@@ -124,13 +172,93 @@ const QualificationHistory: React.FC<QualificationHistoryProps> = ({ leadId }) =
                     {event.details && (
                       <div className="ml-11">
                         {expandedEvent === event.id ? (
-                          <div className="text-sm text-gray-700 bg-gray-50 rounded p-3 mt-2">
-                            {event.details}
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-3">
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                                  Date & Time:
+                                </p>
+                                <p className="text-sm text-gray-900">{event.timestamp}</p>
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                                  Action:
+                                </p>
+                                <p className="text-sm text-gray-900">{event.description}</p>
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">
+                                  By:
+                                </p>
+                                <p className="text-sm text-gray-900">
+                                  {event.user} {event.userRole && `(${event.userRole})`}
+                                </p>
+                              </div>
+
+                              {event.type === 'note' && (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                    Notes:
+                                  </p>
+                                  <p className="text-sm text-gray-700 bg-white rounded p-3 border border-gray-200">
+                                    {event.details}
+                                  </p>
+                                </div>
+                              )}
+
+                              {event.metadata && (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                    Metadata:
+                                  </p>
+                                  <div className="bg-white rounded p-3 border border-gray-200 space-y-1">
+                                    {event.metadata.callDuration && (
+                                      <p className="text-sm text-gray-700">
+                                        • Call duration: {event.metadata.callDuration}
+                                      </p>
+                                    )}
+                                    {event.metadata.callType && (
+                                      <p className="text-sm text-gray-700">
+                                        • Call type: {event.metadata.callType}
+                                      </p>
+                                    )}
+                                    {event.metadata.keyTopics && event.metadata.keyTopics.length > 0 && (
+                                      <p className="text-sm text-gray-700">
+                                        • Key topics: {event.metadata.keyTopics.join(', ')}
+                                      </p>
+                                    )}
+                                    {event.metadata.previousValue && (
+                                      <p className="text-sm text-gray-700">
+                                        • Previous: {event.metadata.previousValue}
+                                      </p>
+                                    )}
+                                    {event.metadata.newValue && (
+                                      <p className="text-sm text-gray-700">
+                                        • New: {event.metadata.newValue}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {!event.metadata && event.type !== 'note' && (
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                    Details:
+                                  </p>
+                                  <p className="text-sm text-gray-700 bg-white rounded p-3 border border-gray-200">
+                                    {event.details}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <div className="text-sm text-gray-600 italic">
-                            "{event.details.substring(0, 50)}
-                            {event.details.length > 50 ? '...' : ''}"
+                            "{event.details.substring(0, 60)}
+                            {event.details.length > 60 ? '...' : ''}"
                           </div>
                         )}
                       </div>
@@ -140,10 +268,10 @@ const QualificationHistory: React.FC<QualificationHistoryProps> = ({ leadId }) =
                   {event.details && (
                     <button
                       onClick={() => toggleExpand(event.id)}
-                      className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
                     >
                       <Eye className="h-4 w-4" />
-                      {expandedEvent === event.id ? 'Hide' : 'View'} Details
+                      {expandedEvent === event.id ? 'Close' : 'View Details'}
                     </button>
                   )}
                 </div>

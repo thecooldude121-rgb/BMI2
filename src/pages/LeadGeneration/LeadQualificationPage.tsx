@@ -5,6 +5,9 @@ import AIScoreBreakdown from '../../components/LeadQualification/AIScoreBreakdow
 import BANTFramework from '../../components/LeadQualification/BANTFramework';
 import QualificationDecision from '../../components/LeadQualification/QualificationDecision';
 import QualificationHistory from '../../components/LeadQualification/QualificationHistory';
+import QualifyLeadModal from '../../components/LeadQualification/QualifyLeadModal';
+import DisqualifyLeadModal from '../../components/LeadQualification/DisqualifyLeadModal';
+import AddNotesModal from '../../components/LeadQualification/AddNotesModal';
 import { useToast } from '../../contexts/ToastContext';
 
 interface Lead {
@@ -43,6 +46,9 @@ const LeadQualificationPage: React.FC = () => {
   const { showToast } = useToast();
 
   const [lead, setLead] = useState<Lead | null>(null);
+  const [showQualifyModal, setShowQualifyModal] = useState(false);
+  const [showDisqualifyModal, setShowDisqualifyModal] = useState(false);
+  const [showAddNotesModal, setShowAddNotesModal] = useState(false);
   const [qualificationData, setQualificationData] = useState<QualificationData>({
     aiScore: 92,
     baseScore: 69,
@@ -165,19 +171,39 @@ const LeadQualificationPage: React.FC = () => {
     }
   };
 
-  const handleQualify = async () => {
+  const handleQualify = () => {
+    const hasIncompleteBANT =
+      !qualificationData.bantData.budget.status ||
+      !qualificationData.bantData.authority.status ||
+      !qualificationData.bantData.need.status ||
+      !qualificationData.bantData.timeline.status;
+
+    setShowQualifyModal(true);
+  };
+
+  const handleConfirmQualify = async () => {
     try {
-      showToast('Lead qualified and synced to CRM successfully!', 'success');
-      navigate('/lead-gen/leads');
+      setShowQualifyModal(false);
+      showToast('✅ Lead qualified and synced to CRM', 'success');
+      setTimeout(() => {
+        navigate('/lead-gen/leads');
+      }, 1000);
     } catch (error) {
       showToast('Failed to qualify lead', 'error');
     }
   };
 
-  const handleDisqualify = async () => {
+  const handleDisqualify = () => {
+    setShowDisqualifyModal(true);
+  };
+
+  const handleConfirmDisqualify = async (reason: string, sendNotification: boolean) => {
     try {
-      showToast('Lead disqualified', 'success');
-      navigate('/lead-gen/leads');
+      setShowDisqualifyModal(false);
+      showToast(`Lead disqualified${sendNotification ? ' (notification sent)' : ''}`, 'success');
+      setTimeout(() => {
+        navigate('/lead-gen/leads');
+      }, 1000);
     } catch (error) {
       showToast('Failed to disqualify lead', 'error');
     }
@@ -185,9 +211,31 @@ const LeadQualificationPage: React.FC = () => {
 
   const handleSaveDraft = async () => {
     try {
-      showToast('Qualification saved as draft', 'success');
+      showToast('💾 Draft saved', 'success');
     } catch (error) {
       showToast('Failed to save draft', 'error');
+    }
+  };
+
+  const handleAddNotes = () => {
+    setShowAddNotesModal(true);
+  };
+
+  const handleSaveNote = async (note: string, isPrivate: boolean) => {
+    try {
+      setShowAddNotesModal(false);
+      showToast(`Note added${isPrivate ? ' (private)' : ''}`, 'success');
+    } catch (error) {
+      showToast('Failed to add note', 'error');
+    }
+  };
+
+  const handleScoreAdjust = async (newScore: number, reason: string) => {
+    try {
+      setQualificationData(prev => ({ ...prev, aiScore: newScore }));
+      showToast(`Score adjusted to ${newScore}/100`, 'success');
+    } catch (error) {
+      showToast('Failed to adjust score', 'error');
     }
   };
 
@@ -291,21 +339,21 @@ const LeadQualificationPage: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={handleQualify}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
                 >
                   <CheckCircle className="h-4 w-4" />
-                  Qualify Lead
+                  Qualify & Sync
                 </button>
                 <button
                   onClick={handleDisqualify}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                 >
                   <XCircle className="h-4 w-4" />
-                  Disqualify
+                  Disqualify Lead
                 </button>
                 <button
-                  onClick={handleSaveDraft}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  onClick={handleAddNotes}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   <FileText className="h-4 w-4" />
                   Add Notes
@@ -322,6 +370,7 @@ const LeadQualificationPage: React.FC = () => {
           hrmsBonusPoints={qualificationData.hrmsBonusPoints}
           scoreComponents={qualificationData.scoreComponents}
           aiInsights={qualificationData.aiInsights}
+          onScoreAdjust={handleScoreAdjust}
         />
 
         <BANTFramework
@@ -345,6 +394,39 @@ const LeadQualificationPage: React.FC = () => {
 
         <QualificationHistory leadId={lead.id} />
       </div>
+
+      <QualifyLeadModal
+        isOpen={showQualifyModal}
+        onClose={() => setShowQualifyModal(false)}
+        onConfirm={handleConfirmQualify}
+        lead={{
+          name: lead?.name || '',
+          company: lead?.company || ''
+        }}
+        aiScore={qualificationData.aiScore}
+        bantScore={20}
+        assignedTo={qualificationData.assignedTo}
+      />
+
+      <DisqualifyLeadModal
+        isOpen={showDisqualifyModal}
+        onClose={() => setShowDisqualifyModal(false)}
+        onConfirm={handleConfirmDisqualify}
+        lead={{
+          name: lead?.name || '',
+          company: lead?.company || ''
+        }}
+      />
+
+      <AddNotesModal
+        isOpen={showAddNotesModal}
+        onClose={() => setShowAddNotesModal(false)}
+        onSave={handleSaveNote}
+        lead={{
+          name: lead?.name || '',
+          company: lead?.company || ''
+        }}
+      />
     </div>
   );
 };
