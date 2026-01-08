@@ -9,6 +9,7 @@ import QualifyLeadModal from '../../components/LeadQualification/QualifyLeadModa
 import DisqualifyLeadModal from '../../components/LeadQualification/DisqualifyLeadModal';
 import AddNotesModal from '../../components/LeadQualification/AddNotesModal';
 import IncompleteBantModal from '../../components/LeadQualification/IncompleteBantModal';
+import PartialBantModal from '../../components/LeadQualification/PartialBantModal';
 import { useToast } from '../../contexts/ToastContext';
 
 interface Lead {
@@ -51,6 +52,7 @@ const LeadQualificationPage: React.FC = () => {
   const [showDisqualifyModal, setShowDisqualifyModal] = useState(false);
   const [showAddNotesModal, setShowAddNotesModal] = useState(false);
   const [showIncompleteBantModal, setShowIncompleteBantModal] = useState(false);
+  const [showPartialBantModal, setShowPartialBantModal] = useState(false);
   const bantSectionRef = useRef<HTMLDivElement>(null);
   const [qualificationData, setQualificationData] = useState<QualificationData>({
     aiScore: 92,
@@ -204,13 +206,111 @@ const LeadQualificationPage: React.FC = () => {
     };
   };
 
+  const getBANTFieldScore = (field: string, status: string) => {
+    if (!status) return 0;
+
+    const scoreMap: { [key: string]: { [status: string]: number } } = {
+      budget: { confirmed: 5, likely: 4, unknown: 2 },
+      authority: { decision_maker: 5, influencer: 4, end_user: 2 },
+      need: { urgent: 5, important: 4, nice_to_have: 2 },
+      timeline: { immediate: 5, short_term: 4, long_term: 2 }
+    };
+
+    return scoreMap[field]?.[status] || 0;
+  };
+
+  const getBANTFieldDisplayValue = (field: string, status: string, data: any) => {
+    const displayMap: { [key: string]: { [status: string]: string } } = {
+      budget: {
+        confirmed: data.range || 'Confirmed',
+        likely: 'Likely',
+        unknown: 'Unknown'
+      },
+      authority: {
+        decision_maker: 'Decision Maker',
+        influencer: 'Influencer',
+        end_user: 'End User'
+      },
+      need: {
+        urgent: 'Urgent',
+        important: 'Important',
+        nice_to_have: 'Nice to have'
+      },
+      timeline: {
+        immediate: 'Immediate (0-30 days)',
+        short_term: 'Short-term (1-3 mo)',
+        long_term: 'Long-term (3-6 mo)'
+      }
+    };
+
+    return displayMap[field]?.[status] || status;
+  };
+
+  const getDetailedBANTFields = () => {
+    const fields = [
+      {
+        name: 'budget',
+        label: 'Budget',
+        status: qualificationData.bantData.budget.status,
+        data: qualificationData.bantData.budget
+      },
+      {
+        name: 'authority',
+        label: 'Authority',
+        status: qualificationData.bantData.authority.status,
+        data: qualificationData.bantData.authority
+      },
+      {
+        name: 'need',
+        label: 'Need',
+        status: qualificationData.bantData.need.status,
+        data: qualificationData.bantData.need
+      },
+      {
+        name: 'timeline',
+        label: 'Timeline',
+        status: qualificationData.bantData.timeline.status,
+        data: qualificationData.bantData.timeline
+      }
+    ];
+
+    const completed = fields
+      .filter(f => f.status && f.status !== '')
+      .map(f => ({
+        name: f.name,
+        label: f.label,
+        completed: true,
+        score: getBANTFieldScore(f.name, f.status),
+        maxScore: 5,
+        displayValue: getBANTFieldDisplayValue(f.name, f.status, f.data)
+      }));
+
+    const missing = fields
+      .filter(f => !f.status || f.status === '')
+      .map(f => ({
+        name: f.name,
+        label: f.label,
+        completed: false,
+        score: 0,
+        maxScore: 5
+      }));
+
+    return { completed, missing };
+  };
+
   const handleQualify = () => {
     const missingFields = getMissingBANTFields();
     const allFieldsMissing = Object.values(missingFields).every(missing => missing);
+    const someFieldsMissing = Object.values(missingFields).some(missing => missing);
     const bantScore = calculateBANTScore();
 
     if (allFieldsMissing) {
       setShowIncompleteBantModal(true);
+      return;
+    }
+
+    if (someFieldsMissing) {
+      setShowPartialBantModal(true);
       return;
     }
 
@@ -219,7 +319,13 @@ const LeadQualificationPage: React.FC = () => {
 
   const handleCompleteBant = () => {
     setShowIncompleteBantModal(false);
+    setShowPartialBantModal(false);
     bantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleQualifyAnywayFromPartial = () => {
+    setShowPartialBantModal(false);
+    setShowQualifyModal(true);
   };
 
   const handleConfirmQualify = async () => {
@@ -479,6 +585,18 @@ const LeadQualificationPage: React.FC = () => {
         onSaveDraft={handleSaveDraft}
         bantScore={calculateBANTScore()}
         missingFields={getMissingBANTFields()}
+      />
+
+      <PartialBantModal
+        isOpen={showPartialBantModal}
+        onClose={() => setShowPartialBantModal(false)}
+        onQualifyAnyway={handleQualifyAnywayFromPartial}
+        onCompleteBant={handleCompleteBant}
+        onSaveDraft={handleSaveDraft}
+        bantScore={calculateBANTScore()}
+        maxScore={20}
+        completedFields={getDetailedBANTFields().completed}
+        missingFields={getDetailedBANTFields().missing}
       />
     </div>
   );
