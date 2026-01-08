@@ -142,9 +142,11 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
                   value="qualified"
                   checked={finalStatus === 'qualified'}
                   onChange={(e) => onUpdateStatus(e.target.value)}
-                  className="h-4 w-4 text-green-600"
+                  className="h-4 w-4 text-emerald-600"
                 />
-                <span className="text-sm text-gray-700">Qualified</span>
+                <span className={`text-sm font-medium ${finalStatus === 'qualified' ? 'text-emerald-600' : 'text-gray-700'}`}>
+                  Qualified
+                </span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -153,9 +155,11 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
                   value="needs_more_info"
                   checked={finalStatus === 'needs_more_info'}
                   onChange={(e) => onUpdateStatus(e.target.value)}
-                  className="h-4 w-4 text-yellow-600"
+                  className="h-4 w-4 text-yellow-500"
                 />
-                <span className="text-sm text-gray-700">Needs More Info</span>
+                <span className={`text-sm font-medium ${finalStatus === 'needs_more_info' ? 'text-yellow-600' : 'text-gray-700'}`}>
+                  Needs More Info
+                </span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -164,9 +168,11 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
                   value="disqualified"
                   checked={finalStatus === 'disqualified'}
                   onChange={(e) => onUpdateStatus(e.target.value)}
-                  className="h-4 w-4 text-red-600"
+                  className="h-4 w-4 text-red-500"
                 />
-                <span className="text-sm text-gray-700">Disqualified</span>
+                <span className={`text-sm font-medium ${finalStatus === 'disqualified' ? 'text-red-600' : 'text-gray-700'}`}>
+                  Disqualified
+                </span>
               </label>
             </div>
           </div>
@@ -220,7 +226,7 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
               disabled={finalStatus !== 'qualified'}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
                 finalStatus === 'qualified'
-                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >
@@ -241,7 +247,7 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
               disabled={finalStatus !== 'disqualified'}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
                 finalStatus === 'disqualified'
-                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  ? 'bg-red-500 text-white hover:bg-red-600'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >

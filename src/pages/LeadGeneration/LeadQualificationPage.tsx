@@ -326,9 +326,9 @@ const LeadQualificationPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-yellow-500">🟡</span>
+                  <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
                   <span className="text-gray-600">
-                    Current Status: <span className="font-medium">{lead.status}</span> → Qualification Pending
+                    Current Status: <span className="font-medium text-yellow-600">{lead.status}</span> → <span className="font-medium text-gray-500">Qualification Pending</span>
                   </span>
                 </div>
                 <p className="text-sm text-gray-500 mt-2">
@@ -339,14 +339,14 @@ const LeadQualificationPage: React.FC = () => {
               <div className="flex gap-3">
                 <button
                   onClick={handleQualify}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
                 >
                   <CheckCircle className="h-4 w-4" />
                   Qualify & Sync
                 </button>
                 <button
                   onClick={handleDisqualify}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
                 >
                   <XCircle className="h-4 w-4" />
                   Disqualify Lead

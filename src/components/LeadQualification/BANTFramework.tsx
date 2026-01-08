@@ -63,9 +63,17 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
   const scores = calculateBANTScore();
   const totalScore = scores.budgetScore + scores.authorityScore + scores.needScore + scores.timelineScore;
 
-  const getScoreDots = (score: number): JSX.Element[] => {
+  const getBANTScoreColor = (totalScore: number): string => {
+    if (totalScore === 20) return 'text-emerald-600';
+    if (totalScore >= 15) return 'text-green-500';
+    if (totalScore >= 10) return 'text-yellow-500';
+    return 'text-red-500';
+  };
+
+  const getScoreDots = (score: number, totalScore: number): JSX.Element[] => {
+    const color = getBANTScoreColor(totalScore);
     return [...Array(5)].map((_, i) => (
-      <span key={i} className={i < score ? 'text-green-500' : 'text-gray-300'}>
+      <span key={i} className={i < score ? color : 'text-gray-300'}>
         ●
       </span>
     ));
@@ -329,7 +337,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
 
           <div className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-4">
-              <Clock className="h-5 w-5 text-purple-600" />
+              <Clock className="h-5 w-5 text-blue-600" />
               <h3 className="font-semibold text-gray-900">
                 TIMELINE (When does the prospect need a solution?)
               </h3>
@@ -410,7 +418,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Budget:</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm space-x-0.5">{getScoreDots(scores.budgetScore)}</span>
+                  <span className="text-sm space-x-0.5">{getScoreDots(scores.budgetScore, totalScore)}</span>
                   <span className="text-sm font-bold text-gray-900">
                     {scores.budgetScore}/5
                   </span>
@@ -423,7 +431,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Authority:</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm space-x-0.5">{getScoreDots(scores.authorityScore)}</span>
+                  <span className="text-sm space-x-0.5">{getScoreDots(scores.authorityScore, totalScore)}</span>
                   <span className="text-sm font-bold text-gray-900">
                     {scores.authorityScore}/5
                   </span>
@@ -436,7 +444,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Need:</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm space-x-0.5">{getScoreDots(scores.needScore)}</span>
+                  <span className="text-sm space-x-0.5">{getScoreDots(scores.needScore, totalScore)}</span>
                   <span className="text-sm font-bold text-gray-900">
                     {scores.needScore}/5
                   </span>
@@ -449,7 +457,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Timeline:</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm space-x-0.5">{getScoreDots(scores.timelineScore)}</span>
+                  <span className="text-sm space-x-0.5">{getScoreDots(scores.timelineScore, totalScore)}</span>
                   <span className="text-sm font-bold text-gray-900">
                     {scores.timelineScore}/5
                   </span>
@@ -463,19 +471,19 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-gray-900">Overall BANT:</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold text-gray-900">
+                    <span className={`text-lg font-bold ${getBANTScoreColor(totalScore)}`}>
                       {totalScore}/20
                     </span>
                     <span className={`text-sm font-semibold ${
-                      totalScore >= 18 ? 'text-green-600' :
-                      totalScore >= 15 ? 'text-blue-600' :
-                      totalScore >= 12 ? 'text-yellow-600' :
-                      'text-red-600'
+                      totalScore === 20 ? 'text-emerald-600' :
+                      totalScore >= 15 ? 'text-green-500' :
+                      totalScore >= 10 ? 'text-yellow-500' :
+                      'text-red-500'
                     }`}>
-                      {totalScore >= 18 ? '✅ HIGHLY QUALIFIED' :
+                      {totalScore === 20 ? '✅ PERFECT' :
                        totalScore >= 15 ? '✅ QUALIFIED' :
-                       totalScore >= 12 ? '⚠️ NEEDS WORK' :
-                       '❌ NOT QUALIFIED'}
+                       totalScore >= 10 ? '⚠️ NEEDS MORE INFO' :
+                       '❌ DISQUALIFY'}
                     </span>
                   </div>
                 </div>

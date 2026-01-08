@@ -98,19 +98,19 @@ const QualifyLeadModal: React.FC<QualifyLeadModalProps> = ({
             </p>
             <ul className="space-y-2">
               <li className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600" />
+                <CheckCircle className="h-4 w-4 text-emerald-600" />
                 Mark lead as "Qualified"
               </li>
               <li className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600" />
+                <CheckCircle className="h-4 w-4 text-emerald-600" />
                 Sync to CRM immediately
               </li>
               <li className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600" />
+                <CheckCircle className="h-4 w-4 text-emerald-600" />
                 Create CRM opportunity
               </li>
               <li className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="h-4 w-4 text-green-600" />
+                <CheckCircle className="h-4 w-4 text-emerald-600" />
                 Notify assigned sales rep
               </li>
             </ul>
@@ -120,7 +120,7 @@ const QualifyLeadModal: React.FC<QualifyLeadModalProps> = ({
         <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
           <button
             onClick={onConfirm}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
           >
             <CheckCircle className="h-5 w-5" />
             Confirm & Sync

@@ -38,17 +38,20 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
     }
   };
 
-  const getScoreRating = (score: number): string => {
-    if (score >= 90) return 'Excellent';
-    if (score >= 75) return 'Good';
-    if (score >= 60) return 'Fair';
-    return 'Poor';
+  const getScoreRating = (score: number): { label: string; grade: string; color: string } => {
+    if (score >= 90) return { label: 'Excellent', grade: 'A+', color: 'text-green-800' };
+    if (score >= 80) return { label: 'Very Good', grade: 'A/A-', color: 'text-green-600' };
+    if (score >= 70) return { label: 'Good', grade: 'B+/B', color: 'text-green-500' };
+    if (score >= 60) return { label: 'Fair', grade: 'C+/C', color: 'text-yellow-500' };
+    if (score >= 50) return { label: 'Poor', grade: 'D', color: 'text-orange-500' };
+    return { label: 'Very Poor', grade: 'F', color: 'text-red-500' };
   };
 
   const getScoreDots = (score: number): JSX.Element[] => {
     const filled = Math.round(score / 10);
+    const rating = getScoreRating(score);
     return [...Array(10)].map((_, i) => (
-      <span key={i} className={i < filled ? 'text-green-500' : 'text-gray-300'}>
+      <span key={i} className={i < filled ? rating.color : 'text-gray-300'}>
         ●
       </span>
     ));
@@ -57,13 +60,6 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
   const getProgressBar = (score: number, max: number): string => {
     const percentage = Math.round((score / max) * 100);
     return `${percentage}%`;
-  };
-
-  const getProgressBarColor = (percentage: number): string => {
-    if (percentage >= 90) return 'bg-green-500';
-    if (percentage >= 75) return 'bg-blue-500';
-    if (percentage >= 60) return 'bg-yellow-500';
-    return 'bg-red-500';
   };
 
   return (
@@ -95,8 +91,11 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
                   Click to adjust manually
                 </div>
               )}
-              <div className="text-2xl mb-4 space-x-1">
-                {getScoreDots(aiScore)} ({getScoreRating(aiScore)})
+              <div className="text-2xl mb-2 space-x-1">
+                {getScoreDots(aiScore)}
+              </div>
+              <div className={`text-xl font-bold mb-4 ${getScoreRating(aiScore).color}`}>
+                Grade: {getScoreRating(aiScore).grade} - {getScoreRating(aiScore).label}
               </div>
             </div>
 
@@ -141,11 +140,9 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
               </div>
             </div>
             <p className="text-sm text-gray-600 mb-2">{scoreComponents.jobTitle.details}</p>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 h-2 rounded">
               <div
-                className={`h-2 rounded-full ${getProgressBarColor(
-                  (scoreComponents.jobTitle.score / scoreComponents.jobTitle.max) * 100
-                )}`}
+                className="h-2 rounded bg-blue-500"
                 style={{ width: getProgressBar(scoreComponents.jobTitle.score, scoreComponents.jobTitle.max) }}
               />
             </div>
@@ -169,11 +166,9 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
                 <p key={index} className="text-sm text-gray-600">• {detail}</p>
               ))}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 h-2 rounded">
               <div
-                className={`h-2 rounded-full ${getProgressBarColor(
-                  (scoreComponents.companyProfile.score / scoreComponents.companyProfile.max) * 100
-                )}`}
+                className="h-2 rounded bg-blue-500"
                 style={{ width: getProgressBar(scoreComponents.companyProfile.score, scoreComponents.companyProfile.max) }}
               />
             </div>
@@ -197,11 +192,9 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
                 <p key={index} className="text-sm text-gray-600">• {detail}</p>
               ))}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 h-2 rounded">
               <div
-                className={`h-2 rounded-full ${getProgressBarColor(
-                  (scoreComponents.engagement.score / scoreComponents.engagement.max) * 100
-                )}`}
+                className="h-2 rounded bg-blue-500"
                 style={{ width: getProgressBar(scoreComponents.engagement.score, scoreComponents.engagement.max) }}
               />
             </div>
@@ -225,11 +218,9 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
                 <p key={index} className="text-sm text-gray-600">• {detail}</p>
               ))}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 h-2 rounded">
               <div
-                className={`h-2 rounded-full ${getProgressBarColor(
-                  (scoreComponents.intentSignals.score / scoreComponents.intentSignals.max) * 100
-                )}`}
+                className="h-2 rounded bg-blue-500"
                 style={{ width: getProgressBar(scoreComponents.intentSignals.score, scoreComponents.intentSignals.max) }}
               />
             </div>
@@ -253,11 +244,9 @@ const AIScoreBreakdown: React.FC<AIScoreBreakdownProps> = ({
                 <p key={index} className="text-sm text-gray-600">• {detail}</p>
               ))}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-gray-200 h-2 rounded">
               <div
-                className={`h-2 rounded-full ${getProgressBarColor(
-                  (scoreComponents.dataCompleteness.score / scoreComponents.dataCompleteness.max) * 100
-                )}`}
+                className="h-2 rounded bg-blue-500"
                 style={{ width: getProgressBar(scoreComponents.dataCompleteness.score, scoreComponents.dataCompleteness.max) }}
               />
             </div>

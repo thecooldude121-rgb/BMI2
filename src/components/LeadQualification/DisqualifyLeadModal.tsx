@@ -56,7 +56,7 @@ const DisqualifyLeadModal: React.FC<DisqualifyLeadModalProps> = ({
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <XCircle className="h-5 w-5 text-red-600" />
+            <XCircle className="h-5 w-5 text-red-500" />
             <h3 className="text-lg font-semibold text-gray-900">
               DISQUALIFY LEAD
             </h3>
@@ -72,7 +72,7 @@ const DisqualifyLeadModal: React.FC<DisqualifyLeadModalProps> = ({
         <div className="p-6 space-y-6">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
               <div>
                 <p className="font-medium text-gray-900 mb-1">
                   You are about to disqualify this lead
@@ -106,7 +106,7 @@ const DisqualifyLeadModal: React.FC<DisqualifyLeadModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Disqualification Reason: <span className="text-red-600">*</span>
+              Disqualification Reason: <span className="text-red-500">*</span>
             </label>
             <textarea
               value={reason}
@@ -121,7 +121,7 @@ const DisqualifyLeadModal: React.FC<DisqualifyLeadModalProps> = ({
               placeholder="Provide detailed reason for disqualification..."
             />
             {showWarning && (
-              <div className="flex items-center gap-2 mt-2 text-sm text-red-600">
+              <div className="flex items-center gap-2 mt-2 text-sm text-red-500">
                 <AlertCircle className="h-4 w-4" />
                 <span>Please provide a disqualification reason</span>
               </div>
@@ -134,7 +134,7 @@ const DisqualifyLeadModal: React.FC<DisqualifyLeadModalProps> = ({
                 type="checkbox"
                 checked={sendNotification}
                 onChange={(e) => setSendNotification(e.target.checked)}
-                className="h-4 w-4 text-red-600 rounded"
+                className="h-4 w-4 text-red-500 rounded"
               />
               <span className="text-sm text-gray-700">
                 Send notification to lead owner
@@ -152,7 +152,7 @@ const DisqualifyLeadModal: React.FC<DisqualifyLeadModalProps> = ({
         <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
           <button
             onClick={handleConfirm}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
           >
             <XCircle className="h-5 w-5" />
             Disqualify Lead
