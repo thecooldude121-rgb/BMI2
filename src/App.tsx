@@ -14,6 +14,7 @@ import HRMSModule from './pages/HRMS/HRMSModule';
 import Analytics from './pages/Analytics/Analytics';
 import Calendar from './pages/Calendar/Calendar';
 import LeadGenerationModule from './pages/LeadGeneration/LeadGenerationModule';
+import DisqualificationDemo from './pages/LeadGeneration/DisqualificationDemo';
 import SettingsPage from './pages/Settings/SettingsPage';
 import Login from './pages/Auth/Login';
 import LoginWireframe from './pages/Auth/LoginWireframe';
@@ -55,6 +56,7 @@ const App = () => {
                   <Route path="/analytics" element={<Layout><Analytics /></Layout>} />
                   <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
                   <Route path="/lead-generation/*" element={<Layout><LeadGenerationModule /></Layout>} />
+                  <Route path="/demo/disqualification" element={<Layout><DisqualificationDemo /></Layout>} />
                   <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
                   <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
                   <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />
