@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Settings, Lightbulb, DollarSign, ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  enrichmentFieldsConfig,
+  calculateEnrichmentCost,
+  getSelectedFieldsCount,
+  getTotalFieldsCount,
+  type EnrichmentField as ConfigField,
+} from '../../utils/enrichmentFieldsConfig';
 
 interface EnrichmentField {
   id: string;
   label: string;
   selected: boolean;
+  cost: number;
 }
 
 interface FieldCategory {
@@ -38,58 +46,35 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
   onClose,
   onSave,
 }) => {
-  const [enrichmentMode, setEnrichmentMode] = useState<'auto' | 'manual'>('auto');
-  const [frequency, setFrequency] = useState('24hours');
-  const [confidenceThreshold, setConfidenceThreshold] = useState('70');
-  const [dataSourcePriority, setDataSourcePriority] = useState('first-come');
+  const [enrichmentMode, setEnrichmentMode] = useState<'auto' | 'manual'>(enrichmentFieldsConfig.mode);
+  const [frequency, setFrequency] = useState(enrichmentFieldsConfig.settings.autoEnrichFrequency);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(String(enrichmentFieldsConfig.settings.confidenceThreshold));
+  const [dataSourcePriority, setDataSourcePriority] = useState(enrichmentFieldsConfig.settings.dataSourcePriority);
   const [notifications, setNotifications] = useState({
-    onComplete: true,
-    dailySummary: true,
-    onFailure: false,
-    lowConfidence: false,
+    onComplete: enrichmentFieldsConfig.settings.notifications.enrichmentComplete,
+    dailySummary: enrichmentFieldsConfig.settings.notifications.dailySummary,
+    onFailure: enrichmentFieldsConfig.settings.notifications.enrichmentFailures,
+    lowConfidence: enrichmentFieldsConfig.settings.notifications.lowConfidenceFields,
   });
 
   const [categories, setCategories] = useState<FieldCategory[]>([
     {
-      id: 'contact',
-      name: 'Contact Information',
-      expanded: true,
-      fields: [
-        { id: 'email', label: 'Email', selected: true },
-        { id: 'direct_phone', label: 'Direct Phone', selected: true },
-        { id: 'linkedin_profile', label: 'LinkedIn Profile', selected: true },
-        { id: 'mobile_phone', label: 'Mobile Phone', selected: true },
-        { id: 'office_location', label: 'Office Location', selected: false },
-      ],
+      id: enrichmentFieldsConfig.fieldCategories.contactInfo.id,
+      name: enrichmentFieldsConfig.fieldCategories.contactInfo.label,
+      expanded: enrichmentFieldsConfig.fieldCategories.contactInfo.expanded,
+      fields: enrichmentFieldsConfig.fieldCategories.contactInfo.fields.map(f => ({ ...f })),
     },
     {
-      id: 'company',
-      name: 'Company Information',
-      expanded: true,
-      fields: [
-        { id: 'company_size', label: 'Company Size', selected: true },
-        { id: 'annual_revenue', label: 'Annual Revenue', selected: true },
-        { id: 'industry', label: 'Industry', selected: true },
-        { id: 'founded_year', label: 'Founded Year', selected: true },
-        { id: 'total_funding', label: 'Total Funding', selected: true },
-        { id: 'company_website', label: 'Company Website', selected: true },
-        { id: 'company_hq', label: 'Company HQ Address', selected: false },
-        { id: 'international_presence', label: 'International Presence', selected: false },
-      ],
+      id: enrichmentFieldsConfig.fieldCategories.companyInfo.id,
+      name: enrichmentFieldsConfig.fieldCategories.companyInfo.label,
+      expanded: enrichmentFieldsConfig.fieldCategories.companyInfo.expanded,
+      fields: enrichmentFieldsConfig.fieldCategories.companyInfo.fields.map(f => ({ ...f })),
     },
     {
-      id: 'professional',
-      name: 'Professional Details',
-      expanded: false,
-      fields: [
-        { id: 'job_title', label: 'Job Title', selected: false },
-        { id: 'department', label: 'Department', selected: false },
-        { id: 'seniority_level', label: 'Seniority Level', selected: false },
-        { id: 'years_experience', label: 'Years of Experience', selected: false },
-        { id: 'previous_companies', label: 'Previous Companies', selected: false },
-        { id: 'education', label: 'Education', selected: false },
-        { id: 'skills', label: 'Skills & Certifications', selected: false },
-      ],
+      id: enrichmentFieldsConfig.fieldCategories.professionalDetails.id,
+      name: enrichmentFieldsConfig.fieldCategories.professionalDetails.label,
+      expanded: enrichmentFieldsConfig.fieldCategories.professionalDetails.expanded,
+      fields: enrichmentFieldsConfig.fieldCategories.professionalDetails.fields.map(f => ({ ...f })),
     },
   ]);
 
@@ -142,19 +127,27 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
   };
 
   const calculateCost = () => {
-    const selectedFields = getSelectedFieldsCount();
-    const totalFields = getTotalFields();
-    const fieldRatio = selectedFields / totalFields;
+    const config = {
+      ...enrichmentFieldsConfig,
+      mode: enrichmentMode,
+      fieldCategories: {
+        contactInfo: { ...enrichmentFieldsConfig.fieldCategories.contactInfo, fields: categories[0].fields },
+        companyInfo: { ...enrichmentFieldsConfig.fieldCategories.companyInfo, fields: categories[1].fields },
+        professionalDetails: { ...enrichmentFieldsConfig.fieldCategories.professionalDetails, fields: categories[2].fields },
+      },
+      settings: {
+        ...enrichmentFieldsConfig.settings,
+        dataSourcePriority,
+      },
+    };
 
-    const apolloCost = 0.05 * fieldRatio;
-    const zoomInfoCost = 0.08 * fieldRatio;
-    const totalCost = apolloCost + zoomInfoCost;
+    const costs = calculateEnrichmentCost(config, dataSourcePriority);
 
     return {
-      apollo: apolloCost.toFixed(2),
-      zoomInfo: zoomInfoCost.toFixed(2),
-      total: totalCost.toFixed(2),
-      monthly: (totalCost * 100).toFixed(2),
+      apollo: costs.apollo.toFixed(2),
+      zoomInfo: costs.zoomInfo.toFixed(2),
+      total: costs.total.toFixed(2),
+      monthly: costs.monthly.toFixed(2),
     };
   };
 
@@ -176,26 +169,36 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
   };
 
   const handleReset = () => {
-    setEnrichmentMode('auto');
-    setFrequency('24hours');
-    setConfidenceThreshold('70');
-    setDataSourcePriority('first-come');
+    setEnrichmentMode(enrichmentFieldsConfig.mode);
+    setFrequency(enrichmentFieldsConfig.settings.autoEnrichFrequency);
+    setConfidenceThreshold(String(enrichmentFieldsConfig.settings.confidenceThreshold));
+    setDataSourcePriority(enrichmentFieldsConfig.settings.dataSourcePriority);
     setNotifications({
-      onComplete: true,
-      dailySummary: true,
-      onFailure: false,
-      lowConfidence: false,
+      onComplete: enrichmentFieldsConfig.settings.notifications.enrichmentComplete,
+      dailySummary: enrichmentFieldsConfig.settings.notifications.dailySummary,
+      onFailure: enrichmentFieldsConfig.settings.notifications.enrichmentFailures,
+      lowConfidence: enrichmentFieldsConfig.settings.notifications.lowConfidenceFields,
     });
-    setCategories(prev =>
-      prev.map(cat => ({
-        ...cat,
-        expanded: cat.id === 'contact' || cat.id === 'company',
-        fields: cat.fields.map((field, idx) => ({
-          ...field,
-          selected: (cat.id === 'contact' && idx < 4) || (cat.id === 'company' && idx < 6),
-        })),
-      }))
-    );
+    setCategories([
+      {
+        id: enrichmentFieldsConfig.fieldCategories.contactInfo.id,
+        name: enrichmentFieldsConfig.fieldCategories.contactInfo.label,
+        expanded: enrichmentFieldsConfig.fieldCategories.contactInfo.expanded,
+        fields: enrichmentFieldsConfig.fieldCategories.contactInfo.fields.map(f => ({ ...f })),
+      },
+      {
+        id: enrichmentFieldsConfig.fieldCategories.companyInfo.id,
+        name: enrichmentFieldsConfig.fieldCategories.companyInfo.label,
+        expanded: enrichmentFieldsConfig.fieldCategories.companyInfo.expanded,
+        fields: enrichmentFieldsConfig.fieldCategories.companyInfo.fields.map(f => ({ ...f })),
+      },
+      {
+        id: enrichmentFieldsConfig.fieldCategories.professionalDetails.id,
+        name: enrichmentFieldsConfig.fieldCategories.professionalDetails.label,
+        expanded: enrichmentFieldsConfig.fieldCategories.professionalDetails.expanded,
+        fields: enrichmentFieldsConfig.fieldCategories.professionalDetails.fields.map(f => ({ ...f })),
+      },
+    ]);
   };
 
   const costs = calculateCost();
@@ -329,12 +332,15 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
                   onChange={(e) => setFrequency(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="realtime">Real-time (on page load if data &gt;24h old)</option>
-                  <option value="24hours">Every 24 hours</option>
-                  <option value="7days">Every 7 days</option>
-                  <option value="30days">Every 30 days</option>
-                  <option value="manual">Manual only (disable auto-enrich)</option>
+                  {enrichmentFieldsConfig.frequencyOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {enrichmentFieldsConfig.frequencyOptions.find(opt => opt.value === frequency)?.description}
+                </p>
               </div>
 
               <div>
@@ -346,15 +352,14 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
                   onChange={(e) => setConfidenceThreshold(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="90">90% or higher (Very strict)</option>
-                  <option value="80">80% or higher (Strict)</option>
-                  <option value="70">70% or higher (Balanced - Recommended)</option>
-                  <option value="60">60% or higher (Lenient)</option>
-                  <option value="any">Any confidence (Accept all)</option>
+                  {enrichmentFieldsConfig.confidenceThresholdOptions.map((option) => (
+                    <option key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Only accept enriched data with confidence ≥ {confidenceThreshold}%
-                  {confidenceThreshold !== 'any' && '. Lower confidence data requires manual review'}
+                  {enrichmentFieldsConfig.confidenceThresholdOptions.find(opt => String(opt.value) === confidenceThreshold)?.description}
                 </p>
               </div>
 
@@ -363,58 +368,21 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
                   Data Source Priority:
                 </label>
                 <div className="space-y-3 bg-gray-50 rounded-lg p-4">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="priority"
-                      checked={dataSourcePriority === 'first-come'}
-                      onChange={() => setDataSourcePriority('first-come')}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="font-medium text-gray-900">First-come-first-serve (Recommended)</div>
-                      <div className="text-xs text-gray-600">Whichever API responds first fills the field</div>
-                    </div>
-                  </label>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="priority"
-                      checked={dataSourcePriority === 'apollo'}
-                      onChange={() => setDataSourcePriority('apollo')}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="font-medium text-gray-900">Prefer Apollo.io</div>
-                      <div className="text-xs text-gray-600">Use Apollo data when both sources respond</div>
-                    </div>
-                  </label>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="priority"
-                      checked={dataSourcePriority === 'zoominfo'}
-                      onChange={() => setDataSourcePriority('zoominfo')}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="font-medium text-gray-900">Prefer ZoomInfo</div>
-                      <div className="text-xs text-gray-600">Use ZoomInfo data when both sources respond</div>
-                    </div>
-                  </label>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="priority"
-                      checked={dataSourcePriority === 'merge'}
-                      onChange={() => setDataSourcePriority('merge')}
-                      className="mt-1 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <div className="font-medium text-gray-900">Merge data (combine both sources)</div>
-                      <div className="text-xs text-gray-600">Take best confidence score from either source</div>
-                    </div>
-                  </label>
+                  {enrichmentFieldsConfig.dataSourcePriorityOptions.map((option) => (
+                    <label key={option.value} className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="priority"
+                        checked={dataSourcePriority === option.value}
+                        onChange={() => setDataSourcePriority(option.value)}
+                        className="mt-1 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div>
+                        <div className="font-medium text-gray-900">{option.label}</div>
+                        <div className="text-xs text-gray-600">{option.description}</div>
+                      </div>
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -497,11 +465,7 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
                       <div>• Fields to enrich: {getSelectedFieldsCount()} of {getTotalFields()}</div>
                       <div>
                         • Frequency:{' '}
-                        {frequency === 'realtime' && 'Real-time'}
-                        {frequency === '24hours' && 'Every 24 hours'}
-                        {frequency === '7days' && 'Every 7 days'}
-                        {frequency === '30days' && 'Every 30 days'}
-                        {frequency === 'manual' && 'Manual only'}
+                        {enrichmentFieldsConfig.frequencyOptions.find(opt => opt.value === frequency)?.label || frequency}
                       </div>
                     </div>
                   </div>
