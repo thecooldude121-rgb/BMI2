@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sarahLeeEnrichmentData, type EnrichedField, type DataSource, type EnrichmentHistoryEntry } from '../../utils/sarahLeeEnrichmentData';
 import { useToast } from '../../contexts/ToastContext';
+import ConfigureEnrichmentFieldsModal from '../../components/LeadGeneration/ConfigureEnrichmentFieldsModal';
 
 export default function LeadEnrichmentPage() {
   const navigate = useNavigate();
@@ -78,6 +79,12 @@ export default function LeadEnrichmentPage() {
       `Auto-enrichment ${!autoEnrich ? 'enabled' : 'disabled'}`,
       'success'
     );
+  };
+
+  const handleSaveEnrichmentSettings = (settings: any, selectedFields: string[]) => {
+    console.log('Enrichment settings saved:', settings);
+    console.log('Selected fields:', selectedFields);
+    addToast(`Enrichment settings saved successfully`, 'success');
   };
 
   return (
@@ -388,9 +395,11 @@ export default function LeadEnrichmentPage() {
       </div>
 
       {/* Modals */}
-      {showConfigModal && (
-        <ConfigureFieldsModal onClose={() => setShowConfigModal(false)} />
-      )}
+      <ConfigureEnrichmentFieldsModal
+        isOpen={showConfigModal}
+        onClose={() => setShowConfigModal(false)}
+        onSave={handleSaveEnrichmentSettings}
+      />
       {selectedDataSource && (
         <DataSourceDetailsModal
           source={selectedDataSource}
@@ -470,90 +479,6 @@ function EnrichedFieldCard({
   );
 }
 
-function ConfigureFieldsModal({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<'auto' | 'manual'>('auto');
-  const [frequency, setFrequency] = useState('24');
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-md w-full m-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-gray-900 mb-4">CONFIGURE ENRICHMENT FIELDS</h3>
-
-        <div className="space-y-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Enrichment Mode:</label>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={mode === 'auto'}
-                  onChange={() => setMode('auto')}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">Auto-enrich all fields (Default)</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={mode === 'manual'}
-                  onChange={() => setMode('manual')}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">Manual selection</span>
-              </label>
-            </div>
-          </div>
-
-          {mode === 'manual' && (
-            <div className="pl-6 space-y-2">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" defaultChecked className="w-4 h-4" />
-                <span className="text-sm text-gray-700">Contact Information (5 fields)</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" defaultChecked className="w-4 h-4" />
-                <span className="text-sm text-gray-700">Company Information (8 fields)</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="w-4 h-4" />
-                <span className="text-sm text-gray-700">Professional Details (7 fields)</span>
-              </label>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Auto-enrich frequency:</label>
-            <select
-              value={frequency}
-              onChange={(e) => setFrequency(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="12">Every 12 hours</option>
-              <option value="24">Every 24 hours</option>
-              <option value="48">Every 48 hours</option>
-              <option value="168">Weekly</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function DataSourceDetailsModal({ source, onClose }: { source: DataSource; onClose: () => void }) {
   const fieldsList = source.name === 'Apollo.io'
