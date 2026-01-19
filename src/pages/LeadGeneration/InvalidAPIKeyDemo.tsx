@@ -92,7 +92,7 @@ const InvalidAPIKeyDemo: React.FC = () => {
               <ul className="text-xs text-red-800 space-y-1">
                 <li>• Type: {invalidAPIKeyData.error.type}</li>
                 <li>• Service: {invalidAPIKeyData.error.service}</li>
-                <li>• Error Code: {invalidAPIKeyData.error.errorCode}</li>
+                <li>• Status Code: {invalidAPIKeyData.error.statusCode}</li>
                 <li>• Message: "{invalidAPIKeyData.error.message}"</li>
               </ul>
             </div>
@@ -101,8 +101,9 @@ const InvalidAPIKeyDemo: React.FC = () => {
               <h3 className="text-sm font-semibold text-gray-900 mb-2">Current API Key</h3>
               <ul className="text-xs text-gray-800 space-y-1">
                 <li>• Masked: {invalidAPIKeyData.currentAPIKey.masked}</li>
-                <li>• Format: {invalidAPIKeyData.currentAPIKey.format}...</li>
-                <li>• Length: {invalidAPIKeyData.currentAPIKey.expectedLength} chars</li>
+                <li>• Status: {invalidAPIKeyData.currentAPIKey.status}</li>
+                <li>• Last Verified: {new Date(invalidAPIKeyData.currentAPIKey.lastVerified).toLocaleDateString()}</li>
+                <li>• Format: {invalidAPIKeyData.currentAPIKey.format}... ({invalidAPIKeyData.currentAPIKey.expectedLength} chars)</li>
               </ul>
             </div>
 

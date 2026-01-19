@@ -17,7 +17,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
   onSkipApollo,
   service = 'Apollo.io'
 }) => {
-  const [selectedOption, setSelectedOption] = useState<string>('update_api_key');
+  const [selectedOption, setSelectedOption] = useState<string>('update_key');
   const [apiKey, setApiKey] = useState('');
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
@@ -40,7 +40,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
   };
 
   const handleSaveAndTest = () => {
-    if (selectedOption === 'update_api_key' && apiKey) {
+    if (selectedOption === 'update_key' && apiKey) {
       onUpdateKey(apiKey);
     } else if (selectedOption === 'skip_apollo') {
       onSkipApollo();
@@ -50,7 +50,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
   };
 
   const handleOpenSettings = () => {
-    window.open(invalidAPIKeyData.instructions.settingsUrl, '_blank');
+    window.open(invalidAPIKeyData.howToGetAPIKey.settingsUrl, '_blank');
   };
 
   const isValidFormat = apiKey.length === 0 ||
@@ -100,7 +100,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
               </div>
               <div className="flex gap-2">
                 <span className="text-gray-600 font-medium">Error Code:</span>
-                <span className="text-gray-900">{invalidAPIKeyData.error.errorCode} Unauthorized</span>
+                <span className="text-gray-900">{invalidAPIKeyData.error.statusCode} Unauthorized</span>
               </div>
               <div className="flex gap-2">
                 <span className="text-gray-600 font-medium">Message:</span>
@@ -156,7 +156,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
           </div>
 
           {/* API Key Input (shown when "Update API key" is selected) */}
-          {selectedOption === 'update_api_key' && (
+          {selectedOption === 'update_key' && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">
@@ -242,12 +242,12 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
             <div className="flex items-center gap-2 mb-3">
               <div className="text-2xl">💡</div>
               <h3 className="font-semibold text-amber-900">
-                {invalidAPIKeyData.instructions.title}
+                HOW TO GET YOUR API KEY
               </h3>
             </div>
 
             <ol className="space-y-2 mb-4">
-              {invalidAPIKeyData.instructions.steps.map((step, index) => (
+              {invalidAPIKeyData.howToGetAPIKey.steps.map((step, index) => (
                 <li key={index} className="text-sm text-amber-900 flex gap-2">
                   <span className="font-semibold">{index + 1}.</span>
                   <span>{step}</span>
@@ -283,7 +283,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
           <button
             onClick={handleSaveAndTest}
             disabled={
-              selectedOption === 'update_api_key' &&
+              selectedOption === 'update_key' &&
               (apiKey.length === 0 || !isValidFormat || testResult !== 'success')
             }
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
