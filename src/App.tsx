@@ -16,6 +16,7 @@ import Calendar from './pages/Calendar/Calendar';
 import LeadGenerationModule from './pages/LeadGeneration/LeadGenerationModule';
 import DisqualificationDemo from './pages/LeadGeneration/DisqualificationDemo';
 import RateLimitDemo from './pages/LeadGeneration/RateLimitDemo';
+import InvalidAPIKeyDemo from './pages/LeadGeneration/InvalidAPIKeyDemo';
 import SettingsPage from './pages/Settings/SettingsPage';
 import Login from './pages/Auth/Login';
 import LoginWireframe from './pages/Auth/LoginWireframe';
@@ -59,6 +60,7 @@ const App = () => {
                   <Route path="/lead-generation/*" element={<Layout><LeadGenerationModule /></Layout>} />
                   <Route path="/demo/disqualification" element={<Layout><DisqualificationDemo /></Layout>} />
                   <Route path="/demo/rate-limit" element={<Layout><RateLimitDemo /></Layout>} />
+                  <Route path="/demo/invalid-api-key" element={<Layout><InvalidAPIKeyDemo /></Layout>} />
                   <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
                   <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
                   <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />
