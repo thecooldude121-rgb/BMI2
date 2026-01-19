@@ -1,43 +1,56 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Code } from 'lucide-react';
 import RateLimitExceededModal from '../../components/LeadGeneration/RateLimitExceededModal';
+import { rateLimitErrorData } from '../../utils/rateLimitErrorMockData';
 
 const RateLimitDemo: React.FC = () => {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(true);
 
-  // Mock rate limit data
+  // Use mock data from rateLimitErrorMockData
   const apolloStatus = {
     provider: 'apollo' as const,
-    used: 100,
-    total: 100,
-    resetTime: new Date(Date.now() + 6 * 60 * 60 * 1000 + 23 * 60 * 1000), // 6 hours 23 minutes from now
+    used: rateLimitErrorData.rateLimitStatus.apollo.used,
+    total: rateLimitErrorData.rateLimitStatus.apollo.limit,
+    resetTime: new Date(rateLimitErrorData.rateLimitStatus.apollo.resetTimestamp),
   };
 
   const zoomInfoStatus = {
     provider: 'zoominfo' as const,
-    used: 45,
-    total: 100,
-    resetTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+    used: rateLimitErrorData.rateLimitStatus.zoominfo.used,
+    total: rateLimitErrorData.rateLimitStatus.zoominfo.limit,
+    resetTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
   };
 
   const handleContinueWithZoomInfo = () => {
+    const option = rateLimitErrorData.options.find(opt => opt.id === 'use_zoominfo');
     console.log('✅ Continuing with ZoomInfo only');
-    console.log('ZoomInfo available requests:', zoomInfoStatus.total - zoomInfoStatus.used);
+    console.log('Option selected:', option);
+    console.log('ZoomInfo available requests:', rateLimitErrorData.rateLimitStatus.zoominfo.available);
+    console.log('Estimated fields to enrich:', option?.estimatedFields);
     alert('Continuing enrichment with ZoomInfo API...');
     setIsModalOpen(false);
   };
 
   const handleScheduleForLater = () => {
+    const option = rateLimitErrorData.options.find(opt => opt.id === 'wait_for_reset');
     console.log('⏰ Scheduling enrichment for later');
+    console.log('Option selected:', option);
+    console.log('Wait time:', option?.waitTime);
+    console.log('Scheduled time:', option?.scheduledTime);
     console.log('Will resume after Apollo reset:', apolloStatus.resetTime);
     alert('Enrichment scheduled for when Apollo resets!');
     setIsModalOpen(false);
   };
 
   const handleUpgrade = () => {
+    const option = rateLimitErrorData.options.find(opt => opt.id === 'upgrade_plan');
     console.log('🚀 Opening upgrade flow');
+    console.log('Option selected:', option);
+    console.log('Current plan:', option?.currentPlan);
+    console.log('Upgrade to:', option?.upgradePlan);
+    console.log('Cost:', option?.cost);
     alert('Redirecting to Apollo.io upgrade page...');
     setIsModalOpen(false);
   };
@@ -152,6 +165,60 @@ const RateLimitDemo: React.FC = () => {
                   <li>4️⃣ Skip enrichment (save as draft)</li>
                 </ul>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mock Data Structure */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Code className="w-5 h-5 text-gray-700" />
+            <h2 className="text-lg font-semibold text-gray-900">Mock Data Structure</h2>
+          </div>
+
+          <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+            <pre className="text-xs text-green-400 font-mono">
+              <code>{JSON.stringify(rateLimitErrorData, null, 2)}</code>
+            </pre>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">Error Details</h3>
+              <ul className="text-xs text-blue-800 space-y-1">
+                <li>• Type: {rateLimitErrorData.error.type}</li>
+                <li>• Service: {rateLimitErrorData.error.service}</li>
+                <li>• Timestamp: {rateLimitErrorData.error.timestamp}</li>
+              </ul>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <h3 className="text-sm font-semibold text-amber-900 mb-2">Apollo Status</h3>
+              <ul className="text-xs text-amber-800 space-y-1">
+                <li>• Used: {rateLimitErrorData.rateLimitStatus.apollo.used}/{rateLimitErrorData.rateLimitStatus.apollo.limit}</li>
+                <li>• Percentage: {rateLimitErrorData.rateLimitStatus.apollo.percentage}%</li>
+                <li>• Status: {rateLimitErrorData.rateLimitStatus.apollo.status}</li>
+                <li>• Resets in: {rateLimitErrorData.rateLimitStatus.apollo.resetsIn}</li>
+              </ul>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <h3 className="text-sm font-semibold text-green-900 mb-2">ZoomInfo Status</h3>
+              <ul className="text-xs text-green-800 space-y-1">
+                <li>• Used: {rateLimitErrorData.rateLimitStatus.zoominfo.used}/{rateLimitErrorData.rateLimitStatus.zoominfo.limit}</li>
+                <li>• Available: {rateLimitErrorData.rateLimitStatus.zoominfo.available}</li>
+                <li>• Percentage: {rateLimitErrorData.rateLimitStatus.zoominfo.percentage}%</li>
+                <li>• Status: {rateLimitErrorData.rateLimitStatus.zoominfo.status}</li>
+              </ul>
+            </div>
+
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+              <h3 className="text-sm font-semibold text-indigo-900 mb-2">Available Options</h3>
+              <ul className="text-xs text-indigo-800 space-y-1">
+                {rateLimitErrorData.options.map((option, index) => (
+                  <li key={option.id}>• Option {index + 1}: {option.id}</li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
