@@ -379,11 +379,26 @@ export function simulateEnrichmentProgress(
 
   const totalFields = allFields.length;
   let aborted = false;
+  const startTime = Date.now();
+  currentState.startTime = startTime;
+  currentState.message = `Preparing to enrich ${totalFields} fields...`;
+
+  // Set initial queue positions
+  allFields.forEach((field, index) => {
+    field.queuePosition = index + 1;
+  });
 
   const enrichField = (fieldIndex: number) => {
     if (aborted || fieldIndex >= totalFields) {
+      const endTime = Date.now();
+      const durationMs = endTime - startTime;
+      const durationSec = (durationMs / 1000).toFixed(1);
+
       currentState.status = 'completed';
       currentState.overallProgress = 100;
+      currentState.endTime = endTime;
+      currentState.duration = `${durationSec}s`;
+      currentState.message = `Successfully enriched ${totalFields} fields in ${durationSec}s`;
       onUpdate(currentState);
       onComplete();
       return;
@@ -395,11 +410,31 @@ export function simulateEnrichmentProgress(
       f => f.fieldId === field.fieldId
     );
 
+    // Calculate estimated time remaining (1s per field)
+    const remainingFields = totalFields - fieldIndex;
+    const estimatedSeconds = remainingFields;
+
     field.status = 'enriching';
     field.statusMessage = `Fetching from ${enrichmentFieldData[field.fieldId]?.source || 'API'}...`;
     field.progress = 0;
+    field.estimatedTimeRemaining = `${estimatedSeconds}s`;
+    delete field.queuePosition;
+
     currentState.status = 'enriching';
+    currentState.currentField = field.fieldId;
+    currentState.message = `Enriching ${field.fieldName}... (${fieldIndex + 1}/${totalFields})`;
     currentState.categories[categoryIndex].fields[fieldInCategoryIndex] = { ...field };
+
+    // Update queue positions for remaining fields
+    for (let i = fieldIndex + 1; i < allFields.length; i++) {
+      const queuedField = allFields[i];
+      const qCatIndex = currentState.categories.findIndex(c => c.id === queuedField.category);
+      const qFieldIndex = currentState.categories[qCatIndex].fields.findIndex(
+        f => f.fieldId === queuedField.fieldId
+      );
+      currentState.categories[qCatIndex].fields[qFieldIndex].queuePosition = i - fieldIndex;
+    }
+
     onUpdate({ ...currentState });
 
     let progress = 0;
@@ -425,8 +460,10 @@ export function simulateEnrichmentProgress(
           field.source = enrichedData.source;
           field.confidence = enrichedData.confidence;
           field.timestamp = enrichedData.timestamp;
+          field.completedAt = new Date().toISOString();
           field.error = enrichedData.error;
           field.progress = 100;
+          delete field.estimatedTimeRemaining;
         }
 
         currentState.categories[categoryIndex].fields[fieldInCategoryIndex] = { ...field };

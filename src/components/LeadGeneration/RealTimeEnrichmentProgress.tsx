@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle, Clock, Loader2, XCircle, Zap } from 'lucide-react';
+import { CheckCircle, Clock, Loader2, XCircle, Zap, RotateCcw } from 'lucide-react';
 import type { EnrichmentProgressState, EnrichedFieldData } from '../../types/enrichmentProgress';
 
 interface RealTimeEnrichmentProgressProps {
   progressState: EnrichmentProgressState;
   onComplete?: () => void;
+  onRetryField?: (fieldId: string) => void;
 }
 
 export function RealTimeEnrichmentProgress({
   progressState,
-  onComplete
+  onComplete,
+  onRetryField
 }: RealTimeEnrichmentProgressProps) {
   const [completedFieldIds, setCompletedFieldIds] = useState<Set<string>>(new Set());
 
@@ -88,9 +90,18 @@ export function RealTimeEnrichmentProgress({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600">
-              {progressState.status === 'preparing' && '🔄 Preparing to enrich fields...'}
-              {progressState.status === 'enriching' && `Enriching field ${progressState.completedFields + 1} of ${progressState.totalFields}...`}
-              {progressState.status === 'completed' && '✅ Enrichment complete!'}
+              {progressState.message ? progressState.message : (
+                <>
+                  {progressState.status === 'preparing' && '🔄 Preparing to enrich fields...'}
+                  {progressState.status === 'enriching' && `Enriching field ${progressState.completedFields + 1} of ${progressState.totalFields}...`}
+                  {progressState.status === 'completed' && (
+                    <>
+                      ✅ Enrichment complete!
+                      {progressState.duration && ` (${progressState.duration})`}
+                    </>
+                  )}
+                </>
+              )}
             </span>
             <span className="font-semibold text-gray-900">
               {Math.round(progressState.overallProgress)}%
@@ -122,6 +133,7 @@ export function RealTimeEnrichmentProgress({
                   key={field.fieldId}
                   field={field}
                   isJustCompleted={isFieldJustCompleted(field.fieldId)}
+                  onRetry={onRetryField}
                 />
               ))}
             </div>
@@ -135,9 +147,10 @@ export function RealTimeEnrichmentProgress({
 interface FieldCardProps {
   field: EnrichedFieldData;
   isJustCompleted: boolean;
+  onRetry?: (fieldId: string) => void;
 }
 
-function FieldCard({ field, isJustCompleted }: FieldCardProps) {
+function FieldCard({ field, isJustCompleted, onRetry }: FieldCardProps) {
   const [showHighlight, setShowHighlight] = useState(false);
 
   useEffect(() => {
@@ -205,13 +218,22 @@ function FieldCard({ field, isJustCompleted }: FieldCardProps) {
       {/* Progress Bar for Enriching State */}
       {field.status === 'enriching' && (
         <div className="mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-gray-600">
+              {field.statusMessage || 'Processing...'}
+            </span>
+            {field.estimatedTimeRemaining && (
+              <span className="text-xs text-blue-600 font-medium">
+                ~{field.estimatedTimeRemaining}
+              </span>
+            )}
+          </div>
           <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
             <div
               className="h-full bg-blue-500 transition-all duration-300 ease-out animate-pulse"
               style={{ width: `${field.progress}%` }}
             />
           </div>
-          <p className="text-xs text-gray-600 mt-1">{field.statusMessage || 'Processing...'}</p>
         </div>
       )}
 
@@ -219,7 +241,16 @@ function FieldCard({ field, isJustCompleted }: FieldCardProps) {
       {field.status === 'queued' && (
         <div className="space-y-2">
           <div className="h-4 bg-gray-200 rounded animate-pulse" />
-          <p className="text-xs text-gray-500">{field.statusMessage || 'Waiting for API response...'}</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              {field.statusMessage || 'Waiting for API response...'}
+            </p>
+            {field.queuePosition !== undefined && (
+              <span className="text-xs text-gray-500 font-medium">
+                Position #{field.queuePosition}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -247,9 +278,22 @@ function FieldCard({ field, isJustCompleted }: FieldCardProps) {
       )}
 
       {/* Error Message for Failed State */}
-      {field.status === 'failed' && field.error && (
-        <div className="text-sm text-red-600 mt-2">
-          {field.error}
+      {field.status === 'failed' && (
+        <div className="space-y-2">
+          {field.error && (
+            <div className="text-sm text-red-600">
+              {field.error}
+            </div>
+          )}
+          {onRetry && (
+            <button
+              onClick={() => onRetry(field.fieldId)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Retry Enrichment
+            </button>
+          )}
         </div>
       )}
     </div>

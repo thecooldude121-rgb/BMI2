@@ -12,8 +12,11 @@ export interface EnrichedFieldData {
   source?: string;
   confidence?: number;
   timestamp?: string;
+  completedAt?: string;
   error?: string;
   statusMessage?: string;
+  estimatedTimeRemaining?: string;
+  queuePosition?: number;
 }
 
 export interface FieldCategory {
@@ -29,6 +32,9 @@ export interface EnrichmentProgressState {
   completedFields: number;
   overallProgress: number;
   status: 'idle' | 'preparing' | 'enriching' | 'completed' | 'error';
+  currentField?: string;
+  message?: string;
+  duration?: string;
   categories: FieldCategory[];
   startTime?: number;
   endTime?: number;
