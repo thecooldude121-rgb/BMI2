@@ -19,6 +19,8 @@ import RateLimitDemo from './pages/LeadGeneration/RateLimitDemo';
 import InvalidAPIKeyDemo from './pages/LeadGeneration/InvalidAPIKeyDemo';
 import NetworkConnectionErrorDemo from './pages/LeadGeneration/NetworkConnectionErrorDemo';
 import PartialEnrichmentDemo from './pages/LeadGeneration/PartialEnrichmentDemo';
+import DataConflictDemo from './pages/LeadGeneration/DataConflictDemo';
+import { RealTimeProgressDemo } from './pages/LeadGeneration/RealTimeProgressDemo';
 import SettingsPage from './pages/Settings/SettingsPage';
 import Login from './pages/Auth/Login';
 import LoginWireframe from './pages/Auth/LoginWireframe';
@@ -65,6 +67,8 @@ const App = () => {
                   <Route path="/demo/invalid-api-key" element={<Layout><InvalidAPIKeyDemo /></Layout>} />
                   <Route path="/demo/network-error" element={<Layout><NetworkConnectionErrorDemo /></Layout>} />
                   <Route path="/demo/partial-enrichment" element={<Layout><PartialEnrichmentDemo /></Layout>} />
+                  <Route path="/demo/data-conflict" element={<Layout><DataConflictDemo /></Layout>} />
+                  <Route path="/demo/real-time-progress" element={<Layout><RealTimeProgressDemo /></Layout>} />
                   <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
                   <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
                   <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />
