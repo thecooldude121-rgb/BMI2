@@ -28,9 +28,12 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
   };
 
   const handleCheckStatus = () => {
-    addLog('📊 Opened service status pages');
-    addLog('✅ Apollo.io status: https://status.apollo.io');
-    addLog('✅ ZoomInfo status: https://status.zoominfo.com');
+    const checkStatusOption = networkConnectionErrorData.options.find(opt => opt.id === 'check_status');
+    if (checkStatusOption && 'statusUrls' in checkStatusOption) {
+      addLog('📊 Opened service status pages');
+      addLog(`✅ Apollo.io status: ${checkStatusOption.statusUrls.apollo}`);
+      addLog(`✅ ZoomInfo status: ${checkStatusOption.statusUrls.zoominfo}`);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -39,9 +42,12 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
   };
 
   const handleContactSupport = () => {
+    const supportOption = networkConnectionErrorData.options.find(opt => opt.id === 'contact_support');
     addLog('📧 Support contact initiated');
     addLog(`📋 Ticket created with error details`);
-    addLog(`📞 Support: ${networkConnectionErrorData.supportInfo.phone}`);
+    if (supportOption && 'supportEmail' in supportOption) {
+      addLog(`📧 Email: ${supportOption.supportEmail}`);
+    }
     setShowModal(false);
   };
 
@@ -97,22 +103,25 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
               <pre className="text-xs text-gray-800">
 {`{
   error: {
-    type: "network_connection_failed",
-    statusCode: 504,
-    message: "Cannot connect to..."
+    type: "network_error",
+    subtype: "connection_timeout",
+    attemptNumber: ${attemptNumber},
+    maxAttempts: 3
   },
   connectionStatus: {
     apollo: {
       status: "failed",
-      message: "Connection timeout"
+      error: "Connection timeout",
+      timeout: 30
     },
     zoominfo: {
       status: "failed",
-      message: "Connection timeout"
+      error: "Connection timeout",
+      timeout: 30
     },
     internet: {
       status: "connected",
-      message: "Connected"
+      message: "Internet connection active"
     }
   },
   errorDetails: [
@@ -120,10 +129,14 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
     "DNS resolution failed",
     "Possible firewall issues"
   ],
-  retryInfo: {
-    currentAttempt: ${attemptNumber},
-    maxAttempts: 3
-  }
+  options: [
+    { id: "retry", attemptNumber: 1,
+      maxAttempts: 3 },
+    { id: "check_status", statusUrls: {...} },
+    { id: "save_draft" },
+    { id: "contact_support",
+      supportEmail: "support@company.com" }
+  ]
 }`}
               </pre>
             </div>
@@ -134,8 +147,8 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
                 <h3 className="text-sm font-semibold text-red-900 mb-2">Error Info</h3>
                 <ul className="text-xs text-red-800 space-y-1">
                   <li>• Type: {networkConnectionErrorData.error.type}</li>
-                  <li>• Code: {networkConnectionErrorData.error.statusCode}</li>
-                  <li>• Message: {networkConnectionErrorData.error.message}</li>
+                  <li>• Subtype: {networkConnectionErrorData.error.subtype}</li>
+                  <li>• Timestamp: {new Date(networkConnectionErrorData.error.timestamp).toLocaleTimeString()}</li>
                 </ul>
               </div>
 
@@ -143,9 +156,9 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <h3 className="text-sm font-semibold text-blue-900 mb-2">Retry Status</h3>
                 <ul className="text-xs text-blue-800 space-y-1">
-                  <li>• Current: {attemptNumber} of 3</li>
-                  <li>• Max Attempts: {networkConnectionErrorData.retryInfo.maxAttempts}</li>
-                  <li>• Delay: {networkConnectionErrorData.retryInfo.suggestedDelay}ms</li>
+                  <li>• Current: {attemptNumber} of {networkConnectionErrorData.error.maxAttempts}</li>
+                  <li>• Max Attempts: {networkConnectionErrorData.error.maxAttempts}</li>
+                  <li>• Timeout: {networkConnectionErrorData.connectionStatus.apollo.timeout}s</li>
                 </ul>
               </div>
 
@@ -153,8 +166,8 @@ export const NetworkConnectionErrorDemo: React.FC = () => {
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">Services</h3>
                 <ul className="text-xs text-gray-800 space-y-1">
-                  <li>• Apollo: {networkConnectionErrorData.connectionStatus.apollo.status}</li>
-                  <li>• ZoomInfo: {networkConnectionErrorData.connectionStatus.zoominfo.status}</li>
+                  <li>• Apollo: {networkConnectionErrorData.connectionStatus.apollo.status} ({networkConnectionErrorData.connectionStatus.apollo.timeout}s)</li>
+                  <li>• ZoomInfo: {networkConnectionErrorData.connectionStatus.zoominfo.status} ({networkConnectionErrorData.connectionStatus.zoominfo.timeout}s)</li>
                   <li>• Internet: {networkConnectionErrorData.connectionStatus.internet.status}</li>
                 </ul>
               </div>

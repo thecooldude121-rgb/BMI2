@@ -1,32 +1,28 @@
 export const networkConnectionErrorData = {
   error: {
-    type: "network_connection_failed",
-    statusCode: 504,
-    message: "Cannot connect to enrichment services",
-    timestamp: "2025-01-19T16:30:00Z"
+    type: "network_error",
+    subtype: "connection_timeout",
+    timestamp: "2025-01-06T14:45:00Z",
+    attemptNumber: 1,
+    maxAttempts: 3
   },
 
   connectionStatus: {
     apollo: {
-      service: "Apollo.io",
       status: "failed",
-      icon: "❌",
-      message: "Connection timeout",
-      lastAttempt: "2025-01-19T16:30:15Z"
+      error: "Connection timeout",
+      lastAttempt: "2025-01-06T14:45:00Z",
+      timeout: 30 // seconds
     },
     zoominfo: {
-      service: "ZoomInfo",
       status: "failed",
-      icon: "❌",
-      message: "Connection timeout",
-      lastAttempt: "2025-01-19T16:30:18Z"
+      error: "Connection timeout",
+      lastAttempt: "2025-01-06T14:45:00Z",
+      timeout: 30
     },
     internet: {
-      service: "Internet",
       status: "connected",
-      icon: "✅",
-      message: "Connected",
-      lastCheck: "2025-01-19T16:30:20Z"
+      message: "Internet connection active"
     }
   },
 
@@ -43,38 +39,33 @@ export const networkConnectionErrorData = {
     "VPN or proxy interference"
   ],
 
-  retryInfo: {
-    currentAttempt: 1,
-    maxAttempts: 3,
-    suggestedDelay: 5000
-  },
-
   options: [
     {
       id: "retry",
       label: "Retry connection",
-      sublabel: "Attempt 1 of 3",
       description: "Try connecting again",
-      icon: "🔄",
-      default: true
+      attemptNumber: 1,
+      maxAttempts: 3
     },
     {
       id: "check_status",
       label: "Check service status",
       description: "View Apollo & ZoomInfo status pages",
-      icon: "📊"
+      statusUrls: {
+        apollo: "https://status.apollo.io",
+        zoominfo: "https://status.zoominfo.com"
+      }
     },
     {
       id: "save_draft",
       label: "Save draft and try later",
-      description: "Retry enrichment when connection improves",
-      icon: "💾"
+      description: "Retry enrichment when connection improves"
     },
     {
       id: "contact_support",
       label: "Contact support",
       description: "Report persistent connection issues",
-      icon: "📧"
+      supportEmail: "support@company.com"
     }
   ],
 
@@ -84,20 +75,7 @@ export const networkConnectionErrorData = {
     "Check if firewall is blocking API access",
     "Try from a different network",
     "Contact your IT department if issue persists"
-  ],
-
-  serviceStatusUrls: {
-    apollo: "https://status.apollo.io",
-    zoominfo: "https://status.zoominfo.com",
-    systemHealth: "/settings/integrations/status"
-  },
-
-  supportInfo: {
-    email: "support@crm.com",
-    phone: "+1 (555) 123-4567",
-    chatUrl: "/support/chat",
-    ticketUrl: "/support/new-ticket"
-  }
+  ]
 };
 
 export type NetworkConnectionErrorData = typeof networkConnectionErrorData;

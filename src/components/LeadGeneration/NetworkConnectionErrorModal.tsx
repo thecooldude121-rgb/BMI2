@@ -61,8 +61,11 @@ export const NetworkConnectionErrorModal: React.FC<NetworkConnectionErrorModalPr
 
   const handleCheckStatus = () => {
     console.log('📊 Opening Service Status Pages');
-    window.open(networkConnectionErrorData.serviceStatusUrls.apollo, '_blank');
-    window.open(networkConnectionErrorData.serviceStatusUrls.zoominfo, '_blank');
+    const checkStatusOption = networkConnectionErrorData.options.find(opt => opt.id === 'check_status');
+    if (checkStatusOption && 'statusUrls' in checkStatusOption) {
+      window.open(checkStatusOption.statusUrls.apollo, '_blank');
+      window.open(checkStatusOption.statusUrls.zoominfo, '_blank');
+    }
     onCheckStatus();
   };
 
@@ -94,35 +97,41 @@ export const NetworkConnectionErrorModal: React.FC<NetworkConnectionErrorModalPr
               {/* Apollo Status */}
               <div className="flex items-center justify-between bg-white rounded p-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{networkConnectionErrorData.connectionStatus.apollo.icon}</span>
+                  <span className="text-xl">
+                    {networkConnectionErrorData.connectionStatus.apollo.status === 'failed' ? '❌' : '✅'}
+                  </span>
                   <span className="font-medium text-gray-900">
-                    {networkConnectionErrorData.connectionStatus.apollo.service}:
+                    Apollo.io:
                   </span>
                 </div>
                 <span className="text-red-600 font-medium">
-                  {networkConnectionErrorData.connectionStatus.apollo.message}
+                  {networkConnectionErrorData.connectionStatus.apollo.error}
                 </span>
               </div>
 
               {/* ZoomInfo Status */}
               <div className="flex items-center justify-between bg-white rounded p-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{networkConnectionErrorData.connectionStatus.zoominfo.icon}</span>
+                  <span className="text-xl">
+                    {networkConnectionErrorData.connectionStatus.zoominfo.status === 'failed' ? '❌' : '✅'}
+                  </span>
                   <span className="font-medium text-gray-900">
-                    {networkConnectionErrorData.connectionStatus.zoominfo.service}:
+                    ZoomInfo:
                   </span>
                 </div>
                 <span className="text-red-600 font-medium">
-                  {networkConnectionErrorData.connectionStatus.zoominfo.message}
+                  {networkConnectionErrorData.connectionStatus.zoominfo.error}
                 </span>
               </div>
 
               {/* Internet Status */}
               <div className="flex items-center justify-between bg-white rounded p-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{networkConnectionErrorData.connectionStatus.internet.icon}</span>
+                  <span className="text-xl">
+                    {networkConnectionErrorData.connectionStatus.internet.status === 'connected' ? '✅' : '❌'}
+                  </span>
                   <span className="font-medium text-gray-900">
-                    {networkConnectionErrorData.connectionStatus.internet.service}:
+                    Internet:
                   </span>
                 </div>
                 <span className="text-green-600 font-medium">
@@ -162,37 +171,46 @@ export const NetworkConnectionErrorModal: React.FC<NetworkConnectionErrorModalPr
           <div>
             <p className="font-medium text-gray-900 mb-3">What would you like to do?</p>
             <div className="space-y-3">
-              {networkConnectionErrorData.options.map((option) => (
-                <label
-                  key={option.id}
-                  className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                    selectedOption === option.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="network-option"
-                    value={option.id}
-                    checked={selectedOption === option.id}
-                    onChange={(e) => setSelectedOption(e.target.value)}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{option.icon}</span>
-                      <span className="font-medium text-gray-900">{option.label}</span>
-                      {option.sublabel && (
-                        <span className="text-sm text-gray-500">
-                          ({option.sublabel.replace('1', String(attemptNumber))})
-                        </span>
-                      )}
+              {networkConnectionErrorData.options.map((option) => {
+                const icons = {
+                  retry: '🔄',
+                  check_status: '📊',
+                  save_draft: '💾',
+                  contact_support: '📧'
+                };
+
+                return (
+                  <label
+                    key={option.id}
+                    className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                      selectedOption === option.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="network-option"
+                      value={option.id}
+                      checked={selectedOption === option.id}
+                      onChange={(e) => setSelectedOption(e.target.value)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{icons[option.id as keyof typeof icons]}</span>
+                        <span className="font-medium text-gray-900">{option.label}</span>
+                        {option.id === 'retry' && 'attemptNumber' in option && 'maxAttempts' in option && (
+                          <span className="text-sm text-gray-500">
+                            (Attempt {attemptNumber} of {option.maxAttempts})
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">{option.description}</p>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">{option.description}</p>
-                  </div>
-                </label>
-              ))}
+                  </label>
+                );
+              })}
             </div>
           </div>
 
