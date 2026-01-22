@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PartialEnrichmentModal } from '../../components/LeadGeneration/PartialEnrichmentModal';
-import { partialEnrichmentData } from '../../utils/partialEnrichmentMockData';
+import { partialEnrichmentData, getCategoryTotals } from '../../utils/partialEnrichmentMockData';
 
 export default function PartialEnrichmentDemo() {
   const [showModal, setShowModal] = useState(false);
@@ -13,29 +13,31 @@ export default function PartialEnrichmentDemo() {
 
   const handleAccept = () => {
     addLog('✅ Accepted partial enrichment - 12 fields saved');
-    addLog('📊 Success rate: 60%');
+    addLog(`📊 Success rate: ${partialEnrichmentData.results.successRate}%`);
     addLog('💾 Lead updated with available data');
     setShowModal(false);
   };
 
   const handleRetryFailed = () => {
-    addLog('🔄 Retrying enrichment for 8 failed fields...');
+    addLog(`🔄 Retrying enrichment for ${partialEnrichmentData.results.failed} failed fields...`);
     addLog('📡 Attempting to fetch: Direct Phone, Office Location, Annual Revenue...');
     addLog('⏳ This may take a few moments');
     setShowModal(false);
   };
 
   const handleManualEntry = () => {
-    addLog('✏️ Opening manual entry form for 8 missing fields');
+    addLog(`✏️ Opening manual entry form for ${partialEnrichmentData.results.failed} missing fields`);
     addLog('📝 You can now add the missing data yourself');
     setShowModal(false);
   };
 
   const handleDiscard = () => {
     addLog('❌ Discarded all enrichment data');
-    addLog('⚠️ None of the 12 successfully enriched fields were saved');
+    addLog(`⚠️ None of the ${partialEnrichmentData.results.successful} successfully enriched fields were saved`);
     setShowModal(false);
   };
+
+  const categoryTotals = getCategoryTotals();
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -58,7 +60,7 @@ export default function PartialEnrichmentDemo() {
             onClick={() => {
               setShowModal(true);
               addLog('⚠️ Partial enrichment scenario triggered');
-              addLog(`📊 ${partialEnrichmentData.enrichmentResults.successful} fields succeeded, ${partialEnrichmentData.enrichmentResults.failed} fields failed`);
+              addLog(`📊 ${partialEnrichmentData.results.successful} fields succeeded, ${partialEnrichmentData.results.failed} fields failed`);
             }}
             className="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium transition-colors"
           >
@@ -67,8 +69,8 @@ export default function PartialEnrichmentDemo() {
 
           <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded">
             <p className="text-sm text-yellow-800">
-              <strong>Scenario:</strong> Enriching Jessica Anderson's profile resulted in partial success.
-              12 out of 20 fields were enriched successfully.
+              <strong>Scenario:</strong> Enriching Sarah Lee's profile resulted in partial success.
+              {partialEnrichmentData.results.successful} out of {partialEnrichmentData.results.total} fields were enriched successfully.
             </p>
           </div>
         </div>
@@ -84,63 +86,54 @@ export default function PartialEnrichmentDemo() {
             <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
               <pre className="text-xs text-gray-800">
 {`{
-  error: {
-    type: "partial_enrichment",
-    leadName: "Jessica Anderson",
-    leadEmail: "jessica.anderson@techcorp.com"
-  },
-  enrichmentResults: {
-    total: 20,
-    successful: ${partialEnrichmentData.enrichmentResults.successful},
-    failed: ${partialEnrichmentData.enrichmentResults.failed},
-    skipped: ${partialEnrichmentData.enrichmentResults.skipped},
-    successRate: ${partialEnrichmentData.enrichmentResults.successRate}%
+  results: {
+    total: ${partialEnrichmentData.results.total},
+    successful: ${partialEnrichmentData.results.successful},
+    failed: ${partialEnrichmentData.results.failed},
+    skipped: ${partialEnrichmentData.results.skipped},
+    successRate: ${partialEnrichmentData.results.successRate}%
   },
   successfulFields: {
-    contactInformation: {
-      total: 5, enriched: 3,
-      fields: [ Email, LinkedIn, Phone ]
-    },
-    companyInformation: {
-      total: 8, enriched: 5,
-      fields: [ Size, Industry, Founded,
-                Website, Funding ]
-    },
-    professionalDetails: {
-      total: 7, enriched: 4,
-      fields: [ Title, Seniority,
-                Department, Education ]
-    }
-  },
-  failedFields: {
-    contactInformation: [
-      { name: "Direct Phone",
-        reason: "No data available" },
-      { name: "Office Location",
-        reason: "API timeout" }
+    contactInfo: [
+      { field: "email", value: "...", source: "apollo" },
+      { field: "linkedin", value: "...", source: "apollo" },
+      { field: "mobile_phone", value: "...", source: "apollo" }
     ],
-    companyInformation: [
-      { name: "Annual Revenue",
-        reason: "Data not found" },
-      { name: "Company HQ",
-        reason: "API error" },
-      { name: "International Presence",
-        reason: "No data available" }
+    companyInfo: [
+      { field: "company_size", value: "...", source: "apollo" },
+      { field: "industry", value: "...", source: "apollo" },
+      { field: "founded_year", value: "...", source: "zoominfo" },
+      { field: "company_website", value: "...", source: "apollo" },
+      { field: "total_funding", value: "...", source: "apollo" }
     ],
     professionalDetails: [
-      { name: "Years in Role",
-        reason: "Data not found" },
-      { name: "Skills & Expertise",
-        reason: "API timeout" },
-      { name: "Previous Companies",
-        reason: "No data available" }
+      { field: "job_title", value: "...", source: "apollo" },
+      { field: "seniority_level", value: "...", source: "zoominfo" },
+      { field: "department", value: "...", source: "apollo" },
+      { field: "education", value: "...", source: "apollo" }
+    ]
+  },
+  failedFields: {
+    contactInfo: [
+      { field: "direct_phone", reason: "No data available" },
+      { field: "office_location", reason: "API timeout" }
+    ],
+    companyInfo: [
+      { field: "annual_revenue", reason: "Data not found" },
+      { field: "company_hq", reason: "API error" },
+      { field: "international_presence", reason: "No data" }
+    ],
+    professionalDetails: [
+      { field: "years_in_role", reason: "Data not found" },
+      { field: "skills", reason: "API timeout" },
+      { field: "previous_companies", reason: "No data" }
     ]
   },
   options: [
-    "accept_partial",
-    "retry_failed",
-    "manual_entry",
-    "discard_all"
+    { id: "accept", label: "Accept partial enrichment" },
+    { id: "retry", label: "Retry failed fields only" },
+    { id: "manual", label: "Fill missing fields manually" },
+    { id: "discard", label: "Discard all and cancel" }
   ]
 }`}
               </pre>
@@ -159,19 +152,19 @@ export default function PartialEnrichmentDemo() {
                 <div className="flex items-center justify-between p-3 bg-green-50 rounded">
                   <span className="text-sm font-medium text-green-900">Successfully Enriched</span>
                   <span className="text-xl font-bold text-green-700">
-                    {partialEnrichmentData.enrichmentResults.successful}
+                    {partialEnrichmentData.results.successful}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-red-50 rounded">
                   <span className="text-sm font-medium text-red-900">Failed to Enrich</span>
                   <span className="text-xl font-bold text-red-700">
-                    {partialEnrichmentData.enrichmentResults.failed}
+                    {partialEnrichmentData.results.failed}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-blue-50 rounded">
                   <span className="text-sm font-medium text-blue-900">Success Rate</span>
                   <span className="text-xl font-bold text-blue-700">
-                    {partialEnrichmentData.enrichmentResults.successRate}%
+                    {partialEnrichmentData.results.successRate}%
                   </span>
                 </div>
               </div>
@@ -188,16 +181,14 @@ export default function PartialEnrichmentDemo() {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-gray-900">Contact Information</span>
                     <span className="text-sm font-bold text-gray-700">
-                      {partialEnrichmentData.successfulFields.contactInformation.enriched}/
-                      {partialEnrichmentData.successfulFields.contactInformation.total}
+                      {categoryTotals.contactInfo.enriched}/{categoryTotals.contactInfo.total}
                     </span>
                   </div>
                   <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-blue-500"
                       style={{
-                        width: `${(partialEnrichmentData.successfulFields.contactInformation.enriched /
-                                  partialEnrichmentData.successfulFields.contactInformation.total) * 100}%`
+                        width: `${(categoryTotals.contactInfo.enriched / categoryTotals.contactInfo.total) * 100}%`
                       }}
                     ></div>
                   </div>
@@ -207,16 +198,14 @@ export default function PartialEnrichmentDemo() {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-gray-900">Company Information</span>
                     <span className="text-sm font-bold text-gray-700">
-                      {partialEnrichmentData.successfulFields.companyInformation.enriched}/
-                      {partialEnrichmentData.successfulFields.companyInformation.total}
+                      {categoryTotals.companyInfo.enriched}/{categoryTotals.companyInfo.total}
                     </span>
                   </div>
                   <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-green-500"
                       style={{
-                        width: `${(partialEnrichmentData.successfulFields.companyInformation.enriched /
-                                  partialEnrichmentData.successfulFields.companyInformation.total) * 100}%`
+                        width: `${(categoryTotals.companyInfo.enriched / categoryTotals.companyInfo.total) * 100}%`
                       }}
                     ></div>
                   </div>
@@ -226,16 +215,14 @@ export default function PartialEnrichmentDemo() {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-gray-900">Professional Details</span>
                     <span className="text-sm font-bold text-gray-700">
-                      {partialEnrichmentData.successfulFields.professionalDetails.enriched}/
-                      {partialEnrichmentData.successfulFields.professionalDetails.total}
+                      {categoryTotals.professionalDetails.enriched}/{categoryTotals.professionalDetails.total}
                     </span>
                   </div>
                   <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-purple-500"
                       style={{
-                        width: `${(partialEnrichmentData.successfulFields.professionalDetails.enriched /
-                                  partialEnrichmentData.successfulFields.professionalDetails.total) * 100}%`
+                        width: `${(categoryTotals.professionalDetails.enriched / categoryTotals.professionalDetails.total) * 100}%`
                       }}
                     ></div>
                   </div>

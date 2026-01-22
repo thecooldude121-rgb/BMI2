@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { partialEnrichmentData } from '../../utils/partialEnrichmentMockData';
+import { partialEnrichmentData, formatFieldName, getCategoryTotals } from '../../utils/partialEnrichmentMockData';
 
 interface PartialEnrichmentModalProps {
   isOpen: boolean;
@@ -18,41 +18,41 @@ export function PartialEnrichmentModal({
   onManualEntry,
   onDiscard
 }: PartialEnrichmentModalProps) {
-  const [selectedOption, setSelectedOption] = useState('accept_partial');
+  const [selectedOption, setSelectedOption] = useState('accept');
 
   if (!isOpen) return null;
 
+  const categoryTotals = getCategoryTotals();
+  const { results, successfulFields, failedFields, options, recommendations } = partialEnrichmentData;
+
   const handlePrimaryAction = () => {
     switch (selectedOption) {
-      case 'accept_partial':
+      case 'accept':
         onAccept();
         break;
-      case 'retry_failed':
+      case 'retry':
         onRetryFailed();
         break;
-      case 'manual_entry':
+      case 'manual':
         onManualEntry();
         break;
-      case 'discard_all':
+      case 'discard':
         onDiscard();
         break;
     }
   };
 
-  const getButtonLabel = () => {
-    switch (selectedOption) {
-      case 'accept_partial':
-        return 'Accept & Continue';
-      case 'retry_failed':
-        return 'Retry Failed';
-      case 'manual_entry':
-        return 'Manual Entry';
-      case 'discard_all':
-        return 'Discard';
-      default:
-        return 'Continue';
-    }
+  const getButtonConfig = () => {
+    const configs: Record<string, { label: string; icon: string; color: string }> = {
+      accept: { label: 'Accept & Continue', icon: '✅', color: 'bg-green-600 hover:bg-green-700' },
+      retry: { label: 'Retry Failed', icon: '🔄', color: 'bg-blue-600 hover:bg-blue-700' },
+      manual: { label: 'Manual Entry', icon: '✏️', color: 'bg-purple-600 hover:bg-purple-700' },
+      discard: { label: 'Discard', icon: '❌', color: 'bg-red-600 hover:bg-red-700' }
+    };
+    return configs[selectedOption] || configs.accept;
   };
+
+  const buttonConfig = getButtonConfig();
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -90,17 +90,17 @@ export function PartialEnrichmentModal({
             <div className="grid grid-cols-2 gap-4 mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-green-600 font-semibold">✅ Successfully enriched:</span>
-                <span className="font-bold text-green-700">{partialEnrichmentData.enrichmentResults.successful} fields</span>
+                <span className="font-bold text-green-700">{results.successful} fields</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-red-600 font-semibold">❌ Failed to enrich:</span>
-                <span className="font-bold text-red-700">{partialEnrichmentData.enrichmentResults.failed} fields</span>
+                <span className="font-bold text-red-700">{results.failed} fields</span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="text-blue-600 font-semibold">⏭️ Skipped (low confidence):</span>
-              <span className="font-bold text-blue-700">{partialEnrichmentData.enrichmentResults.skipped} fields</span>
+              <span className="font-bold text-blue-700">{results.skipped} fields</span>
             </div>
 
             <div className="mt-4 pt-4 border-t border-gray-300">
@@ -110,11 +110,11 @@ export function PartialEnrichmentModal({
                   <div className="w-48 h-3 bg-gray-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-green-500 transition-all"
-                      style={{ width: `${partialEnrichmentData.enrichmentResults.successRate}%` }}
+                      style={{ width: `${results.successRate}%` }}
                     ></div>
                   </div>
                   <span className="font-bold text-lg text-gray-900">
-                    {partialEnrichmentData.enrichmentResults.successRate}%
+                    {results.successRate}%
                   </span>
                 </div>
               </div>
@@ -126,19 +126,19 @@ export function PartialEnrichmentModal({
             <div className="flex items-center gap-2 mb-4">
               <span className="text-lg">✅</span>
               <h3 className="font-semibold text-green-900">
-                SUCCESSFULLY ENRICHED ({partialEnrichmentData.enrichmentResults.successful} fields)
+                SUCCESSFULLY ENRICHED ({results.successful} fields)
               </h3>
             </div>
 
             {/* Contact Information */}
             <div className="mb-4">
               <h4 className="font-medium text-green-900 mb-2">
-                Contact Information ({partialEnrichmentData.successfulFields.contactInformation.enriched}/{partialEnrichmentData.successfulFields.contactInformation.total}):
+                Contact Information ({categoryTotals.contactInfo.enriched}/{categoryTotals.contactInfo.total}):
               </h4>
               <ul className="space-y-1 ml-4">
-                {partialEnrichmentData.successfulFields.contactInformation.fields.map((field, idx) => (
+                {successfulFields.contactInfo.map((item, idx) => (
                   <li key={idx} className="text-sm text-green-800">
-                    • {field.name} ✓
+                    • {formatFieldName(item.field)} ✓
                   </li>
                 ))}
               </ul>
@@ -147,12 +147,12 @@ export function PartialEnrichmentModal({
             {/* Company Information */}
             <div className="mb-4">
               <h4 className="font-medium text-green-900 mb-2">
-                Company Information ({partialEnrichmentData.successfulFields.companyInformation.enriched}/{partialEnrichmentData.successfulFields.companyInformation.total}):
+                Company Information ({categoryTotals.companyInfo.enriched}/{categoryTotals.companyInfo.total}):
               </h4>
               <ul className="space-y-1 ml-4">
-                {partialEnrichmentData.successfulFields.companyInformation.fields.map((field, idx) => (
+                {successfulFields.companyInfo.map((item, idx) => (
                   <li key={idx} className="text-sm text-green-800">
-                    • {field.name} ✓
+                    • {formatFieldName(item.field)} ✓
                   </li>
                 ))}
               </ul>
@@ -161,12 +161,12 @@ export function PartialEnrichmentModal({
             {/* Professional Details */}
             <div>
               <h4 className="font-medium text-green-900 mb-2">
-                Professional Details ({partialEnrichmentData.successfulFields.professionalDetails.enriched}/{partialEnrichmentData.successfulFields.professionalDetails.total}):
+                Professional Details ({categoryTotals.professionalDetails.enriched}/{categoryTotals.professionalDetails.total}):
               </h4>
               <ul className="space-y-1 ml-4">
-                {partialEnrichmentData.successfulFields.professionalDetails.fields.map((field, idx) => (
+                {successfulFields.professionalDetails.map((item, idx) => (
                   <li key={idx} className="text-sm text-green-800">
-                    • {field.name} ✓
+                    • {formatFieldName(item.field)} ✓
                   </li>
                 ))}
               </ul>
@@ -178,63 +178,69 @@ export function PartialEnrichmentModal({
             <div className="flex items-center gap-2 mb-4">
               <span className="text-lg">❌</span>
               <h3 className="font-semibold text-red-900">
-                FAILED TO ENRICH ({partialEnrichmentData.enrichmentResults.failed} fields)
+                FAILED TO ENRICH ({results.failed} fields)
               </h3>
             </div>
 
             {/* Contact Information */}
-            <div className="mb-4">
-              <h4 className="font-medium text-red-900 mb-2">
-                Contact Information ({partialEnrichmentData.failedFields.contactInformation.length}):
-              </h4>
-              <ul className="space-y-1 ml-4">
-                {partialEnrichmentData.failedFields.contactInformation.map((field, idx) => (
-                  <li key={idx} className="text-sm text-red-800">
-                    • {field.name} - <span className="italic">{field.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {failedFields.contactInfo.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-red-900 mb-2">
+                  Contact Information ({failedFields.contactInfo.length}):
+                </h4>
+                <ul className="space-y-1 ml-4">
+                  {failedFields.contactInfo.map((item, idx) => (
+                    <li key={idx} className="text-sm text-red-800">
+                      • {formatFieldName(item.field)} - <span className="italic">{item.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Company Information */}
-            <div className="mb-4">
-              <h4 className="font-medium text-red-900 mb-2">
-                Company Information ({partialEnrichmentData.failedFields.companyInformation.length}):
-              </h4>
-              <ul className="space-y-1 ml-4">
-                {partialEnrichmentData.failedFields.companyInformation.map((field, idx) => (
-                  <li key={idx} className="text-sm text-red-800">
-                    • {field.name} - <span className="italic">{field.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {failedFields.companyInfo.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-red-900 mb-2">
+                  Company Information ({failedFields.companyInfo.length}):
+                </h4>
+                <ul className="space-y-1 ml-4">
+                  {failedFields.companyInfo.map((item, idx) => (
+                    <li key={idx} className="text-sm text-red-800">
+                      • {formatFieldName(item.field)} - <span className="italic">{item.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Professional Details */}
-            <div>
-              <h4 className="font-medium text-red-900 mb-2">
-                Professional Details ({partialEnrichmentData.failedFields.professionalDetails.length}):
-              </h4>
-              <ul className="space-y-1 ml-4">
-                {partialEnrichmentData.failedFields.professionalDetails.map((field, idx) => (
-                  <li key={idx} className="text-sm text-red-800">
-                    • {field.name} - <span className="italic">{field.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            {failedFields.professionalDetails.length > 0 && (
+              <div>
+                <h4 className="font-medium text-red-900 mb-2">
+                  Professional Details ({failedFields.professionalDetails.length}):
+                </h4>
+                <ul className="space-y-1 ml-4">
+                  {failedFields.professionalDetails.map((item, idx) => (
+                    <li key={idx} className="text-sm text-red-800">
+                      • {formatFieldName(item.field)} - <span className="italic">{item.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Options */}
           <div className="mb-4">
             <h3 className="font-semibold text-gray-900 mb-3">What would you like to do?</h3>
             <div className="space-y-3">
-              {partialEnrichmentData.options.map((option) => {
-                const icons = {
-                  accept_partial: '✅',
-                  retry_failed: '🔄',
-                  manual_entry: '✏️',
-                  discard_all: '❌'
+              {options.map((option) => {
+                const icons: Record<string, string> = {
+                  accept: '✅',
+                  retry: '🔄',
+                  manual: '✏️',
+                  discard: '❌'
                 };
 
                 return (
@@ -256,7 +262,7 @@ export function PartialEnrichmentModal({
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">{icons[option.id as keyof typeof icons]}</span>
+                        <span className="text-lg">{icons[option.id]}</span>
                         <span className="font-medium text-gray-900">{option.label}</span>
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{option.description}</p>
@@ -268,14 +274,14 @@ export function PartialEnrichmentModal({
           </div>
 
           {/* Recommendations */}
-          {partialEnrichmentData.recommendations.length > 0 && (
+          {recommendations && recommendations.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-2">
                 <span className="text-lg">💡</span>
                 <div>
                   <h4 className="font-semibold text-blue-900 mb-2">Recommendations:</h4>
                   <ul className="space-y-1">
-                    {partialEnrichmentData.recommendations.map((rec, idx) => (
+                    {recommendations.map((rec, idx) => (
                       <li key={idx} className="text-sm text-blue-800">
                         • {rec}
                       </li>
@@ -297,47 +303,13 @@ export function PartialEnrichmentModal({
               Cancel
             </button>
 
-            <div className="flex items-center gap-3">
-              {selectedOption === 'accept_partial' && (
-                <button
-                  onClick={onAccept}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors flex items-center gap-2"
-                >
-                  <span>✅</span>
-                  Accept & Continue
-                </button>
-              )}
-
-              {selectedOption === 'retry_failed' && (
-                <button
-                  onClick={onRetryFailed}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
-                >
-                  <span>🔄</span>
-                  Retry Failed
-                </button>
-              )}
-
-              {selectedOption === 'manual_entry' && (
-                <button
-                  onClick={onManualEntry}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium transition-colors flex items-center gap-2"
-                >
-                  <span>✏️</span>
-                  Manual Entry
-                </button>
-              )}
-
-              {selectedOption === 'discard_all' && (
-                <button
-                  onClick={onDiscard}
-                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors flex items-center gap-2"
-                >
-                  <span>❌</span>
-                  Discard
-                </button>
-              )}
-            </div>
+            <button
+              onClick={handlePrimaryAction}
+              className={`px-6 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${buttonConfig.color}`}
+            >
+              <span>{buttonConfig.icon}</span>
+              {buttonConfig.label}
+            </button>
           </div>
         </div>
       </div>
