@@ -17,8 +17,8 @@ export default function DataConflictDemo() {
     addLog(`📊 Apollo selected for ${summary.apolloSelected} fields, ZoomInfo for ${summary.zoominfoSelected} fields`);
 
     conflicts.forEach(conflict => {
-      const selectedSource = conflict.selected === 'apollo' ? 'Apollo.io' : 'ZoomInfo';
-      const selectedValue = conflict.selected === 'apollo' ? conflict.apollo.value : conflict.zoominfo.value;
+      const selectedSource = conflict.apollo.selected ? 'Apollo.io' : 'ZoomInfo';
+      const selectedValue = conflict.apollo.selected ? conflict.apollo.value : conflict.zoominfo.value;
       addLog(`   • ${conflict.fieldLabel}: ${selectedValue} (${selectedSource})`);
     });
 

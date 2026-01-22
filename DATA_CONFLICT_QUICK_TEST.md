@@ -13,18 +13,21 @@
 ```
 ✓ See 3 conflicts displayed:
   • Conflict 1: Company Size (Apollo 94% vs ZoomInfo 87%)
+    💡 Recommendation: Use Apollo (Higher confidence score)
   • Conflict 2: Annual Revenue (Apollo 82% vs ZoomInfo 91%)
+    💡 Recommendation: Use ZoomInfo (Higher confidence score)
   • Conflict 3: Direct Phone (Apollo 88% vs ZoomInfo 85%)
+    💡 Recommendation: Use Apollo (Higher confidence score)
 ✓ Each shows confidence badges and source info
-✓ Recommendations displayed with 💡 icon
+✓ Recommendations displayed with 💡 icon and reason
 ```
 
 ### Step 3: Test Resolution Strategies
 ```
-✓ Click "Use recommendations" → See auto-selections
+✓ Click "Use recommendations (auto-select highest confidence)" → See auto-selections
 ✓ Click "Always prefer Apollo.io" → All switch to Apollo
 ✓ Click "Always prefer ZoomInfo" → All switch to ZoomInfo
-✓ Click individual radio buttons → Strategy changes to "manual"
+✓ Click individual radio buttons → Strategy changes to "Review each conflict manually"
 ```
 
 ### Step 4: Check Selection Summary
@@ -93,10 +96,10 @@
 | Scenario | Action | Expected Result |
 |----------|--------|----------------|
 | **1. Open Modal** | Click trigger button | Modal appears with 3 conflicts |
-| **2. Recommendations** | Select "Use recommendations" | Apollo: 2, ZoomInfo: 1 |
-| **3. All Apollo** | Select "Always prefer Apollo" | Apollo: 3, ZoomInfo: 0 |
+| **2. Recommendations** | Select "Use recommendations (auto-select...)" | Apollo: 2, ZoomInfo: 1 |
+| **3. All Apollo** | Select "Always prefer Apollo.io" | Apollo: 3, ZoomInfo: 0 |
 | **4. All ZoomInfo** | Select "Always prefer ZoomInfo" | Apollo: 0, ZoomInfo: 3 |
-| **5. Manual Mix** | Click individual options | Mixed selection, strategy = manual |
+| **5. Manual Mix** | Click individual options | Mixed selection, strategy = "Review each conflict manually" |
 | **6. Quick Apollo** | Click "Use All Apollo" button | Instant apply all Apollo |
 | **7. Quick ZoomInfo** | Click "Use All ZoomInfo" button | Instant apply all ZoomInfo |
 | **8. Accept** | Click "Accept Selections" | Apply & log selections |

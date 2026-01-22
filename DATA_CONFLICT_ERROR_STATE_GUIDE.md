@@ -34,10 +34,23 @@
   - Radio buttons to select preferred source
 
 ### ✅ Resolution Strategies
-1. **Use Recommendations** - Auto-select highest confidence for each field
+1. **Use Recommendations** (Default) - Auto-select highest confidence for each field
 2. **Always Prefer Apollo** - Use Apollo.io for all conflicts
 3. **Always Prefer ZoomInfo** - Use ZoomInfo for all conflicts
 4. **Manual Review** - Choose individually for each field
+
+Resolution options data structure:
+```typescript
+resolutionOptions: [
+  {
+    id: "use_recommendations",
+    label: "Use recommendations (auto-select highest confidence)",
+    description: "Automatically select the data source with highest confidence for each field",
+    default: true
+  },
+  // ... other options with default: false
+]
+```
 
 ### ✅ Interactive Selection
 - Click anywhere on a data card to select it
@@ -64,15 +77,17 @@ interface DataConflict {
     confidence: number;              // 0-100 confidence score
     source: string;                  // Data source description
     lastUpdated: string;             // Last update time
+    selected: boolean;               // Whether Apollo is selected
   };
   zoominfo: {
     value: string;                   // ZoomInfo's value
     confidence: number;              // 0-100 confidence score
     source: string;                  // Data source description
     lastUpdated: string;             // Last update time
+    selected: boolean;               // Whether ZoomInfo is selected
   };
   recommendation: 'apollo' | 'zoominfo';  // AI recommendation
-  selected: 'apollo' | 'zoominfo';        // User's selection
+  reason: string;                          // Reason for recommendation
 }
 ```
 
@@ -81,19 +96,19 @@ interface DataConflict {
 ## Mock Data Details
 
 ### Conflict 1: Company Size
-- **Apollo:** 85 employees (94% confidence, updated 2 days ago)
+- **Apollo:** 85 employees (94% confidence, updated 2 days ago) ✅ Selected
 - **ZoomInfo:** 100-150 employees (87% confidence, updated 1 month ago)
-- **Recommendation:** Apollo (more recent, higher confidence)
+- **Recommendation:** Apollo - Higher confidence score
 
 ### Conflict 2: Annual Revenue
-- **Apollo:** $10M - $15M (82% confidence, estimated)
-- **ZoomInfo:** $12M - $15M (91% confidence, from financial filings)
-- **Recommendation:** ZoomInfo (higher confidence, official source)
+- **Apollo:** $10M - $15M (82% confidence, estimated from funding + employee count)
+- **ZoomInfo:** $12M - $15M (91% confidence, from financial filings) ✅ Selected
+- **Recommendation:** ZoomInfo - Higher confidence score
 
 ### Conflict 3: Direct Phone
-- **Apollo:** +1 (415) 234-5678 (88% confidence, verified database)
+- **Apollo:** +1 (415) 234-5678 (88% confidence, verified database) ✅ Selected
 - **ZoomInfo:** +1 (415) 234-9999 (85% confidence, public records)
-- **Recommendation:** Apollo (higher confidence)
+- **Recommendation:** Apollo - Higher confidence score
 
 ---
 
@@ -132,9 +147,15 @@ Applies a resolution strategy to all conflicts and returns updated conflicts.
 
 **Parameters:**
 - `conflicts`: Array of DataConflict objects
-- `strategy`: 'recommendations' | 'prefer_apollo' | 'prefer_zoominfo' | 'manual'
+- `strategy`: 'use_recommendations' | 'prefer_apollo' | 'prefer_zoominfo' | 'manual_review'
 
-**Returns:** Array of DataConflict objects with updated selections
+**Returns:** Array of DataConflict objects with updated `selected` boolean flags in apollo/zoominfo objects
+
+**Logic:**
+- `use_recommendations`: Selects the source matching the recommendation field
+- `prefer_apollo`: Sets apollo.selected=true, zoominfo.selected=false for all
+- `prefer_zoominfo`: Sets apollo.selected=false, zoominfo.selected=true for all
+- `manual_review`: Preserves existing selection states
 
 ### `getConflictSummary(conflicts)`
 Calculates summary statistics for the current selections.

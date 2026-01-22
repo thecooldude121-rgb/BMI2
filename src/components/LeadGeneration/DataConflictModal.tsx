@@ -22,7 +22,7 @@ export function DataConflictModal({
   onUseAllZoomInfo
 }: DataConflictModalProps) {
   const [conflicts, setConflicts] = useState<DataConflict[]>(dataConflictData.conflicts);
-  const [selectedStrategy, setSelectedStrategy] = useState('recommendations');
+  const [selectedStrategy, setSelectedStrategy] = useState('use_recommendations');
 
   if (!isOpen) return null;
 
@@ -34,9 +34,15 @@ export function DataConflictModal({
 
   const handleConflictSelection = (index: number, source: 'apollo' | 'zoominfo') => {
     const updatedConflicts = [...conflicts];
-    updatedConflicts[index].selected = source;
+    if (source === 'apollo') {
+      updatedConflicts[index].apollo.selected = true;
+      updatedConflicts[index].zoominfo.selected = false;
+    } else {
+      updatedConflicts[index].apollo.selected = false;
+      updatedConflicts[index].zoominfo.selected = true;
+    }
     setConflicts(updatedConflicts);
-    setSelectedStrategy('manual');
+    setSelectedStrategy('manual_review');
   };
 
   const summary = getConflictSummary(conflicts);
@@ -90,7 +96,7 @@ export function DataConflictModal({
                 {/* Apollo Option */}
                 <label
                   className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all mb-3 ${
-                    conflict.selected === 'apollo'
+                    conflict.apollo.selected
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
@@ -100,7 +106,7 @@ export function DataConflictModal({
                     type="radio"
                     name={`conflict-${index}`}
                     value="apollo"
-                    checked={conflict.selected === 'apollo'}
+                    checked={conflict.apollo.selected}
                     onChange={() => handleConflictSelection(index, 'apollo')}
                     className="mt-1"
                   />
@@ -125,7 +131,7 @@ export function DataConflictModal({
                 {/* ZoomInfo Option */}
                 <label
                   className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all mb-3 ${
-                    conflict.selected === 'zoominfo'
+                    conflict.zoominfo.selected
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
@@ -135,7 +141,7 @@ export function DataConflictModal({
                     type="radio"
                     name={`conflict-${index}`}
                     value="zoominfo"
-                    checked={conflict.selected === 'zoominfo'}
+                    checked={conflict.zoominfo.selected}
                     onChange={() => handleConflictSelection(index, 'zoominfo')}
                     className="mt-1"
                   />
@@ -162,7 +168,7 @@ export function DataConflictModal({
                   <span className="text-lg">💡</span>
                   <div className="text-sm text-blue-900">
                     <span className="font-semibold">Recommendation:</span> Use{' '}
-                    {conflict.recommendation === 'apollo' ? 'Apollo' : 'ZoomInfo'} (higher confidence)
+                    {conflict.recommendation === 'apollo' ? 'Apollo' : 'ZoomInfo'} ({conflict.reason})
                   </div>
                 </div>
               </div>
@@ -173,11 +179,11 @@ export function DataConflictModal({
           <div className="mb-6">
             <h3 className="font-semibold text-gray-900 mb-3">Resolution Options:</h3>
             <div className="space-y-3">
-              {dataConflictData.resolutionStrategies.map((strategy) => (
+              {dataConflictData.resolutionOptions.map((option) => (
                 <label
-                  key={strategy.id}
+                  key={option.id}
                   className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                    selectedStrategy === strategy.id
+                    selectedStrategy === option.id
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
@@ -185,14 +191,14 @@ export function DataConflictModal({
                   <input
                     type="radio"
                     name="resolution-strategy"
-                    value={strategy.id}
-                    checked={selectedStrategy === strategy.id}
+                    value={option.id}
+                    checked={selectedStrategy === option.id}
                     onChange={(e) => handleStrategyChange(e.target.value)}
                     className="mt-1"
                   />
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900">{strategy.label}</div>
-                    <p className="text-sm text-gray-600 mt-1">{strategy.description}</p>
+                    <div className="font-medium text-gray-900">{option.label}</div>
+                    <p className="text-sm text-gray-600 mt-1">{option.description}</p>
                   </div>
                 </label>
               ))}

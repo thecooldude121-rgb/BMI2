@@ -6,15 +6,17 @@ export interface DataConflict {
     confidence: number;
     source: string;
     lastUpdated: string;
+    selected: boolean;
   };
   zoominfo: {
     value: string;
     confidence: number;
     source: string;
     lastUpdated: string;
+    selected: boolean;
   };
   recommendation: 'apollo' | 'zoominfo';
-  selected: 'apollo' | 'zoominfo';
+  reason: string;
 }
 
 export const dataConflictData = {
@@ -30,17 +32,19 @@ export const dataConflictData = {
       apollo: {
         value: "85 employees",
         confidence: 94,
-        source: "LinkedIn company page, updated 2 days ago",
-        lastUpdated: "2 days ago"
+        source: "LinkedIn company page",
+        lastUpdated: "2 days ago",
+        selected: true
       },
       zoominfo: {
         value: "100-150 employees",
         confidence: 87,
-        source: "ZoomInfo database, updated 1 month ago",
-        lastUpdated: "1 month ago"
+        source: "ZoomInfo database",
+        lastUpdated: "1 month ago",
+        selected: false
       },
       recommendation: "apollo",
-      selected: "apollo"
+      reason: "Higher confidence score"
     },
     {
       field: "annual_revenue",
@@ -49,16 +53,18 @@ export const dataConflictData = {
         value: "$10M - $15M",
         confidence: 82,
         source: "Estimated from funding + employee count",
-        lastUpdated: "1 week ago"
+        lastUpdated: "Real-time",
+        selected: false
       },
       zoominfo: {
         value: "$12M - $15M",
         confidence: 91,
-        source: "Financial filings, updated 3 months ago",
-        lastUpdated: "3 months ago"
+        source: "Financial filings",
+        lastUpdated: "3 months ago",
+        selected: true
       },
       recommendation: "zoominfo",
-      selected: "zoominfo"
+      reason: "Higher confidence score"
     },
     {
       field: "direct_phone",
@@ -67,39 +73,45 @@ export const dataConflictData = {
         value: "+1 (415) 234-5678",
         confidence: 88,
         source: "Verified contact database",
-        lastUpdated: "1 week ago"
+        lastUpdated: "1 week ago",
+        selected: true
       },
       zoominfo: {
         value: "+1 (415) 234-9999",
         confidence: 85,
         source: "Public records",
-        lastUpdated: "2 weeks ago"
+        lastUpdated: "2 months ago",
+        selected: false
       },
       recommendation: "apollo",
-      selected: "apollo"
+      reason: "Higher confidence score"
     }
   ] as DataConflict[],
 
-  resolutionStrategies: [
+  resolutionOptions: [
     {
-      id: "recommendations",
+      id: "use_recommendations",
       label: "Use recommendations (auto-select highest confidence)",
-      description: "Automatically select the data source with higher confidence for each field"
+      description: "Automatically select the data source with highest confidence for each field",
+      default: true
     },
     {
       id: "prefer_apollo",
       label: "Always prefer Apollo.io",
-      description: "Use Apollo.io data for all conflicting fields"
+      description: "Use Apollo data for all conflicting fields",
+      default: false
     },
     {
       id: "prefer_zoominfo",
       label: "Always prefer ZoomInfo",
-      description: "Use ZoomInfo data for all conflicting fields"
+      description: "Use ZoomInfo data for all conflicting fields",
+      default: false
     },
     {
-      id: "manual",
-      label: "Review each conflict manually (selected above)",
-      description: "Choose which data to use for each individual field"
+      id: "manual_review",
+      label: "Review each conflict manually",
+      description: "Select data source for each conflicting field individually",
+      default: false
     }
   ],
 
@@ -115,32 +127,42 @@ export function applyResolutionStrategy(
   strategy: string
 ): DataConflict[] {
   return conflicts.map(conflict => {
-    let selected: 'apollo' | 'zoominfo';
+    let apolloSelected = false;
+    let zoominfoSelected = false;
 
     switch (strategy) {
-      case 'recommendations':
-        selected = conflict.recommendation;
+      case 'use_recommendations':
+        apolloSelected = conflict.recommendation === 'apollo';
+        zoominfoSelected = conflict.recommendation === 'zoominfo';
         break;
       case 'prefer_apollo':
-        selected = 'apollo';
+        apolloSelected = true;
+        zoominfoSelected = false;
         break;
       case 'prefer_zoominfo':
-        selected = 'zoominfo';
+        apolloSelected = false;
+        zoominfoSelected = true;
         break;
-      case 'manual':
-        selected = conflict.selected;
+      case 'manual_review':
+        apolloSelected = conflict.apollo.selected;
+        zoominfoSelected = conflict.zoominfo.selected;
         break;
       default:
-        selected = conflict.recommendation;
+        apolloSelected = conflict.recommendation === 'apollo';
+        zoominfoSelected = conflict.recommendation === 'zoominfo';
     }
 
-    return { ...conflict, selected };
+    return {
+      ...conflict,
+      apollo: { ...conflict.apollo, selected: apolloSelected },
+      zoominfo: { ...conflict.zoominfo, selected: zoominfoSelected }
+    };
   });
 }
 
 export function getConflictSummary(conflicts: DataConflict[]) {
-  const apolloSelected = conflicts.filter(c => c.selected === 'apollo').length;
-  const zoominfoSelected = conflicts.filter(c => c.selected === 'zoominfo').length;
+  const apolloSelected = conflicts.filter(c => c.apollo.selected).length;
+  const zoominfoSelected = conflicts.filter(c => c.zoominfo.selected).length;
 
   return {
     apolloSelected,
