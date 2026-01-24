@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, Info, CheckCircle, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { RealTimeEnrichmentProgress } from '../../components/LeadGeneration/RealTimeEnrichmentProgress';
 import { EditFieldModal } from '../../components/LeadGeneration/EditFieldModal';
 import { FieldHistoryModal } from '../../components/LeadGeneration/FieldHistoryModal';
+import { RejectFieldConfirmationModal } from '../../components/LeadGeneration/RejectFieldConfirmationModal';
 import { simulateEnrichmentProgress, initialEnrichmentState } from '../../utils/enrichmentProgressMockData';
 import {
   fieldLevelActionsData,
@@ -13,13 +14,22 @@ import {
 } from '../../utils/fieldLevelActionsMockData';
 import type { EnrichmentProgressState, FieldHistoryEntry, EnrichedFieldData } from '../../types/enrichmentProgress';
 
+interface ToastNotification {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  message: string;
+}
+
 export default function FieldLevelActionsDemo() {
   const navigate = useNavigate();
   const [progressState, setProgressState] = useState<EnrichmentProgressState>(initialEnrichmentState);
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedField, setSelectedField] = useState<EnrichedFieldData | null>(null);
+  const [fieldToReject, setFieldToReject] = useState<EnrichedFieldData | null>(null);
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [fieldHistories, setFieldHistories] = useState<Record<string, any[]>>({
     direct_phone: fieldLevelActionsData.fieldHistory,
     email: emailFieldData.fieldHistory,
@@ -37,6 +47,14 @@ export default function FieldLevelActionsDemo() {
 
     return () => abort();
   }, []);
+
+  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
 
   const handleEditField = (
     fieldId: string,
@@ -75,6 +93,7 @@ export default function FieldLevelActionsDemo() {
       ...prev,
       `✏️ Edited field "${fieldId}": ${newValue}${markAsVerified ? ' (marked as verified)' : ''}`
     ]);
+    showToast('success', `✅ Field "${fieldId}" updated successfully`);
   };
 
   const handleRevertField = (fieldId: string) => {
@@ -133,6 +152,7 @@ export default function FieldLevelActionsDemo() {
     });
 
     setActivityLog(prev => [...prev, `✅ Verified field "${fieldId}"`]);
+    showToast('success', `✅ Field verified`);
   };
 
   const handleViewHistory = (fieldId: string) => {
@@ -153,6 +173,27 @@ export default function FieldLevelActionsDemo() {
   };
 
   const handleRejectField = (fieldId: string) => {
+    let field: EnrichedFieldData | null = null;
+
+    progressState.categories.forEach(category => {
+      category.fields.forEach(f => {
+        if (f.fieldId === fieldId) {
+          field = f;
+        }
+      });
+    });
+
+    if (field) {
+      setFieldToReject(field);
+      setRejectModalOpen(true);
+    }
+  };
+
+  const confirmRejectField = () => {
+    if (!fieldToReject) return;
+
+    const fieldId = fieldToReject.fieldId;
+
     setProgressState(prevState => {
       const newState = { ...prevState };
 
@@ -178,6 +219,25 @@ export default function FieldLevelActionsDemo() {
     });
 
     setActivityLog(prev => [...prev, `🚫 Rejected enrichment for field "${fieldId}"`]);
+    showToast('success', `Enrichment rejected`);
+    setFieldToReject(null);
+  };
+
+  const handleOpenEditModal = (fieldId: string) => {
+    let field: EnrichedFieldData | null = null;
+
+    progressState.categories.forEach(category => {
+      category.fields.forEach(f => {
+        if (f.fieldId === fieldId) {
+          field = f;
+        }
+      });
+    });
+
+    if (field) {
+      setSelectedField(field);
+      setEditModalOpen(true);
+    }
   };
 
   return (
@@ -212,7 +272,7 @@ export default function FieldLevelActionsDemo() {
                 console.log('Enrichment complete!');
               }}
               onRetryField={handleRetryField}
-              onEditField={handleEditField}
+              onEditField={handleOpenEditModal}
               onRevertField={handleRevertField}
               onVerifyField={handleVerifyField}
               onViewHistory={handleViewHistory}
@@ -378,6 +438,42 @@ export default function FieldLevelActionsDemo() {
           />
         </>
       )}
+
+      {fieldToReject && (
+        <RejectFieldConfirmationModal
+          fieldName={fieldToReject.fieldName}
+          fieldIcon={fieldToReject.fieldIcon}
+          currentValue={fieldToReject.afterValue || ''}
+          previousValue={fieldToReject.beforeValue || ''}
+          isOpen={rejectModalOpen}
+          onClose={() => {
+            setRejectModalOpen(false);
+            setFieldToReject(null);
+          }}
+          onConfirm={confirmRejectField}
+        />
+      )}
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border animate-slide-in-right ${
+              toast.type === 'success'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : toast.type === 'error'
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : 'bg-blue-50 border-blue-200 text-blue-800'
+            }`}
+          >
+            {toast.type === 'success' && <CheckCircle className="w-5 h-5" />}
+            {toast.type === 'error' && <XCircle className="w-5 h-5" />}
+            {toast.type === 'info' && <Info className="w-5 h-5" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

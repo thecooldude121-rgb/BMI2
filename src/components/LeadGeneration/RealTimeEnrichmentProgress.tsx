@@ -6,7 +6,7 @@ interface RealTimeEnrichmentProgressProps {
   progressState: EnrichmentProgressState;
   onComplete?: () => void;
   onRetryField?: (fieldId: string) => void;
-  onEditField?: (fieldId: string, newValue: string, reason: string, notes: string, markAsVerified: boolean) => void;
+  onEditField?: (fieldId: string) => void;
   onRevertField?: (fieldId: string) => void;
   onVerifyField?: (fieldId: string) => void;
   onViewHistory?: (fieldId: string) => void;
@@ -144,6 +144,7 @@ export function RealTimeEnrichmentProgress({
                   field={field}
                   isJustCompleted={isFieldJustCompleted(field.fieldId)}
                   onRetry={onRetryField}
+                  onEdit={onEditField}
                   onVerify={onVerifyField}
                   onViewHistory={onViewHistory}
                   onReject={onRejectField}
@@ -161,12 +162,13 @@ interface FieldCardProps {
   field: EnrichedFieldData;
   isJustCompleted: boolean;
   onRetry?: (fieldId: string) => void;
+  onEdit?: (fieldId: string) => void;
   onVerify?: (fieldId: string) => void;
   onViewHistory?: (fieldId: string) => void;
   onReject?: (fieldId: string) => void;
 }
 
-function FieldCard({ field, isJustCompleted, onRetry, onVerify, onViewHistory, onReject }: FieldCardProps) {
+function FieldCard({ field, isJustCompleted, onRetry, onEdit, onVerify, onViewHistory, onReject }: FieldCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [showHighlight, setShowHighlight] = useState(false);
 
@@ -301,6 +303,16 @@ function FieldCard({ field, isJustCompleted, onRetry, onVerify, onViewHistory, o
           {/* Action Buttons */}
           {showActions && (
             <div className="flex items-center gap-2 pt-2 border-t border-green-200">
+              {onEdit && (
+                <button
+                  onClick={() => onEdit(field.fieldId)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded transition-colors"
+                  title="Edit field"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  Edit
+                </button>
+              )}
               {!field.isVerified && onVerify && (
                 <button
                   onClick={() => onVerify(field.fieldId)}
