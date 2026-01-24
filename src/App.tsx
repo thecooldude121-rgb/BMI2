@@ -21,6 +21,7 @@ import NetworkConnectionErrorDemo from './pages/LeadGeneration/NetworkConnection
 import PartialEnrichmentDemo from './pages/LeadGeneration/PartialEnrichmentDemo';
 import DataConflictDemo from './pages/LeadGeneration/DataConflictDemo';
 import { RealTimeProgressDemo } from './pages/LeadGeneration/RealTimeProgressDemo';
+import FieldLevelActionsDemo from './pages/LeadGeneration/FieldLevelActionsDemo';
 import SettingsPage from './pages/Settings/SettingsPage';
 import Login from './pages/Auth/Login';
 import LoginWireframe from './pages/Auth/LoginWireframe';
@@ -69,6 +70,7 @@ const App = () => {
                   <Route path="/demo/partial-enrichment" element={<Layout><PartialEnrichmentDemo /></Layout>} />
                   <Route path="/demo/data-conflict" element={<Layout><DataConflictDemo /></Layout>} />
                   <Route path="/demo/real-time-progress" element={<Layout><RealTimeProgressDemo /></Layout>} />
+                  <Route path="/demo/field-level-actions" element={<Layout><FieldLevelActionsDemo /></Layout>} />
                   <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
                   <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
                   <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />
