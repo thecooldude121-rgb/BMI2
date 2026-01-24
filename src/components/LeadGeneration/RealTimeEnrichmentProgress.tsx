@@ -1,17 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle, Clock, Loader2, XCircle, Zap, RotateCcw } from 'lucide-react';
+import { CheckCircle, Clock, Loader2, XCircle, Zap, RotateCcw, Edit3, CheckCircle as VerifyIcon, History, XOctagon } from 'lucide-react';
 import type { EnrichmentProgressState, EnrichedFieldData } from '../../types/enrichmentProgress';
 
 interface RealTimeEnrichmentProgressProps {
   progressState: EnrichmentProgressState;
   onComplete?: () => void;
   onRetryField?: (fieldId: string) => void;
+  onEditField?: (fieldId: string, newValue: string, reason: string, notes: string, markAsVerified: boolean) => void;
+  onRevertField?: (fieldId: string) => void;
+  onVerifyField?: (fieldId: string) => void;
+  onViewHistory?: (fieldId: string) => void;
+  onRejectField?: (fieldId: string) => void;
 }
 
 export function RealTimeEnrichmentProgress({
   progressState,
   onComplete,
-  onRetryField
+  onRetryField,
+  onEditField,
+  onRevertField,
+  onVerifyField,
+  onViewHistory,
+  onRejectField
 }: RealTimeEnrichmentProgressProps) {
   const [completedFieldIds, setCompletedFieldIds] = useState<Set<string>>(new Set());
 
@@ -134,6 +144,9 @@ export function RealTimeEnrichmentProgress({
                   field={field}
                   isJustCompleted={isFieldJustCompleted(field.fieldId)}
                   onRetry={onRetryField}
+                  onVerify={onVerifyField}
+                  onViewHistory={onViewHistory}
+                  onReject={onRejectField}
                 />
               ))}
             </div>
@@ -148,9 +161,13 @@ interface FieldCardProps {
   field: EnrichedFieldData;
   isJustCompleted: boolean;
   onRetry?: (fieldId: string) => void;
+  onVerify?: (fieldId: string) => void;
+  onViewHistory?: (fieldId: string) => void;
+  onReject?: (fieldId: string) => void;
 }
 
-function FieldCard({ field, isJustCompleted, onRetry }: FieldCardProps) {
+function FieldCard({ field, isJustCompleted, onRetry, onVerify, onViewHistory, onReject }: FieldCardProps) {
+  const [showActions, setShowActions] = useState(false);
   const [showHighlight, setShowHighlight] = useState(false);
 
   useEffect(() => {
@@ -189,8 +206,12 @@ function FieldCard({ field, isJustCompleted, onRetry }: FieldCardProps) {
     }
   };
 
+  const canShowActions = field.status === 'completed' || field.status === 'failed';
+
   return (
     <div
+      onMouseEnter={() => canShowActions && setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
       className={`border-2 rounded-lg p-4 transition-all duration-500 ${
         showHighlight
           ? 'border-green-500 bg-green-50 shadow-lg scale-[1.02]'
@@ -256,22 +277,66 @@ function FieldCard({ field, isJustCompleted, onRetry }: FieldCardProps) {
 
       {/* Before/After Values for Completed State */}
       {field.status === 'completed' && (
-        <div className="space-y-2">
-          {field.beforeValue && (
-            <div className="text-sm">
-              <span className="text-gray-600">Before: </span>
-              <span className="text-gray-800 line-through">{field.beforeValue}</span>
-            </div>
-          )}
-          {field.afterValue && (
-            <div className="text-sm">
-              <span className="text-gray-600">After: </span>
-              <span className="text-gray-900 font-medium">{field.afterValue}</span>
-            </div>
-          )}
-          {field.source && field.confidence && (
-            <div className="text-xs text-gray-600">
-              Source: {field.source} ({field.confidence}%) • {field.timestamp}
+        <div className="space-y-3">
+          <div className="space-y-2">
+            {field.beforeValue && (
+              <div className="text-sm">
+                <span className="text-gray-600">Before: </span>
+                <span className="text-gray-800 line-through">{field.beforeValue}</span>
+              </div>
+            )}
+            {field.afterValue && (
+              <div className="text-sm">
+                <span className="text-gray-600">After: </span>
+                <span className="text-gray-900 font-medium">{field.afterValue}</span>
+              </div>
+            )}
+            {field.source && field.confidence && (
+              <div className="text-xs text-gray-600">
+                Source: {field.source} ({field.confidence}%) • {field.timestamp}
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          {showActions && (
+            <div className="flex items-center gap-2 pt-2 border-t border-green-200">
+              {!field.isVerified && onVerify && (
+                <button
+                  onClick={() => onVerify(field.fieldId)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded transition-colors"
+                  title="Mark as verified"
+                >
+                  <VerifyIcon className="w-3 h-3" />
+                  Verify
+                </button>
+              )}
+              {field.isVerified && (
+                <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-100 rounded">
+                  <CheckCircle className="w-3 h-3" />
+                  Verified
+                </span>
+              )}
+              {onViewHistory && (
+                <button
+                  onClick={() => onViewHistory(field.fieldId)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded transition-colors"
+                  title="View history"
+                >
+                  <History className="w-3 h-3" />
+                  History
+                </button>
+              )}
+              {onReject && (
+                <button
+                  onClick={() => onReject(field.fieldId)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 hover:bg-orange-200 rounded transition-colors"
+                  title="Reject enrichment"
+                >
+                  <XOctagon className="w-3 h-3" />
+                  Reject
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -279,21 +344,35 @@ function FieldCard({ field, isJustCompleted, onRetry }: FieldCardProps) {
 
       {/* Error Message for Failed State */}
       {field.status === 'failed' && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {field.error && (
             <div className="text-sm text-red-600">
               {field.error}
             </div>
           )}
-          {onRetry && (
-            <button
-              onClick={() => onRetry(field.fieldId)}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Retry Enrichment
-            </button>
-          )}
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            {onRetry && (
+              <button
+                onClick={() => onRetry(field.fieldId)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 rounded-md transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Retry Enrichment
+              </button>
+            )}
+            {showActions && onViewHistory && (
+              <button
+                onClick={() => onViewHistory(field.fieldId)}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 rounded transition-colors"
+                title="View history"
+              >
+                <History className="w-3 h-3" />
+                History
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

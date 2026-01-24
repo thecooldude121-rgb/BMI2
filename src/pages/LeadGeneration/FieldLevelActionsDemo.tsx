@@ -2,13 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { RealTimeEnrichmentProgress } from '../../components/LeadGeneration/RealTimeEnrichmentProgress';
+import { EditFieldModal } from '../../components/LeadGeneration/EditFieldModal';
+import { FieldHistoryModal } from '../../components/LeadGeneration/FieldHistoryModal';
 import { simulateEnrichmentProgress, initialEnrichmentState } from '../../utils/enrichmentProgressMockData';
-import type { EnrichmentProgressState, FieldHistoryEntry } from '../../types/enrichmentProgress';
+import {
+  fieldLevelActionsData,
+  emailFieldData,
+  linkedinFieldData,
+  githubFieldData
+} from '../../utils/fieldLevelActionsMockData';
+import type { EnrichmentProgressState, FieldHistoryEntry, EnrichedFieldData } from '../../types/enrichmentProgress';
 
 export default function FieldLevelActionsDemo() {
   const navigate = useNavigate();
   const [progressState, setProgressState] = useState<EnrichmentProgressState>(initialEnrichmentState);
   const [activityLog, setActivityLog] = useState<string[]>([]);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [selectedField, setSelectedField] = useState<EnrichedFieldData | null>(null);
+  const [fieldHistories, setFieldHistories] = useState<Record<string, any[]>>({
+    direct_phone: fieldLevelActionsData.fieldHistory,
+    email: emailFieldData.fieldHistory,
+    linkedin: linkedinFieldData.fieldHistory,
+    github: githubFieldData.fieldHistory
+  });
 
   useEffect(() => {
     const abort = simulateEnrichmentProgress(
@@ -92,6 +109,77 @@ export default function FieldLevelActionsDemo() {
     setActivityLog(prev => [...prev, `🔄 Retrying enrichment for field "${fieldId}"`]);
   };
 
+  const handleVerifyField = (fieldId: string) => {
+    setProgressState(prevState => {
+      const newState = { ...prevState };
+
+      newState.categories.forEach(category => {
+        category.fields.forEach(field => {
+          if (field.fieldId === fieldId) {
+            field.isVerified = true;
+            const historyEntry: FieldHistoryEntry = {
+              timestamp: new Date().toISOString(),
+              action: 'verified',
+              previousValue: field.afterValue,
+              newValue: field.afterValue,
+              userName: 'Current User'
+            };
+            field.history = [...(field.history || []), historyEntry];
+          }
+        });
+      });
+
+      return newState;
+    });
+
+    setActivityLog(prev => [...prev, `✅ Verified field "${fieldId}"`]);
+  };
+
+  const handleViewHistory = (fieldId: string) => {
+    let field: EnrichedFieldData | null = null;
+
+    progressState.categories.forEach(category => {
+      category.fields.forEach(f => {
+        if (f.fieldId === fieldId) {
+          field = f;
+        }
+      });
+    });
+
+    if (field) {
+      setSelectedField(field);
+      setHistoryModalOpen(true);
+    }
+  };
+
+  const handleRejectField = (fieldId: string) => {
+    setProgressState(prevState => {
+      const newState = { ...prevState };
+
+      newState.categories.forEach(category => {
+        category.fields.forEach(field => {
+          if (field.fieldId === fieldId) {
+            const historyEntry: FieldHistoryEntry = {
+              timestamp: new Date().toISOString(),
+              action: 'rejected',
+              previousValue: field.afterValue,
+              newValue: field.beforeValue,
+              userName: 'Current User'
+            };
+
+            field.afterValue = field.beforeValue;
+            field.isVerified = false;
+            field.history = [...(field.history || []), historyEntry];
+          }
+        });
+      });
+
+      return newState;
+    });
+
+    setActivityLog(prev => [...prev, `🚫 Rejected enrichment for field "${fieldId}"`]);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200">
@@ -126,6 +214,9 @@ export default function FieldLevelActionsDemo() {
               onRetryField={handleRetryField}
               onEditField={handleEditField}
               onRevertField={handleRevertField}
+              onVerifyField={handleVerifyField}
+              onViewHistory={handleViewHistory}
+              onRejectField={handleRejectField}
             />
           </div>
 
@@ -145,28 +236,35 @@ export default function FieldLevelActionsDemo() {
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">2. Edit Fields</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">2. Hover Over Fields</h4>
                   <p className="text-gray-600">
-                    Click the edit button on completed or failed fields to manually edit values.
+                    Hover over completed fields to see action buttons: Verify, History, and Reject.
                   </p>
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">3. Mark as Verified</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">3. Verify Fields</h4>
                   <p className="text-gray-600">
-                    Check the "Mark as verified" box to prevent future enrichments from overriding your changes.
+                    Click "Verify" to mark a field as verified, preventing future auto-overrides.
                   </p>
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">4. Revert Changes</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">4. View History</h4>
                   <p className="text-gray-600">
-                    Use the "Revert to API Value" button to restore the original enriched value.
+                    Click "History" to see complete audit trail of all changes to a field.
                   </p>
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">5. Retry Failed Fields</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">5. Reject Enrichment</h4>
+                  <p className="text-gray-600">
+                    Click "Reject" to revert to the original value before enrichment.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">6. Retry Failed Fields</h4>
                   <p className="text-gray-600">
                     Click "Retry Enrichment" on failed fields to attempt enrichment again.
                   </p>
@@ -205,6 +303,18 @@ export default function FieldLevelActionsDemo() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-green-600">✅</span>
+                  <span className="text-gray-700">Verify field (prevent overrides)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600">✅</span>
+                  <span className="text-gray-700">View complete field history</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600">✅</span>
+                  <span className="text-gray-700">Reject enrichment</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600">✅</span>
                   <span className="text-gray-700">Show current enrichment data</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -229,21 +339,45 @@ export default function FieldLevelActionsDemo() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-green-600">✅</span>
-                  <span className="text-gray-700">Field history tracking</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-600">✅</span>
                   <span className="text-gray-700">Format hints for fields</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-green-600">✅</span>
-                  <span className="text-gray-700">Edit button on field cards</span>
+                  <span className="text-gray-700">Action buttons on hover</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600">✅</span>
+                  <span className="text-gray-700">Timeline view of changes</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-green-600">✅</span>
+                  <span className="text-gray-700">Confidence scores display</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {selectedField && (
+        <>
+          <EditFieldModal
+            field={selectedField}
+            isOpen={editModalOpen}
+            onClose={() => setEditModalOpen(false)}
+            onSave={handleEditField}
+            onRevert={handleRevertField}
+          />
+
+          <FieldHistoryModal
+            fieldName={selectedField.fieldName}
+            fieldIcon={selectedField.fieldIcon}
+            history={fieldHistories[selectedField.fieldId] || selectedField.history || []}
+            isOpen={historyModalOpen}
+            onClose={() => setHistoryModalOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }
