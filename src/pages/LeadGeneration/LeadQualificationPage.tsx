@@ -331,6 +331,10 @@ const LeadQualificationPage: React.FC = () => {
     setQualificationData(prev => ({ ...prev, assignedTo }));
   };
 
+  const calculateBANTScore = () => {
+    return bantValidation.calculateBantScore(qualificationData.bantData);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
