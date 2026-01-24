@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, Loader2 } from 'lucide-react';
+import { crmSyncConfig, SyncAction } from '../../utils/crmSyncMockData';
 
 interface SyncStep {
   id: string;
@@ -16,71 +17,59 @@ const CRMSyncProgressModal: React.FC<CRMSyncProgressModalProps> = ({
   isOpen,
   onComplete
 }) => {
-  const [steps, setSteps] = useState<SyncStep[]>([
-    { id: 'status', label: 'Lead status updated (Qualified)', status: 'pending' },
-    { id: 'contact', label: 'Contact data synced (5 fields)', status: 'pending' },
-    { id: 'company', label: 'Company data synced (8 fields)', status: 'pending' },
-    { id: 'bant', label: 'BANT assessment synced (4 components)', status: 'pending' },
-    { id: 'opportunity', label: 'Creating CRM opportunity...', status: 'pending' },
-    { id: 'notification', label: 'Sending notification to John Smith...', status: 'pending' },
-    { id: 'calendar', label: 'Creating calendar reminder...', status: 'pending' }
-  ]);
+  const getInitialSteps = (): SyncStep[] => {
+    return crmSyncConfig.syncActions.map((action: SyncAction) => ({
+      id: action.action,
+      label: action.description,
+      status: 'pending' as const
+    }));
+  };
 
+  const [steps, setSteps] = useState<SyncStep[]>(getInitialSteps());
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     if (!isOpen) {
-      setSteps([
-        { id: 'status', label: 'Lead status updated (Qualified)', status: 'pending' },
-        { id: 'contact', label: 'Contact data synced (5 fields)', status: 'pending' },
-        { id: 'company', label: 'Company data synced (8 fields)', status: 'pending' },
-        { id: 'bant', label: 'BANT assessment synced (4 components)', status: 'pending' },
-        { id: 'opportunity', label: 'Creating CRM opportunity...', status: 'pending' },
-        { id: 'notification', label: 'Sending notification to John Smith...', status: 'pending' },
-        { id: 'calendar', label: 'Creating calendar reminder...', status: 'pending' }
-      ]);
+      setSteps(getInitialSteps());
       setProgress(0);
       return;
     }
 
-    const stepDuration = 800;
-    let currentStep = 0;
+    const executeSyncActions = async () => {
+      const totalSteps = steps.length;
 
-    const interval = setInterval(() => {
-      if (currentStep < steps.length) {
+      for (let i = 0; i < totalSteps; i++) {
         setSteps(prevSteps => {
           const newSteps = [...prevSteps];
 
-          if (currentStep > 0) {
-            newSteps[currentStep - 1].status = 'completed';
+          if (i > 0) {
+            newSteps[i - 1].status = 'completed';
           }
 
-          newSteps[currentStep].status = 'in_progress';
+          newSteps[i].status = 'in_progress';
           return newSteps;
         });
 
-        const newProgress = ((currentStep + 1) / steps.length) * 100;
+        const newProgress = ((i + 1) / totalSteps) * 100;
         setProgress(newProgress);
 
-        currentStep++;
-      } else {
-        clearInterval(interval);
-
-        setSteps(prevSteps => {
-          const newSteps = [...prevSteps];
-          newSteps[newSteps.length - 1].status = 'completed';
-          return newSteps;
-        });
-
-        setProgress(100);
-
-        setTimeout(() => {
-          onComplete();
-        }, 1000);
+        await new Promise(resolve => setTimeout(resolve, 800));
       }
-    }, stepDuration);
 
-    return () => clearInterval(interval);
+      setSteps(prevSteps => {
+        const newSteps = [...prevSteps];
+        newSteps[newSteps.length - 1].status = 'completed';
+        return newSteps;
+      });
+
+      setProgress(100);
+
+      setTimeout(() => {
+        onComplete();
+      }, 1000);
+    };
+
+    executeSyncActions();
   }, [isOpen, onComplete]);
 
   if (!isOpen) return null;
