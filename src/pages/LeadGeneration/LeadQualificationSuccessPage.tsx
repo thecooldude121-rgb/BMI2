@@ -115,6 +115,18 @@ const LeadQualificationSuccessPage: React.FC = () => {
   };
 
   const handleViewInCRM = () => {
+    // Track click in analytics
+    if (typeof window !== 'undefined' && (window as any).analytics) {
+      (window as any).analytics.track('CRM Opportunity Viewed', {
+        opportunityId: successData.crmOpportunity.id,
+        leadId: successData.lead.id,
+        leadName: successData.lead.name,
+        company: successData.lead.company,
+        amount: successData.crmOpportunity.amount,
+        source: 'qualification_success_page'
+      });
+    }
+
     window.open(successData.crmOpportunity.crmUrl, '_blank');
     showToast('info', 'Opening CRM opportunity in new tab');
   };

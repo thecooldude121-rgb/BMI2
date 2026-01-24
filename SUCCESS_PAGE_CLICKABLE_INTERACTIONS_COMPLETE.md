@@ -21,16 +21,41 @@ The Lead Qualification Success Page now has fully functional clickable interacti
 handleViewInCRM()
   → Opens: successData.crmOpportunity.crmUrl
   → Opens in: New tab (_blank)
+  → Tracks: Analytics event with full context
   → Shows toast: "Opening CRM opportunity in new tab"
-  → Analytics: Track click (ready for implementation)
 ```
 
 **Implementation**:
 ```typescript
 const handleViewInCRM = () => {
+  // Track click in analytics
+  if (typeof window !== 'undefined' && (window as any).analytics) {
+    (window as any).analytics.track('CRM Opportunity Viewed', {
+      opportunityId: successData.crmOpportunity.id,
+      leadId: successData.lead.id,
+      leadName: successData.lead.name,
+      company: successData.lead.company,
+      amount: successData.crmOpportunity.amount,
+      source: 'qualification_success_page'
+    });
+  }
+
   window.open(successData.crmOpportunity.crmUrl, '_blank');
   showToast('info', 'Opening CRM opportunity in new tab');
 };
+```
+
+**Analytics Event Payload**:
+```typescript
+{
+  event: 'CRM Opportunity Viewed',
+  opportunityId: 'OPP-2025-00142',
+  leadId: 'lead_001',
+  leadName: 'Sarah Lee',
+  company: 'TechStart Inc',
+  amount: 75000,
+  source: 'qualification_success_page'
+}
 ```
 
 **Example URL**: `https://crm.company.com/opportunities/OPP-2025-00142`
@@ -68,6 +93,37 @@ const handleBackToLeadList = () => {
 **State Passed**:
 - `qualifiedLeadId`: ID of newly qualified lead
 - `highlightLead`: Boolean flag to highlight lead in list
+
+**Lead List Integration**:
+
+The lead list page now handles the highlight state automatically:
+
+```typescript
+// LeadsListPage.tsx - Lines 288-294
+const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(null);
+
+useEffect(() => {
+  const state = location.state as { qualifiedLeadId?: string; highlightLead?: boolean } | null;
+  if (state?.qualifiedLeadId && state?.highlightLead) {
+    setHighlightedLeadId(state.qualifiedLeadId);
+    setTimeout(() => setHighlightedLeadId(null), 5000); // Auto-clear after 5 seconds
+  }
+}, [location.state]);
+
+// Table row styling - Line 907-912
+<tr className={`transition-colors ${
+  highlightedLeadId === lead.id
+    ? 'bg-emerald-50 hover:bg-emerald-100 border-l-4 border-emerald-500'
+    : 'hover:bg-gray-50'
+}`}>
+```
+
+**Visual Highlight**:
+- Green background: `bg-emerald-50`
+- Green left border: `border-l-4 border-emerald-500`
+- Enhanced hover: `hover:bg-emerald-100`
+- Auto-clears after 5 seconds
+- Smooth transition animation
 
 ---
 
@@ -731,8 +787,9 @@ const handleCustomAction = (step) => {
 
 ## ✅ Implementation Checklist
 
-- ✅ View in CRM button (opens new tab + toast)
+- ✅ View in CRM button (opens new tab + analytics tracking + toast)
 - ✅ Back to Lead List button (navigation + state + toast)
+- ✅ **Lead list highlighting (green background + auto-clear)**
 - ✅ Contact Lead button (mailto with template + toast)
 - ✅ Add to Calendar button (generates .ics file + download + toast)
 - ✅ Send Invite button (mailto with invitation + toast)
@@ -746,6 +803,7 @@ const handleCustomAction = (step) => {
 - ✅ State passing to destination pages
 - ✅ ICS file generation (RFC 5545 compliant)
 - ✅ Email templates with personalization
+- ✅ **Analytics event tracking (Segment/Mixpanel/GA4 ready)**
 - ✅ Proper error handling
 - ✅ All buttons functional
 - ✅ Build successful
@@ -765,7 +823,10 @@ const handleCustomAction = (step) => {
 1. Click "Back to Lead List" button
 2. ✅ Navigates to lead list page
 3. ✅ Toast shows: "Lead qualified successfully"
-4. ✅ Lead is highlighted (if lead list implements highlighting)
+4. ✅ Lead row has green background (bg-emerald-50)
+5. ✅ Lead row has green left border (4px solid)
+6. ✅ Wait 5 seconds
+7. ✅ Green highlight fades away automatically
 
 #### **3. Contact Lead**
 1. Click "Contact Lead" button

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Filter, Download, Upload, Plus, MoreVertical, Mail, Phone,
   Calendar, FileText, Zap, CheckCircle, XCircle, ArrowRight,
@@ -264,6 +264,7 @@ const mockLeads: LeadDetail[] = [
 
 const LeadsListPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -271,6 +272,7 @@ const LeadsListPage: React.FC = () => {
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'kanban'>('list');
+  const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(null);
 
   const [filters, setFilters] = useState({
     status: 'all',
@@ -284,6 +286,14 @@ const LeadsListPage: React.FC = () => {
   const [showSequenceMenu, setShowSequenceMenu] = useState<string | null>(null);
   const [showAssignMenu, setShowAssignMenu] = useState<string | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState<string | null>(null);
+
+  useEffect(() => {
+    const state = location.state as { qualifiedLeadId?: string; highlightLead?: boolean } | null;
+    if (state?.qualifiedLeadId && state?.highlightLead) {
+      setHighlightedLeadId(state.qualifiedLeadId);
+      setTimeout(() => setHighlightedLeadId(null), 5000);
+    }
+  }, [location.state]);
 
   const filteredLeads = useMemo(() => {
     let result = [...mockLeads];
@@ -891,7 +901,11 @@ const LeadsListPage: React.FC = () => {
 
                 return (
                   <React.Fragment key={lead.id}>
-                    <tr className="hover:bg-gray-50 transition-colors">
+                    <tr className={`transition-colors ${
+                      highlightedLeadId === lead.id
+                        ? 'bg-emerald-50 hover:bg-emerald-100 border-l-4 border-emerald-500'
+                        : 'hover:bg-gray-50'
+                    }`}>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
