@@ -79,7 +79,7 @@ export const campaignsMockData: Campaign[] = [
     conversionCount: 0,
     createdAt: '2025-01-20',
     scheduledFor: '2025-01-29T09:00:00',
-    owner: 'Emily Rodriguez',
+    owner: 'Adithya Vardhan',
     tags: ['conference', 'event', 'saastr']
   },
   {
@@ -259,7 +259,7 @@ export interface DetailedCampaign {
       bounced: number;
       unsubscribed: number;
       spam_complaints: number;
-    };
+    } | null;
     linkedin?: {
       sent: number;
       viewed: number;
@@ -270,8 +270,8 @@ export interface DetailedCampaign {
     rates: {
       send_rate: number;
       delivery_rate: number;
-      open_rate: number;
-      click_rate: number;
+      open_rate: number | null;
+      click_rate: number | null;
       reply_rate: number;
       bounce_rate: number;
       unsubscribe_rate: number;
@@ -283,8 +283,8 @@ export interface DetailedCampaign {
       revenue_generated: number;
       conversion_rate: number;
     };
-    engagement_score: 'hot' | 'warm' | 'cold' | 'frozen';
-    performance_grade: 'excellent' | 'good' | 'average' | 'poor';
+    engagement_score: 'hot' | 'warm' | 'cold' | 'frozen' | 'not_started';
+    performance_grade: 'excellent' | 'good' | 'average' | 'poor' | 'not_started';
   };
 
   settings: {
@@ -542,13 +542,13 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_004",
     name: "SaaStr Conference Follow-up",
-    description: "Conference attendees from SaaStr 2025",
+    description: "Following up with leads from SaaStr Annual 2025",
     status: "scheduled",
     type: "linkedin",
     template: "event_followup",
     created_at: "2025-01-20T14:00:00Z",
-    created_by: "user_emily",
-    updated_at: "2025-01-20T14:00:00Z",
+    created_by: "user_adithya",
+    updated_at: "2025-01-24T10:30:00Z",
     start_date: "2025-01-29T09:00:00Z",
     end_date: null,
 
@@ -561,45 +561,42 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
     },
 
     sequences: {
-      total_touches: 4,
-      current_touch: "scheduled",
+      total_touches: 3,
+      current_touch: "not_started",
       touches_config: [
-        {touch: 1, channel: "linkedin", delay: 0, subject: "Great meeting you at SaaStr!"},
-        {touch: 2, channel: "email", delay: "3d", subject: "Following up from SaaStr"},
-        {touch: 3, channel: "linkedin", delay: "7d", subject: "SaaStr follow-up"},
-        {touch: 4, channel: "email", delay: "10d", subject: "Last follow-up from SaaStr"}
+        {touch: 1, channel: "linkedin", delay: 0, subject: "Great meeting you at SaaStr, {{firstName}}!"},
+        {touch: 2, channel: "linkedin", delay: "3d", subject: "Following up on our conversation about {{painPoint}}"},
+        {touch: 3, channel: "linkedin", delay: "7d", subject: "Quick question about {{company}}'s goals"}
       ]
     },
 
     performance: {
-      email: {
+      email: null,
+      linkedin: {
         sent: 0,
-        delivered: 0,
-        opened: 0,
-        clicked: 0,
+        viewed: 0,
         replied: 0,
-        bounced: 0,
-        unsubscribed: 0,
-        spam_complaints: 0
+        connected: 0,
+        ignored: 0
       },
       rates: {
-        send_rate: 0.0,
-        delivery_rate: 0.0,
-        open_rate: 0.0,
-        click_rate: 0.0,
-        reply_rate: 0.0,
-        bounce_rate: 0.0,
-        unsubscribe_rate: 0.0
+        send_rate: 0.00,
+        delivery_rate: 0.00,
+        open_rate: null,
+        click_rate: null,
+        reply_rate: 0.00,
+        bounce_rate: 0.00,
+        unsubscribe_rate: 0.00
       },
       conversion: {
         meetings_booked: 0,
         opportunities_created: 0,
         deals_closed: 0,
         revenue_generated: 0,
-        conversion_rate: 0.0
+        conversion_rate: 0.00
       },
-      engagement_score: "cold",
-      performance_grade: "average"
+      engagement_score: "not_started",
+      performance_grade: "not_started"
     },
 
     settings: {
@@ -608,7 +605,7 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       business_hours_only: true,
       daily_send_limit: 40,
       ab_testing_enabled: false,
-      ab_variants: 0,
+      ab_variants: 1,
       stop_on_reply: true,
       stop_on_unsubscribe: true
     }
