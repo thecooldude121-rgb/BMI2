@@ -220,6 +220,8 @@ export interface DetailedCampaign {
   updated_at: string;
   start_date: string;
   end_date: string | null;
+  paused_at?: string;
+  paused_reason?: string;
 
   leads: {
     total_enrolled: number;
@@ -227,6 +229,12 @@ export interface DetailedCampaign {
     paused: number;
     completed: number;
     unsubscribed: number;
+  };
+
+  lead_source?: {
+    hrms_leads: number;
+    hrms_percentage: number;
+    avg_score_bonus: number;
   };
 
   sequences: {
@@ -453,31 +461,39 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_003",
     name: "HRMS Warm Intro - Tech Hires Q4",
-    description: "Leveraging referrals for tech hiring decision makers",
+    description: "Following up on new hires from target companies (HRMS integration)",
     status: "paused",
     type: "email",
-    template: "warm_intro",
+    template: "warm_introduction",
     created_at: "2025-01-08T08:00:00Z",
-    created_by: "user_michael",
+    created_by: "user_adithya",
     updated_at: "2025-01-20T16:45:00Z",
     start_date: "2025-01-09T09:00:00Z",
     end_date: null,
+    paused_at: "2025-01-20T16:45:00Z",
+    paused_reason: "Manual pause by user - reviewing messaging",
 
     leads: {
       total_enrolled: 45,
-      active: 0,
-      paused: 43,
+      active: 43,
+      paused: 0,
       completed: 2,
       unsubscribed: 0
     },
 
+    lead_source: {
+      hrms_leads: 45,
+      hrms_percentage: 100,
+      avg_score_bonus: 0.33
+    },
+
     sequences: {
       total_touches: 3,
-      current_touch: "paused",
+      current_touch: "mixed",
       touches_config: [
-        {touch: 1, channel: "email", delay: 0, subject: "{{referrerName}} suggested I reach out"},
-        {touch: 2, channel: "email", delay: "5d", subject: "Following up on {{referrerName}}'s intro"},
-        {touch: 3, channel: "email", delay: "10d", subject: "Last follow-up re: {{company}}'s hiring"}
+        {touch: 1, channel: "email", delay: 0, subject: "Welcome to {{company}}, {{firstName}}!"},
+        {touch: 2, channel: "email", delay: "2d", subject: "Settling in at {{company}}?"},
+        {touch: 3, channel: "email", delay: "7d", subject: "Quick resource for your new role"}
       ]
     },
 
@@ -486,7 +502,7 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
         sent: 43,
         delivered: 43,
         opened: 25,
-        clicked: 18,
+        clicked: 15,
         replied: 9,
         bounced: 0,
         unsubscribed: 0,
@@ -494,16 +510,16 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       },
       rates: {
         send_rate: 0.95,
-        delivery_rate: 1.0,
+        delivery_rate: 1.00,
         open_rate: 0.58,
-        click_rate: 0.42,
-        reply_rate: 0.21,
-        bounce_rate: 0.0,
-        unsubscribe_rate: 0.0
+        click_rate: 0.35,
+        reply_rate: 0.22,
+        bounce_rate: 0.00,
+        unsubscribe_rate: 0.00
       },
       conversion: {
-        meetings_booked: 8,
-        opportunities_created: 5,
+        meetings_booked: 6,
+        opportunities_created: 4,
         deals_closed: 1,
         revenue_generated: 85000,
         conversion_rate: 0.089
@@ -517,8 +533,8 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       timezone_aware: true,
       business_hours_only: true,
       daily_send_limit: 20,
-      ab_testing_enabled: false,
-      ab_variants: 0,
+      ab_testing_enabled: true,
+      ab_variants: 2,
       stop_on_reply: true,
       stop_on_unsubscribe: true
     }
