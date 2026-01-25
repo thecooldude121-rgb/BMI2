@@ -162,7 +162,7 @@ export const campaignsMockData: Campaign[] = [
     conversionCount: 1,
     createdAt: '2024-10-01',
     archivedAt: '2024-12-31',
-    owner: 'Amanda Foster',
+    owner: 'Adithya Vardhan',
     tags: ['retro', 'annual', 'archived']
   },
   {
@@ -830,31 +830,33 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_008",
     name: "2024 Annual Retro Campaign",
-    description: "Year-end retrospective outreach",
+    description: "Year-end retrospective outreach to past prospects",
     status: "archived",
     type: "email",
     template: "custom",
     created_at: "2024-10-01T09:00:00Z",
-    created_by: "user_amanda",
+    created_by: "user_adithya",
     updated_at: "2024-12-31T23:59:00Z",
-    start_date: "2024-10-02T09:00:00Z",
-    end_date: "2024-12-31T23:59:00Z",
+    start_date: "2024-10-05T09:00:00Z",
+    end_date: "2024-12-15T17:00:00Z",
+    completed_at: "2024-12-15T17:00:00Z",
+    archived_at: "2024-12-31T23:59:00Z",
 
     leads: {
       total_enrolled: 150,
       active: 0,
       paused: 0,
-      completed: 132,
-      unsubscribed: 18
+      completed: 150,
+      unsubscribed: 3
     },
 
     sequences: {
       total_touches: 3,
-      current_touch: "archived",
+      current_touch: "completed",
       touches_config: [
-        {touch: 1, channel: "email", delay: 0, subject: "Reflecting on 2024 at {{company}}"},
-        {touch: 2, channel: "email", delay: "7d", subject: "Your 2024 wins and 2025 goals"},
-        {touch: 3, channel: "email", delay: "14d", subject: "Planning for 2025 together"}
+        {touch: 1, channel: "email", delay: 0, subject: "2024 wrap-up: How was your year, {{firstName}}?"},
+        {touch: 2, channel: "email", delay: "7d", subject: "Planning for 2025 at {{company}}?"},
+        {touch: 3, channel: "email", delay: "14d", subject: "One last thing before the new year"}
       ]
     },
 
@@ -863,20 +865,20 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
         sent: 132,
         delivered: 130,
         opened: 24,
-        clicked: 10,
+        clicked: 8,
         replied: 4,
         bounced: 2,
-        unsubscribed: 18,
-        spam_complaints: 2
+        unsubscribed: 3,
+        spam_complaints: 0
       },
       rates: {
         send_rate: 0.88,
         delivery_rate: 0.985,
         open_rate: 0.18,
-        click_rate: 0.077,
-        reply_rate: 0.031,
+        click_rate: 0.061,
+        reply_rate: 0.03,
         bounce_rate: 0.015,
-        unsubscribe_rate: 0.138
+        unsubscribe_rate: 0.023
       },
       conversion: {
         meetings_booked: 2,
@@ -886,7 +888,7 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
         conversion_rate: 0.007
       },
       engagement_score: "cold",
-      performance_grade: "poor"
+      performance_grade: "fair"
     },
 
     settings: {
@@ -895,7 +897,7 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       business_hours_only: true,
       daily_send_limit: 30,
       ab_testing_enabled: false,
-      ab_variants: 0,
+      ab_variants: 1,
       stop_on_reply: true,
       stop_on_unsubscribe: true
     }
