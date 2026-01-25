@@ -236,7 +236,8 @@ export interface DetailedCampaign {
       touch: number;
       channel: string;
       delay: number | string;
-      subject: string;
+      subject?: string;
+      message?: string;
     }>;
   };
 
@@ -250,6 +251,13 @@ export interface DetailedCampaign {
       bounced: number;
       unsubscribed: number;
       spam_complaints: number;
+    };
+    linkedin?: {
+      sent: number;
+      viewed: number;
+      replied: number;
+      connected: number;
+      ignored: number;
     };
     rates: {
       send_rate: number;
@@ -361,36 +369,35 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   },
   {
     id: "camp_002",
-    name: "Series A Startup Blitz",
-    description: "Fast-growing Series A companies in fintech",
+    name: "Series A Startup Outreach Campaign",
+    description: "Targeting series A funded startups",
     status: "active",
     type: "multi-channel",
-    template: "multi_touch",
+    template: "custom",
     created_at: "2025-01-10T10:00:00Z",
-    created_by: "user_sarah",
-    updated_at: "2025-01-25T11:15:00Z",
-    start_date: "2025-01-11T10:00:00Z",
+    created_by: "user_adithya",
+    updated_at: "2025-01-25T11:20:00Z",
+    start_date: "2025-01-12T09:00:00Z",
     end_date: null,
 
     leads: {
       total_enrolled: 180,
       active: 126,
-      paused: 8,
-      completed: 44,
-      unsubscribed: 2
+      paused: 0,
+      completed: 54,
+      unsubscribed: 5
     },
 
     sequences: {
-      total_touches: 7,
+      total_touches: 6,
       current_touch: "mixed",
       touches_config: [
         {touch: 1, channel: "email", delay: 0, subject: "Congrats on your Series A, {{firstName}}!"},
-        {touch: 2, channel: "linkedin", delay: "2d", subject: "Connection request"},
-        {touch: 3, channel: "email", delay: "4d", subject: "3 ways to scale {{company}} faster"},
-        {touch: 4, channel: "linkedin", delay: "6d", subject: "InMail follow-up"},
-        {touch: 5, channel: "email", delay: "8d", subject: "Case study: How {{similarCompany}} scaled"},
-        {touch: 6, channel: "email", delay: "12d", subject: "Quick question {{firstName}}"},
-        {touch: 7, channel: "email", delay: "15d", subject: "Final follow-up"}
+        {touch: 2, channel: "linkedin", delay: "2d", message: "Saw your recent funding round..."},
+        {touch: 3, channel: "email", delay: "5d", subject: "How {{company}} can 10x growth"},
+        {touch: 4, channel: "linkedin", delay: "7d", message: "Following up on my email..."},
+        {touch: 5, channel: "email", delay: "10d", subject: "Quick case study for {{company}}"},
+        {touch: 6, channel: "email", delay: "14d", subject: "Should I close your file?"}
       ]
     },
 
@@ -399,39 +406,46 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
         sent: 126,
         delivered: 124,
         opened: 15,
-        clicked: 8,
+        clicked: 3,
         replied: 2,
         bounced: 2,
-        unsubscribed: 2,
-        spam_complaints: 0
+        unsubscribed: 5,
+        spam_complaints: 1
+      },
+      linkedin: {
+        sent: 90,
+        viewed: 25,
+        replied: 1,
+        connected: 8,
+        ignored: 65
       },
       rates: {
         send_rate: 0.70,
         delivery_rate: 0.984,
         open_rate: 0.12,
-        click_rate: 0.063,
-        reply_rate: 0.016,
+        click_rate: 0.024,
+        reply_rate: 0.01,
         bounce_rate: 0.016,
-        unsubscribe_rate: 0.016
+        unsubscribe_rate: 0.04
       },
       conversion: {
         meetings_booked: 1,
         opportunities_created: 0,
         deals_closed: 0,
         revenue_generated: 0,
-        conversion_rate: 0.006
+        conversion_rate: 0.00
       },
       engagement_score: "cold",
       performance_grade: "poor"
     },
 
     settings: {
-      send_time_optimization: true,
+      send_time_optimization: false,
       timezone_aware: true,
       business_hours_only: true,
       daily_send_limit: 30,
       ab_testing_enabled: false,
-      ab_variants: 0,
+      ab_variants: 1,
       stop_on_reply: true,
       stop_on_unsubscribe: true
     }
