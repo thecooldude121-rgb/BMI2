@@ -120,7 +120,7 @@ export const campaignsMockData: Campaign[] = [
     conversionCount: 30,
     createdAt: '2024-12-01',
     completedAt: '2025-01-15',
-    owner: 'Lisa Anderson',
+    owner: 'Adithya Vardhan',
     tags: ['demo', 'trial', 'follow-up']
   },
   {
@@ -679,12 +679,12 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_006",
     name: "Product Demo Follow-up - Q4 2024",
-    description: "Following up with demo attendees from Q4 2024",
+    description: "Nurture sequence for leads who attended product demos",
     status: "completed",
     type: "email",
     template: "trial_followup",
     created_at: "2024-12-01T09:00:00Z",
-    created_by: "user_lisa",
+    created_by: "user_adithya",
     updated_at: "2025-01-15T17:00:00Z",
     start_date: "2024-12-02T09:00:00Z",
     end_date: "2025-01-15T17:00:00Z",
@@ -694,50 +694,49 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       active: 0,
       paused: 0,
       completed: 500,
-      unsubscribed: 5
+      unsubscribed: 8
     },
 
     sequences: {
-      total_touches: 6,
+      total_touches: 5,
       current_touch: "completed",
       touches_config: [
-        {touch: 1, channel: "email", delay: 0, subject: "Thanks for attending our demo!"},
-        {touch: 2, channel: "email", delay: "2d", subject: "Demo recording + resources"},
-        {touch: 3, channel: "email", delay: "5d", subject: "Questions about {{feature}}?"},
-        {touch: 4, channel: "email", delay: "8d", subject: "How {{company}} can benefit"},
-        {touch: 5, channel: "email", delay: "12d", subject: "Limited time offer for demo attendees"},
-        {touch: 6, channel: "email", delay: "15d", subject: "Final offer expires soon"}
+        {touch: 1, channel: "email", delay: 0, subject: "Thanks for attending our demo, {{firstName}}!"},
+        {touch: 2, channel: "email", delay: "1d", subject: "Your personalized demo recording"},
+        {touch: 3, channel: "email", delay: "3d", subject: "Quick question about {{company}}'s needs"},
+        {touch: 4, channel: "email", delay: "7d", subject: "Case study: How {{industry}} companies use our platform"},
+        {touch: 5, channel: "email", delay: "10d", subject: "Ready to move forward, {{firstName}}?"}
       ]
     },
 
     performance: {
       email: {
         sent: 500,
-        delivered: 498,
+        delivered: 495,
         opened: 210,
-        clicked: 124,
+        clicked: 98,
         replied: 75,
-        bounced: 2,
-        unsubscribed: 5,
-        spam_complaints: 1
+        bounced: 5,
+        unsubscribed: 8,
+        spam_complaints: 2
       },
       rates: {
         send_rate: 1.0,
-        delivery_rate: 0.996,
+        delivery_rate: 0.99,
         open_rate: 0.42,
-        click_rate: 0.248,
+        click_rate: 0.20,
         reply_rate: 0.15,
-        bounce_rate: 0.004,
-        unsubscribe_rate: 0.01
+        bounce_rate: 0.01,
+        unsubscribe_rate: 0.016
       },
       conversion: {
         meetings_booked: 45,
-        opportunities_created: 35,
+        opportunities_created: 30,
         deals_closed: 8,
-        revenue_generated: 420000,
+        revenue_generated: 480000,
         conversion_rate: 0.06
       },
-      engagement_score: "warm",
+      engagement_score: "hot",
       performance_grade: "excellent"
     },
 
