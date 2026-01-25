@@ -17,7 +17,6 @@ import {
   BarChart3,
   AlertCircle
 } from 'lucide-react';
-import LeadGenNavigation from '../../components/LeadGeneration/LeadGenNavigation';
 import { Campaign, CampaignFilters } from '../../types/campaigns';
 import { campaignsMockData, campaignTemplates } from '../../utils/campaignsMockData';
 
@@ -219,8 +218,6 @@ const CampaignsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <LeadGenNavigation />
-
       <div className="px-8 py-6">
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
