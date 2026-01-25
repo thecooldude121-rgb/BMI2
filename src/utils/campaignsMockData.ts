@@ -202,7 +202,7 @@ export const campaignsMockData: Campaign[] = [
     conversionRate: 0,
     conversionCount: 0,
     createdAt: '2025-01-18',
-    owner: 'Kevin Brown',
+    owner: 'Adithya Vardhan',
     tags: ['urgent', 'low-engagement'],
     notes: 'Need immediate attention - potential deliverability issues'
   }
@@ -976,14 +976,14 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_010",
     name: "⚠️ Urgent: Low Engagement Fix Needed",
-    description: "Campaign with severe engagement issues - needs immediate attention",
+    description: "Campaign showing red flags - 0 opens in 7 days despite 100% send",
     status: "active",
     type: "email",
     template: "custom",
-    created_at: "2025-01-18T09:00:00Z",
-    created_by: "user_kevin",
-    updated_at: "2025-01-25T15:00:00Z",
-    start_date: "2025-01-18T10:00:00Z",
+    created_at: "2025-01-18T08:00:00Z",
+    created_by: "user_adithya",
+    updated_at: "2025-01-25T10:00:00Z",
+    start_date: "2025-01-18T09:00:00Z",
     end_date: null,
 
     leads: {
@@ -991,61 +991,66 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       active: 200,
       paused: 0,
       completed: 0,
-      unsubscribed: 8
+      unsubscribed: 4
     },
 
     sequences: {
-      total_touches: 5,
-      current_touch: "touch_2",
+      total_touches: 4,
+      current_touch: "touch_1",
       touches_config: [
-        {touch: 1, channel: "email", delay: 0, subject: "Important update for {{company}}"},
-        {touch: 2, channel: "email", delay: "3d", subject: "Did you see my email?"},
-        {touch: 3, channel: "email", delay: "6d", subject: "Following up"},
-        {touch: 4, channel: "email", delay: "9d", subject: "Quick question"},
-        {touch: 5, channel: "email", delay: "12d", subject: "Final attempt"}
+        {touch: 1, channel: "email", delay: 0, subject: "RE: Your inquiry about our platform"},
+        {touch: 2, channel: "email", delay: "3d", subject: "Following up - {{firstName}}"},
+        {touch: 3, channel: "email", delay: "5d", subject: "Quick question"},
+        {touch: 4, channel: "email", delay: "7d", subject: "Last try"}
       ]
     },
 
     performance: {
       email: {
         sent: 200,
-        delivered: 195,
+        delivered: 196,
         opened: 10,
-        clicked: 2,
+        clicked: 0,
         replied: 0,
-        bounced: 5,
-        unsubscribed: 8,
-        spam_complaints: 12
+        bounced: 4,
+        unsubscribed: 4,
+        spam_complaints: 2
       },
       rates: {
-        send_rate: 1.0,
-        delivery_rate: 0.975,
+        send_rate: 1.00,
+        delivery_rate: 0.98,
         open_rate: 0.05,
-        click_rate: 0.01,
-        reply_rate: 0.0,
-        bounce_rate: 0.025,
-        unsubscribe_rate: 0.04
+        click_rate: 0.00,
+        reply_rate: 0.00,
+        bounce_rate: 0.02,
+        unsubscribe_rate: 0.02
       },
       conversion: {
         meetings_booked: 0,
         opportunities_created: 0,
         deals_closed: 0,
         revenue_generated: 0,
-        conversion_rate: 0.0
+        conversion_rate: 0.00
       },
-      engagement_score: "frozen",
-      performance_grade: "poor"
+      engagement_score: "cold",
+      performance_grade: "very_poor",
+      red_flags: [
+        "0 opens in last 7 days",
+        "100% send rate but 5% open rate",
+        "2 spam complaints",
+        "Possible deliverability issue"
+      ]
     },
 
     settings: {
       send_time_optimization: false,
-      timezone_aware: false,
-      business_hours_only: false,
-      daily_send_limit: 200,
+      timezone_aware: true,
+      business_hours_only: true,
+      daily_send_limit: 50,
       ab_testing_enabled: false,
-      ab_variants: 0,
-      stop_on_reply: false,
-      stop_on_unsubscribe: false
+      ab_variants: 1,
+      stop_on_reply: true,
+      stop_on_unsubscribe: true
     }
   }
 ];
