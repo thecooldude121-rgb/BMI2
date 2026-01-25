@@ -99,7 +99,7 @@ export const campaignsMockData: Campaign[] = [
     conversionRate: 0,
     conversionCount: 0,
     createdAt: '2025-01-22',
-    owner: 'David Park',
+    owner: 'Adithya Vardhan',
     tags: ['re-engagement', 'dormant']
   },
   {
@@ -268,13 +268,13 @@ export interface DetailedCampaign {
       ignored: number;
     };
     rates: {
-      send_rate: number;
-      delivery_rate: number;
+      send_rate: number | null;
+      delivery_rate: number | null;
       open_rate: number | null;
       click_rate: number | null;
-      reply_rate: number;
-      bounce_rate: number;
-      unsubscribe_rate: number;
+      reply_rate: number | null;
+      bounce_rate: number | null;
+      unsubscribe_rate: number | null;
     };
     conversion: {
       meetings_booked: number;
@@ -284,7 +284,7 @@ export interface DetailedCampaign {
       conversion_rate: number;
     };
     engagement_score: 'hot' | 'warm' | 'cold' | 'frozen' | 'not_started';
-    performance_grade: 'excellent' | 'good' | 'average' | 'poor' | 'not_started';
+    performance_grade: 'excellent' | 'good' | 'average' | 'poor' | 'not_started' | 'draft';
   };
 
   settings: {
@@ -613,14 +613,14 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_005",
     name: "Re-engagement - Dormant Leads Q4",
-    description: "Win-back campaign for cold leads from Q4 2024",
+    description: "Win-back campaign for leads with no activity in 90+ days",
     status: "draft",
     type: "multi-channel",
     template: "reengagement",
     created_at: "2025-01-22T11:00:00Z",
-    created_by: "user_david",
-    updated_at: "2025-01-22T11:00:00Z",
-    start_date: "2025-02-01T09:00:00Z",
+    created_by: "user_adithya",
+    updated_at: "2025-01-25T09:15:00Z",
+    start_date: null,
     end_date: null,
 
     leads: {
@@ -632,47 +632,37 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
     },
 
     sequences: {
-      total_touches: 6,
-      current_touch: "draft",
+      total_touches: 4,
+      current_touch: "not_started",
       touches_config: [
-        {touch: 1, channel: "email", delay: 0, subject: "We've made some exciting changes at {{ourCompany}}"},
-        {touch: 2, channel: "linkedin", delay: "4d", subject: "LinkedIn check-in"},
-        {touch: 3, channel: "email", delay: "7d", subject: "Still interested in {{solution}}?"},
-        {touch: 4, channel: "email", delay: "12d", subject: "New case study: {{industry}} success"},
-        {touch: 5, channel: "linkedin", delay: "16d", subject: "Final LinkedIn message"},
-        {touch: 6, channel: "email", delay: "20d", subject: "Should we close your file?"}
+        {touch: 1, channel: "email", delay: 0, subject: "It's been a while, {{firstName}}..."},
+        {touch: 2, channel: "linkedin", delay: "3d", subject: "Hey {{firstName}}, checking in..."},
+        {touch: 3, channel: "email", delay: "7d", subject: "Last chance: {{company}} exclusive offer"},
+        {touch: 4, channel: "email", delay: "14d", subject: "Should I remove you from our list?"}
       ]
     },
 
     performance: {
-      email: {
-        sent: 0,
-        delivered: 0,
-        opened: 0,
-        clicked: 0,
-        replied: 0,
-        bounced: 0,
-        unsubscribed: 0,
-        spam_complaints: 0
-      },
+      email: null,
+      linkedin: null,
       rates: {
-        send_rate: 0.0,
-        delivery_rate: 0.0,
-        open_rate: 0.0,
-        click_rate: 0.0,
-        reply_rate: 0.0,
-        bounce_rate: 0.0,
-        unsubscribe_rate: 0.0
+        send_rate: null,
+        delivery_rate: null,
+        open_rate: null,
+        click_rate: null,
+        reply_rate: null,
+        bounce_rate: null,
+        unsubscribe_rate: null
       },
       conversion: {
         meetings_booked: 0,
         opportunities_created: 0,
         deals_closed: 0,
         revenue_generated: 0,
-        conversion_rate: 0.0
+        conversion_rate: 0.00
       },
-      engagement_score: "cold",
-      performance_grade: "average"
+      engagement_score: "not_started",
+      performance_grade: "draft"
     },
 
     settings: {
