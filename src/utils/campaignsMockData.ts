@@ -182,7 +182,7 @@ export const campaignsMockData: Campaign[] = [
     conversionRate: 2.4,
     conversionCount: 2,
     createdAt: '2025-01-05',
-    owner: 'Jessica Martinez',
+    owner: 'Adithya Vardhan',
     tags: ['linkedin', 'thought-leader']
   },
   {
@@ -905,21 +905,21 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_009",
     name: "LinkedIn Thought Leader Outreach",
-    description: "Connecting with industry influencers and thought leaders",
+    description: "Connecting with VPs and C-level executives on LinkedIn",
     status: "active",
     type: "linkedin",
     template: "cold_outreach",
     created_at: "2025-01-05T10:00:00Z",
-    created_by: "user_jessica",
-    updated_at: "2025-01-25T12:00:00Z",
-    start_date: "2025-01-06T10:00:00Z",
+    created_by: "user_adithya",
+    updated_at: "2025-01-25T13:45:00Z",
+    start_date: "2025-01-06T09:00:00Z",
     end_date: null,
 
     leads: {
       total_enrolled: 85,
       active: 77,
-      paused: 2,
-      completed: 6,
+      paused: 0,
+      completed: 8,
       unsubscribed: 0
     },
 
@@ -927,34 +927,32 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       total_touches: 3,
       current_touch: "mixed",
       touches_config: [
-        {touch: 1, channel: "linkedin", delay: 0, subject: "Connection request + personalized note"},
-        {touch: 2, channel: "linkedin", delay: "5d", subject: "Thanks for connecting!"},
-        {touch: 3, channel: "linkedin", delay: "10d", subject: "Collaboration opportunity"}
+        {touch: 1, channel: "linkedin", delay: 0, message: "Hi {{firstName}}, impressed by your work at {{company}}..."},
+        {touch: 2, channel: "linkedin", delay: "5d", message: "Following up on my connection request..."},
+        {touch: 3, channel: "linkedin", delay: "10d", message: "Quick question about {{company}}'s {{painPoint}}"}
       ]
     },
 
     performance: {
-      email: {
-        sent: 0,
-        delivered: 0,
-        opened: 0,
-        clicked: 0,
-        replied: 0,
-        bounced: 0,
-        unsubscribed: 0,
-        spam_complaints: 0
+      email: null,
+      linkedin: {
+        sent: 77,
+        viewed: 52,
+        replied: 6,
+        connected: 18,
+        ignored: 25
       },
       rates: {
         send_rate: 0.90,
-        delivery_rate: 1.0,
-        open_rate: 0.0,
-        click_rate: 0.0,
-        reply_rate: 0.078,
-        bounce_rate: 0.0,
-        unsubscribe_rate: 0.0
+        delivery_rate: 1.00,
+        open_rate: null,
+        click_rate: null,
+        reply_rate: 0.08,
+        bounce_rate: 0.00,
+        unsubscribe_rate: 0.00
       },
       conversion: {
-        meetings_booked: 4,
+        meetings_booked: 3,
         opportunities_created: 2,
         deals_closed: 0,
         revenue_generated: 0,
@@ -968,11 +966,11 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
       send_time_optimization: true,
       timezone_aware: true,
       business_hours_only: true,
-      daily_send_limit: 20,
+      daily_send_limit: 15,
       ab_testing_enabled: false,
-      ab_variants: 0,
+      ab_variants: 1,
       stop_on_reply: true,
-      stop_on_unsubscribe: true
+      stop_on_unsubscribe: false
     }
   },
   {
