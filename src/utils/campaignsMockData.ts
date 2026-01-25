@@ -140,8 +140,8 @@ export const campaignsMockData: Campaign[] = [
     conversionRate: 0,
     conversionCount: 0,
     createdAt: '2024-11-15',
-    completedAt: '2024-12-15',
-    owner: 'Robert Wilson',
+    completedAt: '2024-12-20',
+    owner: 'Adithya Vardhan',
     tags: ['test', 'low-value', 'cold']
   },
   {
@@ -754,32 +754,34 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
   {
     id: "camp_007",
     name: "Low-Value Cold Outreach Test",
-    description: "Testing new cold messaging approach - underperformed",
+    description: "Testing messaging for lower-tier market segment",
     status: "completed",
     type: "email",
     template: "cold_outreach",
     created_at: "2024-11-15T10:00:00Z",
-    created_by: "user_robert",
-    updated_at: "2024-12-15T18:00:00Z",
+    created_by: "user_adithya",
+    updated_at: "2024-12-20T15:30:00Z",
     start_date: "2024-11-16T09:00:00Z",
-    end_date: "2024-12-15T18:00:00Z",
+    end_date: "2024-12-20T15:30:00Z",
+    completed_at: "2024-12-20T15:30:00Z",
 
     leads: {
       total_enrolled: 300,
       active: 0,
       paused: 0,
-      completed: 285,
-      unsubscribed: 15
+      completed: 300,
+      unsubscribed: 12
     },
 
     sequences: {
-      total_touches: 4,
+      total_touches: 5,
       current_touch: "completed",
       touches_config: [
-        {touch: 1, channel: "email", delay: 0, subject: "Improving {{company}}'s processes"},
-        {touch: 2, channel: "email", delay: "4d", subject: "Following up on my previous email"},
-        {touch: 3, channel: "email", delay: "8d", subject: "Quick question"},
-        {touch: 4, channel: "email", delay: "12d", subject: "Final follow-up"}
+        {touch: 1, channel: "email", delay: 0, subject: "Affordable solution for {{company}}"},
+        {touch: 2, channel: "email", delay: "3d", subject: "Still interested, {{firstName}}?"},
+        {touch: 3, channel: "email", delay: "5d", subject: "Limited time offer for {{company}}"},
+        {touch: 4, channel: "email", delay: "7d", subject: "Last call: Special pricing"},
+        {touch: 5, channel: "email", delay: "10d", subject: "Closing your file"}
       ]
     },
 
@@ -791,37 +793,37 @@ export const detailedCampaignsMockData: DetailedCampaign[] = [
         clicked: 5,
         replied: 1,
         bounced: 5,
-        unsubscribed: 15,
-        spam_complaints: 8
+        unsubscribed: 12,
+        spam_complaints: 3
       },
       rates: {
         send_rate: 0.95,
         delivery_rate: 0.982,
         open_rate: 0.08,
         click_rate: 0.018,
-        reply_rate: 0.0035,
+        reply_rate: 0.003,
         bounce_rate: 0.018,
-        unsubscribe_rate: 0.053
+        unsubscribe_rate: 0.042
       },
       conversion: {
-        meetings_booked: 0,
+        meetings_booked: 1,
         opportunities_created: 0,
         deals_closed: 0,
         revenue_generated: 0,
         conversion_rate: 0.0
       },
-      engagement_score: "frozen",
-      performance_grade: "poor"
+      engagement_score: "cold",
+      performance_grade: "very_poor"
     },
 
     settings: {
       send_time_optimization: false,
-      timezone_aware: false,
-      business_hours_only: false,
-      daily_send_limit: 100,
+      timezone_aware: true,
+      business_hours_only: true,
+      daily_send_limit: 50,
       ab_testing_enabled: false,
-      ab_variants: 0,
-      stop_on_reply: false,
+      ab_variants: 1,
+      stop_on_reply: true,
       stop_on_unsubscribe: true
     }
   },
