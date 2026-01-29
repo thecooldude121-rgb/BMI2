@@ -20,7 +20,15 @@ import {
   Lightbulb,
   Plus,
   Search,
-  UserCircle
+  UserCircle,
+  MoreVertical,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Copy,
+  Link,
+  Paperclip,
+  Type
 } from 'lucide-react';
 
 type CampaignStep = 1 | 2 | 3 | 4 | 5 | 6;
@@ -48,10 +56,20 @@ interface CampaignFormData {
 
 interface SequenceTouch {
   touch: number;
+  name: string;
   channel: string;
-  delay: number | string;
+  delay: number;
+  delayUnit: string;
   subject: string;
-  content?: string;
+  content: string;
+  abTestEnabled: boolean;
+  variantASubject?: string;
+  variantBSubject?: string;
+  sendConditions: {
+    onlyIfOpened: boolean;
+    onlyIfClicked: boolean;
+    onlyIfNotReplied: boolean;
+  };
 }
 
 interface CampaignSettings {
@@ -138,6 +156,7 @@ const CreateCampaignPage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<CampaignStep>(1);
   const [newTag, setNewTag] = useState('');
   const [collaboratorSearch, setCollaboratorSearch] = useState('');
+  const [expandedTouches, setExpandedTouches] = useState<number[]>([1]);
   const [formData, setFormData] = useState<CampaignFormData>({
     name: '',
     description: '',
@@ -199,9 +218,120 @@ const CreateCampaignPage: React.FC = () => {
     }
   };
 
+  const getDefaultSequence = (templateId: string): SequenceTouch[] => {
+    if (templateId === 'cold-outreach') {
+      return [
+        {
+          touch: 1,
+          name: 'Initial Outreach',
+          channel: 'Email',
+          delay: 0,
+          delayUnit: 'immediately',
+          subject: "Quick question about {{company}}'s growth",
+          content: `Hi {{firstName}},\n\nI noticed {{company}} recently {{hrmsSource}} and wanted to reach out.\n\nWe help {{industry}} companies like yours solve {{painPoint}} and achieve measurable results in {{timeline}}.\n\nWould you be open to a quick 15-minute call next week?\n\nBest,\n{{senderName}}`,
+          abTestEnabled: true,
+          variantASubject: "Quick question about {{company}}'s growth",
+          variantBSubject: "{{firstName}}, saw your recent post",
+          sendConditions: { onlyIfOpened: false, onlyIfClicked: false, onlyIfNotReplied: false }
+        },
+        {
+          touch: 2,
+          name: 'Follow-up',
+          channel: 'Email',
+          delay: 3,
+          delayUnit: 'days',
+          subject: 'Following up - {{firstName}}',
+          content: `Hi {{firstName}},\n\nJust wanted to follow up on my previous email. Have you had a chance to review it?\n\nI'd love to discuss how we can help {{company}} achieve {{benefit}}.\n\nBest,\n{{senderName}}`,
+          abTestEnabled: false,
+          sendConditions: { onlyIfOpened: true, onlyIfClicked: false, onlyIfNotReplied: true }
+        },
+        {
+          touch: 3,
+          name: 'Value Proposition',
+          channel: 'Email',
+          delay: 5,
+          delayUnit: 'days',
+          subject: 'How {{competitorCompany}} increased revenue by 40%',
+          content: `Hi {{firstName}},\n\nI wanted to share a quick case study that might be relevant to {{company}}.\n\nWe recently helped {{competitorCompany}} increase their revenue by 40% in just 6 months.\n\nWould you like to learn more?\n\nBest,\n{{senderName}}`,
+          abTestEnabled: false,
+          sendConditions: { onlyIfOpened: false, onlyIfClicked: false, onlyIfNotReplied: true }
+        },
+        {
+          touch: 4,
+          name: 'Case Study',
+          channel: 'Email',
+          delay: 2,
+          delayUnit: 'days',
+          subject: 'Thought this might interest you, {{firstName}}',
+          content: `Hi {{firstName}},\n\nI came across this case study and immediately thought of {{company}}.\n\n[Link to case study]\n\nLet me know if you'd like to discuss how we could achieve similar results for you.\n\nBest,\n{{senderName}}`,
+          abTestEnabled: false,
+          sendConditions: { onlyIfOpened: false, onlyIfClicked: false, onlyIfNotReplied: true }
+        },
+        {
+          touch: 5,
+          name: 'Break-up Email',
+          channel: 'Email',
+          delay: 4,
+          delayUnit: 'days',
+          subject: 'Should I close your file?',
+          content: `Hi {{firstName}},\n\nI haven't heard back from you, so I'm assuming the timing isn't right.\n\nI'll close your file for now, but feel free to reach out if things change.\n\nBest of luck!\n{{senderName}}`,
+          abTestEnabled: false,
+          sendConditions: { onlyIfOpened: false, onlyIfClicked: false, onlyIfNotReplied: true }
+        }
+      ];
+    }
+    return [];
+  };
+
   const handleTemplateSelect = (templateId: string) => {
-    setFormData({ ...formData, template: templateId });
+    const defaultSequence = getDefaultSequence(templateId);
+    setFormData({ ...formData, template: templateId, sequence: defaultSequence });
+    setExpandedTouches([1]);
     handleNext();
+  };
+
+  const toggleTouchExpanded = (touchNumber: number) => {
+    setExpandedTouches(prev =>
+      prev.includes(touchNumber)
+        ? prev.filter(t => t !== touchNumber)
+        : [...prev, touchNumber]
+    );
+  };
+
+  const updateTouch = (touchNumber: number, field: string, value: any) => {
+    setFormData({
+      ...formData,
+      sequence: formData.sequence.map(touch =>
+        touch.touch === touchNumber
+          ? { ...touch, [field]: value }
+          : touch
+      )
+    });
+  };
+
+  const deleteTouchFromSequence = (touchNumber: number) => {
+    setFormData({
+      ...formData,
+      sequence: formData.sequence
+        .filter(touch => touch.touch !== touchNumber)
+        .map((touch, index) => ({ ...touch, touch: index + 1 }))
+    });
+    setExpandedTouches(prev => prev.filter(t => t !== touchNumber));
+  };
+
+  const duplicateTouch = (touchNumber: number) => {
+    const touchToDuplicate = formData.sequence.find(t => t.touch === touchNumber);
+    if (touchToDuplicate) {
+      const newTouch = {
+        ...touchToDuplicate,
+        touch: formData.sequence.length + 1,
+        name: `${touchToDuplicate.name} (Copy)`
+      };
+      setFormData({
+        ...formData,
+        sequence: [...formData.sequence, newTouch]
+      });
+    }
   };
 
   const renderProgressTracker = () => (
@@ -721,18 +851,434 @@ const CreateCampaignPage: React.FC = () => {
     </div>
   );
 
-  const renderStep3Sequence = () => (
-    <div className="bg-white rounded-lg border border-gray-200 p-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">STEP 3: BUILD SEQUENCE</h2>
-      <p className="text-sm text-gray-600 mb-8">Configure your campaign touches and timing</p>
+  const renderStep3Sequence = () => {
+    const selectedTemplate = campaignTemplates.find(t => t.id === formData.template);
+    const totalDuration = formData.sequence.reduce((sum, touch) => sum + (typeof touch.delay === 'number' ? touch.delay : 0), 0);
 
-      <div className="text-center py-20 text-gray-500">
-        <Share2 className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-        <p>Sequence builder will be configured here</p>
-        <p className="text-sm mt-2">Based on selected template: {formData.template || 'None'}</p>
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-8">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xl font-bold text-gray-900">STEP 3: BUILD SEQUENCE</h2>
+          <button
+            onClick={() => {
+              const newTouch: SequenceTouch = {
+                touch: formData.sequence.length + 1,
+                name: `Touch ${formData.sequence.length + 1}`,
+                channel: 'Email',
+                delay: 3,
+                delayUnit: 'days',
+                subject: '',
+                content: '',
+                abTestEnabled: false,
+                sendConditions: { onlyIfOpened: false, onlyIfClicked: false, onlyIfNotReplied: false }
+              };
+              setFormData({ ...formData, sequence: [...formData.sequence, newTouch] });
+              setExpandedTouches([...expandedTouches, newTouch.touch]);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+          >
+            <Plus className="h-4 w-4" />
+            Add Touch
+          </button>
+        </div>
+        <p className="text-sm text-gray-600 mb-8">Create your multi-touch outreach sequence</p>
+
+        {/* Sequence Overview */}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
+            Sequence Overview
+          </h3>
+          <div className="flex items-center gap-6 text-sm">
+            <div>
+              <span className="text-gray-600">Template: </span>
+              <span className="font-medium text-gray-900">{selectedTemplate?.name || 'None'}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300"></div>
+            <div>
+              <span className="text-gray-600">Total Touches: </span>
+              <span className="font-medium text-gray-900">{formData.sequence.length}</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300"></div>
+            <div>
+              <span className="text-gray-600">Est. Duration: </span>
+              <span className="font-medium text-gray-900">{totalDuration} days</span>
+            </div>
+            <div className="h-4 w-px bg-gray-300"></div>
+            <div>
+              <span className="text-gray-600">Channel: </span>
+              <span className="font-medium text-gray-900">{selectedTemplate?.channel || 'Email'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Touch Cards */}
+        <div className="space-y-6">
+          {formData.sequence.map((touch, index) => {
+            const isExpanded = expandedTouches.includes(touch.touch);
+            const cumulativeDays = formData.sequence
+              .slice(0, index + 1)
+              .reduce((sum, t) => sum + (typeof t.delay === 'number' ? t.delay : 0), 0);
+
+            return (
+              <div key={touch.touch} className="border-2 border-gray-200 rounded-lg overflow-hidden">
+                {/* Touch Header */}
+                <div className="bg-gray-50 border-b border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-gray-900">
+                      TOUCH {touch.touch} - {touch.name}
+                    </h3>
+                    <button className="text-gray-400 hover:text-gray-600">
+                      <MoreVertical className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Touch Content */}
+                <div className="p-5">
+                  {/* Timing Info */}
+                  <div className="mb-4 text-sm text-gray-600">
+                    <div className="mb-2">
+                      <span className="font-medium">Timing: </span>
+                      {touch.delay === 0 ? (
+                        'Immediately when lead enrolled'
+                      ) : index === 0 ? (
+                        `${touch.delay} ${touch.delayUnit} after enrollment`
+                      ) : (
+                        `${touch.delay} ${touch.delayUnit} after Touch ${touch.touch - 1} (${cumulativeDays} days total)`
+                      )}
+                    </div>
+                    {touch.delay > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Delay: </span>
+                        <select
+                          value={touch.delay}
+                          onChange={(e) => updateTouch(touch.touch, 'delay', parseInt(e.target.value))}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={touch.delayUnit}
+                          onChange={(e) => updateTouch(touch.touch, 'delayUnit', e.target.value)}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="days">days</option>
+                          <option value="hours">hours</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mb-4 text-sm">
+                    <span className="font-medium text-gray-700">Channel: </span>
+                    <span className="text-gray-900">📧 {touch.channel}</span>
+                  </div>
+
+                  {isExpanded ? (
+                    <>
+                      {/* Send Conditions */}
+                      {touch.touch > 1 && (
+                        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="text-sm font-medium text-gray-700 mb-3">Send Conditions (Optional)</div>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={touch.sendConditions.onlyIfOpened}
+                                onChange={(e) => updateTouch(touch.touch, 'sendConditions', {
+                                  ...touch.sendConditions,
+                                  onlyIfOpened: e.target.checked
+                                })}
+                                className="rounded border-gray-300"
+                              />
+                              Only send if Touch {touch.touch - 1} was opened
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={touch.sendConditions.onlyIfClicked}
+                                onChange={(e) => updateTouch(touch.touch, 'sendConditions', {
+                                  ...touch.sendConditions,
+                                  onlyIfClicked: e.target.checked
+                                })}
+                                className="rounded border-gray-300"
+                              />
+                              Only send if Touch {touch.touch - 1} was clicked
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={touch.sendConditions.onlyIfNotReplied}
+                                onChange={(e) => updateTouch(touch.touch, 'sendConditions', {
+                                  ...touch.sendConditions,
+                                  onlyIfNotReplied: e.target.checked
+                                })}
+                                className="rounded border-gray-300"
+                              />
+                              Only send if Touch {touch.touch - 1} was NOT replied
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Subject Line */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Subject Line <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={touch.subject}
+                          onChange={(e) => updateTouch(touch.touch, 'subject', e.target.value)}
+                          placeholder="Enter subject line..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <div className="text-xs text-gray-500 mt-1">
+                          ({touch.subject.length}/100 chars)
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <div className="flex items-start gap-2">
+                          <Lightbulb className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                          <div className="text-xs text-blue-700">
+                            <span className="font-semibold">Personalization variables:</span> {'{'}{'{'} firstName {'}'}{'}'}, {'{'}{'{'} lastName {'}'}{'}'}, {'{'}{'{'} company {'}'}{'}'}, {'{'}{'{'} title {'}'}{'}'}, {'{'}{'{'} industry {'}'}{'}'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Email Body */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Email Body <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          value={touch.content}
+                          onChange={(e) => updateTouch(touch.touch, 'content', e.target.value)}
+                          placeholder="Enter email content..."
+                          rows={10}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                        />
+                        <div className="text-xs text-gray-500 mt-1">
+                          ({touch.content.length}/2000 chars)
+                        </div>
+                      </div>
+
+                      {/* Toolbar */}
+                      <div className="flex items-center gap-2 mb-6">
+                        <button className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                          <Type className="h-4 w-4" />
+                          Insert Variable
+                          <ChevronDown className="h-3 w-3" />
+                        </button>
+                        <button className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                          <Type className="h-4 w-4" />
+                          Format Text
+                        </button>
+                        <button className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                          <Link className="h-4 w-4" />
+                          Add Link
+                        </button>
+                        <button className="flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                          <Paperclip className="h-4 w-4" />
+                          Add Attachment
+                        </button>
+                      </div>
+
+                      {/* A/B Testing */}
+                      <div className="mb-6 p-4 border border-gray-300 rounded-lg">
+                        <label className="flex items-center gap-2 mb-4">
+                          <input
+                            type="checkbox"
+                            checked={touch.abTestEnabled}
+                            onChange={(e) => updateTouch(touch.touch, 'abTestEnabled', e.target.checked)}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="text-sm font-medium text-gray-700">Enable A/B testing for this touch</span>
+                        </label>
+
+                        {touch.abTestEnabled && (
+                          <>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <div className="text-sm font-semibold text-gray-700 mb-3">VARIANT A (50%)</div>
+                                <div className="text-xs text-gray-600 mb-2">
+                                  Subject: {touch.variantASubject || touch.subject}
+                                </div>
+                                <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                                  Edit Variant A
+                                </button>
+                              </div>
+                              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <div className="text-sm font-semibold text-gray-700 mb-3">VARIANT B (50%)</div>
+                                <div className="text-xs text-gray-600 mb-2">
+                                  Subject: {touch.variantBSubject || 'Alternative subject'}
+                                </div>
+                                <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                                  Edit Variant B
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-6 text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-700 font-medium">Winner Selection:</span>
+                                <label className="flex items-center gap-1">
+                                  <input type="radio" name={`winner-${touch.touch}`} defaultChecked className="text-blue-500" />
+                                  <span className="text-gray-600">Automatic (after 100 sends)</span>
+                                </label>
+                                <label className="flex items-center gap-1">
+                                  <input type="radio" name={`winner-${touch.touch}`} className="text-blue-500" />
+                                  <span className="text-gray-600">Manual</span>
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="mt-3">
+                              <label className="text-sm text-gray-700 font-medium">Winning Metric: </label>
+                              <select className="ml-2 px-3 py-1 border border-gray-300 rounded text-sm">
+                                <option>Open Rate</option>
+                                <option>Click Rate</option>
+                                <option>Reply Rate</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Preview */}
+                      <div className="mb-6">
+                        <div className="text-sm font-medium text-gray-700 mb-3">Preview</div>
+                        <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 font-mono text-sm space-y-2">
+                          <div className="text-gray-600">
+                            <span className="font-semibold">From:</span> adithya@movingwalls.com
+                          </div>
+                          <div className="text-gray-600">
+                            <span className="font-semibold">To:</span> john.smith@acmecorp.com
+                          </div>
+                          <div className="text-gray-600">
+                            <span className="font-semibold">Subject:</span> {touch.subject.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+                              const replacements: Record<string, string> = {
+                                firstName: 'John',
+                                company: 'Acme Corp',
+                                title: 'VP of Sales'
+                              };
+                              return replacements[key] || `{${key}}`;
+                            })}
+                          </div>
+                          <div className="border-t border-gray-300 my-2"></div>
+                          <div className="text-gray-900 whitespace-pre-wrap">
+                            {touch.content.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+                              const replacements: Record<string, string> = {
+                                firstName: 'John',
+                                lastName: 'Smith',
+                                company: 'Acme Corp',
+                                title: 'VP of Sales',
+                                industry: 'SaaS',
+                                hrmsSource: 'hired a new VP of Sales',
+                                painPoint: 'lead generation challenges',
+                                timeline: '3-6 months',
+                                senderName: 'Adithya',
+                                benefit: 'faster growth',
+                                competitorCompany: 'Similar Corp'
+                              };
+                              return replacements[key] || `{{${key}}}`;
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+                        <button
+                          onClick={() => toggleTouchExpanded(touch.touch)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                          Collapse Touch {touch.touch}
+                        </button>
+                        <button
+                          onClick={() => deleteTouchFromSequence(touch.touch)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Touch
+                        </button>
+                        <button
+                          onClick={() => duplicateTouch(touch.touch)}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                        >
+                          <Copy className="h-4 w-4" />
+                          Duplicate Touch
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Collapsed State */}
+                      <div className="text-sm text-gray-600 mb-4">
+                        <div className="mb-2">
+                          <span className="font-medium">Subject: </span>
+                          {touch.subject || 'Not set'}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => toggleTouchExpanded(touch.touch)}
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                        Expand to edit
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Touch Button (Bottom) */}
+        <button
+          onClick={() => {
+            const newTouch: SequenceTouch = {
+              touch: formData.sequence.length + 1,
+              name: `Touch ${formData.sequence.length + 1}`,
+              channel: 'Email',
+              delay: 3,
+              delayUnit: 'days',
+              subject: '',
+              content: '',
+              abTestEnabled: false,
+              sendConditions: { onlyIfOpened: false, onlyIfClicked: false, onlyIfNotReplied: false }
+            };
+            setFormData({ ...formData, sequence: [...formData.sequence, newTouch] });
+            setExpandedTouches([...expandedTouches, newTouch.touch]);
+          }}
+          className="flex items-center gap-2 px-4 py-2 mt-6 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium"
+        >
+          <Plus className="h-4 w-4" />
+          Add Touch
+        </button>
+
+        {/* Sequence Tips */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-8">
+          <div className="flex items-start gap-2 mb-2">
+            <Lightbulb className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+            <div className="text-sm font-semibold text-blue-700">SEQUENCE TIPS</div>
+          </div>
+          <ul className="ml-7 space-y-1 text-sm text-blue-700">
+            <li>• Keep subject lines under 50 characters for better open rates</li>
+            <li>• Use personalization variables to increase relevance</li>
+            <li>• Space touches 2-5 days apart for optimal engagement</li>
+            <li>• Always include clear call-to-action</li>
+            <li>• A/B test subject lines to find what works best</li>
+          </ul>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStep4Leads = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-8">
