@@ -15,20 +15,35 @@ import {
   CheckCircle,
   Sparkles,
   TrendingUp,
-  Zap
+  Zap,
+  AlertTriangle,
+  Lightbulb,
+  Plus,
+  Search,
+  UserCircle
 } from 'lucide-react';
 
 type CampaignStep = 1 | 2 | 3 | 4 | 5 | 6;
+type CampaignGoalType = 'meetings' | 'demos' | 'trials' | 'opportunities' | '';
 
 interface CampaignFormData {
   name: string;
   description: string;
   type: 'email' | 'multi-channel' | 'linkedin';
-  goal: string;
+  goalType: CampaignGoalType;
   template: string;
   sequence: SequenceTouch[];
   leads: string[];
   settings: CampaignSettings;
+  targetMetrics: {
+    openRate: string;
+    replyRate: string;
+    opportunities: string;
+    revenue: string;
+  };
+  tags: string[];
+  owner: string;
+  collaborators: string[];
 }
 
 interface SequenceTouch {
@@ -121,11 +136,13 @@ const campaignTemplates = [
 const CreateCampaignPage: React.FC = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<CampaignStep>(1);
+  const [newTag, setNewTag] = useState('');
+  const [collaboratorSearch, setCollaboratorSearch] = useState('');
   const [formData, setFormData] = useState<CampaignFormData>({
     name: '',
     description: '',
     type: 'email',
-    goal: '',
+    goalType: '',
     template: '',
     sequence: [],
     leads: [],
@@ -137,8 +154,24 @@ const CreateCampaignPage: React.FC = () => {
       abTestingEnabled: false,
       stopOnReply: true,
       stopOnUnsubscribe: true
-    }
+    },
+    targetMetrics: {
+      openRate: '',
+      replyRate: '',
+      opportunities: '',
+      revenue: ''
+    },
+    tags: [],
+    owner: 'user_adithya',
+    collaborators: []
   });
+
+  const availableCollaborators = [
+    { id: 'user_sarah', name: 'Sarah Chen', avatar: '👤' },
+    { id: 'user_mike', name: 'Mike Johnson', avatar: '👤' },
+    { id: 'user_emily', name: 'Emily Rodriguez', avatar: '👤' },
+    { id: 'user_david', name: 'David Park', avatar: '👤' }
+  ];
 
   const steps = [
     { number: 1, label: 'Basic Info', icon: Mail, status: currentStep > 1 ? 'complete' : currentStep === 1 ? 'current' : 'pending' },
@@ -217,107 +250,375 @@ const CreateCampaignPage: React.FC = () => {
     </div>
   );
 
+  const handleAddTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+      setNewTag('');
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormData({ ...formData, tags: formData.tags.filter(tag => tag !== tagToRemove) });
+  };
+
+  const handleToggleCollaborator = (collaboratorId: string) => {
+    if (formData.collaborators.includes(collaboratorId)) {
+      setFormData({ ...formData, collaborators: formData.collaborators.filter(id => id !== collaboratorId) });
+    } else {
+      setFormData({ ...formData, collaborators: [...formData.collaborators, collaboratorId] });
+    }
+  };
+
   const renderStep1BasicInfo = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">STEP 1: BASIC INFORMATION</h2>
-      <p className="text-sm text-gray-600 mb-8">Tell us about your campaign</p>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">STEP 1: BASIC INFORMATION</h2>
+      <p className="text-sm text-gray-600 mb-8">Let's start with the basics</p>
 
-      <div className="space-y-6 max-w-2xl">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Campaign Name *
-          </label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="e.g., Q1 2025 Enterprise Outreach"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      <div className="space-y-8">
+        <div className="border-b border-gray-200 pb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
+            Campaign Details
+          </h3>
+
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Campaign Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Q1 2025 Enterprise Outreach"
+                maxLength={100}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-blue-600 flex items-center gap-1">
+                  <Lightbulb className="h-3 w-3" />
+                  Choose a clear, descriptive name. You can always change it later.
+                </p>
+                <span className="text-xs text-gray-500">({formData.name.length}/100 chars)</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description (Optional)
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Targeting VP and C-level at SaaS companies with 100-500 employees"
+                rows={3}
+                maxLength={500}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="text-right mt-1">
+                <span className="text-xs text-gray-500">({formData.description.length}/500 chars)</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Description
-          </label>
-          <textarea
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Describe the purpose and goals of this campaign..."
-            rows={3}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="border-b border-gray-200 pb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-3">
             Campaign Type *
           </label>
           <div className="grid grid-cols-3 gap-4">
             <button
               onClick={() => setFormData({ ...formData, type: 'email' })}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
+              className={`p-5 border-2 rounded-lg text-left transition-all ${
                 formData.type === 'email'
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
-              <Mail className={`h-6 w-6 mb-2 ${formData.type === 'email' ? 'text-blue-500' : 'text-gray-400'}`} />
-              <div className="font-medium text-sm">Email</div>
-              <div className="text-xs text-gray-500">Email-only sequence</div>
-            </button>
-
-            <button
-              onClick={() => setFormData({ ...formData, type: 'multi-channel' })}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
-                formData.type === 'multi-channel'
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <Share2 className={`h-6 w-6 mb-2 ${formData.type === 'multi-channel' ? 'text-blue-500' : 'text-gray-400'}`} />
-              <div className="font-medium text-sm">Multi-channel</div>
-              <div className="text-xs text-gray-500">Email + LinkedIn + Calls</div>
+              <div className="flex items-center gap-2 mb-3">
+                {formData.type === 'email' ? '⦿' : '○'}
+                <Mail className={`h-5 w-5 ${formData.type === 'email' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <span className="font-medium text-sm">Email Only</span>
+              </div>
+              <div className="text-xs text-gray-600 space-y-1">
+                <div className="font-medium mb-1">Best for:</div>
+                <div>• Wide reach</div>
+                <div>• Scalable</div>
+                <div>• Trackable metrics</div>
+              </div>
             </button>
 
             <button
               onClick={() => setFormData({ ...formData, type: 'linkedin' })}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
+              className={`p-5 border-2 rounded-lg text-left transition-all ${
                 formData.type === 'linkedin'
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300'
               }`}
             >
-              <Linkedin className={`h-6 w-6 mb-2 ${formData.type === 'linkedin' ? 'text-blue-500' : 'text-gray-400'}`} />
-              <div className="font-medium text-sm">LinkedIn</div>
-              <div className="text-xs text-gray-500">LinkedIn-only sequence</div>
+              <div className="flex items-center gap-2 mb-3">
+                {formData.type === 'linkedin' ? '⦿' : '○'}
+                <Linkedin className={`h-5 w-5 ${formData.type === 'linkedin' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <span className="font-medium text-sm">LinkedIn Only</span>
+              </div>
+              <div className="text-xs text-gray-600 space-y-1">
+                <div className="font-medium mb-1">Best for:</div>
+                <div>• C-level targets</div>
+                <div>• Relationship bldg</div>
+                <div>• High-value leads</div>
+              </div>
             </button>
+
+            <button
+              onClick={() => setFormData({ ...formData, type: 'multi-channel' })}
+              className={`p-5 border-2 rounded-lg text-left transition-all ${
+                formData.type === 'multi-channel'
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                {formData.type === 'multi-channel' ? '⦿' : '○'}
+                <Share2 className={`h-5 w-5 ${formData.type === 'multi-channel' ? 'text-blue-500' : 'text-gray-400'}`} />
+                <span className="font-medium text-sm">Multi-Channel</span>
+              </div>
+              <div className="text-xs text-gray-600 space-y-1">
+                <div className="font-medium mb-1">Best for:</div>
+                <div>• Maximum coverage</div>
+                <div>• Complex sequences</div>
+                <div>• Multi-touch</div>
+              </div>
+            </button>
+          </div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-yellow-700">Campaign type cannot be changed after creation</p>
+          </div>
+        </div>
+
+        <div className="border-b border-gray-200 pb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            Goal (Optional)
+          </label>
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { id: 'meetings', label: 'Meetings', icon: Calendar },
+              { id: 'demos', label: 'Demos', icon: Target },
+              { id: 'trials', label: 'Trials', icon: Sparkles },
+              { id: 'opportunities', label: 'Opportunities', icon: TrendingUp }
+            ].map((goal) => (
+              <button
+                key={goal.id}
+                onClick={() => setFormData({ ...formData, goalType: goal.id as CampaignGoalType })}
+                className={`p-3 border-2 rounded-lg text-center transition-all ${
+                  formData.goalType === goal.id
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="text-lg mb-1">{formData.goalType === goal.id ? '⦿' : '○'}</div>
+                <div className="text-sm font-medium text-gray-900">{goal.label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-b border-gray-200 pb-6">
+          <h3 className="text-sm font-medium text-gray-700 mb-4">Target Metrics (Optional)</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="border border-gray-200 rounded-lg p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Target Open Rate (%)
+              </label>
+              <input
+                type="number"
+                value={formData.targetMetrics.openRate}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  targetMetrics: { ...formData.targetMetrics, openRate: e.target.value }
+                })}
+                placeholder="30"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">Industry avg: 25%</p>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Target Reply Rate (%)
+              </label>
+              <input
+                type="number"
+                value={formData.targetMetrics.replyRate}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  targetMetrics: { ...formData.targetMetrics, replyRate: e.target.value }
+                })}
+                placeholder="10"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">Industry avg: 7%</p>
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Target Opportunities
+              </label>
+              <input
+                type="number"
+                value={formData.targetMetrics.opportunities}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  targetMetrics: { ...formData.targetMetrics, opportunities: e.target.value }
+                })}
+                placeholder="20"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Target Revenue ($)
+              </label>
+              <input
+                type="number"
+                value={formData.targetMetrics.revenue}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  targetMetrics: { ...formData.targetMetrics, revenue: e.target.value }
+                })}
+                placeholder="500000"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="border-b border-gray-200 pb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Tags (Optional)
+          </label>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
+              placeholder="Add a tag..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
+            <button
+              onClick={handleAddTag}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+          {formData.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {formData.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                >
+                  {tag}
+                  <button
+                    onClick={() => handleRemoveTag(tag)}
+                    className="hover:text-blue-900"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-blue-600 mt-2 flex items-center gap-1">
+            <Lightbulb className="h-3 w-3" />
+            Tags help organize and filter campaigns
+          </p>
+        </div>
+
+        <div className="border-b border-gray-200 pb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Owner *
+          </label>
+          <div className="relative">
+            <select
+              value={formData.owner}
+              onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+            >
+              <option value="user_adithya">👤 Adithya (You)</option>
+              <option value="user_sarah">👤 Sarah Chen</option>
+              <option value="user_mike">👤 Mike Johnson</option>
+              <option value="user_emily">👤 Emily Rodriguez</option>
+            </select>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">▼</div>
           </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Campaign Goal
+            Collaborators (Optional)
           </label>
-          <input
-            type="text"
-            value={formData.goal}
-            onChange={(e) => setFormData({ ...formData, goal: e.target.value })}
-            placeholder="e.g., Book 50 demo calls, Generate 200 MQLs"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              value={collaboratorSearch}
+              onChange={(e) => setCollaboratorSearch(e.target.value)}
+              placeholder="Search team members..."
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex gap-2">
-            <TrendingUp className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+          {collaboratorSearch && (
+            <div className="border border-gray-200 rounded-lg mb-3 max-h-48 overflow-y-auto">
+              {availableCollaborators
+                .filter(c => c.name.toLowerCase().includes(collaboratorSearch.toLowerCase()))
+                .map((collaborator) => (
+                  <button
+                    key={collaborator.id}
+                    onClick={() => {
+                      handleToggleCollaborator(collaborator.id);
+                      setCollaboratorSearch('');
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <UserCircle className="h-5 w-5 text-gray-400" />
+                    <span className="text-sm">{collaborator.name}</span>
+                    {formData.collaborators.includes(collaborator.id) && (
+                      <CheckCircle className="h-4 w-4 text-green-500 ml-auto" />
+                    )}
+                  </button>
+                ))}
+            </div>
+          )}
+
+          {formData.collaborators.length > 0 && (
             <div>
-              <div className="text-sm font-medium text-blue-900 mb-1">Pro Tip</div>
-              <div className="text-sm text-blue-700">
-                Clear campaign names and goals help your team understand performance at a glance. Include the quarter, target audience, or primary objective.
+              <p className="text-xs text-gray-600 mb-2">Selected:</p>
+              <div className="flex flex-wrap gap-2">
+                {formData.collaborators.map((collabId) => {
+                  const collaborator = availableCollaborators.find(c => c.id === collabId);
+                  return collaborator ? (
+                    <span
+                      key={collabId}
+                      className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+                    >
+                      <UserCircle className="h-4 w-4" />
+                      {collaborator.name}
+                      <button
+                        onClick={() => handleToggleCollaborator(collabId)}
+                        className="hover:text-gray-900"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ) : null;
+                })}
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -661,19 +962,24 @@ const CreateCampaignPage: React.FC = () => {
         {renderCurrentStep()}
 
         <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">Navigation</h3>
           <div className="flex items-center justify-between">
-            <button
-              onClick={handlePrevious}
-              disabled={currentStep === 1}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
-                currentStep === 1
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Previous: {currentStep > 1 ? steps[currentStep - 2].label : ''}
-            </button>
+            {currentStep === 1 ? (
+              <button
+                onClick={() => navigate('/lead-generation/campaigns')}
+                className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                onClick={handlePrevious}
+                className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Previous: {steps[currentStep - 2].label}
+              </button>
+            )}
 
             <button
               onClick={handleNext}
@@ -684,7 +990,8 @@ const CreateCampaignPage: React.FC = () => {
                   : 'bg-blue-500 text-white hover:bg-blue-600'
               }`}
             >
-              Next: {currentStep < 6 ? steps[currentStep].label : ''}
+              {currentStep === 1 ? 'Next: Select Template' :
+               currentStep < 6 ? `Next: ${steps[currentStep].label}` : 'Complete'}
               <ArrowLeft className="h-4 w-4 rotate-180" />
             </button>
           </div>
