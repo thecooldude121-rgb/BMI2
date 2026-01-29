@@ -626,38 +626,49 @@ const CreateCampaignPage: React.FC = () => {
 
   const renderStep2Template = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">STEP 2: SELECT TEMPLATE</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">STEP 2: SELECT TEMPLATE</h2>
       <p className="text-sm text-gray-600 mb-8">Choose a pre-built template or start from scratch</p>
 
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+      <div className="border-b border-gray-200 pb-2 mb-6">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
           Recommended Templates
         </h3>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-3 gap-6 mb-8">
         {campaignTemplates.map((template) => {
           const Icon = template.icon;
+          const isSelected = formData.template === template.id;
+
           return (
             <div
               key={template.id}
-              className="border-2 border-gray-200 rounded-lg p-6 hover:border-blue-300 hover:shadow-md transition-all"
+              className={`border-2 rounded-lg p-5 transition-all ${
+                isSelected
+                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                  : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
+              }`}
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <Icon className="h-6 w-6 text-blue-500" />
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className={`h-5 w-5 ${isSelected ? 'text-blue-500' : 'text-gray-500'}`} />
+                  <h3 className="font-bold text-gray-900 uppercase text-sm tracking-wide">
+                    {template.name}
+                  </h3>
                 </div>
-                <h3 className="font-bold text-gray-900">{template.name}</h3>
+                <div className="border-b border-gray-300 mb-3"></div>
               </div>
 
-              <div className="space-y-3 mb-6">
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">{template.touchCount > 0 ? `${template.touchCount}-touch` : 'Custom'}</span> sequence
+              <div className="space-y-4 mb-6 min-h-[280px]">
+                <div className="space-y-1">
+                  <div className="text-sm text-gray-700 font-medium">
+                    {template.touchCount > 0 ? `${template.touchCount}-touch sequence` : 'Build your own'}
+                  </div>
+                  <div className="text-sm text-gray-600">{template.channel}</div>
                 </div>
-                <div className="text-sm text-gray-600">{template.channel}</div>
 
                 <div>
-                  <div className="text-xs font-medium text-gray-700 mb-2">Perfect for:</div>
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Perfect for:</div>
                   <ul className="space-y-1">
                     {template.perfectFor.map((item, idx) => (
                       <li key={idx} className="text-xs text-gray-600">• {item}</li>
@@ -665,28 +676,32 @@ const CreateCampaignPage: React.FC = () => {
                   </ul>
                 </div>
 
-                {(template.avgOpenRate !== null || template.avgReplyRate !== null) && (
-                  <div>
-                    <div className="text-xs font-medium text-gray-700 mb-2">Avg Performance:</div>
-                    {template.avgOpenRate !== null && (
-                      <div className="text-xs text-gray-600">📊 {template.avgOpenRate}% open rate</div>
-                    )}
-                    {template.avgReplyRate !== null && (
-                      <div className="text-xs text-gray-600">💬 {template.avgReplyRate}% reply rate</div>
-                    )}
-                  </div>
-                )}
-
-                {template.avgOpenRate === null && template.avgReplyRate === null && (
-                  <div className="text-xs text-gray-500 italic">
-                    No pre-set performance data
-                  </div>
-                )}
+                <div>
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Avg Performance:</div>
+                  {template.avgOpenRate !== null && (
+                    <div className="text-xs text-gray-600 mb-1">📊 {template.avgOpenRate}% open rate</div>
+                  )}
+                  {template.avgReplyRate !== null && (
+                    <div className="text-xs text-gray-600">💬 {template.avgReplyRate}% reply rate</div>
+                  )}
+                  {template.avgOpenRate === null && template.avgReplyRate === null && (
+                    <div className="text-xs text-gray-500 italic">
+                      No pre-set<br />performance data
+                    </div>
+                  )}
+                  {template.avgOpenRate === null && template.avgReplyRate !== null && (
+                    <div className="text-xs text-gray-500">📊 N/A (LinkedIn)</div>
+                  )}
+                </div>
               </div>
 
               <button
                 onClick={() => handleTemplateSelect(template.id)}
-                className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium text-sm"
+                className={`w-full px-4 py-2.5 rounded-lg transition-colors font-medium text-sm ${
+                  isSelected
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-blue-500 text-white hover:bg-blue-600'
+                }`}
               >
                 {template.id === 'custom' ? 'Start from Scratch' : 'Select Template'}
               </button>
@@ -697,9 +712,9 @@ const CreateCampaignPage: React.FC = () => {
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex gap-2">
-          <TrendingUp className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
+          <Lightbulb className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-700">
-            <span className="font-medium">Tip:</span> Templates can be customized after selection. Your changes won't affect the template.
+            <span className="font-semibold">TIP:</span> Templates can be customized after selection. Your changes won't affect the template.
           </div>
         </div>
       </div>
@@ -991,7 +1006,11 @@ const CreateCampaignPage: React.FC = () => {
               }`}
             >
               {currentStep === 1 ? 'Next: Select Template' :
-               currentStep < 6 ? `Next: ${steps[currentStep].label}` : 'Complete'}
+               currentStep === 2 ? 'Next: Build Sequence' :
+               currentStep === 3 ? 'Next: Select Leads' :
+               currentStep === 4 ? 'Next: Configure Settings' :
+               currentStep === 5 ? 'Next: Review & Launch' :
+               'Complete'}
               <ArrowLeft className="h-4 w-4 rotate-180" />
             </button>
           </div>
