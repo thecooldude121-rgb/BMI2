@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -157,6 +157,18 @@ const CreateCampaignPage: React.FC = () => {
   const [newTag, setNewTag] = useState('');
   const [collaboratorSearch, setCollaboratorSearch] = useState('');
   const [expandedTouches, setExpandedTouches] = useState<number[]>([1]);
+  const [enrollmentMethod, setEnrollmentMethod] = useState<'manual' | 'auto'>('manual');
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [leadFilters, setLeadFilters] = useState({
+    source: '',
+    score: '',
+    bant: '',
+    industry: '',
+    companySize: '',
+    stage: '',
+    search: ''
+  });
+  const [quickFilter, setQuickFilter] = useState<string>('');
   const [formData, setFormData] = useState<CampaignFormData>({
     name: '',
     description: '',
@@ -1280,15 +1292,532 @@ const CreateCampaignPage: React.FC = () => {
     );
   };
 
+  const mockLeads = [
+    { id: '1', name: 'John Smith', title: 'VP of Sales', company: 'Acme Corp', industry: 'SaaS', employees: '250 emp', score: 92, bantScore: 18, bantMax: 20, source: 'HRMS', sourceType: 'Warm', stage: 'New', selected: true },
+    { id: '2', name: 'Sarah Johnson', title: 'CEO', company: 'TechStart Inc', industry: 'SaaS', employees: '150 emp', score: 88, bantScore: 16, bantMax: 20, source: 'Apollo', sourceType: 'Cold', stage: 'New', selected: true },
+    { id: '3', name: 'Mike Chen', title: 'Director, Marketing', company: 'Global Solutions', industry: 'Enterprise', employees: '500+', score: 85, bantScore: 15, bantMax: 20, source: 'ZoomInfo', sourceType: 'Cold', stage: 'New', selected: true },
+    { id: '4', name: 'Lisa Park', title: 'Marketing Manager', company: 'StartupXYZ', industry: 'SaaS', employees: '20 emp', score: 45, bantScore: 8, bantMax: 20, source: 'Manual', sourceType: '', stage: 'New', selected: false },
+    { id: '5', name: 'David Brown', title: 'VP Operations', company: 'Enterprise Co', industry: 'Finance', employees: '1000+', score: 78, bantScore: 14, bantMax: 20, source: 'Intelligence', sourceType: 'Warm', stage: 'Contacted', selected: true },
+    { id: '6', name: 'Emily Davis', title: 'CMO', company: 'FastGrow Inc', industry: 'SaaS', employees: '300 emp', score: 91, bantScore: 17, bantMax: 20, source: 'HRMS', sourceType: 'Warm', stage: 'New', selected: true },
+    { id: '7', name: 'Robert Wilson', title: 'CTO', company: 'Tech Innovations', industry: 'Technology', employees: '450 emp', score: 87, bantScore: 16, bantMax: 20, source: 'Apollo', sourceType: 'Cold', stage: 'New', selected: true },
+    { id: '8', name: 'Jennifer Martinez', title: 'VP Sales', company: 'CloudBase', industry: 'SaaS', employees: '200 emp', score: 83, bantScore: 15, bantMax: 20, source: 'ZoomInfo', sourceType: 'Cold', stage: 'Qualified', selected: true },
+  ];
+
+  const filteredLeads = useMemo(() => {
+    let filtered = [...mockLeads];
+
+    if (quickFilter === 'high-score') {
+      filtered = filtered.filter(l => l.score >= 80);
+    } else if (quickFilter === 'bant-qualified') {
+      filtered = filtered.filter(l => l.bantScore >= 15);
+    } else if (quickFilter === 'hrms') {
+      filtered = filtered.filter(l => l.source === 'HRMS');
+    } else if (quickFilter === 'new-week') {
+      filtered = filtered.filter(l => l.stage === 'New');
+    }
+
+    if (leadFilters.source) {
+      filtered = filtered.filter(l => l.source === leadFilters.source);
+    }
+    if (leadFilters.score === 'high') {
+      filtered = filtered.filter(l => l.score >= 80);
+    } else if (leadFilters.score === 'medium') {
+      filtered = filtered.filter(l => l.score >= 60 && l.score < 80);
+    } else if (leadFilters.score === 'low') {
+      filtered = filtered.filter(l => l.score < 60);
+    }
+    if (leadFilters.bant === 'qualified') {
+      filtered = filtered.filter(l => l.bantScore >= 15);
+    } else if (leadFilters.bant === 'needs-info') {
+      filtered = filtered.filter(l => l.bantScore >= 10 && l.bantScore < 15);
+    } else if (leadFilters.bant === 'not-qualified') {
+      filtered = filtered.filter(l => l.bantScore < 10);
+    }
+    if (leadFilters.industry) {
+      filtered = filtered.filter(l => l.industry === leadFilters.industry);
+    }
+    if (leadFilters.stage) {
+      filtered = filtered.filter(l => l.stage === leadFilters.stage);
+    }
+    if (leadFilters.search) {
+      const search = leadFilters.search.toLowerCase();
+      filtered = filtered.filter(l =>
+        l.name.toLowerCase().includes(search) ||
+        l.company.toLowerCase().includes(search) ||
+        l.title.toLowerCase().includes(search)
+      );
+    }
+
+    return filtered;
+  }, [leadFilters, quickFilter]);
+
+  const selectedLeads = filteredLeads.filter(l => l.selected);
+  const selectedCount = selectedLeads.length;
+
+  const toggleLeadSelection = (leadId: string) => {
+    const lead = mockLeads.find(l => l.id === leadId);
+    if (lead) {
+      lead.selected = !lead.selected;
+      setSelectedLeadIds(prev =>
+        lead.selected
+          ? [...prev, leadId]
+          : prev.filter(id => id !== leadId)
+      );
+    }
+  };
+
+  const clearAllSelections = () => {
+    mockLeads.forEach(l => l.selected = false);
+    setSelectedLeadIds([]);
+  };
+
+  const resetFilters = () => {
+    setLeadFilters({
+      source: '',
+      score: '',
+      bant: '',
+      industry: '',
+      companySize: '',
+      stage: '',
+      search: ''
+    });
+    setQuickFilter('');
+  };
+
+  const getScoreBadge = (score: number) => {
+    if (score >= 80) return '🟢';
+    if (score >= 60) return '🟡';
+    return '🔴';
+  };
+
+  const getBantBadge = (bantScore: number) => {
+    if (bantScore >= 15) return '✅';
+    if (bantScore >= 10) return '⚠️';
+    return '❌';
+  };
+
+  const enrollmentStats = useMemo(() => {
+    const hrmsCount = selectedLeads.filter(l => l.source === 'HRMS').length;
+    const apolloCount = selectedLeads.filter(l => l.source === 'Apollo').length;
+    const zoomInfoCount = selectedLeads.filter(l => l.source === 'ZoomInfo').length;
+    const intelligenceCount = selectedLeads.filter(l => l.source === 'Intelligence').length;
+
+    const highScoreCount = selectedLeads.filter(l => l.score >= 80).length;
+    const mediumScoreCount = selectedLeads.filter(l => l.score >= 60 && l.score < 80).length;
+    const lowScoreCount = selectedLeads.filter(l => l.score < 60).length;
+
+    const qualifiedCount = selectedLeads.filter(l => l.bantScore >= 15).length;
+    const needsInfoCount = selectedLeads.filter(l => l.bantScore >= 10 && l.bantScore < 15).length;
+    const notQualifiedCount = selectedLeads.filter(l => l.bantScore < 10).length;
+
+    const totalSends = selectedCount * formData.sequence.length;
+    const estimatedCost = (totalSends * 0.10).toFixed(2);
+
+    return {
+      hrms: hrmsCount,
+      apollo: apolloCount,
+      zoomInfo: zoomInfoCount,
+      intelligence: intelligenceCount,
+      highScore: highScoreCount,
+      mediumScore: mediumScoreCount,
+      lowScore: lowScoreCount,
+      qualified: qualifiedCount,
+      needsInfo: needsInfoCount,
+      notQualified: notQualifiedCount,
+      totalSends,
+      estimatedCost
+    };
+  }, [selectedLeads, selectedCount, formData.sequence.length]);
+
   const renderStep4Leads = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">STEP 4: SELECT LEADS</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">STEP 4: SELECT LEADS</h2>
       <p className="text-sm text-gray-600 mb-8">Choose which leads to enroll in this campaign</p>
 
-      <div className="text-center py-20 text-gray-500">
-        <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-        <p>Lead selection interface will be configured here</p>
+      {/* Enrollment Method */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+          Enrollment Method
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div
+            onClick={() => setEnrollmentMethod('manual')}
+            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+              enrollmentMethod === 'manual'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="radio"
+                checked={enrollmentMethod === 'manual'}
+                onChange={() => setEnrollmentMethod('manual')}
+                className="text-blue-500"
+              />
+              <span className="font-semibold text-gray-900">SELECT FROM EXISTING LEADS</span>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Manually choose specific leads to add to this campaign
+            </p>
+            {enrollmentMethod === 'manual' && (
+              <div className="text-xs font-medium text-blue-600">[Selected]</div>
+            )}
+          </div>
+
+          <div
+            onClick={() => setEnrollmentMethod('auto')}
+            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+              enrollmentMethod === 'auto'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="radio"
+                checked={enrollmentMethod === 'auto'}
+                onChange={() => setEnrollmentMethod('auto')}
+                className="text-blue-500"
+              />
+              <span className="font-semibold text-gray-900">AUTO-ENROLL NEW LEADS</span>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Automatically enroll leads that match your criteria
+            </p>
+            {enrollmentMethod === 'auto' ? (
+              <div className="text-xs font-medium text-blue-600">[Selected]</div>
+            ) : (
+              <div className="text-xs font-medium text-gray-600">[Select]</div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {enrollmentMethod === 'manual' && (
+        <>
+          {/* Filter Section */}
+          <div className="border border-gray-200 rounded-lg p-4 mb-6">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+              Filter Leads
+            </h3>
+
+            {/* Dropdowns */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <select
+                value={leadFilters.source}
+                onChange={(e) => setLeadFilters({ ...leadFilters, source: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Source</option>
+                <option value="HRMS">HRMS</option>
+                <option value="Apollo">Apollo</option>
+                <option value="ZoomInfo">ZoomInfo</option>
+                <option value="Intelligence">Intelligence</option>
+                <option value="Manual">Manual</option>
+              </select>
+
+              <select
+                value={leadFilters.score}
+                onChange={(e) => setLeadFilters({ ...leadFilters, score: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Score</option>
+                <option value="high">High (80+)</option>
+                <option value="medium">Medium (60-79)</option>
+                <option value="low">Low (&lt;60)</option>
+              </select>
+
+              <select
+                value={leadFilters.bant}
+                onChange={(e) => setLeadFilters({ ...leadFilters, bant: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">BANT</option>
+                <option value="qualified">Qualified</option>
+                <option value="needs-info">Needs Info</option>
+                <option value="not-qualified">Not Qualified</option>
+              </select>
+
+              <select
+                value={leadFilters.industry}
+                onChange={(e) => setLeadFilters({ ...leadFilters, industry: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Industry</option>
+                <option value="SaaS">SaaS</option>
+                <option value="Enterprise">Enterprise</option>
+                <option value="Technology">Technology</option>
+                <option value="Finance">Finance</option>
+              </select>
+
+              <select
+                value={leadFilters.companySize}
+                onChange={(e) => setLeadFilters({ ...leadFilters, companySize: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Company Size</option>
+                <option value="small">Small (1-50)</option>
+                <option value="medium">Medium (51-500)</option>
+                <option value="large">Large (500+)</option>
+              </select>
+
+              <select
+                value={leadFilters.stage}
+                onChange={(e) => setLeadFilters({ ...leadFilters, stage: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="">Stage</option>
+                <option value="New">New</option>
+                <option value="Contacted">Contacted</option>
+                <option value="Qualified">Qualified</option>
+              </select>
+            </div>
+
+            {/* Search and Reset */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={leadFilters.search}
+                  onChange={(e) => setLeadFilters({ ...leadFilters, search: e.target.value })}
+                  placeholder="Search by name, company, email..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Reset Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Filters */}
+          <div className="border border-gray-200 rounded-lg p-4 mb-6">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
+              Quick Filters
+            </h3>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={() => setQuickFilter(quickFilter === 'high-score' ? '' : 'high-score')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  quickFilter === 'high-score'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ⭐ High Score (80+)
+              </button>
+              <button
+                onClick={() => setQuickFilter(quickFilter === 'bant-qualified' ? '' : 'bant-qualified')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  quickFilter === 'bant-qualified'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ✅ BANT Qualified
+              </button>
+              <button
+                onClick={() => setQuickFilter(quickFilter === 'hrms' ? '' : 'hrms')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  quickFilter === 'hrms'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                🤝 HRMS Leads
+              </button>
+              <button
+                onClick={() => setQuickFilter(quickFilter === 'new-week' ? '' : 'new-week')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  quickFilter === 'new-week'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                🆕 New This Week
+              </button>
+            </div>
+          </div>
+
+          {/* Selected Leads Table */}
+          <div className="border border-gray-200 rounded-lg overflow-hidden mb-6">
+            <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Selected Leads: {selectedCount}
+              </h3>
+              <button
+                onClick={clearAllSelections}
+                className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700 font-medium"
+              >
+                <X className="h-4 w-4" />
+                Clear All
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-12">
+                      <input type="checkbox" className="rounded border-gray-300" />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Company
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Score
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      BANT
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Source
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Stage
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-12">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredLeads.slice(0, 5).map((lead) => (
+                    <tr key={lead.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={lead.selected}
+                          onChange={() => toggleLeadSelection(lead.id)}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{lead.name}</div>
+                        <div className="text-xs text-gray-500">{lead.title}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{lead.company}</div>
+                        <div className="text-xs text-gray-500">{lead.industry}, {lead.employees}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{lead.score}</div>
+                        <div className="text-lg">{getScoreBadge(lead.score)}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{lead.bantScore}/{lead.bantMax}</div>
+                        <div className="text-lg">{getBantBadge(lead.bantScore)}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-gray-900">{lead.source}</div>
+                        {lead.sourceType && (
+                          <div className="text-xs text-gray-500">({lead.sourceType})</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-sm text-gray-700">{lead.stage}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button className="text-gray-400 hover:text-gray-600">
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-600">
+              Showing 5 of {selectedCount} selected
+            </div>
+          </div>
+
+          {/* Enrollment Preview */}
+          <div className="border border-gray-200 rounded-lg p-6 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Target className="h-5 w-5 text-gray-700" />
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Enrollment Preview
+              </h3>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-lg font-bold text-gray-900">Total Leads: {selectedCount}</div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-6 mb-6">
+              <div>
+                <div className="text-sm font-semibold text-gray-700 mb-2">By Source:</div>
+                <div className="space-y-1 text-sm text-gray-600">
+                  <div>• HRMS: {enrollmentStats.hrms} ({Math.round(enrollmentStats.hrms / selectedCount * 100)}%)</div>
+                  <div>• Apollo: {enrollmentStats.apollo} ({Math.round(enrollmentStats.apollo / selectedCount * 100)}%)</div>
+                  <div>• ZoomInfo: {enrollmentStats.zoomInfo} ({Math.round(enrollmentStats.zoomInfo / selectedCount * 100)}%)</div>
+                  <div>• Intelligence: {enrollmentStats.intelligence} ({Math.round(enrollmentStats.intelligence / selectedCount * 100)}%)</div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-gray-700 mb-2">By Score:</div>
+                <div className="space-y-1 text-sm text-gray-600">
+                  <div>• High (80+): {enrollmentStats.highScore} ({Math.round(enrollmentStats.highScore / selectedCount * 100)}%)</div>
+                  <div>• Medium (60-79): {enrollmentStats.mediumScore} ({Math.round(enrollmentStats.mediumScore / selectedCount * 100)}%)</div>
+                  <div>• Low (&lt;60): {enrollmentStats.lowScore} ({Math.round(enrollmentStats.lowScore / selectedCount * 100)}%)</div>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-gray-700 mb-2">By BANT:</div>
+                <div className="space-y-1 text-sm text-gray-600">
+                  <div>• Qualified: {enrollmentStats.qualified} ({Math.round(enrollmentStats.qualified / selectedCount * 100)}%)</div>
+                  <div>• Needs Info: {enrollmentStats.needsInfo} ({Math.round(enrollmentStats.needsInfo / selectedCount * 100)}%)</div>
+                  <div>• Not Qualified: {enrollmentStats.notQualified} ({Math.round(enrollmentStats.notQualified / selectedCount * 100)}%)</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm text-gray-700">
+              <div><span className="font-medium">Estimated Sends:</span> {enrollmentStats.totalSends} emails ({selectedCount} leads × {formData.sequence.length} touches)</div>
+              <div><span className="font-medium">Estimated Duration:</span> 14 days</div>
+              <div><span className="font-medium">Estimated Cost:</span> ${enrollmentStats.estimatedCost} (API credits for personalization)</div>
+            </div>
+          </div>
+
+          {/* Important Notes */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-semibold text-yellow-800 mb-2">IMPORTANT NOTES</div>
+                <ul className="space-y-1 text-sm text-yellow-700">
+                  <li>• Leads already in active campaigns will be skipped</li>
+                  <li>• Leads who unsubscribed will be automatically excluded</li>
+                  <li>• You can add more leads after campaign starts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {enrollmentMethod === 'auto' && (
+        <div className="border border-gray-200 rounded-lg p-8 text-center">
+          <div className="text-gray-500 mb-4">
+            <Zap className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+            <p className="text-sm">Auto-enrollment configuration will be available here</p>
+            <p className="text-xs mt-2">Set criteria for automatic lead enrollment</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 
