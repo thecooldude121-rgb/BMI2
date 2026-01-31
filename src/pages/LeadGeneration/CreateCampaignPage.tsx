@@ -31,7 +31,13 @@ import {
   Type,
   Clock,
   Check,
-  MapPin
+  MapPin,
+  Edit2,
+  BarChart3,
+  Rocket,
+  FileText,
+  Send,
+  DollarSign
 } from 'lucide-react';
 
 type CampaignStep = 1 | 2 | 3 | 4 | 5 | 6;
@@ -215,6 +221,7 @@ const CreateCampaignPage: React.FC = () => {
     includeAddress: true,
     honorImmediately: true
   });
+  const [testEmail, setTestEmail] = useState('adithya@movingwalls.com');
   const [formData, setFormData] = useState<CampaignFormData>({
     name: '',
     description: '',
@@ -2397,54 +2404,341 @@ const CreateCampaignPage: React.FC = () => {
     </div>
   );
 
-  const renderStep6Review = () => (
-    <div className="bg-white rounded-lg border border-gray-200 p-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">STEP 6: REVIEW & LAUNCH</h2>
-      <p className="text-sm text-gray-600 mb-8">Review your campaign before launching</p>
+  const handleSendTestEmail = () => {
+    console.log('Sending test email to:', testEmail);
+    // Show success toast
+  };
 
-      <div className="max-w-3xl space-y-6">
-        <div className="border border-gray-200 rounded-lg p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Campaign Summary</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-500">Name:</span>
-              <span className="ml-2 font-medium">{formData.name || 'Not set'}</span>
+  const handleLaunchCampaign = () => {
+    console.log('Launching campaign:', formData);
+    navigate('/lead-generation/campaigns');
+  };
+
+  const renderStep6Review = () => {
+    const totalLeads = formData.leads.length || 127;
+    const totalTouches = formData.sequence.length || 5;
+    const totalSends = totalLeads * totalTouches;
+    const expectedOpens = Math.round(totalSends * 0.28);
+    const expectedReplies = Math.round(totalSends * 0.08);
+    const expectedOpps = Math.round(totalLeads * 0.047);
+    const estimatedCost = (totalSends * 0.10).toFixed(2);
+    const projectedRevenue = expectedOpps * 60000;
+
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-2">STEP 6: REVIEW & LAUNCH</h2>
+        <p className="text-sm text-gray-600 mb-8">Review all campaign details before launching</p>
+
+        <div className="space-y-8">
+          {/* CAMPAIGN SUMMARY */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+              Campaign Summary
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Basic Information Card */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">BASIC INFORMATION</h4>
+                  <button
+                    onClick={() => setCurrentStep(1)}
+                    className="text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div><span className="text-gray-600">Name:</span> <span className="font-medium ml-1">{formData.name || 'Q1 2025 Enterprise Outreach'}</span></div>
+                  <div><span className="text-gray-600">Type:</span> <span className="font-medium ml-1">📧 Email Campaign</span></div>
+                  <div><span className="text-gray-600">Owner:</span> <span className="font-medium ml-1">Adithya</span></div>
+                  <div><span className="text-gray-600">Goal:</span> <span className="font-medium ml-1 capitalize">{formData.goalType || 'Opportunities'}</span></div>
+                  <div><span className="text-gray-600">Tags:</span> <span className="font-medium ml-1">{formData.tags.length > 0 ? formData.tags.join(', ') : 'Enterprise, SaaS, Q1-2025'}</span></div>
+                </div>
+              </div>
+
+              {/* Template & Sequence Card */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">TEMPLATE & SEQUENCE</h4>
+                  <button
+                    onClick={() => setCurrentStep(2)}
+                    className="text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div><span className="text-gray-600">Template:</span> <span className="font-medium ml-1">{formData.template || 'Cold Outreach'}</span></div>
+                  <div><span className="text-gray-600">Total Touches:</span> <span className="font-medium ml-1">{totalTouches}</span></div>
+                  <div><span className="text-gray-600">Duration:</span> <span className="font-medium ml-1">14 days</span></div>
+                  <div><span className="text-gray-600">Channel:</span> <span className="font-medium ml-1">Email only</span></div>
+                  <div><span className="text-gray-600">A/B Testing:</span> <span className="font-medium ml-1">Enabled (Touch 1)</span></div>
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="text-gray-500">Type:</span>
-              <span className="ml-2 font-medium capitalize">{formData.type}</span>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Enrolled Leads Card */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">ENROLLED LEADS</h4>
+                  <button
+                    onClick={() => setCurrentStep(4)}
+                    className="text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="font-medium text-gray-900 mb-2">Total Leads: {totalLeads}</div>
+                  <div className="space-y-1 text-gray-600">
+                    <div>• HRMS: 45 (35%)</div>
+                    <div>• Apollo: 38 (30%)</div>
+                    <div>• ZoomInfo: 32 (25%)</div>
+                    <div>• Intelligence: 12 (9%)</div>
+                  </div>
+                  <div className="pt-2 border-t border-gray-100 space-y-1">
+                    <div><span className="text-gray-600">High Score (80+):</span> <span className="font-medium ml-1">89 (70%)</span></div>
+                    <div><span className="text-gray-600">BANT Qualified:</span> <span className="font-medium ml-1">102 (80%)</span></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Settings Card */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">SETTINGS</h4>
+                  <button
+                    onClick={() => setCurrentStep(5)}
+                    className="text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div><span className="text-gray-600">Start:</span> <span className="font-medium ml-1">{startType === 'immediate' ? 'Immediately' : `Scheduled (${startDate} ${startTime})`}</span></div>
+                  <div><span className="text-gray-600">Send Time:</span> <span className="font-medium ml-1">{formData.settings.sendTimeOptimization ? 'Optimized' : 'Fixed'}</span></div>
+                  <div><span className="text-gray-600">Business Hours:</span> <span className="font-medium ml-1">{formData.settings.businessHoursOnly ? 'Yes' : 'No'}</span></div>
+                  <div><span className="text-gray-600">Daily Limit:</span> <span className="font-medium ml-1">{formData.settings.dailySendLimit} emails/day</span></div>
+                  <div><span className="text-gray-600">Timezone Aware:</span> <span className="font-medium ml-1">{formData.settings.timezoneAware ? 'Yes' : 'No'}</span></div>
+                  <div><span className="text-gray-600">Auto-stop on Reply:</span> <span className="font-medium ml-1">{stopConditions.onReply ? 'Yes' : 'No'}</span></div>
+                  <div><span className="text-gray-600">From:</span> <span className="font-medium ml-1">adithya@movingwalls.com</span></div>
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="text-gray-500">Template:</span>
-              <span className="ml-2 font-medium">{formData.template || 'Not selected'}</span>
+          </div>
+
+          {/* SEQUENCE PREVIEW */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+              Sequence Preview
+            </h3>
+
+            <div className="space-y-3">
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="font-medium text-gray-900 mb-1">Touch 1: Initial Outreach (Day 0)</div>
+                <div className="text-sm text-gray-600 mb-1">Subject: Quick question about {'{{company}}'}'s growth</div>
+                <div className="text-xs text-blue-600">A/B Testing: 2 variants (auto-select winner after 100 sends)</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="font-medium text-gray-900 mb-1">Touch 2: Follow-up (Day 3)</div>
+                <div className="text-sm text-gray-600 mb-1">Subject: Following up - {'{{firstName}}'}</div>
+                <div className="text-xs text-amber-600">Condition: Only if Touch 1 was opened</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="font-medium text-gray-900 mb-1">Touch 3: Value Proposition (Day 8)</div>
+                <div className="text-sm text-gray-600">Subject: Thought this might help {'{{company}}'}</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="font-medium text-gray-900 mb-1">Touch 4: Case Study (Day 10)</div>
+                <div className="text-sm text-gray-600">Subject: How companies like {'{{company}}'} achieve results</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="font-medium text-gray-900 mb-1">Touch 5: Break-up Email (Day 14)</div>
+                <div className="text-sm text-gray-600">Subject: Should I close your file?</div>
+              </div>
             </div>
-            <div>
-              <span className="text-gray-500">Daily Limit:</span>
-              <span className="ml-2 font-medium">{formData.settings.dailySendLimit} emails/day</span>
+          </div>
+
+          {/* PROJECTED PERFORMANCE */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200 flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Projected Performance
+            </h3>
+
+            <p className="text-sm text-gray-600 mb-4">Based on similar campaigns and lead quality:</p>
+
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-gray-600 mb-2">Total Sends</div>
+                <div className="text-3xl font-bold text-gray-900 mb-1">{totalSends}</div>
+                <div className="text-xs text-gray-500">({totalLeads} × {totalTouches})</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-gray-600 mb-2">Expected Opens</div>
+                <div className="text-3xl font-bold text-gray-900 mb-1">{expectedOpens}</div>
+                <div className="text-xs text-gray-500">(28% avg)</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-gray-600 mb-2">Expected Replies</div>
+                <div className="text-3xl font-bold text-gray-900 mb-1">{expectedReplies}</div>
+                <div className="text-xs text-gray-500">(8% avg)</div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-sm font-medium text-gray-600 mb-2">Expected Opps</div>
+                <div className="text-3xl font-bold text-gray-900 mb-1">{expectedOpps}</div>
+                <div className="text-xs text-gray-500">(4.7% conv)</div>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm text-gray-600">
+              <div><span className="font-medium text-gray-700">Estimated Timeline:</span> 14 days</div>
+              <div><span className="font-medium text-gray-700">Estimated Cost:</span> ${estimatedCost} (API credits for enrichment & personalization)</div>
+              <div><span className="font-medium text-gray-700">Projected Revenue:</span> ~${projectedRevenue.toLocaleString()} (based on avg deal size $60k)</div>
+            </div>
+          </div>
+
+          {/* PRE-FLIGHT CHECKLIST */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              Pre-Flight Checklist
+            </h3>
+
+            <div className="space-y-2 text-sm">
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">Campaign name is clear and descriptive</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">All 5 email sequences have subject lines</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">All email bodies include personalization variables</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">127 leads selected and validated</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">No leads are in active campaigns (conflict check passed)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">Sender email verified (adithya@movingwalls.com)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">Unsubscribe link included in all emails</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">Business hours and timezone settings configured</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">Daily send limit set to 50 (safe threshold)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <span className="text-gray-700">A/B testing enabled - requires 100 sends for statistical significance</span>
+              </div>
+            </div>
+          </div>
+
+          {/* LAUNCH OPTIONS */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200 flex items-center gap-2">
+              <Target className="h-4 w-4" />
+              Launch Options
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border-2 border-green-500 rounded-lg p-6 bg-green-50">
+                <div className="flex items-center gap-2 text-xl font-bold text-green-700 mb-2">
+                  <Rocket className="h-6 w-6" />
+                  LAUNCH CAMPAIGN
+                </div>
+                <div className="space-y-2 text-sm text-gray-700 mb-4">
+                  <p>Start sending immediately {startType === 'scheduled' ? '(or at scheduled time)' : ''}</p>
+                  <p>Cannot edit sequence after launch (can only pause)</p>
+                </div>
+                <button
+                  onClick={handleLaunchCampaign}
+                  className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Rocket className="h-5 w-5" />
+                  Launch Now
+                </button>
+              </div>
+
+              <div className="border-2 border-gray-300 rounded-lg p-6 bg-gray-50">
+                <div className="flex items-center gap-2 text-xl font-bold text-gray-700 mb-2">
+                  <FileText className="h-6 w-6" />
+                  SAVE AS DRAFT
+                </div>
+                <div className="space-y-2 text-sm text-gray-700 mb-4">
+                  <p>Save for later launch</p>
+                  <p>Edit anytime before launch</p>
+                  <p>No emails will be sent until manually launched</p>
+                </div>
+                <button
+                  onClick={handleSaveDraft}
+                  className="w-full px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <FileText className="h-5 w-5" />
+                  Save Draft
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* SEND TEST EMAIL */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200 flex items-center gap-2">
+              <Send className="h-4 w-4" />
+              Send Test Email
+            </h3>
+
+            <div className="border border-gray-200 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-3">Send a test email to yourself before launching</p>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Test Email:</label>
+                  <input
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <button
+                  onClick={handleSendTestEmail}
+                  className="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <Mail className="h-4 w-4" />
+                  Send Test
+                </button>
+              </div>
             </div>
           </div>
         </div>
-
-        <div className="flex gap-4">
-          <button
-            onClick={() => {
-              console.log('Launching campaign:', formData);
-              navigate('/lead-generation/campaigns');
-            }}
-            className="flex-1 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
-          >
-            🚀 Launch Campaign
-          </button>
-          <button
-            onClick={handleSaveDraft}
-            className="flex-1 px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
-          >
-            💾 Save as Draft
-          </button>
-        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderCurrentStep = () => {
     switch (currentStep) {
