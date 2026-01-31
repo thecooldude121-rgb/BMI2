@@ -28,7 +28,10 @@ import {
   Copy,
   Link,
   Paperclip,
-  Type
+  Type,
+  Clock,
+  Check,
+  MapPin
 } from 'lucide-react';
 
 type CampaignStep = 1 | 2 | 3 | 4 | 5 | 6;
@@ -169,6 +172,49 @@ const CreateCampaignPage: React.FC = () => {
     search: ''
   });
   const [quickFilter, setQuickFilter] = useState<string>('');
+  const [startType, setStartType] = useState<'immediate' | 'scheduled'>('immediate');
+  const [startDate, setStartDate] = useState('2025-02-01');
+  const [startTime, setStartTime] = useState('09:00');
+  const [sendDays, setSendDays] = useState({
+    mon: true,
+    tue: true,
+    wed: true,
+    thu: true,
+    fri: true,
+    sat: false,
+    sun: false
+  });
+  const [stopConditions, setStopConditions] = useState({
+    onReply: true,
+    onUnsubscribe: true,
+    onConversion: true,
+    onDisqualified: true,
+    onMultipleOpens: false,
+    onBounces: false
+  });
+  const [followUpActions, setFollowUpActions] = useState({
+    notifyOwner: true,
+    createTask: true,
+    autoAssign: false,
+    slackNotify: false
+  });
+  const [clickActions, setClickActions] = useState({
+    trackClick: true,
+    notifyOwner: false,
+    triggerNext: false
+  });
+  const [tracking, setTracking] = useState({
+    trackOpens: true,
+    trackClicks: true,
+    trackReplies: true,
+    trackBounces: true,
+    autoUTM: true
+  });
+  const [compliance, setCompliance] = useState({
+    includeUnsubscribe: true,
+    includeAddress: true,
+    honorImmediately: true
+  });
   const [formData, setFormData] = useState<CampaignFormData>({
     name: '',
     description: '',
@@ -1821,61 +1867,132 @@ const CreateCampaignPage: React.FC = () => {
     </div>
   );
 
+  const toggleSendDay = (day: keyof typeof sendDays) => {
+    setSendDays({ ...sendDays, [day]: !sendDays[day] });
+  };
+
   const renderStep5Settings = () => (
     <div className="bg-white rounded-lg border border-gray-200 p-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">STEP 5: CONFIGURE SETTINGS</h2>
-      <p className="text-sm text-gray-600 mb-8">Fine-tune your campaign behavior</p>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">STEP 5: CAMPAIGN SETTINGS</h2>
+      <p className="text-sm text-gray-600 mb-8">Configure sending schedule and automation rules</p>
 
-      <div className="max-w-2xl space-y-6">
-        <div className="border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="font-medium text-gray-900">Send Time Optimization</div>
-              <div className="text-sm text-gray-500">AI determines best send time for each lead</div>
+      <div className="space-y-8">
+        {/* SENDING SCHEDULE */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+            Sending Schedule
+          </h3>
+
+          {/* Campaign Start */}
+          <div className="mb-6">
+            <div className="text-sm font-medium text-gray-900 mb-3">Campaign Start</div>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div
+                onClick={() => setStartType('immediate')}
+                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                  startType === 'immediate'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="radio"
+                    checked={startType === 'immediate'}
+                    onChange={() => setStartType('immediate')}
+                    className="text-blue-500"
+                  />
+                  <span className="font-semibold text-gray-900">Start Immediately</span>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Begin sending as soon as campaign is launched
+                </p>
+                {startType === 'immediate' && (
+                  <div className="text-xs font-medium text-blue-600">[Selected]</div>
+                )}
+              </div>
+
+              <div
+                onClick={() => setStartType('scheduled')}
+                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                  startType === 'scheduled'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="radio"
+                    checked={startType === 'scheduled'}
+                    onChange={() => setStartType('scheduled')}
+                    className="text-blue-500"
+                  />
+                  <span className="font-semibold text-gray-900">Schedule for Later</span>
+                </div>
+                {startType === 'scheduled' ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="text-sm px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-gray-500" />
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="text-sm px-2 py-1 border border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="text-xs font-medium text-blue-600">[Selected]</div>
+                  </div>
+                ) : (
+                  <div className="text-xs font-medium text-gray-600">[Select]</div>
+                )}
+              </div>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.settings.sendTimeOptimization}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  settings: { ...formData.settings, sendTimeOptimization: e.target.checked }
-                })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-            </label>
           </div>
-        </div>
 
-        <div className="border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="font-medium text-gray-900">Timezone Aware</div>
-              <div className="text-sm text-gray-500">Send based on recipient's timezone</div>
+          {/* Send Time Optimization */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-900 mb-3">Send Time Optimization</div>
+            <div className="space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.settings.sendTimeOptimization}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    settings: { ...formData.settings, sendTimeOptimization: e.target.checked }
+                  })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Enable send time optimization (AI determines best time based on past engagement)</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!formData.settings.sendTimeOptimization}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    settings: { ...formData.settings, sendTimeOptimization: !e.target.checked }
+                  })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Use fixed send times (specify below)</span>
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.settings.timezoneAware}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  settings: { ...formData.settings, timezoneAware: e.target.checked }
-                })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-            </label>
           </div>
-        </div>
 
-        <div className="border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="font-medium text-gray-900">Business Hours Only</div>
-              <div className="text-sm text-gray-500">Send only during business hours (9 AM - 5 PM)</div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+          {/* Business Hours Only */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-900 mb-3">Business Hours Only</div>
+            <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.settings.businessHoursOnly}
@@ -1883,69 +2000,398 @@ const CreateCampaignPage: React.FC = () => {
                   ...formData,
                   settings: { ...formData.settings, businessHoursOnly: e.target.checked }
                 })}
-                className="sr-only peer"
+                className="mt-0.5 rounded border-gray-300"
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+              <span className="text-sm text-gray-700">Send only during business hours (9 AM - 5 PM recipient's local time)</span>
+            </label>
+          </div>
+
+          {/* Send Days */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-900 mb-3">Send Days</div>
+            <div className="flex items-center gap-2">
+              {[
+                { key: 'mon' as const, label: 'Mon' },
+                { key: 'tue' as const, label: 'Tue' },
+                { key: 'wed' as const, label: 'Wed' },
+                { key: 'thu' as const, label: 'Thu' },
+                { key: 'fri' as const, label: 'Fri' },
+                { key: 'sat' as const, label: 'Sat' },
+                { key: 'sun' as const, label: 'Sun' }
+              ].map((day) => (
+                <button
+                  key={day.key}
+                  onClick={() => toggleSendDay(day.key)}
+                  className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                    sendDays[day.key]
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {sendDays[day.key] && <Check className="h-3 w-3 inline mr-1" />}
+                  {day.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Daily Send Limit */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-900 mb-3">Daily Send Limit</div>
+            <div className="max-w-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-700">Maximum sends per day:</span>
+                <select
+                  value={formData.settings.dailySendLimit}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    settings: { ...formData.settings, dailySendLimit: parseInt(e.target.value) }
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+              <div className="flex items-start gap-2 mt-2 text-xs text-blue-700">
+                <Lightbulb className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                <span>Lower limits reduce spam risk but slow campaign progress</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Timezone Handling */}
+          <div className="mb-4">
+            <div className="text-sm font-medium text-gray-900 mb-3">Timezone Handling</div>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.settings.timezoneAware}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  settings: { ...formData.settings, timezoneAware: e.target.checked }
+                })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Send in recipient's timezone (recommended for multi-timezone campaigns)</span>
             </label>
           </div>
         </div>
 
+        {/* AUTOMATION RULES */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Daily Send Limit
-          </label>
-          <input
-            type="number"
-            value={formData.settings.dailySendLimit}
-            onChange={(e) => setFormData({
-              ...formData,
-              settings: { ...formData.settings, dailySendLimit: parseInt(e.target.value) || 50 }
-            })}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <p className="text-xs text-gray-500 mt-1">Maximum emails to send per day</p>
-        </div>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+            Automation Rules
+          </h3>
 
-        <div className="border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <div className="font-medium text-gray-900">Stop on Reply</div>
-              <div className="text-sm text-gray-500">Pause sequence when lead replies</div>
+          {/* Stop Conditions */}
+          <div className="mb-6">
+            <div className="text-sm font-medium text-gray-900 mb-2">Stop Conditions</div>
+            <div className="text-sm text-gray-600 mb-3">Automatically stop sending to a lead when:</div>
+            <div className="space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stopConditions.onReply}
+                  onChange={(e) => setStopConditions({ ...stopConditions, onReply: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Lead replies to any email</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stopConditions.onUnsubscribe}
+                  onChange={(e) => setStopConditions({ ...stopConditions, onUnsubscribe: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Lead unsubscribes</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stopConditions.onConversion}
+                  onChange={(e) => setStopConditions({ ...stopConditions, onConversion: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Lead is converted to opportunity</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stopConditions.onDisqualified}
+                  onChange={(e) => setStopConditions({ ...stopConditions, onDisqualified: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Lead is manually disqualified</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stopConditions.onMultipleOpens}
+                  onChange={(e) => setStopConditions({ ...stopConditions, onMultipleOpens: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Lead opens 3+ emails without replying (possible disinterest)</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={stopConditions.onBounces}
+                  onChange={(e) => setStopConditions({ ...stopConditions, onBounces: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Email bounces 2+ times</span>
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.settings.stopOnReply}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  settings: { ...formData.settings, stopOnReply: e.target.checked }
-                })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-            </label>
+          </div>
+
+          {/* Follow-up Actions */}
+          <div className="mb-6">
+            <div className="text-sm font-medium text-gray-900 mb-2">Follow-up Actions</div>
+            <div className="text-sm text-gray-600 mb-3">When a lead replies:</div>
+            <div className="space-y-2 mb-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={followUpActions.notifyOwner}
+                  onChange={(e) => setFollowUpActions({ ...followUpActions, notifyOwner: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Notify campaign owner (Adithya)</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={followUpActions.createTask}
+                  onChange={(e) => setFollowUpActions({ ...followUpActions, createTask: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Create task for follow-up</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={followUpActions.autoAssign}
+                  onChange={(e) => setFollowUpActions({ ...followUpActions, autoAssign: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Auto-assign to sales rep</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={followUpActions.slackNotify}
+                  onChange={(e) => setFollowUpActions({ ...followUpActions, slackNotify: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Send internal Slack notification</span>
+              </label>
+            </div>
+
+            <div className="text-sm text-gray-600 mb-3">When a lead clicks a link:</div>
+            <div className="space-y-2">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clickActions.trackClick}
+                  onChange={(e) => setClickActions({ ...clickActions, trackClick: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Track click in analytics</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clickActions.notifyOwner}
+                  onChange={(e) => setClickActions({ ...clickActions, notifyOwner: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Notify campaign owner</span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clickActions.triggerNext}
+                  onChange={(e) => setClickActions({ ...clickActions, triggerNext: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                <span className="text-sm text-gray-700">Trigger next touch immediately</span>
+              </label>
+            </div>
           </div>
         </div>
 
-        <div className="border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
+        {/* EMAIL SENDER SETTINGS */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+            Email Sender Settings
+          </h3>
+
+          <div className="space-y-4">
+            {/* From Name */}
             <div>
-              <div className="font-medium text-gray-900">Stop on Unsubscribe</div>
-              <div className="text-sm text-gray-500">Remove lead from sequence if they unsubscribe</div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">From Name</label>
+              <input
+                type="text"
+                defaultValue="Adithya from Moving Walls"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+
+            {/* From Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">From Email</label>
+              <select
+                defaultValue="adithya@movingwalls.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="adithya@movingwalls.com">adithya@movingwalls.com</option>
+                <option value="sales@movingwalls.com">sales@movingwalls.com</option>
+                <option value="contact@movingwalls.com">contact@movingwalls.com</option>
+              </select>
+              <div className="flex items-center gap-1 mt-2 text-sm text-green-600">
+                <Check className="h-4 w-4" />
+                <span>Verified sender</span>
+              </div>
+            </div>
+
+            {/* Reply-To Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">Reply-To Email (Optional)</label>
+              <input
+                type="text"
+                defaultValue="Same as From Email"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Email Signature */}
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">Email Signature</label>
+              <textarea
+                rows={5}
+                defaultValue={`Best regards,\nAdithya\nProduct Manager, Moving Walls\n📧 adithya@movingwalls.com | 📱 +1 (555) 123-4567\n🌐 www.movingwalls.com`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* TRACKING & ANALYTICS */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+            Tracking & Analytics
+          </h3>
+
+          <div className="space-y-3 mb-4">
+            <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={formData.settings.stopOnUnsubscribe}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  settings: { ...formData.settings, stopOnUnsubscribe: e.target.checked }
-                })}
-                className="sr-only peer"
+                checked={tracking.trackOpens}
+                onChange={(e) => setTracking({ ...tracking, trackOpens: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+              <span className="text-sm text-gray-700">Track email opens</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={tracking.trackClicks}
+                onChange={(e) => setTracking({ ...tracking, trackClicks: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Track link clicks</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={tracking.trackReplies}
+                onChange={(e) => setTracking({ ...tracking, trackReplies: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Track replies</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={tracking.trackBounces}
+                onChange={(e) => setTracking({ ...tracking, trackBounces: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Record bounce/unsubscribe events</span>
             </label>
           </div>
+
+          {/* UTM Parameters */}
+          <div>
+            <div className="text-sm font-medium text-gray-900 mb-3">UTM Parameters (for link tracking)</div>
+            <label className="flex items-start gap-3 cursor-pointer mb-3">
+              <input
+                type="checkbox"
+                checked={tracking.autoUTM}
+                onChange={(e) => setTracking({ ...tracking, autoUTM: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Auto-add UTM parameters to all links</span>
+            </label>
+            {tracking.autoUTM && (
+              <div className="ml-6 space-y-1 text-sm text-gray-600">
+                <div>Campaign: q1_2025_enterprise_outreach</div>
+                <div>Source: bmi_leadgen</div>
+                <div>Medium: email</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COMPLIANCE */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4 pb-2 border-b border-gray-200">
+            Compliance
+          </h3>
+
+          <div className="space-y-3 mb-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={compliance.includeUnsubscribe}
+                onChange={(e) => setCompliance({ ...compliance, includeUnsubscribe: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Include unsubscribe link in all emails (required)</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={compliance.includeAddress}
+                onChange={(e) => setCompliance({ ...compliance, includeAddress: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Add physical mailing address to footer (CAN-SPAM compliance)</span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={compliance.honorImmediately}
+                onChange={(e) => setCompliance({ ...compliance, honorImmediately: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">Honor unsubscribe requests immediately</span>
+            </label>
+          </div>
+
+          {compliance.includeAddress && (
+            <div>
+              <div className="text-sm font-medium text-gray-900 mb-2">Physical Address:</div>
+              <div className="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                Moving Walls, 123 Market Street, San Francisco, CA 94102
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
