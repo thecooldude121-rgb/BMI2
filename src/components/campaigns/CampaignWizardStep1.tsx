@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CampaignNameInput } from './CampaignNameInput';
 import { CampaignDescriptionTextarea } from './CampaignDescriptionTextarea';
+import { CampaignTypeSelector, CampaignType } from './CampaignTypeSelector';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -12,6 +13,7 @@ export interface Step1Data {
   campaignName: string;
   objective: string;
   description: string;
+  campaignType: CampaignType;
 }
 
 export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
@@ -21,10 +23,13 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
   const [formData, setFormData] = useState<Step1Data>({
     campaignName: initialData?.campaignName || '',
     objective: initialData?.objective || '',
-    description: initialData?.description || ''
+    description: initialData?.description || '',
+    campaignType: initialData?.campaignType || null
   });
 
   const [isNameValid, setIsNameValid] = useState(false);
+  const [showTypeError, setShowTypeError] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   const existingCampaignNames = [
     'Q4 2024 Holiday Campaign',
@@ -37,10 +42,22 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
       return;
     }
 
+    if (!formData.campaignType) {
+      setShowTypeError(true);
+      const typeSection = document.getElementById('campaign-type-section');
+      if (typeSection) {
+        typeSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    setShowTypeError(false);
     onNext(formData);
   };
 
-  const canProceed = isNameValid && formData.campaignName.trim().length >= 5;
+  const canProceed = isNameValid &&
+                     formData.campaignName.trim().length >= 5 &&
+                     formData.campaignType !== null;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -135,21 +152,47 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
             onChange={(value) => setFormData(prev => ({ ...prev, description: value }))}
             onSave={() => console.log('Description auto-saved')}
           />
+
+          <div id="campaign-type-section">
+            <CampaignTypeSelector
+              value={formData.campaignType}
+              onChange={(type) => {
+                setFormData(prev => ({ ...prev, campaignType: type }));
+                setShowTypeError(false);
+              }}
+              isLocked={isLocked}
+              showError={showTypeError}
+              onSave={() => console.log('Campaign type auto-saved')}
+            />
+          </div>
         </div>
 
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex gap-3">
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800">
-              <p className="font-semibold mb-1">Campaign Naming Best Practices</p>
-              <ul className="list-disc list-inside space-y-1 text-blue-700">
-                <li>Include time period (e.g., Q1 2025)</li>
-                <li>Mention target audience (e.g., Enterprise)</li>
-                <li>Reference campaign type (e.g., Outreach)</li>
-                <li>Keep it concise but descriptive</li>
-              </ul>
+        <div className="mt-6 space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex gap-3">
+              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                <p className="font-semibold mb-1">Campaign Setup Tips</p>
+                <ul className="list-disc list-inside space-y-1 text-blue-700">
+                  <li>Choose campaign type carefully - it cannot be changed later</li>
+                  <li>Multi-channel campaigns provide maximum flexibility</li>
+                  <li>Email-only campaigns are best for content-rich outreach</li>
+                  <li>LinkedIn-only campaigns work well for executive targeting</li>
+                </ul>
+              </div>
             </div>
           </div>
+
+          {!isLocked && formData.campaignType && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsLocked(true)}
+                className="text-xs text-gray-600 hover:text-gray-800 px-3 py-1.5 rounded border border-gray-300 hover:border-gray-400 transition-colors"
+              >
+                🔒 Simulate Type Lock (for testing)
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end mt-8">
