@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CampaignNameInput } from './CampaignNameInput';
+import { CampaignDescriptionTextarea } from './CampaignDescriptionTextarea';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -129,26 +130,11 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="campaign-description" className="block text-sm font-medium text-gray-900">
-              Description
-              <span className="text-gray-500 font-normal ml-1">(Optional)</span>
-            </label>
-            <textarea
-              id="campaign-description"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Briefly describe the purpose and goals of this campaign..."
-              rows={4}
-              maxLength={500}
-              className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 focus:outline-none resize-none"
-            />
-            <div className="flex justify-end">
-              <span className="text-xs text-gray-500">
-                {formData.description.length}/500 chars
-              </span>
-            </div>
-          </div>
+          <CampaignDescriptionTextarea
+            value={formData.description}
+            onChange={(value) => setFormData(prev => ({ ...prev, description: value }))}
+            onSave={() => console.log('Description auto-saved')}
+          />
         </div>
 
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
