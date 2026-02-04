@@ -31,6 +31,7 @@ import WorkflowAutomationPage from './pages/Settings/WorkflowAutomationPage';
 import NotificationsManagementPage from './pages/Settings/NotificationsManagementPage';
 import { IntegrationsHub } from './pages/Integrations';
 import { TeamPerformancePage, TeamMemberDetailPage } from './pages/Team';
+import { CampaignWizardStep1Demo } from './pages/LeadGeneration/CampaignWizardStep1Demo';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -71,6 +72,7 @@ const App = () => {
                   <Route path="/demo/data-conflict" element={<Layout><DataConflictDemo /></Layout>} />
                   <Route path="/demo/real-time-progress" element={<Layout><RealTimeProgressDemo /></Layout>} />
                   <Route path="/demo/field-level-actions" element={<Layout><FieldLevelActionsDemo /></Layout>} />
+                  <Route path="/demo/campaign-wizard-step1" element={<Layout><CampaignWizardStep1Demo /></Layout>} />
                   <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
                   <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
                   <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />

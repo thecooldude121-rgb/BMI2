@@ -1,0 +1,188 @@
+import React, { useState } from 'react';
+import { CampaignNameInput } from './CampaignNameInput';
+import { ChevronRight, Info } from 'lucide-react';
+
+interface CampaignWizardStep1Props {
+  onNext: (data: Step1Data) => void;
+  initialData?: Partial<Step1Data>;
+}
+
+export interface Step1Data {
+  campaignName: string;
+  objective: string;
+  description: string;
+}
+
+export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
+  onNext,
+  initialData
+}) => {
+  const [formData, setFormData] = useState<Step1Data>({
+    campaignName: initialData?.campaignName || '',
+    objective: initialData?.objective || '',
+    description: initialData?.description || ''
+  });
+
+  const [isNameValid, setIsNameValid] = useState(false);
+
+  const existingCampaignNames = [
+    'Q4 2024 Holiday Campaign',
+    'New Year Product Launch',
+    'Spring Sales Initiative'
+  ];
+
+  const handleNext = () => {
+    if (!isNameValid || !formData.campaignName.trim()) {
+      return;
+    }
+
+    onNext(formData);
+  };
+
+  const canProceed = isNameValid && formData.campaignName.trim().length >= 5;
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+                1
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-900">Basic Info</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                2
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Select Template</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                3
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Build Sequence</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                4
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Select Leads</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                5
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Settings</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                6
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Review</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Basic Information
+          </h2>
+          <p className="text-gray-600">
+            Set up the foundation for your campaign
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          <CampaignNameInput
+            value={formData.campaignName}
+            onChange={(value) => setFormData(prev => ({ ...prev, campaignName: value }))}
+            existingNames={existingCampaignNames}
+            onValidationChange={setIsNameValid}
+          />
+
+          <div className="space-y-2">
+            <label htmlFor="campaign-objective" className="block text-sm font-medium text-gray-900">
+              Campaign Objective
+            </label>
+            <select
+              id="campaign-objective"
+              value={formData.objective}
+              onChange={(e) => setFormData(prev => ({ ...prev, objective: e.target.value }))}
+              className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 focus:outline-none"
+            >
+              <option value="">Select an objective...</option>
+              <option value="lead_generation">Lead Generation</option>
+              <option value="product_launch">Product Launch</option>
+              <option value="re_engagement">Re-engagement</option>
+              <option value="event_promotion">Event Promotion</option>
+              <option value="nurture">Nurture Campaign</option>
+              <option value="customer_retention">Customer Retention</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="campaign-description" className="block text-sm font-medium text-gray-900">
+              Description
+              <span className="text-gray-500 font-normal ml-1">(Optional)</span>
+            </label>
+            <textarea
+              id="campaign-description"
+              value={formData.description}
+              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Briefly describe the purpose and goals of this campaign..."
+              rows={4}
+              maxLength={500}
+              className="w-full px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all duration-200 focus:outline-none resize-none"
+            />
+            <div className="flex justify-end">
+              <span className="text-xs text-gray-500">
+                {formData.description.length}/500 chars
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex gap-3">
+            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-semibold mb-1">Campaign Naming Best Practices</p>
+              <ul className="list-disc list-inside space-y-1 text-blue-700">
+                <li>Include time period (e.g., Q1 2025)</li>
+                <li>Mention target audience (e.g., Enterprise)</li>
+                <li>Reference campaign type (e.g., Outreach)</li>
+                <li>Keep it concise but descriptive</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end mt-8">
+          <button
+            onClick={handleNext}
+            disabled={!canProceed}
+            className={`
+              px-6 py-2.5 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
+              ${canProceed
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }
+            `}
+          >
+            Next: Select Template
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
