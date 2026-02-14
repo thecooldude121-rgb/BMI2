@@ -4,6 +4,7 @@ import { CampaignDescriptionTextarea } from './CampaignDescriptionTextarea';
 import { CampaignTypeSelector, CampaignType } from './CampaignTypeSelector';
 import CampaignTargetMetrics from './CampaignTargetMetrics';
 import CampaignTagsInput from './CampaignTagsInput';
+import CampaignOwnerDropdown from './CampaignOwnerDropdown';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -23,6 +24,7 @@ export interface Step1Data {
     revenue: number | null;
   };
   tags: string[];
+  ownerId: string;
 }
 
 export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
@@ -40,7 +42,8 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
       opportunities: null,
       revenue: null
     },
-    tags: initialData?.tags || []
+    tags: initialData?.tags || [],
+    ownerId: initialData?.ownerId || 'current_user'
   });
 
   const [isNameValid, setIsNameValid] = useState(false);
@@ -190,6 +193,11 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
           <CampaignTagsInput
             tags={formData.tags}
             onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
+          />
+
+          <CampaignOwnerDropdown
+            selectedOwnerId={formData.ownerId}
+            onChange={(ownerId) => setFormData(prev => ({ ...prev, ownerId }))}
           />
         </div>
 
