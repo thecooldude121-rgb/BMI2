@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CampaignNameInput } from './CampaignNameInput';
 import { CampaignDescriptionTextarea } from './CampaignDescriptionTextarea';
 import { CampaignTypeSelector, CampaignType } from './CampaignTypeSelector';
+import CampaignTargetMetrics from './CampaignTargetMetrics';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -14,6 +15,12 @@ export interface Step1Data {
   objective: string;
   description: string;
   campaignType: CampaignType;
+  targetMetrics: {
+    openRate: number | null;
+    replyRate: number | null;
+    opportunities: number | null;
+    revenue: number | null;
+  };
 }
 
 export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
@@ -24,7 +31,13 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
     campaignName: initialData?.campaignName || '',
     objective: initialData?.objective || '',
     description: initialData?.description || '',
-    campaignType: initialData?.campaignType || null
+    campaignType: initialData?.campaignType || null,
+    targetMetrics: initialData?.targetMetrics || {
+      openRate: null,
+      replyRate: null,
+      opportunities: null,
+      revenue: null
+    }
   });
 
   const [isNameValid, setIsNameValid] = useState(false);
@@ -165,6 +178,11 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
               onSave={() => console.log('Campaign type auto-saved')}
             />
           </div>
+
+          <CampaignTargetMetrics
+            values={formData.targetMetrics}
+            onChange={(metrics) => setFormData(prev => ({ ...prev, targetMetrics: metrics }))}
+          />
         </div>
 
         <div className="mt-6 space-y-4">
