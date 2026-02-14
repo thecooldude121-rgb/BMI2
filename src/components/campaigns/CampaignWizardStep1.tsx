@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CampaignNameInput } from './CampaignNameInput';
 import { CampaignDescriptionTextarea } from './CampaignDescriptionTextarea';
 import { CampaignTypeSelector, CampaignType } from './CampaignTypeSelector';
@@ -6,6 +6,9 @@ import CampaignTargetMetrics from './CampaignTargetMetrics';
 import CampaignTagsInput from './CampaignTagsInput';
 import CampaignOwnerDropdown from './CampaignOwnerDropdown';
 import CampaignCollaboratorsSelect from './CampaignCollaboratorsSelect';
+import SaveDraftButton from './SaveDraftButton';
+import UnsavedChangesModal from './UnsavedChangesModal';
+import { useToast } from '../../contexts/ToastContext';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -33,6 +36,8 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
   onNext,
   initialData
 }) => {
+  const { addToast } = useToast();
+
   const [formData, setFormData] = useState<Step1Data>({
     campaignName: initialData?.campaignName || '',
     objective: initialData?.objective || '',
@@ -53,11 +58,96 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
   const [showTypeError, setShowTypeError] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
+  // Draft saving state
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const initialFormDataRef = useRef<Step1Data>(formData);
+
   const existingCampaignNames = [
     'Q4 2024 Holiday Campaign',
     'New Year Product Launch',
     'Spring Sales Initiative'
   ];
+
+  // Detect changes
+  useEffect(() => {
+    const hasFormChanged = JSON.stringify(formData) !== JSON.stringify(initialFormDataRef.current);
+    setHasChanges(hasFormChanged);
+  }, [formData]);
+
+  // Save draft function
+  const handleSaveDraft = async () => {
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // In real app, save to database
+      console.log('Draft saved:', formData);
+
+      // Update initial data to match current (no longer has changes)
+      initialFormDataRef.current = { ...formData };
+      setHasChanges(false);
+
+      addToast('Draft saved successfully', 'success');
+
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      addToast('Failed to save draft. Retrying...', 'error');
+      throw error; // Re-throw for SaveDraftButton to handle retry
+    }
+  };
+
+  // Navigation guard
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
+
+  // Handle navigation with unsaved changes
+  const handleNavigationWithChanges = (callback: () => void) => {
+    if (hasChanges) {
+      setPendingNavigation(() => callback);
+      setShowUnsavedModal(true);
+    } else {
+      callback();
+    }
+  };
+
+  // Unsaved changes modal handlers
+  const handleSaveAndExit = async () => {
+    try {
+      await handleSaveDraft();
+      setShowUnsavedModal(false);
+      if (pendingNavigation) {
+        pendingNavigation();
+        setPendingNavigation(null);
+      }
+    } catch (error) {
+      // Error is handled in handleSaveDraft
+    }
+  };
+
+  const handleExitWithoutSaving = () => {
+    setShowUnsavedModal(false);
+    setHasChanges(false);
+    if (pendingNavigation) {
+      pendingNavigation();
+      setPendingNavigation(null);
+    }
+  };
+
+  const handleCancelExit = () => {
+    setShowUnsavedModal(false);
+    setPendingNavigation(null);
+  };
 
   const handleNext = () => {
     if (!isNameValid || !formData.campaignName.trim()) {
@@ -83,6 +173,14 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Unsaved Changes Modal */}
+      <UnsavedChangesModal
+        isOpen={showUnsavedModal}
+        onSaveAndExit={handleSaveAndExit}
+        onExitWithoutSaving={handleExitWithoutSaving}
+        onCancel={handleCancelExit}
+      />
+
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-2">
@@ -128,6 +226,13 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
               <div className="ml-2 text-sm font-medium text-gray-500">Review</div>
             </div>
           </div>
+
+          {/* Save Draft Button - Top Right */}
+          <SaveDraftButton
+            onSave={handleSaveDraft}
+            hasChanges={hasChanges}
+            autoSaveInterval={5000}
+          />
         </div>
       </div>
 
