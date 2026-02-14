@@ -3,6 +3,7 @@ import { CampaignNameInput } from './CampaignNameInput';
 import { CampaignDescriptionTextarea } from './CampaignDescriptionTextarea';
 import { CampaignTypeSelector, CampaignType } from './CampaignTypeSelector';
 import CampaignTargetMetrics from './CampaignTargetMetrics';
+import CampaignTagsInput from './CampaignTagsInput';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -21,6 +22,7 @@ export interface Step1Data {
     opportunities: number | null;
     revenue: number | null;
   };
+  tags: string[];
 }
 
 export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
@@ -37,7 +39,8 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
       replyRate: null,
       opportunities: null,
       revenue: null
-    }
+    },
+    tags: initialData?.tags || []
   });
 
   const [isNameValid, setIsNameValid] = useState(false);
@@ -182,6 +185,11 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
           <CampaignTargetMetrics
             values={formData.targetMetrics}
             onChange={(metrics) => setFormData(prev => ({ ...prev, targetMetrics: metrics }))}
+          />
+
+          <CampaignTagsInput
+            tags={formData.tags}
+            onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
           />
         </div>
 
