@@ -5,6 +5,7 @@ import { CampaignTypeSelector, CampaignType } from './CampaignTypeSelector';
 import CampaignTargetMetrics from './CampaignTargetMetrics';
 import CampaignTagsInput from './CampaignTagsInput';
 import CampaignOwnerDropdown from './CampaignOwnerDropdown';
+import CampaignCollaboratorsSelect from './CampaignCollaboratorsSelect';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
@@ -25,6 +26,7 @@ export interface Step1Data {
   };
   tags: string[];
   ownerId: string;
+  collaboratorIds: string[];
 }
 
 export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
@@ -43,7 +45,8 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
       revenue: null
     },
     tags: initialData?.tags || [],
-    ownerId: initialData?.ownerId || 'current_user'
+    ownerId: initialData?.ownerId || 'current_user',
+    collaboratorIds: initialData?.collaboratorIds || []
   });
 
   const [isNameValid, setIsNameValid] = useState(false);
@@ -198,6 +201,12 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
           <CampaignOwnerDropdown
             selectedOwnerId={formData.ownerId}
             onChange={(ownerId) => setFormData(prev => ({ ...prev, ownerId }))}
+          />
+
+          <CampaignCollaboratorsSelect
+            selectedCollaboratorIds={formData.collaboratorIds}
+            onChange={(collaboratorIds) => setFormData(prev => ({ ...prev, collaboratorIds }))}
+            ownerId={formData.ownerId}
           />
         </div>
 
