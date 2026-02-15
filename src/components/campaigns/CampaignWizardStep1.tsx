@@ -11,7 +11,7 @@ import UnsavedChangesModal from './UnsavedChangesModal';
 import CancelCampaignButton from './CancelCampaignButton';
 import DiscardChangesModal from './DiscardChangesModal';
 import { useToast } from '../../contexts/ToastContext';
-import { ChevronRight, Info } from 'lucide-react';
+import { ChevronRight, Info, ChevronLeft } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
   onNext: (data: Step1Data) => void;
@@ -183,6 +183,15 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
     }
   };
 
+  // Back button handler (same behavior as cancel)
+  const handleBackClick = () => {
+    if (hasChanges) {
+      setShowDiscardModal(true);
+    } else {
+      handleNavigateBack();
+    }
+  };
+
   const handleSaveDraftAndClose = async () => {
     setIsSaving(true);
     try {
@@ -299,6 +308,17 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
         onCancel={handleCancelDiscard}
         isSaving={isSaving}
       />
+
+      {/* Back Navigation */}
+      <div className="mb-6">
+        <button
+          onClick={handleBackClick}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 group"
+        >
+          <ChevronLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-1" />
+          <span className="text-sm font-medium">Back to Campaigns</span>
+        </button>
+      </div>
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
