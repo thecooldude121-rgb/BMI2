@@ -68,7 +68,11 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
   const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const initialFormDataRef = useRef<Step1Data>(formData);
+
+  // Error states
+  const [showOwnerError, setShowOwnerError] = useState(false);
 
   const existingCampaignNames = [
     'Q4 2024 Holiday Campaign',
@@ -81,6 +85,21 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
     const hasFormChanged = JSON.stringify(formData) !== JSON.stringify(initialFormDataRef.current);
     setHasChanges(hasFormChanged);
   }, [formData]);
+
+  // Keyboard shortcut: Cmd/Ctrl + Enter to proceed
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (canProceed && !isNavigating) {
+          handleNext();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [canProceed, isNavigating, formData]);
 
   // Save draft function
   const handleSaveDraft = async () => {
@@ -197,11 +216,18 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
     }
   };
 
-  const handleNext = () => {
-    if (!isNameValid || !formData.campaignName.trim()) {
+  const handleNext = async () => {
+    // Validate campaign name
+    if (!isNameValid || !formData.campaignName.trim() || formData.campaignName.trim().length < 5) {
+      const nameInput = document.querySelector('[name="campaignName"]') as HTMLElement;
+      if (nameInput) {
+        nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        nameInput.focus();
+      }
       return;
     }
 
+    // Validate campaign type
     if (!formData.campaignType) {
       setShowTypeError(true);
       const typeSection = document.getElementById('campaign-type-section');
@@ -211,13 +237,49 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
       return;
     }
 
+    // Validate owner
+    if (!formData.ownerId) {
+      setShowOwnerError(true);
+      const ownerSection = document.querySelector('[data-section="owner"]') as HTMLElement;
+      if (ownerSection) {
+        ownerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      addToast('Please select a campaign owner', 'error');
+      return;
+    }
+
+    // All validations passed
     setShowTypeError(false);
-    onNext(formData);
+    setShowOwnerError(false);
+    setIsNavigating(true);
+
+    try {
+      // Auto-save before navigation
+      console.log('Auto-saving before proceeding to Step 2...');
+      await handleSaveDraft();
+
+      // Brief delay for smooth transition and scroll to top
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        onNext(formData);
+        setIsNavigating(false);
+      }, 300);
+    } catch (error) {
+      console.error('Error saving before navigation:', error);
+      setIsNavigating(false);
+      // Still proceed with navigation even if save fails
+      addToast('Proceeding without saving', 'info');
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        onNext(formData);
+      }, 100);
+    }
   };
 
   const canProceed = isNameValid &&
                      formData.campaignName.trim().length >= 5 &&
-                     formData.campaignType !== null;
+                     formData.campaignType !== null &&
+                     formData.ownerId !== null;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -363,10 +425,21 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
             onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
           />
 
-          <CampaignOwnerDropdown
-            selectedOwnerId={formData.ownerId}
-            onChange={(ownerId) => setFormData(prev => ({ ...prev, ownerId }))}
-          />
+          <div data-section="owner">
+            <CampaignOwnerDropdown
+              selectedOwnerId={formData.ownerId}
+              onChange={(ownerId) => {
+                setFormData(prev => ({ ...prev, ownerId }));
+                setShowOwnerError(false);
+              }}
+            />
+            {showOwnerError && !formData.ownerId && (
+              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+                <span>⚠️</span>
+                <span>Campaign owner is required</span>
+              </p>
+            )}
+          </div>
 
           <CampaignCollaboratorsSelect
             selectedCollaboratorIds={formData.collaboratorIds}
@@ -391,6 +464,50 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
             </div>
           </div>
 
+          {/* Required vs Optional Fields */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="flex gap-3">
+              <div className="text-sm text-gray-700">
+                <p className="font-semibold mb-2 text-gray-900">Required to Continue:</p>
+                <div className="space-y-1 mb-3">
+                  <div className="flex items-center gap-2">
+                    {formData.campaignName.trim().length >= 5 ? (
+                      <span className="text-green-600">✓</span>
+                    ) : (
+                      <span className="text-gray-400">○</span>
+                    )}
+                    <span className={formData.campaignName.trim().length >= 5 ? 'text-gray-600 line-through' : ''}>
+                      Campaign Name (min 5 characters)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {formData.campaignType ? (
+                      <span className="text-green-600">✓</span>
+                    ) : (
+                      <span className="text-gray-400">○</span>
+                    )}
+                    <span className={formData.campaignType ? 'text-gray-600 line-through' : ''}>
+                      Campaign Type
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {formData.ownerId ? (
+                      <span className="text-green-600">✓</span>
+                    ) : (
+                      <span className="text-gray-400">○</span>
+                    )}
+                    <span className={formData.ownerId ? 'text-gray-600 line-through' : ''}>
+                      Campaign Owner
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 italic">
+                  All other fields are optional and can be filled in later
+                </p>
+              </div>
+            </div>
+          </div>
+
           {!isLocked && formData.campaignType && (
             <div className="flex justify-end">
               <button
@@ -403,20 +520,46 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
           )}
         </div>
 
-        <div className="flex justify-end mt-8">
+        <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
+          {/* Keyboard Shortcut Hint */}
+          <div className="text-sm text-gray-500 flex items-center gap-2">
+            <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">
+              {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}
+            </kbd>
+            <span>+</span>
+            <kbd className="px-2 py-1 bg-gray-100 border border-gray-300 rounded text-xs font-mono">
+              Enter
+            </kbd>
+            <span className="ml-1">to continue</span>
+          </div>
+
+          {/* Next Button */}
           <button
             onClick={handleNext}
-            disabled={!canProceed}
+            disabled={!canProceed || isNavigating}
             className={`
-              px-6 py-2.5 rounded-lg font-medium transition-all duration-200 flex items-center gap-2
-              ${canProceed
-                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+              px-6 py-3 rounded-lg font-medium transition-all duration-200
+              flex items-center gap-2 min-w-[200px] justify-center
+              ${canProceed && !isNavigating
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md active:scale-95'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }
             `}
           >
-            Next: Select Template
-            <ChevronRight className="w-4 h-4" />
+            {isNavigating ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <span>Next: Select Template</span>
+                <ChevronRight className="w-5 h-5" />
+              </>
+            )}
           </button>
         </div>
       </div>
