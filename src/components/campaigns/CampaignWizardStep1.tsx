@@ -8,11 +8,14 @@ import CampaignOwnerDropdown from './CampaignOwnerDropdown';
 import CampaignCollaboratorsSelect from './CampaignCollaboratorsSelect';
 import SaveDraftButton from './SaveDraftButton';
 import UnsavedChangesModal from './UnsavedChangesModal';
+import CancelCampaignButton from './CancelCampaignButton';
+import DiscardChangesModal from './DiscardChangesModal';
 import { useToast } from '../../contexts/ToastContext';
 import { ChevronRight, Info } from 'lucide-react';
 
 interface CampaignWizardStep1Props {
   onNext: (data: Step1Data) => void;
+  onCancel?: () => void;
   initialData?: Partial<Step1Data>;
 }
 
@@ -34,6 +37,7 @@ export interface Step1Data {
 
 export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
   onNext,
+  onCancel,
   initialData
 }) => {
   const { addToast } = useToast();
@@ -61,7 +65,9 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
   // Draft saving state
   const [hasChanges, setHasChanges] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const initialFormDataRef = useRef<Step1Data>(formData);
 
   const existingCampaignNames = [
@@ -149,6 +155,48 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
     setPendingNavigation(null);
   };
 
+  // Cancel button handlers
+  const handleCancelClick = () => {
+    if (hasChanges) {
+      setShowDiscardModal(true);
+    } else {
+      handleNavigateBack();
+    }
+  };
+
+  const handleSaveDraftAndClose = async () => {
+    setIsSaving(true);
+    try {
+      await handleSaveDraft();
+      setShowDiscardModal(false);
+      addToast('Draft saved', 'success');
+      handleNavigateBack();
+    } catch (error) {
+      // Error is handled in handleSaveDraft
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscardChanges = () => {
+    setShowDiscardModal(false);
+    setHasChanges(false);
+    addToast('Changes discarded', 'info');
+    handleNavigateBack();
+  };
+
+  const handleCancelDiscard = () => {
+    setShowDiscardModal(false);
+  };
+
+  const handleNavigateBack = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      // Default behavior: go back in history or to campaigns list
+      window.history.back();
+    }
+  };
+
   const handleNext = () => {
     if (!isNameValid || !formData.campaignName.trim()) {
       return;
@@ -179,6 +227,15 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
         onSaveAndExit={handleSaveAndExit}
         onExitWithoutSaving={handleExitWithoutSaving}
         onCancel={handleCancelExit}
+      />
+
+      {/* Discard Changes Modal */}
+      <DiscardChangesModal
+        isOpen={showDiscardModal}
+        onSaveDraft={handleSaveDraftAndClose}
+        onDiscardChanges={handleDiscardChanges}
+        onCancel={handleCancelDiscard}
+        isSaving={isSaving}
       />
 
       <div className="mb-8">
@@ -227,12 +284,15 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
             </div>
           </div>
 
-          {/* Save Draft Button - Top Right */}
-          <SaveDraftButton
-            onSave={handleSaveDraft}
-            hasChanges={hasChanges}
-            autoSaveInterval={5000}
-          />
+          {/* Action Buttons - Top Right */}
+          <div className="flex items-start gap-3">
+            <SaveDraftButton
+              onSave={handleSaveDraft}
+              hasChanges={hasChanges}
+              autoSaveInterval={5000}
+            />
+            <CancelCampaignButton onClick={handleCancelClick} />
+          </div>
         </div>
       </div>
 
