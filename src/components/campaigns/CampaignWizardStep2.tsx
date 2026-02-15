@@ -1,0 +1,238 @@
+import React, { useState, useEffect } from 'react';
+import { TemplateCard } from './TemplateCard';
+import { campaignTemplates, CampaignTemplate } from '../../utils/campaignTemplates';
+import { useToast } from '../../contexts/ToastContext';
+import { ChevronRight, ChevronLeft, AlertTriangle } from 'lucide-react';
+import CancelCampaignButton from './CancelCampaignButton';
+import SaveDraftButton from './SaveDraftButton';
+
+interface CampaignWizardStep2Props {
+  onNext: (data: Step2Data) => void;
+  onBack: () => void;
+  onCancel?: () => void;
+  initialData?: Partial<Step2Data>;
+}
+
+export interface Step2Data {
+  selectedTemplateId: string | null;
+  selectedTemplate: CampaignTemplate | null;
+}
+
+export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
+  onNext,
+  onBack,
+  onCancel,
+  initialData
+}) => {
+  const { addToast } = useToast();
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    initialData?.selectedTemplateId || null
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const selectedTemplate = selectedTemplateId
+    ? campaignTemplates.find(t => t.id === selectedTemplateId) || null
+    : null;
+
+  const showScratchWarning = selectedTemplateId === 'custom_blank';
+
+  useEffect(() => {
+    setHasChanges(selectedTemplateId !== initialData?.selectedTemplateId);
+  }, [selectedTemplateId, initialData?.selectedTemplateId]);
+
+  const handleTemplateSelect = async (templateId: string) => {
+    setIsLoading(true);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      setSelectedTemplateId(templateId);
+
+      const template = campaignTemplates.find(t => t.id === templateId);
+      if (template) {
+        addToast(`Template "${template.name}" selected`, 'success');
+      }
+
+      await handleAutoSave(templateId);
+    } catch (error) {
+      console.error('Error selecting template:', error);
+      addToast('Failed to select template', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAutoSave = async (templateId: string) => {
+    try {
+      console.log('Auto-saving selected template:', templateId);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log('Template auto-saved successfully');
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  };
+
+  const handleNext = () => {
+    if (!selectedTemplateId) {
+      addToast('Please select a template to continue', 'error');
+      return;
+    }
+
+    onNext({
+      selectedTemplateId,
+      selectedTemplate
+    });
+  };
+
+  const handleNavigateBack = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      window.history.back();
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      {/* Back Navigation */}
+      <div className="mb-6">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 group"
+        >
+          <ChevronLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-1" />
+          <span className="text-sm font-medium">Back to Basic Info</span>
+        </button>
+      </div>
+
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          {/* Progress Tracker */}
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-semibold">
+                ✓
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-900">Basic Info</div>
+            </div>
+            <div className="w-16 h-0.5 bg-blue-500"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+                2
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-900">Select Template</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                3
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Build Sequence</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                4
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Select Leads</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                5
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Settings</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                6
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Review</div>
+            </div>
+          </div>
+
+          {/* Action Buttons - Top Right */}
+          <div className="flex items-start gap-3">
+            <SaveDraftButton
+              onSave={async () => {
+                console.log('Manual draft save');
+                addToast('Draft saved successfully', 'success');
+              }}
+              hasChanges={hasChanges}
+              autoSaveInterval={5000}
+            />
+            <CancelCampaignButton onClick={handleNavigateBack} />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Select Campaign Template
+          </h2>
+          <p className="text-gray-600">
+            Choose a pre-built template or start from scratch
+          </p>
+        </div>
+
+        {/* Warning for Start from Scratch */}
+        {showScratchWarning && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-900 mb-1">
+                Building from scratch
+              </p>
+              <p className="text-sm text-amber-700">
+                You'll need to build your sequence from scratch in the next step. This gives you complete control but requires more setup time.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Template Grid - 3 columns */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {campaignTemplates.map((template) => (
+            <TemplateCard
+              key={template.id}
+              template={template}
+              onSelect={handleTemplateSelect}
+              isSelected={selectedTemplateId === template.id}
+              isLoading={isLoading && selectedTemplateId === template.id}
+            />
+          ))}
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 px-6 py-2.5 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back
+          </button>
+
+          <button
+            onClick={handleNext}
+            disabled={!selectedTemplateId}
+            className={`
+              flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-all duration-200
+              ${selectedTemplateId
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }
+            `}
+          >
+            Next
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

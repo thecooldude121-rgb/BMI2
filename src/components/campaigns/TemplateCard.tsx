@@ -1,28 +1,39 @@
 import React from 'react';
 import { CampaignTemplate } from '../../utils/campaignTemplates';
+import { Check } from 'lucide-react';
 
 interface TemplateCardProps {
   template: CampaignTemplate;
   onSelect: (templateId: string) => void;
   isSelected?: boolean;
+  isLoading?: boolean;
 }
 
 export const TemplateCard: React.FC<TemplateCardProps> = ({
   template,
   onSelect,
-  isSelected = false
+  isSelected = false,
+  isLoading = false
 }) => {
   return (
     <div
       className={`
-        border rounded-xl p-6 cursor-pointer transition-all
+        relative border rounded-xl p-6 cursor-pointer transition-all duration-200
         ${isSelected
           ? 'border-blue-500 bg-blue-50 shadow-md'
-          : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
+          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
         }
+        ${isLoading ? 'animate-pulse pointer-events-none' : ''}
       `}
       onClick={() => onSelect(template.id)}
     >
+      {/* Checkmark badge when selected */}
+      {isSelected && (
+        <div className="absolute top-4 right-4 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+          <Check className="w-5 h-5 text-white" />
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-3xl">{template.icon}</span>
@@ -30,7 +41,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
             {template.name}
           </h3>
         </div>
-        {template.type === 'multi_channel' && (
+        {template.type === 'multi_channel' && !isSelected && (
           <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
             Multi-channel
           </span>
