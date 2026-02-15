@@ -21,10 +21,25 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
         relative border rounded-xl p-6 cursor-pointer transition-all duration-200
         ${isSelected
           ? 'border-blue-500 bg-blue-50 shadow-md'
-          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm'
+          : 'border-gray-200 hover:border-blue-200 hover:bg-blue-50 hover:scale-[1.02]'
         }
         ${isLoading ? 'animate-pulse pointer-events-none' : ''}
       `}
+      style={{
+        boxShadow: isSelected
+          ? '0 4px 6px rgba(0, 0, 0, 0.1)'
+          : undefined
+      }}
+      onMouseEnter={(e) => {
+        if (!isSelected && !isLoading) {
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isSelected) {
+          e.currentTarget.style.boxShadow = '';
+        }
+      }}
       onClick={() => onSelect(template.id)}
     >
       {/* Checkmark badge when selected */}
