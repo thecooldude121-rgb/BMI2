@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TemplateCard } from './TemplateCard';
 import { campaignTemplates, CampaignTemplate } from '../../utils/campaignTemplates';
 import { useToast } from '../../contexts/ToastContext';
-import { ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, X, Grid3X3, Table } from 'lucide-react';
+import { ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, X, Grid3X3, Table, Loader2 } from 'lucide-react';
 import CancelCampaignButton from './CancelCampaignButton';
 import SaveDraftButton from './SaveDraftButton';
 
@@ -30,6 +30,7 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
     initialData?.selectedTemplateId || null
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [showComparisonView, setShowComparisonView] = useState(false);
   const [showTip, setShowTip] = useState(true);
@@ -41,6 +42,27 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
       setShowTip(false);
     }
   }, []);
+
+  const handlePrevious = useCallback(async () => {
+    if (selectedTemplateId) {
+      console.log('Auto-saving before going back to Step 1');
+      await handleAutoSave(selectedTemplateId);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    onBack();
+  }, [selectedTemplateId, onBack]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.altKey || e.metaKey) && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevious();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePrevious]);
 
   const selectedTemplate = selectedTemplateId
     ? campaignTemplates.find(t => t.id === selectedTemplateId) || null
@@ -84,16 +106,46 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!selectedTemplateId) {
-      addToast('Please select a template to continue', 'error');
+      addToast('⚠️ Please select a template or start from scratch', 'error');
       return;
     }
 
-    onNext({
-      selectedTemplateId,
-      selectedTemplate
-    });
+    setIsNavigating(true);
+    const startTime = Date.now();
+
+    try {
+      await handleAutoSave(selectedTemplateId);
+
+      console.log('Loading sequences for template:', selectedTemplateId);
+
+      if (selectedTemplateId === 'custom_blank') {
+        console.log('Loading empty sequence builder for "Start from Scratch"');
+      } else if (selectedTemplateId === 'cold_outreach_basic') {
+        console.log('Loading 5 pre-filled touches for "Cold Outreach" template');
+      } else {
+        console.log(`Loading sequences for ${selectedTemplate?.name}`);
+      }
+
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, 500 - elapsedTime);
+
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      onNext({
+        selectedTemplateId,
+        selectedTemplate
+      });
+    } catch (error) {
+      console.error('Error during navigation:', error);
+      addToast('Failed to proceed to next step', 'error');
+      setIsNavigating(false);
+    }
   };
 
   const handleNavigateBack = () => {
@@ -117,8 +169,9 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
       {/* Back Navigation */}
       <div className="mb-6">
         <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 group"
+          onClick={handlePrevious}
+          disabled={isNavigating}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 group disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ChevronLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-1" />
           <span className="text-sm font-medium">Back to Basic Info</span>
@@ -412,26 +465,36 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
         {/* Navigation Buttons */}
         <div className="flex items-center justify-between pt-6 border-t border-gray-200">
           <button
-            onClick={onBack}
-            className="flex items-center gap-2 px-6 py-2.5 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium"
+            onClick={handlePrevious}
+            disabled={isNavigating}
+            className="flex items-center gap-2 px-6 py-2.5 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" />
-            Back
+            <span>Previous: Basic Info</span>
           </button>
 
           <button
             onClick={handleNext}
-            disabled={!selectedTemplateId}
+            disabled={!selectedTemplateId || isNavigating}
             className={`
               flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-all duration-200
-              ${selectedTemplateId
+              ${selectedTemplateId && !isNavigating
                 ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }
             `}
           >
-            Next
-            <ChevronRight className="w-4 h-4" />
+            {isNavigating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <span>Next: Build Sequence</span>
+                <ChevronRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </div>
       </div>
