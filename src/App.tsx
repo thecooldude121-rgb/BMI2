@@ -33,6 +33,7 @@ import { IntegrationsHub } from './pages/Integrations';
 import { TeamPerformancePage, TeamMemberDetailPage } from './pages/Team';
 import { CampaignWizardStep1Demo } from './pages/LeadGeneration/CampaignWizardStep1Demo';
 import CampaignWizardStep2Demo from './pages/LeadGeneration/CampaignWizardStep2Demo';
+import CampaignWizardStep3Demo from './pages/LeadGeneration/CampaignWizardStep3Demo';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -75,6 +76,7 @@ const App = () => {
                   <Route path="/demo/field-level-actions" element={<Layout><FieldLevelActionsDemo /></Layout>} />
                   <Route path="/demo/campaign-wizard-step1" element={<Layout><CampaignWizardStep1Demo /></Layout>} />
                   <Route path="/demo/campaign-wizard-step2" element={<Layout><CampaignWizardStep2Demo /></Layout>} />
+                  <Route path="/demo/campaign-wizard-step3" element={<Layout><CampaignWizardStep3Demo /></Layout>} />
                   <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
                   <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
                   <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />

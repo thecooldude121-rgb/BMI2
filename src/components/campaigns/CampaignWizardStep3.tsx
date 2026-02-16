@@ -1,0 +1,422 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Loader2, Plus, Mail, Linkedin } from 'lucide-react';
+import { CampaignTemplate, SequenceTouch } from '../../utils/campaignTemplates';
+import { useToast } from '../../contexts/ToastContext';
+import CancelCampaignButton from './CancelCampaignButton';
+import SaveDraftButton from './SaveDraftButton';
+
+interface CampaignWizardStep3Props {
+  onNext: (data: Step3Data) => void;
+  onBack: () => void;
+  onCancel?: () => void;
+  initialData?: Partial<Step3Data>;
+  selectedTemplate: CampaignTemplate | null;
+}
+
+export interface Step3Data {
+  sequences: SequenceTouch[];
+  totalTouches: number;
+  estimatedDuration: number;
+  channel: 'email' | 'linkedin' | 'multi_channel';
+}
+
+export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
+  onNext,
+  onBack,
+  onCancel,
+  initialData,
+  selectedTemplate
+}) => {
+  const { addToast } = useToast();
+
+  const [sequences, setSequences] = useState<SequenceTouch[]>(
+    initialData?.sequences || selectedTemplate?.sequences || []
+  );
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    setHasChanges(JSON.stringify(sequences) !== JSON.stringify(initialData?.sequences));
+  }, [sequences, initialData?.sequences]);
+
+  const calculateEstimatedDuration = useCallback((touches: SequenceTouch[]): number => {
+    if (touches.length === 0) return 0;
+
+    let totalDays = 0;
+    touches.forEach(touch => {
+      if (touch.delayUnit === 'days') {
+        totalDays += touch.delay;
+      } else if (touch.delayUnit === 'hours') {
+        totalDays += touch.delay / 24;
+      }
+    });
+
+    return Math.ceil(totalDays);
+  }, []);
+
+  const determineChannel = useCallback((touches: SequenceTouch[]): 'email' | 'linkedin' | 'multi_channel' => {
+    if (touches.length === 0) return 'email';
+
+    const hasEmail = touches.some(t => t.channel === 'email');
+    const hasLinkedIn = touches.some(t => t.channel === 'linkedin');
+
+    if (hasEmail && hasLinkedIn) return 'multi_channel';
+    if (hasLinkedIn) return 'linkedin';
+    return 'email';
+  }, []);
+
+  const totalTouches = sequences.length;
+  const estimatedDuration = calculateEstimatedDuration(sequences);
+  const channel = determineChannel(sequences);
+
+  const handleAutoSave = async () => {
+    try {
+      console.log('Auto-saving sequence data');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log('Sequence auto-saved successfully');
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  };
+
+  const handlePrevious = useCallback(async () => {
+    if (hasChanges) {
+      console.log('Auto-saving before going back to Step 2');
+      await handleAutoSave();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    onBack();
+  }, [hasChanges, onBack]);
+
+  const handleNext = async () => {
+    if (sequences.length === 0) {
+      addToast('⚠️ Please add at least one touch to your sequence', 'error');
+      return;
+    }
+
+    setIsNavigating(true);
+    const startTime = Date.now();
+
+    try {
+      await handleAutoSave();
+
+      console.log('Proceeding to Step 4 with sequences:', sequences.length);
+
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, 500 - elapsedTime);
+
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      onNext({
+        sequences,
+        totalTouches,
+        estimatedDuration,
+        channel
+      });
+    } catch (error) {
+      console.error('Error during navigation:', error);
+      addToast('Failed to proceed to next step', 'error');
+      setIsNavigating(false);
+    }
+  };
+
+  const handleNavigateBack = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      window.history.back();
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.altKey || e.metaKey) && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevious();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePrevious]);
+
+  const getChannelDisplay = () => {
+    if (channel === 'email') return 'Email';
+    if (channel === 'linkedin') return 'LinkedIn';
+    return 'Multi-channel';
+  };
+
+  const getChannelIcon = () => {
+    if (channel === 'email') return <Mail className="w-4 h-4" />;
+    if (channel === 'linkedin') return <Linkedin className="w-4 h-4" />;
+    return (
+      <div className="flex items-center gap-1">
+        <Mail className="w-3.5 h-3.5" />
+        <Linkedin className="w-3.5 h-3.5" />
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      {/* Back Navigation */}
+      <div className="mb-6">
+        <button
+          onClick={handlePrevious}
+          disabled={isNavigating}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 group disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <ChevronLeft className="w-4 h-4 transition-transform duration-200 group-hover:-translate-x-1" />
+          <span className="text-sm font-medium">Back to Template Selection</span>
+        </button>
+      </div>
+
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          {/* Progress Tracker */}
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-semibold">
+                ✓
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-900">Basic Info</div>
+            </div>
+            <div className="w-16 h-0.5 bg-green-500"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center text-sm font-semibold">
+                ✓
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-900">Template</div>
+            </div>
+            <div className="w-16 h-0.5 bg-blue-500"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+                3
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-900">Build Sequence</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                4
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Select Leads</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                5
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Settings</div>
+            </div>
+            <div className="w-16 h-0.5 bg-gray-300"></div>
+            <div className="flex items-center">
+              <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                6
+              </div>
+              <div className="ml-2 text-sm font-medium text-gray-500">Review</div>
+            </div>
+          </div>
+
+          {/* Action Buttons - Top Right */}
+          <div className="flex items-start gap-3">
+            <SaveDraftButton
+              onSave={async () => {
+                await handleAutoSave();
+                addToast('Draft saved successfully', 'success');
+              }}
+              hasChanges={hasChanges}
+              autoSaveInterval={5000}
+            />
+            <CancelCampaignButton onClick={handleNavigateBack} />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+        <div className="mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Build Your Sequence
+          </h2>
+          <p className="text-gray-600">
+            Create or customize your campaign touches
+          </p>
+        </div>
+
+        {/* 21. Sequence Overview Panel */}
+        <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            {/* Template */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center text-xl">
+                {selectedTemplate?.icon || '✨'}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Template</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {selectedTemplate?.name || 'Custom'}
+                </p>
+              </div>
+            </div>
+
+            <div className="h-10 w-px bg-gray-300"></div>
+
+            {/* Total Touches */}
+            <div>
+              <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Touches</p>
+              <p className="text-2xl font-bold text-blue-600">{totalTouches}</p>
+            </div>
+
+            <div className="h-10 w-px bg-gray-300"></div>
+
+            {/* Est. Duration */}
+            <div>
+              <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Est. Duration</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {estimatedDuration} {estimatedDuration === 1 ? 'day' : 'days'}
+              </p>
+            </div>
+
+            <div className="h-10 w-px bg-gray-300"></div>
+
+            {/* Channel */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center">
+                {getChannelIcon()}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Channel</p>
+                <p className="text-sm font-semibold text-gray-900">{getChannelDisplay()}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sequence Builder Area - Placeholder for now */}
+        <div className="mb-8">
+          {sequences.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center">
+                  <Plus className="w-8 h-8 text-gray-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    No touches yet
+                  </h3>
+                  <p className="text-gray-600">
+                    {selectedTemplate?.id === 'custom_blank'
+                      ? 'Add your first touch to start building your sequence'
+                      : 'Template touches will appear here'}
+                  </p>
+                </div>
+                <button className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add First Touch
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {sequences.map((touch, index) => (
+                <div
+                  key={index}
+                  className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                        {touch.touchNumber}
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                          {touch.touchName}
+                        </h4>
+                        <div className="flex items-center gap-3 text-sm text-gray-600 mb-2">
+                          <span className="flex items-center gap-1">
+                            {touch.channel === 'email' ? (
+                              <Mail className="w-4 h-4" />
+                            ) : (
+                              <Linkedin className="w-4 h-4" />
+                            )}
+                            {touch.channel === 'email' ? 'Email' : 'LinkedIn'}
+                          </span>
+                          <span>•</span>
+                          <span>
+                            {touch.delay === 0
+                              ? 'Send immediately'
+                              : `Wait ${touch.delay} ${touch.delayUnit}`}
+                          </span>
+                        </div>
+                        {touch.subjectLine && (
+                          <p className="text-sm text-gray-700 font-medium">
+                            Subject: {touch.subjectLine}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`
+                        text-xs px-2 py-1 rounded font-medium
+                        ${touch.channel === 'email'
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-purple-100 text-purple-700'}
+                      `}>
+                        Touch {touch.touchNumber}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors font-medium flex items-center justify-center gap-2">
+                <Plus className="w-5 h-5" />
+                Add Another Touch
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
+          <button
+            onClick={handlePrevious}
+            disabled={isNavigating}
+            className="flex items-center gap-2 px-6 py-2.5 text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Previous: Template</span>
+          </button>
+
+          <button
+            onClick={handleNext}
+            disabled={sequences.length === 0 || isNavigating}
+            className={`
+              flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-all duration-200
+              ${sequences.length > 0 && !isNavigating
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }
+            `}
+          >
+            {isNavigating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <span>Next: Select Leads</span>
+                <ChevronRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
