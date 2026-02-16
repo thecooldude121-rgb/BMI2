@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TemplateCard } from './TemplateCard';
 import { campaignTemplates, CampaignTemplate } from '../../utils/campaignTemplates';
 import { useToast } from '../../contexts/ToastContext';
-import { ChevronRight, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, AlertTriangle, ArrowRight, X, Grid3X3, Table } from 'lucide-react';
 import CancelCampaignButton from './CancelCampaignButton';
 import SaveDraftButton from './SaveDraftButton';
 
@@ -31,6 +31,7 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
   );
   const [isLoading, setIsLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showComparisonView, setShowComparisonView] = useState(false);
 
   const selectedTemplate = selectedTemplateId
     ? campaignTemplates.find(t => t.id === selectedTemplateId) || null
@@ -170,13 +171,32 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            Select Campaign Template
-          </h2>
-          <p className="text-gray-600">
-            Choose a pre-built template or start from scratch
-          </p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Select Campaign Template
+            </h2>
+            <p className="text-gray-600">
+              Choose a pre-built template or start from scratch
+            </p>
+          </div>
+          <button
+            onClick={() => setShowComparisonView(!showComparisonView)}
+            className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            {showComparisonView ? (
+              <>
+                <Grid3X3 className="w-4 h-4" />
+                Card View
+              </>
+            ) : (
+              <>
+                <Table className="w-4 h-4" />
+                Compare Templates
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         </div>
 
         {/* Warning for Start from Scratch */}
@@ -194,18 +214,155 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
           </div>
         )}
 
-        {/* Template Grid - 3 columns */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          {campaignTemplates.map((template) => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              onSelect={handleTemplateSelect}
-              isSelected={selectedTemplateId === template.id}
-              isLoading={isLoading && selectedTemplateId === template.id}
-            />
-          ))}
-        </div>
+        {/* Comparison Table View */}
+        {showComparisonView ? (
+          <div className="mb-8 overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b-2 border-gray-200">
+                  <th className="text-left p-4 font-semibold text-gray-900">Feature</th>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <th key={template.id} className="text-center p-4">
+                        <div className="flex flex-col items-center gap-2">
+                          <span className="text-2xl">{template.icon}</span>
+                          <span className="font-semibold text-gray-900 text-sm">
+                            {template.name}
+                          </span>
+                          <button
+                            onClick={() => handleTemplateSelect(template.id)}
+                            disabled={isLoading}
+                            className={`
+                              text-xs px-3 py-1.5 rounded-lg font-medium transition-colors
+                              ${selectedTemplateId === template.id
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }
+                            `}
+                          >
+                            {selectedTemplateId === template.id ? '✓ Selected' : 'Select'}
+                          </button>
+                        </div>
+                      </th>
+                    ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">Touches</td>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <td key={template.id} className="p-4 text-center text-gray-700">
+                        {template.totalTouches}
+                      </td>
+                    ))}
+                </tr>
+                <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">Duration</td>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <td key={template.id} className="p-4 text-center text-gray-700">
+                        {template.duration} days
+                      </td>
+                    ))}
+                </tr>
+                <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">Channel</td>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <td key={template.id} className="p-4 text-center">
+                        <span className={`
+                          text-xs px-2 py-1 rounded
+                          ${template.type === 'email' ? 'bg-blue-100 text-blue-700' :
+                            template.type === 'linkedin' ? 'bg-purple-100 text-purple-700' :
+                            'bg-green-100 text-green-700'}
+                        `}>
+                          {template.type === 'email' ? 'Email' :
+                           template.type === 'linkedin' ? 'LinkedIn' :
+                           'Multi-channel'}
+                        </span>
+                      </td>
+                    ))}
+                </tr>
+                <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">Open Rate</td>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <td key={template.id} className="p-4 text-center">
+                        {template.type === 'linkedin' ? (
+                          <span className="text-gray-400 text-sm">N/A</span>
+                        ) : (
+                          <span className={`
+                            font-semibold
+                            ${template.avgPerformance.openRate >= 40 ? 'text-green-600' :
+                              template.avgPerformance.openRate >= 25 ? 'text-blue-600' :
+                              'text-gray-700'}
+                          `}>
+                            {template.avgPerformance.openRate}%
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                </tr>
+                <tr className="border-b border-gray-200 hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">Reply Rate</td>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <td key={template.id} className="p-4 text-center">
+                        <span className={`
+                          font-semibold
+                          ${template.avgPerformance.replyRate >= 15 ? 'text-green-600' :
+                            template.avgPerformance.replyRate >= 8 ? 'text-blue-600' :
+                            'text-gray-700'}
+                        `}>
+                          {template.avgPerformance.replyRate}%
+                        </span>
+                      </td>
+                    ))}
+                </tr>
+                <tr className="hover:bg-gray-50">
+                  <td className="p-4 font-medium text-gray-900">Best For</td>
+                  {campaignTemplates
+                    .filter(t => t.id !== 'custom_blank')
+                    .map(template => (
+                      <td key={template.id} className="p-4 text-center">
+                        <div className="text-xs text-gray-600 space-y-1">
+                          {template.perfectFor.slice(0, 2).map((item, idx) => (
+                            <div key={idx}>{item}</div>
+                          ))}
+                        </div>
+                      </td>
+                    ))}
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Tip:</strong> Higher open and reply rates indicate better engagement. Choose based on your audience and campaign goals.
+              </p>
+            </div>
+          </div>
+        ) : (
+          /* Template Grid - 3 columns */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            {campaignTemplates.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                onSelect={handleTemplateSelect}
+                isSelected={selectedTemplateId === template.id}
+                isLoading={isLoading && selectedTemplateId === template.id}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Navigation Buttons */}
         <div className="flex items-center justify-between pt-6 border-t border-gray-200">
