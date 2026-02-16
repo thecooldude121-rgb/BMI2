@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { CampaignTemplate } from '../../utils/campaignTemplates';
-import { Check, ArrowRight } from 'lucide-react';
+import { Check, ArrowRight, Info } from 'lucide-react';
 import { TemplateDetailsModal } from './TemplateDetailsModal';
 
 interface TemplateCardProps {
@@ -17,6 +17,51 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
   isLoading = false
 }) => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const showTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (showTimeoutRef.current) clearTimeout(showTimeoutRef.current);
+      if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+    };
+  }, []);
+
+  const handleInfoMouseEnter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+
+    showTimeoutRef.current = setTimeout(() => {
+      setShowTooltip(true);
+      setTooltipPosition({ x: e.clientX + 10, y: e.clientY + 10 });
+    }, 300);
+  };
+
+  const handleInfoMouseMove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (showTooltip) {
+      setTooltipPosition({ x: e.clientX + 10, y: e.clientY + 10 });
+    }
+  };
+
+  const handleInfoMouseLeave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (showTimeoutRef.current) {
+      clearTimeout(showTimeoutRef.current);
+      showTimeoutRef.current = null;
+    }
+
+    hideTimeoutRef.current = setTimeout(() => {
+      setShowTooltip(false);
+    }, 200);
+  };
   return (
     <div
       className={`
@@ -54,9 +99,21 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-3xl">{template.icon}</span>
-          <h3 className="text-lg font-semibold text-gray-900">
-            {template.name}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {template.name}
+            </h3>
+            {template.stats && (
+              <div
+                className="relative"
+                onMouseEnter={handleInfoMouseEnter}
+                onMouseMove={handleInfoMouseMove}
+                onMouseLeave={handleInfoMouseLeave}
+              >
+                <Info className="w-4 h-4 text-gray-400 hover:text-blue-600 cursor-help transition-colors" />
+              </div>
+            )}
+          </div>
         </div>
         {template.type === 'multi_channel' && !isSelected && (
           <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
@@ -163,6 +220,40 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
         onClose={() => setShowDetailsModal(false)}
         onSelect={onSelect}
       />
+
+      {showTooltip && template.stats && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{
+            left: `${tooltipPosition.x}px`,
+            top: `${tooltipPosition.y}px`,
+          }}
+        >
+          <div className="bg-gray-900 text-white rounded-lg shadow-xl border border-gray-700 p-4 min-w-[280px] animate-in fade-in duration-150">
+            <div className="mb-3 pb-3 border-b border-gray-700">
+              <h4 className="font-semibold text-sm">{template.name} Template</h4>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-300">Used by campaigns:</span>
+                <span className="font-semibold">{template.stats.campaignsUsing.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-300">Avg success rate:</span>
+                <span className="font-semibold">{template.stats.avgSuccessRate}%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-300">Best for:</span>
+                <span className="font-semibold">{template.stats.bestFor}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-300">Daily limit:</span>
+                <span className="font-semibold">{template.stats.recommendedDailyLimit} leads</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

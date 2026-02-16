@@ -13,6 +13,12 @@ export interface CampaignTemplate {
     conversionRate: number;
   };
   sequences: SequenceTouch[];
+  stats?: {
+    campaignsUsing: number;
+    avgSuccessRate: number;
+    bestFor: string;
+    recommendedDailyLimit: number;
+  };
 }
 
 export interface SequenceTouch {
@@ -57,6 +63,12 @@ export const campaignTemplates: CampaignTemplate[] = [
       openRate: 28,
       replyRate: 8,
       conversionRate: 4
+    },
+    stats: {
+      campaignsUsing: 1247,
+      avgSuccessRate: 28,
+      bestFor: 'Cold prospects',
+      recommendedDailyLimit: 50
     },
     sequences: [
       {
@@ -206,6 +218,12 @@ P.S. - If you do want to chat, here's my calendar link: [calendar link]`,
       replyRate: 20,
       conversionRate: 8.9
     },
+    stats: {
+      campaignsUsing: 823,
+      avgSuccessRate: 55,
+      bestFor: 'HRMS leads',
+      recommendedDailyLimit: 30
+    },
     sequences: [
       {
         touchNumber: 1,
@@ -299,6 +317,12 @@ Best,
       openRate: 18,
       replyRate: 5,
       conversionRate: 2
+    },
+    stats: {
+      campaignsUsing: 512,
+      avgSuccessRate: 18,
+      bestFor: 'Dormant leads',
+      recommendedDailyLimit: 75
     },
     sequences: [
       {
@@ -410,6 +434,12 @@ Best,
       replyRate: 12,
       conversionRate: 5
     },
+    stats: {
+      campaignsUsing: 389,
+      avgSuccessRate: 35,
+      bestFor: 'Event contacts',
+      recommendedDailyLimit: 25
+    },
     sequences: [
       {
         touchNumber: 1,
@@ -492,6 +522,12 @@ Best,
       openRate: 42,
       replyRate: 15,
       conversionRate: 6
+    },
+    stats: {
+      campaignsUsing: 654,
+      avgSuccessRate: 42,
+      bestFor: 'Trial users',
+      recommendedDailyLimit: 40
     },
     sequences: [
       {
