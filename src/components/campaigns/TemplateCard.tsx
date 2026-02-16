@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CampaignTemplate } from '../../utils/campaignTemplates';
-import { Check } from 'lucide-react';
+import { Check, ArrowRight } from 'lucide-react';
+import { TemplateDetailsModal } from './TemplateDetailsModal';
 
 interface TemplateCardProps {
   template: CampaignTemplate;
@@ -15,6 +16,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
   isSelected = false,
   isLoading = false
 }) => {
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   return (
     <div
       className={`
@@ -125,6 +127,19 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
         </div>
       )}
 
+      {template.totalTouches > 0 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDetailsModal(true);
+          }}
+          className="w-full mb-3 text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center justify-center gap-1 transition-colors"
+        >
+          View Sequence Details
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      )}
+
       <button
         className={`
           w-full py-2 px-4 rounded-lg font-medium text-sm transition-colors
@@ -141,6 +156,13 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
         {isSelected ? '✓ Selected' :
          template.id === 'custom_blank' ? 'Start from Scratch' : 'Select Template'}
       </button>
+
+      <TemplateDetailsModal
+        template={template}
+        isOpen={showDetailsModal}
+        onClose={() => setShowDetailsModal(false)}
+        onSelect={onSelect}
+      />
     </div>
   );
 };
