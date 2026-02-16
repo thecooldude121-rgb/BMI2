@@ -32,6 +32,15 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [showComparisonView, setShowComparisonView] = useState(false);
+  const [showTip, setShowTip] = useState(true);
+  const [isTipFadingOut, setIsTipFadingOut] = useState(false);
+
+  useEffect(() => {
+    const tipDismissed = localStorage.getItem('campaign_template_tip_dismissed');
+    if (tipDismissed === 'true') {
+      setShowTip(false);
+    }
+  }, []);
 
   const selectedTemplate = selectedTemplateId
     ? campaignTemplates.find(t => t.id === selectedTemplateId) || null
@@ -93,6 +102,14 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
     } else {
       window.history.back();
     }
+  };
+
+  const handleDismissTip = () => {
+    setIsTipFadingOut(true);
+    setTimeout(() => {
+      setShowTip(false);
+      localStorage.setItem('campaign_template_tip_dismissed', 'true');
+    }, 500);
   };
 
   return (
@@ -361,6 +378,34 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
                 isLoading={isLoading && selectedTemplateId === template.id}
               />
             ))}
+          </div>
+        )}
+
+        {/* Dismissible Tip Box */}
+        {showTip && !showComparisonView && (
+          <div
+            className={`
+              mb-8 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3
+              transition-all duration-500
+              ${isTipFadingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}
+            `}
+          >
+            <span className="text-2xl flex-shrink-0">💡</span>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-900 mb-1">
+                TIP
+              </p>
+              <p className="text-sm text-blue-800">
+                Templates can be customized after selection. You'll be able to edit email content, adjust timing, add or remove touches, and personalize every aspect of your campaign in the next step.
+              </p>
+            </div>
+            <button
+              onClick={handleDismissTip}
+              className="flex-shrink-0 text-blue-600 hover:text-blue-800 transition-colors"
+              aria-label="Dismiss tip"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         )}
 
