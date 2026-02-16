@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, Plus, Mail, Linkedin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Plus, Mail, Linkedin, ChevronDown, ChevronRight as ChevronRightIcon, MoreVertical } from 'lucide-react';
 import { CampaignTemplate, SequenceTouch } from '../../utils/campaignTemplates';
 import { useToast } from '../../contexts/ToastContext';
 import CancelCampaignButton from './CancelCampaignButton';
@@ -35,7 +35,17 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
   );
   const [isNavigating, setIsNavigating] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [expandedTouches, setExpandedTouches] = useState<Set<number>>(new Set());
+  const [expandedTouches, setExpandedTouches] = useState<Set<number>>(() => {
+    const saved = localStorage.getItem('campaignWizardExpandedTouches');
+    if (saved) {
+      try {
+        return new Set(JSON.parse(saved));
+      } catch {
+        return new Set([1]);
+      }
+    }
+    return new Set([1]);
+  });
   const [showMaxTouchesWarning, setShowMaxTouchesWarning] = useState(false);
   const touchRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
   const subjectInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
@@ -43,6 +53,10 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
   useEffect(() => {
     setHasChanges(JSON.stringify(sequences) !== JSON.stringify(initialData?.sequences));
   }, [sequences, initialData?.sequences]);
+
+  useEffect(() => {
+    localStorage.setItem('campaignWizardExpandedTouches', JSON.stringify(Array.from(expandedTouches)));
+  }, [expandedTouches]);
 
   const calculateEstimatedDuration = useCallback((touches: SequenceTouch[]): number => {
     if (touches.length === 0) return 0;
@@ -137,6 +151,18 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
       window.history.back();
     }
   };
+
+  const toggleTouchExpansion = useCallback((touchNumber: number) => {
+    setExpandedTouches(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(touchNumber)) {
+        newSet.delete(touchNumber);
+      } else {
+        newSet.add(touchNumber);
+      }
+      return newSet;
+    });
+  }, []);
 
   const handleAddTouch = useCallback(async () => {
     if (sequences.length >= MAX_TOUCHES) {
@@ -414,74 +440,182 @@ Best,
             </div>
           ) : (
             <div className="space-y-4">
-              {sequences.map((touch, index) => (
-                <div
-                  key={index}
-                  ref={el => touchRefs.current[touch.touchNumber] = el}
-                  className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                        {touch.touchNumber}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-lg font-semibold text-gray-900 mb-1">
-                          {touch.touchName}
-                        </h4>
-                        <div className="flex items-center gap-3 text-sm text-gray-600 mb-2">
-                          <span className="flex items-center gap-1">
-                            {touch.channel === 'email' ? (
-                              <Mail className="w-4 h-4" />
-                            ) : (
-                              <Linkedin className="w-4 h-4" />
+              {sequences.map((touch, index) => {
+                const isExpanded = expandedTouches.has(touch.touchNumber);
+                return (
+                  <div
+                    key={index}
+                    ref={el => touchRefs.current[touch.touchNumber] = el}
+                    className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+                  >
+                    {/* 23. Touch Card Header - Always Visible */}
+                    <div
+                      className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => toggleTouchExpansion(touch.touchNumber)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4 flex-1">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                            {touch.touchNumber}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="text-lg font-semibold text-gray-900">
+                                TOUCH {touch.touchNumber} - {touch.touchName}
+                              </h4>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span className="font-medium">
+                                Timing: {touch.delay === 0 ? 'Immediately' : `Wait ${touch.delay} ${touch.delayUnit}`}
+                              </span>
+                              <span>|</span>
+                              <span className="flex items-center gap-1.5">
+                                <span>Channel:</span>
+                                {touch.channel === 'email' ? (
+                                  <>
+                                    <Mail className="w-4 h-4" />
+                                    <span>Email</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Linkedin className="w-4 h-4" />
+                                    <span>LinkedIn</span>
+                                  </>
+                                )}
+                              </span>
+                            </div>
+                            {!isExpanded && touch.subjectLine && (
+                              <p className="text-sm text-gray-500 mt-2 truncate">
+                                Subject: {touch.subjectLine}
+                              </p>
                             )}
-                            {touch.channel === 'email' ? 'Email' : 'LinkedIn'}
-                          </span>
-                          <span>•</span>
-                          <span>
-                            {touch.delay === 0
-                              ? 'Send immediately'
-                              : `Wait ${touch.delay} ${touch.delayUnit}`}
-                          </span>
+                          </div>
                         </div>
-                        {touch.subjectLine && (
-                          <p className="text-sm text-gray-700 font-medium mb-3">
-                            Subject: {touch.subjectLine}
-                          </p>
-                        )}
-                        {expandedTouches.has(touch.touchNumber) && (
-                          <div className="mt-4 space-y-3">
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                            }}
+                          >
+                            <MoreVertical className="w-5 h-5 text-gray-500" />
+                          </button>
+                          <button
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTouchExpansion(touch.touchNumber);
+                            }}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-5 h-5 text-gray-700 transition-transform duration-300" />
+                            ) : (
+                              <ChevronRightIcon className="w-5 h-5 text-gray-700 transition-transform duration-300" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Touch Card Body - Collapsible */}
+                    <div
+                      className={`
+                        overflow-hidden transition-all duration-300 ease-in-out
+                        ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}
+                      `}
+                    >
+                      <div className="px-6 pb-6 pt-0 border-t border-gray-100">
+                        <div className="space-y-4 mt-4">
+                          {/* Touch Name Input */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Touch Name
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Enter touch name..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              defaultValue={touch.touchName}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+
+                          {/* Channel & Timing */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Channel
+                              </label>
+                              <select
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                defaultValue={touch.channel}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <option value="email">📧 Email</option>
+                                <option value="linkedin">💼 LinkedIn</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Delay After Previous
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  defaultValue={touch.delay}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <select
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                  defaultValue={touch.delayUnit}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="hours">hours</option>
+                                  <option value="days">days</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Subject Line */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Subject Line
+                            </label>
                             <input
                               ref={el => subjectInputRefs.current[touch.touchNumber] = el}
                               type="text"
                               placeholder="Enter subject line..."
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                               defaultValue={touch.subjectLine}
-                            />
-                            <textarea
-                              placeholder="Enter email body..."
-                              rows={4}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
-                              defaultValue={touch.emailBody}
+                              onClick={(e) => e.stopPropagation()}
                             />
                           </div>
-                        )}
+
+                          {/* Email Body */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Email Body
+                            </label>
+                            <textarea
+                              placeholder="Enter email body..."
+                              rows={6}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+                              defaultValue={touch.emailBody}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Available variables: {'{{firstName}}'}, {'{{lastName}}'}, {'{{company}}'}, {'{{senderName}}'}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`
-                        text-xs px-2 py-1 rounded font-medium
-                        ${touch.channel === 'email'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-purple-100 text-purple-700'}
-                      `}>
-                        Touch {touch.touchNumber}
-                      </span>
-                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {sequences.length < MAX_TOUCHES && (
                 <button
                   onClick={handleAddTouch}
