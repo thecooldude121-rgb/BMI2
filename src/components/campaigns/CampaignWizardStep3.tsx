@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Loader2, Plus, Mail, Linkedin } from 'lucide-react';
 import { CampaignTemplate, SequenceTouch } from '../../utils/campaignTemplates';
 import { useToast } from '../../contexts/ToastContext';
 import CancelCampaignButton from './CancelCampaignButton';
 import SaveDraftButton from './SaveDraftButton';
+import { MaxTouchesWarningModal } from './MaxTouchesWarningModal';
 
 interface CampaignWizardStep3Props {
   onNext: (data: Step3Data) => void;
@@ -34,6 +35,10 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
   );
   const [isNavigating, setIsNavigating] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [expandedTouches, setExpandedTouches] = useState<Set<number>>(new Set());
+  const [showMaxTouchesWarning, setShowMaxTouchesWarning] = useState(false);
+  const touchRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const subjectInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
 
   useEffect(() => {
     setHasChanges(JSON.stringify(sequences) !== JSON.stringify(initialData?.sequences));
@@ -68,6 +73,7 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
   const totalTouches = sequences.length;
   const estimatedDuration = calculateEstimatedDuration(sequences);
   const channel = determineChannel(sequences);
+  const MAX_TOUCHES = 10;
 
   const handleAutoSave = async () => {
     try {
@@ -132,17 +138,77 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
     }
   };
 
+  const handleAddTouch = useCallback(async () => {
+    if (sequences.length >= MAX_TOUCHES) {
+      setShowMaxTouchesWarning(true);
+      return;
+    }
+
+    const newTouchNumber = sequences.length + 1;
+    const previousTouch = sequences[sequences.length - 1];
+
+    const defaultChannel: 'email' | 'linkedin' = previousTouch?.channel || 'email';
+
+    const newTouch: SequenceTouch = {
+      touchNumber: newTouchNumber,
+      touchName: `Touch ${newTouchNumber}`,
+      channel: defaultChannel,
+      delay: 3,
+      delayUnit: 'days',
+      subjectLine: '',
+      emailBody: `Hi {{firstName}},
+
+[Your message here]
+
+Best regards,
+{{senderName}}`,
+      linkedInMessage: defaultChannel === 'linkedin' ? `Hi {{firstName}},
+
+[Your message here]
+
+Best,
+{{senderName}}` : undefined
+    };
+
+    setSequences(prev => [...prev, newTouch]);
+
+    setExpandedTouches(prev => new Set([...prev, newTouchNumber]));
+
+    await handleAutoSave();
+
+    setTimeout(() => {
+      const touchElement = touchRefs.current[newTouchNumber];
+      if (touchElement) {
+        touchElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        setTimeout(() => {
+          const subjectInput = subjectInputRefs.current[newTouchNumber];
+          if (subjectInput) {
+            subjectInput.focus();
+          }
+        }, 500);
+      }
+    }, 100);
+
+    addToast(`Touch ${newTouchNumber} added`, 'success');
+  }, [sequences, MAX_TOUCHES, handleAutoSave, addToast]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.altKey || e.metaKey) && e.key === 'ArrowLeft') {
         e.preventDefault();
         handlePrevious();
       }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        handleAddTouch();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePrevious]);
+  }, [handlePrevious, handleAddTouch]);
 
   const getChannelDisplay = () => {
     if (channel === 'email') return 'Email';
@@ -297,7 +363,29 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
           </div>
         </div>
 
-        {/* Sequence Builder Area - Placeholder for now */}
+        {/* 22. Add Touch Button (Top Right of Sequence Section) */}
+        <div className="mb-4 flex justify-between items-center">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Sequence Touches {sequences.length > 0 && `(${sequences.length}/${MAX_TOUCHES})`}
+          </h3>
+          <button
+            onClick={handleAddTouch}
+            disabled={sequences.length >= MAX_TOUCHES}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200
+              ${sequences.length < MAX_TOUCHES
+                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }
+            `}
+            title={sequences.length >= MAX_TOUCHES ? 'Maximum 10 touches per campaign' : 'Add new touch (Ctrl/Cmd + N)'}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Touch</span>
+          </button>
+        </div>
+
+        {/* Sequence Builder Area */}
         <div className="mb-8">
           {sequences.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -315,7 +403,10 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
                       : 'Template touches will appear here'}
                   </p>
                 </div>
-                <button className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2">
+                <button
+                  onClick={handleAddTouch}
+                  className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                >
                   <Plus className="w-4 h-4" />
                   Add First Touch
                 </button>
@@ -326,6 +417,7 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
               {sequences.map((touch, index) => (
                 <div
                   key={index}
+                  ref={el => touchRefs.current[touch.touchNumber] = el}
                   className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-start justify-between">
@@ -333,7 +425,7 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
                       <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
                         {touch.touchNumber}
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <h4 className="text-lg font-semibold text-gray-900 mb-1">
                           {touch.touchName}
                         </h4>
@@ -354,9 +446,26 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
                           </span>
                         </div>
                         {touch.subjectLine && (
-                          <p className="text-sm text-gray-700 font-medium">
+                          <p className="text-sm text-gray-700 font-medium mb-3">
                             Subject: {touch.subjectLine}
                           </p>
+                        )}
+                        {expandedTouches.has(touch.touchNumber) && (
+                          <div className="mt-4 space-y-3">
+                            <input
+                              ref={el => subjectInputRefs.current[touch.touchNumber] = el}
+                              type="text"
+                              placeholder="Enter subject line..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              defaultValue={touch.subjectLine}
+                            />
+                            <textarea
+                              placeholder="Enter email body..."
+                              rows={4}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+                              defaultValue={touch.emailBody}
+                            />
+                          </div>
                         )}
                       </div>
                     </div>
@@ -373,10 +482,15 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
                   </div>
                 </div>
               ))}
-              <button className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors font-medium flex items-center justify-center gap-2">
-                <Plus className="w-5 h-5" />
-                Add Another Touch
-              </button>
+              {sequences.length < MAX_TOUCHES && (
+                <button
+                  onClick={handleAddTouch}
+                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Another Touch
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -417,6 +531,12 @@ export const CampaignWizardStep3: React.FC<CampaignWizardStep3Props> = ({
           </button>
         </div>
       </div>
+
+      {/* Max Touches Warning Modal */}
+      <MaxTouchesWarningModal
+        isOpen={showMaxTouchesWarning}
+        onClose={() => setShowMaxTouchesWarning(false)}
+      />
     </div>
   );
 };
