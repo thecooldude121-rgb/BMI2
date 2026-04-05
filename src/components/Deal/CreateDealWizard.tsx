@@ -32,10 +32,28 @@ const CreateDealWizard: React.FC<CreateDealWizardProps> = ({
   
   // Default handlers if not provided
   const handleClose = onClose || (() => navigate('/crm/deals'));
-  const saveDealFunction = onSave || (async (dealData: Partial<Deal>) => {
+  // Enhanced save deal function with improved error handling
+  const saveDealFunction = onSave || (async (dealData: Partial<Deal>, retryCount = 0) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000; // 1 second
+
     try {
+      // Input validation
+      if (!dealData.name?.trim()) {
+        throw new Error('Deal name is required');
+      }
+      if (!dealData.amount || dealData.amount <= 0) {
+        throw new Error('Deal amount must be greater than 0');
+      }
+      if (!dealData.stageId) {
+        throw new Error('Deal stage is required');
+      }
+      if (!dealData.ownerId) {
+        throw new Error('Deal owner is required');
+      }
+
       console.log('Creating deal with data:', dealData);
-      
+
       // Convert Deal format to the format expected by addDeal
       const dealForContext = {
         title: dealData.name || 'Untitled Deal',
@@ -48,23 +66,76 @@ const CreateDealWizard: React.FC<CreateDealWizardProps> = ({
         assignedTo: dealData.ownerId || '1',
         notes: dealData.description || ''
       };
-      
+
       console.log('Converted deal data:', dealForContext);
-      addDeal(dealForContext);
-      
-      // Show success message
+
+      // Attempt to save the deal
+      await addDeal(dealForContext);
+
+      // Log success
       console.log('Deal created successfully!');
-      
+
       // Clear draft from localStorage
       localStorage.removeItem('dealDraft');
-      
-      // Navigate back to deals page
+
+      // Clear any previous errors
+      setSaveError('');
+
+      // Navigate back to deals page with a small delay for UX
       setTimeout(() => {
         navigate('/crm/deals');
       }, 100);
+
     } catch (error) {
       console.error('Failed to create deal:', error);
-      setSaveError('Failed to create deal. Please try again.');
+
+      // Determine error type and provide appropriate message
+      let errorMessage = 'Failed to create deal. Please try again.';
+      let shouldRetry = false;
+
+      if (error instanceof Error) {
+        // Handle specific validation errors
+        if (error.message.includes('required') || error.message.includes('must be')) {
+          errorMessage = error.message;
+        }
+        // Handle network/server errors
+        else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+          shouldRetry = retryCount < MAX_RETRIES;
+        }
+        // Handle server errors
+        else if (error.message.includes('500') || error.message.includes('server')) {
+          errorMessage = 'Server error. Please try again later.';
+          shouldRetry = retryCount < MAX_RETRIES;
+        }
+        // Handle authentication errors
+        else if (error.message.includes('401') || error.message.includes('403')) {
+          errorMessage = 'Authentication error. Please log in again.';
+        }
+        // Handle conflict errors (deal already exists, etc.)
+        else if (error.message.includes('409') || error.message.includes('conflict')) {
+          errorMessage = 'A deal with this information already exists.';
+        }
+      }
+
+      // Implement retry logic for recoverable errors
+      if (shouldRetry) {
+        console.log(`Retrying deal creation... Attempt ${retryCount + 1}/${MAX_RETRIES}`);
+        setSaveError(`${errorMessage} Retrying in ${RETRY_DELAY / 1000} seconds...`);
+
+        setTimeout(() => {
+          saveDealFunction(dealData, retryCount + 1);
+        }, RETRY_DELAY);
+        return;
+      }
+
+      // Set final error message
+      setSaveError(errorMessage);
+
+      // Auto-clear error after 5 seconds for non-critical errors
+      if (!errorMessage.includes('Authentication error') && !errorMessage.includes('already exists')) {
+        setTimeout(() => setSaveError(''), 5000);
+      }
     }
   });
   const [currentStep, setCurrentStep] = useState<WizardStep>('ownership');
