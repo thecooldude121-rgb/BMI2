@@ -5,6 +5,8 @@ import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getPipeline, getPipelineStage } from '../../../config/pipelines';
 import { getDealType } from '../../../config/dealTypes';
 import { getContactRole, roleChipClasses, StakeholderContact } from '../../../config/contactRoles';
+import { Competitor } from '../../../config/competitors';
+import { Swords } from 'lucide-react';
 
 interface DealPreviewPanelProps {
   formData: any;
@@ -168,6 +170,27 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
                   {tag}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Competitor chips */}
+          {((formData.competitors ?? []) as Competitor[]).length > 0 && (
+            <div className="mt-2">
+              <div className="flex items-center space-x-1 mb-1.5">
+                <Swords className="h-3.5 w-3.5 text-red-400" />
+                <span className="text-xs text-gray-400">Competing against</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {((formData.competitors ?? []) as Competitor[]).map((c) => (
+                  <span
+                    key={c.id}
+                    className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-100 text-xs font-medium rounded-full"
+                  >
+                    {c.isCustom && <span className="text-red-400 mr-0.5">*</span>}
+                    {c.name}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>

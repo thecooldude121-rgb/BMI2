@@ -24,6 +24,7 @@ import { generateDealName } from '../../utils/dealNameGenerator';
 import { DEFAULT_PIPELINE, getPipeline, getStageProbability } from '../../config/pipelines';
 import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
 import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
+import { Competitor } from '../../config/competitors';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -48,6 +49,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     primaryContactName: '',
     contactRole: DEFAULT_CONTACT_ROLE.id,
     additionalContacts: [] as StakeholderContact[],
+    competitors: [] as Competitor[],
     owner: 'current-user',
     source: '',
     hrmsConnection: null,
@@ -610,6 +612,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           .filter(c => c.name.trim())
           .map(c => ({ ...c, isPrimary: false })),
       ],
+      competitors: (formData.competitors ?? []) as Competitor[],
       source: formData.source || undefined,
       priority: formData.priority || undefined,
       tags: formData.tags.length > 0 ? formData.tags : undefined,
@@ -685,6 +688,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             primaryContactName: '',
             contactRole: DEFAULT_CONTACT_ROLE.id,
             additionalContacts: [] as StakeholderContact[],
+            competitors: [] as Competitor[],
             owner: 'current-user',
             source: '',
             hrmsConnection: null,

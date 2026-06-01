@@ -62,6 +62,11 @@ export interface DealPayload {
   contact_name?: string;
   contact_email?: string;
   contact_title?: string;
+  competitors?: Array<{
+    id: string;
+    name: string;
+    isCustom: boolean;
+  }>;
   stakeholders?: Array<{
     id: string;
     name: string;

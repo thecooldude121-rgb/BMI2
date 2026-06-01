@@ -38,7 +38,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       stage, probability, expected_close_date,
       close_date_is_past, close_date_override_reason,
       assigned_to, description, next_step, notes, company_name,
-      contact_name, contact_email, contact_title, stakeholders,
+      contact_name, contact_email, contact_title, stakeholders, competitors,
       source, priority, tags, product, contract_term, payment_terms
     } = req.body;
 
@@ -54,10 +54,10 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           stage, probability, expected_close_date,
           close_date_is_past, close_date_override_reason,
           assigned_to, description, next_step, notes, company_name,
-          contact_name, contact_email, contact_title, stakeholders,
+          contact_name, contact_email, contact_title, stakeholders, competitors,
           source, priority, tags, product, contract_term, payment_terms)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
        RETURNING *`,
       [
         id, name, title, lead_id, value,
@@ -69,6 +69,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         assigned_to, description, next_step, notes, company_name,
         contact_name, contact_email, contact_title,
         JSON.stringify(stakeholders ?? []),
+        JSON.stringify(competitors ?? []),
         source, priority || 'Medium', tags, product, contract_term, payment_terms
       ]
     );
@@ -78,7 +79,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','assigned_to','description','next_step','notes','company_name','contact_name','contact_email','contact_title','stakeholders','source','priority','tags','product','contract_term','payment_terms'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','assigned_to','description','next_step','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
