@@ -115,6 +115,17 @@ export async function updateDeal(id: string, payload: Partial<DealPayload>): Pro
   return json;
 }
 
+export async function fetchDeals(): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_BASE}/deals`, { headers: getAuthHeaders() });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.success ? json.data : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getDeal(id: string): Promise<{ success: boolean; data: any }> {
   const res = await fetch(`${API_BASE}/deals/${id}`, {
     headers: getAuthHeaders(),

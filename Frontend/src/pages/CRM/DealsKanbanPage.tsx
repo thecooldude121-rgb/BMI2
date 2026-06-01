@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useData } from '../../contexts/DataContext';
+import { fetchDeals } from '../../utils/dealsApi';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Plus,
@@ -60,6 +62,7 @@ interface PipelineStage {
 
 const DealsKanbanPage: React.FC = () => {
   const navigate = useNavigate();
+  const { deals: contextDeals } = useData();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
@@ -578,6 +581,44 @@ const DealsKanbanPage: React.FC = () => {
     }
   ]);
 
+  // Fetch real deals from the backend on mount and inject any that
+  // don't already exist in the hardcoded sample stage data.
+  useEffect(() => {
+    fetchDeals().then(apiDeals => {
+      if (!apiDeals.length) return;
+      setStages(prev => {
+        const existingIds = new Set(prev.flatMap(s => s.deals.map(d => d.id)));
+        const newDeals = apiDeals.filter((d: any) => !existingIds.has(d.id));
+        if (!newDeals.length) return prev;
+
+        return prev.map(stage => {
+          const toAdd: DealCard[] = newDeals
+            .filter((d: any) => d.stage === stage.id)
+            .map((d: any) => ({
+              id: d.id,
+              companyName: d.company_name || d.name,
+              dealName: d.name || d.title || 'Untitled',
+              accountName: d.company_name || d.name,
+              amount: parseFloat(d.value) || 0,
+              closeDate: d.expected_close_date ? d.expected_close_date.split('T')[0] : '',
+              stage: stage.id,
+              aiScore: d.probability || 0,
+              contactName: d.contact_name || '',
+              contactTitle: d.contact_title || '',
+              owner: d.assigned_to || 'current-user',
+              lastActivity: d.updated_at || d.created_at,
+              daysSinceContact: 0,
+              isHRMS: false,
+              priority: (d.priority?.toLowerCase() || 'medium') as 'high' | 'medium' | 'low',
+              health: 'healthy' as const,
+              source: d.source || 'manual',
+            }));
+          return toAdd.length ? { ...stage, deals: [...stage.deals, ...toAdd] } : stage;
+        });
+      });
+    });
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOwner, setSelectedOwner] = useState('all');
   const [selectedCloseDateFilter, setSelectedCloseDateFilter] = useState('all');
@@ -931,14 +972,18 @@ const DealsKanbanPage: React.FC = () => {
     : stages;
 
   useEffect(() => {
-    const initialCounts: Record<string, number> = {};
+    const updates: Record<string, number> = {};
     stages.forEach(stage => {
-      if (!visibleDealsCount[stage.id]) {
-        initialCounts[stage.id] = Math.min(DEALS_PER_PAGE, stage.deals.length);
+      const target = Math.min(DEALS_PER_PAGE, stage.deals.length);
+      const current = visibleDealsCount[stage.id];
+      // Allow count to grow when new deals are injected; never shrink a
+      // count the user has already expanded via "load more".
+      if (!current || current < target) {
+        updates[stage.id] = target;
       }
     });
-    if (Object.keys(initialCounts).length > 0) {
-      setVisibleDealsCount(prev => ({ ...prev, ...initialCounts }));
+    if (Object.keys(updates).length > 0) {
+      setVisibleDealsCount(prev => ({ ...prev, ...updates }));
     }
   }, [stages]);
 

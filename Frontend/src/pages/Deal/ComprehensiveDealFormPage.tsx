@@ -19,6 +19,7 @@ import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
 import { createDeal, updateDeal } from '../../utils/dealsApi';
+import { useData } from '../../contexts/DataContext';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
 import { generateDealName } from '../../utils/dealNameGenerator';
@@ -34,6 +35,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { addDeal: addDealToContext } = useData();
   const isEditMode = !!id;
 
   // Form state
@@ -713,6 +715,22 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       } else {
         const result = await createDeal(payload);
         savedDealId = result.data?.id;
+        // Sync into DataContext so the pipeline/list view reflects the new deal
+        // without requiring a page refresh. Stage is cast loosely because
+        // DealManagementPage normalises unrecognised stages to 'qualified'.
+        const rawValue = parseAmountInput(formData.dealValue?.toString() || '0') || 0;
+        addDealToContext({
+          name: formData.dealName,
+          title: formData.dealName,
+          leadId: '',
+          value: rawValue,
+          stage: formData.stage as any,
+          probability: formData.probability,
+          expectedCloseDate: formData.closeDate || '',
+          assignedTo: formData.owner || 'current-user',
+          description: formData.description || undefined,
+          nextStep: formData.nextSteps || undefined,
+        });
       }
 
       localStorage.removeItem('deal-form-draft');
