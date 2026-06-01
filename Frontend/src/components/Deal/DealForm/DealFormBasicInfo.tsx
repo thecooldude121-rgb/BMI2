@@ -4,6 +4,12 @@ import { SUPPORTED_CURRENCIES, getCurrency, BASE_CURRENCY_CODE } from '../../../
 import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, validateDealValue } from '../../../utils/currencyUtils';
 import { PIPELINES, getPipeline, stageButtonClasses } from '../../../config/pipelines';
 import { DEAL_TYPES } from '../../../config/dealTypes';
+import {
+  FORECAST_CATEGORIES,
+  getForecastCategory,
+  getSuggestedForecastCategory,
+  forecastChipClasses,
+} from '../../../config/forecastCategories';
 
 interface DealFormBasicInfoProps {
   formData: any;
@@ -335,6 +341,65 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             Stages shown are specific to the <span className="font-medium text-gray-600">{currentPipeline.name}</span> pipeline
           </p>
         </div>
+
+        {/* Forecast Category */}
+        {(() => {
+          const currentCategory = formData.forecastCategory || '';
+          const suggestedId = getSuggestedForecastCategory(formData.stage || '');
+          const suggestedObj = getForecastCategory(suggestedId);
+          const isSuggested = currentCategory === suggestedId && !!currentCategory;
+          const currentObj = getForecastCategory(currentCategory);
+
+          return (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Forecast Category
+                  <span className="ml-1 text-xs text-gray-400 font-normal">(optional)</span>
+                </label>
+                {isSuggested && currentObj && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${forecastChipClasses(currentObj.chipColor)}`}>
+                    Suggested
+                  </span>
+                )}
+              </div>
+
+              <select
+                value={currentCategory}
+                onChange={(e) => onChange('forecastCategory', e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">— Not set —</option>
+                {FORECAST_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+
+              {currentObj && currentCategory && (
+                <p className="mt-1 text-xs text-gray-400">{currentObj.description}</p>
+              )}
+
+              {!currentCategory && suggestedObj && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Suggested for {formData.stage ? `this stage: ` : 'this stage: '}
+                  <button
+                    type="button"
+                    onClick={() => onChange('forecastCategory', suggestedId)}
+                    className="font-medium text-blue-500 hover:text-blue-600 underline"
+                  >
+                    {suggestedObj.label}
+                  </button>
+                </p>
+              )}
+
+              <p className="mt-1.5 text-xs text-gray-400">
+                Managerial forecast classification; separate from deal stage.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Deal Type */}
         <div>

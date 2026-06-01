@@ -25,6 +25,7 @@ import { DEFAULT_PIPELINE, getPipeline, getStageProbability } from '../../config
 import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
 import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
 import { Competitor } from '../../config/competitors';
+import { getSuggestedForecastCategory } from '../../config/forecastCategories';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -50,6 +51,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     contactRole: DEFAULT_CONTACT_ROLE.id,
     additionalContacts: [] as StakeholderContact[],
     competitors: [] as Competitor[],
+    forecastCategory: '',
     owner: 'current-user',
     source: '',
     hrmsConnection: null,
@@ -86,6 +88,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   // true = user has manually typed a deal name → never auto-overwrite
   // false = name is empty or was auto-generated → safe to overwrite
   const [dealNameUserEdited, setDealNameUserEdited] = useState(false);
+  // true = user manually selected a forecast category → stage changes won't overwrite
+  const [forecastCategoryUserSet, setForecastCategoryUserSet] = useState(false);
 
   // Load deal data if editing
   useEffect(() => {
@@ -515,11 +519,16 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     const stageStillValid = pipeline.stages.some(s => s.id === formData.stage);
     const newStage = stageStillValid ? formData.stage : firstStage.id;
 
+    const suggestedCategory = !forecastCategoryUserSet
+      ? getSuggestedForecastCategory(newStage)
+      : formData.forecastCategory;
+
     const newData = {
       ...formData,
       pipelineId: pipeline.id,
       pipelineName: pipeline.name,
       stage: newStage,
+      forecastCategory: suggestedCategory,
     };
 
     setFormData({
@@ -538,6 +547,17 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     // When the user types in the deal name field, lock it from auto-overwriting
     if (field === 'dealName') {
       setDealNameUserEdited(value.length > 0);
+    }
+
+    // When user manually picks a forecast category, lock it from suggestion overwriting
+    if (field === 'forecastCategory') {
+      setForecastCategoryUserSet(!!value);
+    }
+
+    // When stage changes directly, suggest a forecast category if user hasn't set one
+    if (field === 'stage' && !forecastCategoryUserSet) {
+      const suggested = getSuggestedForecastCategory(value);
+      setFormData(prev => ({ ...prev, forecastCategory: suggested }));
     }
 
     // Strip non-numeric chars but keep one decimal point while user types
@@ -612,6 +632,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           .filter(c => c.name.trim())
           .map(c => ({ ...c, isPrimary: false })),
       ],
+      forecast_category: formData.forecastCategory || undefined,
       competitors: (formData.competitors ?? []) as Competitor[],
       source: formData.source || undefined,
       priority: formData.priority || undefined,
@@ -689,6 +710,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             contactRole: DEFAULT_CONTACT_ROLE.id,
             additionalContacts: [] as StakeholderContact[],
             competitors: [] as Competitor[],
+            forecastCategory: '',
             owner: 'current-user',
             source: '',
             hrmsConnection: null,
@@ -709,6 +731,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           setValidationErrors({});
           setFieldWarnings({});
           setDealNameUserEdited(false);
+          setForecastCategoryUserSet(false);
           showToast('success', 'Ready to add another deal');
         } else if (savedDealId) {
           navigate(`/crm/deals/${savedDealId}`);

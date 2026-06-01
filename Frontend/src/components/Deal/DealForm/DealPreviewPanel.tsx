@@ -4,6 +4,7 @@ import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUt
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getPipeline, getPipelineStage } from '../../../config/pipelines';
 import { getDealType } from '../../../config/dealTypes';
+import { getForecastCategory, forecastChipClasses } from '../../../config/forecastCategories';
 import { getContactRole, roleChipClasses, StakeholderContact } from '../../../config/contactRoles';
 import { Competitor } from '../../../config/competitors';
 import { Swords } from 'lucide-react';
@@ -23,9 +24,10 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
   const amount = isNaN(rawAmount) ? 0 : rawAmount;
   const baseAmount = convertToBaseCurrency(amount, currency);
 
-  // Resolve pipeline, stage, and deal type from config
+  // Resolve pipeline, stage, deal type, and forecast category from config
   const pipeline = getPipeline(formData.pipelineId || '');
   const dealTypeObj = getDealType(formData.dealType || '');
+  const forecastCategoryObj = getForecastCategory(formData.forecastCategory || '');
   const stageObj = getPipelineStage(pipeline.id, formData.stage);
   const stageIndex = pipeline.stages.findIndex(s => s.id === formData.stage);
   const stagePosition = stageIndex >= 0 ? stageIndex + 1 : 1;
@@ -93,6 +95,15 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
               {pipeline.name} pipeline
             </div>
           </div>
+
+          {/* Forecast Category badge — shown alongside stage, visually distinct */}
+          {forecastCategoryObj && formData.forecastCategory && (
+            <div className="flex items-center space-x-2">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${forecastChipClasses(forecastCategoryObj.chipColor)}`}>
+                Forecast: {forecastCategoryObj.label}
+              </span>
+            </div>
+          )}
 
           {/* Deal Type badge */}
           {formData.dealType && (
