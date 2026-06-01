@@ -62,7 +62,7 @@ export const EmailToDealPanel: React.FC<EmailToDealPanelProps> = ({
     // Simulate async parser (ready for real async LLM call)
     setTimeout(() => {
       const result = emailParser.parse(emailText);
-      setExtraction(Object.keys(result).length > 0 ? result : null);
+      setExtraction(result); // empty object shows "no fields found"; null = not yet extracted
       setParsing(false);
     }, 400);
   };
