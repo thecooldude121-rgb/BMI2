@@ -179,8 +179,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       product: 'Enterprise Plan',
       contractTerm: 'Annual',
       paymentTerms: 'Net 30',
-      description: 'Enterprise plan for 75-person SaaS company. Key needs: Automation, integration with Salesforce, reporting dashboards. Budget confirmed at $50K. Timeline: Q1 2026.',
-      nextSteps: '1. Send proposal by Dec 10\n2. Schedule demo for stakeholders\n3. Get CEO introduction from John'
+      description: '',
+      nextSteps: '',
     };
 
     // Set selected account and contact for edit mode
@@ -640,8 +640,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       product: formData.product || undefined,
       contract_term: formData.contractTerm || undefined,
       payment_terms: formData.paymentTerms || undefined,
-      description: formData.description || undefined,
-      next_step: formData.nextSteps || undefined,
+      // .trim() prevents whitespace-only strings from reaching the backend
+      description: formData.description?.trim() || undefined,
+      next_step: formData.nextSteps?.trim() || undefined,
     };
   };
 

@@ -25,11 +25,10 @@ export const DealFormDescription: React.FC<DealFormDescriptionProps> = ({ formDa
           <textarea
             value={formData.description}
             onChange={(e) => onChange('description', e.target.value)}
-            placeholder="Enterprise plan for 75-person SaaS company. Key needs: Automation, integration with Salesforce, reporting dashboards. Budget confirmed at $50K. Timeline: Q1 2026."
+            placeholder="Summarize customer needs, budget, timeline, and use case…"
             rows={6}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-gray-400"
           />
-          <div className="text-sm text-gray-500 mt-1">Rich text editor: Bold, Italic, Lists, Links</div>
         </div>
 
         <div>
@@ -37,9 +36,9 @@ export const DealFormDescription: React.FC<DealFormDescriptionProps> = ({ formDa
           <textarea
             value={formData.nextSteps}
             onChange={(e) => onChange('nextSteps', e.target.value)}
-            placeholder="1. Send proposal by Dec 10&#10;2. Schedule demo for stakeholders&#10;3. Get CEO introduction from John"
+            placeholder="e.g. Send proposal, schedule stakeholder demo, confirm procurement process…"
             rows={5}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-gray-400"
           />
         </div>
       </div>
