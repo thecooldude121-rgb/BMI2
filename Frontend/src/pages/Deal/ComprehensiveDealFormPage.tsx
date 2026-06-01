@@ -854,9 +854,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Frozen header — sticks directly below the 56px global TopBar */}
-      <div className="sticky top-14 z-10 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-semibold text-gray-900">
+      <div className="sticky top-14 z-10 bg-white border-b border-gray-200 px-8 py-2 shadow-sm">
+        <div className="flex items-center justify-between mb-0.5">
+          <h1 className="text-lg font-semibold text-gray-900">
             {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
           </h1>
           <div className="flex items-center space-x-3">

@@ -8,8 +8,6 @@ import { useAuth } from '../../contexts/AuthContext';
 
 // Derives a human-readable page label from the current pathname
 const getPageLabel = (pathname: string): string => {
-  if (pathname.startsWith('/crm/deals/add') || pathname.startsWith('/crm/deals/create')) return 'Add New Deal';
-  if (/\/crm\/deals\/[^/]+\/edit/.test(pathname)) return 'Edit Deal';
   if (pathname.startsWith('/crm/deals'))         return 'Deals';
   if (pathname.startsWith('/crm/leads'))         return 'Leads';
   if (pathname.startsWith('/crm/contacts'))      return 'Contacts';
