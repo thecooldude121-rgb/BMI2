@@ -21,6 +21,7 @@ import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../.
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
 import { generateDealName } from '../../utils/dealNameGenerator';
 import { DEFAULT_PIPELINE, getPipeline, getStageProbability } from '../../config/pipelines';
+import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -36,6 +37,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     closeDate: '',
     pipelineId: DEFAULT_PIPELINE.id,
     pipelineName: DEFAULT_PIPELINE.name,
+    dealType: DEFAULT_DEAL_TYPE.id,
     stage: DEFAULT_PIPELINE.stages[0].id,
     probability: DEFAULT_PIPELINE.stages[0].probability,
     accountId: '',
@@ -552,7 +554,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   };
 
   const validateForm = () => {
-    const required = ['dealName', 'dealValue', 'closeDate', 'stage', 'accountName', 'primaryContactName', 'owner', 'source'];
+    const required = ['dealName', 'dealValue', 'closeDate', 'dealType', 'stage', 'accountName', 'primaryContactName', 'owner', 'source'];
     const missing = required.filter(field => !formData[field as keyof typeof formData]);
     return missing.length === 0;
   };
@@ -568,6 +570,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       base_amount_usd: baseAmountUsd,
       pipeline_id: formData.pipelineId,
       pipeline_name: formData.pipelineName,
+      deal_type: formData.dealType,
       stage: formData.stage,
       probability: formData.probability,
       expected_close_date: formData.closeDate || undefined,
@@ -634,6 +637,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             closeDate: '',
             pipelineId: DEFAULT_PIPELINE.id,
             pipelineName: DEFAULT_PIPELINE.name,
+            dealType: DEFAULT_DEAL_TYPE.id,
             stage: DEFAULT_PIPELINE.stages[0].id,
             probability: DEFAULT_PIPELINE.stages[0].probability,
             accountId: '',
@@ -676,11 +680,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   };
 
   const getValidationStatus = () => {
-    const total = 8;
+    const total = 9;
     const completed = [
       formData.dealName,
       formData.dealValue,
       formData.closeDate,
+      formData.dealType,
       formData.stage,
       formData.accountName,
       formData.primaryContactName,

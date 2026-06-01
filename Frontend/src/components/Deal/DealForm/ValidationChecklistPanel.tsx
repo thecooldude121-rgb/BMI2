@@ -16,6 +16,7 @@ export const ValidationChecklistPanel: React.FC<ValidationChecklistPanelProps> =
     { field: 'dealName', label: 'Deal Name', completed: !!formData.dealName },
     { field: 'dealValue', label: 'Deal Value', completed: !!formData.dealValue },
     { field: 'closeDate', label: 'Close Date', completed: !!formData.closeDate },
+    { field: 'dealType', label: 'Deal Type', completed: !!formData.dealType },
     { field: 'stage', label: 'Stage', completed: !!formData.stage },
     { field: 'accountName', label: 'Account', completed: !!formData.accountName },
     { field: 'primaryContactName', label: 'Primary Contact', completed: !!formData.primaryContactName },

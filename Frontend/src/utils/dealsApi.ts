@@ -48,6 +48,7 @@ export interface DealPayload {
   base_amount_usd: number;   // value converted to USD for reporting
   pipeline_id: string;       // e.g. 'new-business'
   pipeline_name: string;     // e.g. 'New Business'
+  deal_type: string;         // e.g. 'upsell' — analytics-friendly enum
   stage: string;
   probability: number;
   expected_close_date?: string;

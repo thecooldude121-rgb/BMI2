@@ -34,7 +34,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
   try {
     const {
       name, title, lead_id, value, currency, base_amount_usd,
-      pipeline_id, pipeline_name,
+      pipeline_id, pipeline_name, deal_type,
       stage, probability, expected_close_date, assigned_to,
       description, next_step, notes, company_name,
       contact_name, contact_email, contact_title,
@@ -49,18 +49,19 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     const result = await pool.query(
       `INSERT INTO deals
          (id, name, title, lead_id, value, currency, base_amount_usd,
-          pipeline_id, pipeline_name,
+          pipeline_id, pipeline_name, deal_type,
           stage, probability, expected_close_date, assigned_to,
           description, next_step, notes, company_name,
           contact_name, contact_email, contact_title,
           source, priority, tags, product, contract_term, payment_terms)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
        RETURNING *`,
       [
         id, name, title, lead_id, value,
         currency || 'USD', base_amount_usd ?? value,
         pipeline_id || 'new-business', pipeline_name || 'New Business',
+        deal_type || 'new-business',
         stage || 'prospecting', probability || 0, expected_close_date,
         assigned_to, description, next_step, notes, company_name,
         contact_name, contact_email, contact_title,
@@ -73,7 +74,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','stage','probability','expected_close_date','assigned_to','description','next_step','notes','company_name','contact_name','contact_email','contact_title','source','priority','tags','product','contract_term','payment_terms'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','assigned_to','description','next_step','notes','company_name','contact_name','contact_email','contact_title','source','priority','tags','product','contract_term','payment_terms'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;

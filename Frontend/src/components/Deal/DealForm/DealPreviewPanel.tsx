@@ -3,6 +3,7 @@ import { Eye } from 'lucide-react';
 import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getPipeline, getPipelineStage } from '../../../config/pipelines';
+import { getDealType } from '../../../config/dealTypes';
 
 interface DealPreviewPanelProps {
   formData: any;
@@ -19,8 +20,9 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
   const amount = isNaN(rawAmount) ? 0 : rawAmount;
   const baseAmount = convertToBaseCurrency(amount, currency);
 
-  // Resolve pipeline and stage from config — always current, never stale
+  // Resolve pipeline, stage, and deal type from config
   const pipeline = getPipeline(formData.pipelineId || '');
+  const dealTypeObj = getDealType(formData.dealType || '');
   const stageObj = getPipelineStage(pipeline.id, formData.stage);
   const stageIndex = pipeline.stages.findIndex(s => s.id === formData.stage);
   const stagePosition = stageIndex >= 0 ? stageIndex + 1 : 1;
@@ -88,6 +90,16 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
               {pipeline.name} pipeline
             </div>
           </div>
+
+          {/* Deal Type badge */}
+          {formData.dealType && (
+            <div className="flex items-center space-x-2">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                {dealTypeObj.label}
+              </span>
+              <span className="text-xs text-gray-400">{dealTypeObj.description}</span>
+            </div>
+          )}
 
           <div>
             <div className="text-sm text-gray-600">Close: {formData.closeDate || 'Not set'}</div>
