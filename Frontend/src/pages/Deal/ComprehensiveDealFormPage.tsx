@@ -9,6 +9,7 @@ import { DealFormOwnership } from '../../components/Deal/DealForm/DealFormOwners
 import { DealFormProductDetails } from '../../components/Deal/DealForm/DealFormProductDetails';
 import { DealFormDescription } from '../../components/Deal/DealForm/DealFormDescription';
 import { DealPreviewPanel } from '../../components/Deal/DealForm/DealPreviewPanel';
+import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
 import { AIInsightsPanel } from '../../components/Deal/DealForm/AIInsightsPanel';
 import { AIRecommendationsPanel } from '../../components/Deal/DealForm/AIRecommendationsPanel';
 import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
@@ -931,6 +932,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
           {/* Right Column (35% width) */}
           <div className="lg:col-span-1 space-y-6">
+            <DealHealthScorePanel formData={formData} />
             <DealPreviewPanel formData={formData} />
             <AIInsightsPanel formData={formData} />
             <AIRecommendationsPanel

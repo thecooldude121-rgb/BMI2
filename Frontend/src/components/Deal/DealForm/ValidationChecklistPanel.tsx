@@ -46,8 +46,8 @@ export const ValidationChecklistPanel: React.FC<ValidationChecklistPanelProps> =
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center space-x-2 mb-4">
-        <CheckCircle2 className="h-6 w-6 text-green-600" />
-        <h2 className="text-lg font-bold text-gray-900">✅ VALIDATION CHECKLIST</h2>
+        <CheckCircle2 className="h-5 w-5 text-green-500" />
+        <h2 className="text-sm font-semibold text-gray-900">Required Fields</h2>
       </div>
 
       <div className="space-y-4">
@@ -104,23 +104,14 @@ export const ValidationChecklistPanel: React.FC<ValidationChecklistPanelProps> =
           </div>
         </div>
 
-        <div className="pt-4 border-t border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-gray-700">Data Quality:</span>
-            <span className="text-lg font-bold text-gray-900">{validation.percentage}/100 {validation.percentage >= 80 ? '(Excellent)' : validation.percentage >= 50 ? '(Good)' : '(Needs Work)'}</span>
+        {validation.isValid && (
+          <div className="pt-3 border-t border-gray-200">
+            <div className="flex items-center space-x-2 text-sm font-medium text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>All required fields complete — ready to save!</span>
+            </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
-            <div
-              className={`h-3 rounded-full transition-all duration-300 ${
-                validation.percentage >= 80 ? 'bg-green-500' : validation.percentage >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${validation.percentage}%` }}
-            ></div>
-          </div>
-          {validation.isValid && (
-            <div className="mt-2 text-sm font-medium text-green-600">✅ Ready to save!</div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
