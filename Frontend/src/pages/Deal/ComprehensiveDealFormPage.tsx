@@ -13,7 +13,7 @@ import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthS
 import { AIInsightsPanel } from '../../components/Deal/DealForm/AIInsightsPanel';
 import { AIRecommendationsPanel } from '../../components/Deal/DealForm/AIRecommendationsPanel';
 import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
-import { SaveOptionsPanel } from '../../components/Deal/DealForm/SaveOptionsPanel';
+import { PostSaveModal, PostSaveAction } from '../../components/Deal/DealForm/PostSaveModal';
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
@@ -75,14 +75,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const [duplicateDeals, setDuplicateDeals] = useState<any[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [fieldWarnings, setFieldWarnings] = useState<Record<string, string>>({});
-  const [saveOptions, setSaveOptions] = useState({
-    viewDeal: true,
-    createTask: false,
-    sendEmail: false,
-    scheduleMeeting: false,
-    addAnother: false
-  });
   const [isSaving, setIsSaving] = useState(false);
+  const [postSaveModal, setPostSaveModal] = useState<{ open: boolean; dealId: string | undefined; dealName: string }>({
+    open: false,
+    dealId: undefined,
+    dealName: '',
+  });
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showHRMSModal, setShowHRMSModal] = useState(false);
@@ -719,62 +717,86 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       localStorage.removeItem('deal-form-draft');
       setHasUnsavedChanges(false);
 
-      showToast('success', draft ? 'Draft saved' : 'Deal saved successfully!');
-
-      if (!draft) {
-        if (saveOptions.addAnother) {
-          setFormData({
-            dealName: '',
-            dealValue: '',
-            currency: 'USD',
-            closeDate: '',
-            pipelineId: DEFAULT_PIPELINE.id,
-            pipelineName: DEFAULT_PIPELINE.name,
-            dealType: DEFAULT_DEAL_TYPE.id,
-            stage: DEFAULT_PIPELINE.stages[0].id,
-            probability: DEFAULT_PIPELINE.stages[0].probability,
-            accountId: '',
-            accountName: '',
-            primaryContactId: '',
-            primaryContactName: '',
-            contactRole: DEFAULT_CONTACT_ROLE.id,
-            additionalContacts: [] as StakeholderContact[],
-            competitors: [] as Competitor[],
-            forecastCategory: '',
-            owner: 'current-user',
-            source: '',
-            hrmsConnection: null,
-            priority: 'Medium',
-            tags: [],
-            product: '',
-            contractTerm: '',
-            paymentTerms: '',
-            description: '',
-            nextSteps: '',
-            closeDateOverrideReason: '',
-            sourceJourney: null
-          });
-          setShowSmartSearch(true);
-          setSelectedAccount(null);
-          setSelectedContact(null);
-          setAiSuggestions(null);
-          setValidationErrors({});
-          setFieldWarnings({});
-          setDealNameUserEdited(false);
-          setForecastCategoryUserSet(false);
-          setDealValueUserEdited(false);
-          setAttachments([]);
-          showToast('success', 'Ready to add another deal');
-        } else if (savedDealId) {
-          navigate(`/crm/deals/${savedDealId}`);
-        } else {
-          navigate('/crm/deals');
-        }
+      if (draft) {
+        showToast('success', 'Draft saved');
+      } else {
+        setPostSaveModal({ open: true, dealId: savedDealId, dealName: formData.dealName });
       }
     } catch (err: any) {
       showToast('error', err.message || 'Failed to save deal. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const resetFormForAnother = () => {
+    setFormData({
+      dealName: '',
+      dealValue: '',
+      currency: 'USD',
+      closeDate: '',
+      pipelineId: DEFAULT_PIPELINE.id,
+      pipelineName: DEFAULT_PIPELINE.name,
+      dealType: DEFAULT_DEAL_TYPE.id,
+      stage: DEFAULT_PIPELINE.stages[0].id,
+      probability: DEFAULT_PIPELINE.stages[0].probability,
+      accountId: '',
+      accountName: '',
+      primaryContactId: '',
+      primaryContactName: '',
+      contactRole: DEFAULT_CONTACT_ROLE.id,
+      additionalContacts: [] as StakeholderContact[],
+      competitors: [] as Competitor[],
+      forecastCategory: '',
+      owner: 'current-user',
+      source: '',
+      hrmsConnection: null,
+      priority: 'Medium',
+      tags: [],
+      product: '',
+      contractTerm: '',
+      paymentTerms: '',
+      description: '',
+      nextSteps: '',
+      closeDateOverrideReason: '',
+      sourceJourney: null,
+    });
+    setShowSmartSearch(true);
+    setSelectedAccount(null);
+    setSelectedContact(null);
+    setAiSuggestions(null);
+    setValidationErrors({});
+    setFieldWarnings({});
+    setDealNameUserEdited(false);
+    setForecastCategoryUserSet(false);
+    setDealValueUserEdited(false);
+    setAttachments([]);
+  };
+
+  const handlePostSaveAction = (action: PostSaveAction) => {
+    const { dealId, dealName } = postSaveModal;
+    setPostSaveModal(prev => ({ ...prev, open: false }));
+
+    switch (action) {
+      case 'view':
+        navigate(dealId ? `/crm/deals/${dealId}` : '/crm/deals');
+        break;
+      case 'task':
+        navigate('/crm/tasks', { state: { createTask: true, dealId, dealName } });
+        break;
+      case 'email':
+        navigate('/crm/activities', { state: { composeEmail: true, dealId, dealName } });
+        break;
+      case 'meeting':
+        navigate('/crm/meetings', { state: { createMeeting: true, dealId, dealName } });
+        break;
+      case 'another':
+        resetFormForAnother();
+        showToast('success', 'Ready to add another deal');
+        break;
+      case 'dismiss':
+        navigate('/crm/deals');
+        break;
     }
   };
 
@@ -1017,10 +1039,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               onApplyRecommendation={(field, value) => handleFieldChange(field, value)}
             />
             <ValidationChecklistPanel validation={validation} formData={formData} />
-            <SaveOptionsPanel
-              options={saveOptions}
-              onChange={setSaveOptions}
-            />
             <TipsHelpPanel />
             {duplicateDeals.length > 0 && (
               <DuplicateCheckPanel
@@ -1032,6 +1050,13 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Post-save action modal */}
+      <PostSaveModal
+        isOpen={postSaveModal.open}
+        dealName={postSaveModal.dealName}
+        onAction={handlePostSaveAction}
+      />
 
       {/* HRMS Advantage Modal */}
       {hrmsModalData && (
