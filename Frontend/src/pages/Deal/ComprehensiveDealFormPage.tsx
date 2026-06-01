@@ -26,6 +26,7 @@ import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
 import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
 import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
+import { DealFormAttachments, AttachmentItem } from '../../components/Deal/DealForm/DealFormAttachments';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -90,6 +91,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const [dealNameUserEdited, setDealNameUserEdited] = useState(false);
   // true = user manually selected a forecast category → stage changes won't overwrite
   const [forecastCategoryUserSet, setForecastCategoryUserSet] = useState(false);
+  // File attachments — kept outside formData because File objects are not JSON-serializable
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
 
   // Load deal data if editing
   useEffect(() => {
@@ -634,6 +637,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       ],
       forecast_category: formData.forecastCategory || undefined,
       competitors: (formData.competitors ?? []) as Competitor[],
+      // Only include uploaded files — pending/failed are intentionally excluded
+      attachment_metadata: attachments
+        .filter(a => a.status === 'uploaded' && a.uploadedUrl)
+        .map(a => ({ name: a.name, size: a.size, type: a.type, url: a.uploadedUrl! })),
       source: formData.source || undefined,
       priority: formData.priority || undefined,
       tags: formData.tags.length > 0 ? formData.tags : undefined,
@@ -733,6 +740,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           setFieldWarnings({});
           setDealNameUserEdited(false);
           setForecastCategoryUserSet(false);
+          setAttachments([]);
           showToast('success', 'Ready to add another deal');
         } else if (savedDealId) {
           navigate(`/crm/deals/${savedDealId}`);
@@ -955,6 +963,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             <DealFormDescription
               formData={formData}
               onChange={handleFieldChange}
+            />
+
+            <DealFormAttachments
+              attachments={attachments}
+              onChange={setAttachments}
             />
           </div>
 

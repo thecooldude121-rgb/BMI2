@@ -68,6 +68,15 @@ export interface DealPayload {
     name: string;
     isCustom: boolean;
   }>;
+  // Metadata for files that have been uploaded via the attachment service.
+  // Pending/failed files are excluded. When backend upload API is live,
+  // this becomes document IDs linked via documents.record_id = dealId.
+  attachment_metadata?: Array<{
+    name: string;
+    size: number;
+    type: string;
+    url: string;
+  }>;
   stakeholders?: Array<{
     id: string;
     name: string;
