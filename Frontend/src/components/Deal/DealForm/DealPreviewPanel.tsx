@@ -1,8 +1,8 @@
 import React from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, Info } from 'lucide-react';
 import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
-import { getPipeline, getPipelineStage } from '../../../config/pipelines';
+import { getPipeline, getPipelineStage, getStageProbability, DEFAULT_PIPELINE } from '../../../config/pipelines';
 import { getDealType } from '../../../config/dealTypes';
 import { getForecastCategory, forecastChipClasses } from '../../../config/forecastCategories';
 import { getContactRole, roleChipClasses, StakeholderContact } from '../../../config/contactRoles';
@@ -121,15 +121,40 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">🤖 {formData.probability}% Win Probability</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-blue-500 h-3 rounded-full transition-all duration-300"
-                style={{ width: `${formData.probability}%` }}
-              ></div>
-            </div>
+            {(() => {
+              const sp = getStageProbability(formData.pipelineId || DEFAULT_PIPELINE.id, formData.stage);
+              const prob = formData.probability ?? sp;
+              const isAI = prob > sp;
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-1.5">
+                      {isAI ? (
+                        <span className="text-sm font-medium text-gray-700">AI Score</span>
+                      ) : (
+                        <span className="text-sm font-medium text-gray-700">Stage Baseline</span>
+                      )}
+                      <div className="relative group">
+                        <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                        <div className="absolute left-0 bottom-5 w-56 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 leading-relaxed">
+                          AI score uses deal context and stakeholder signals; stage baseline is historical default.
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-blue-600">{prob}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${prob}%` }}
+                    />
+                  </div>
+                  {isAI && (
+                    <div className="mt-1 text-xs text-gray-400 text-right">Stage: {sp}%</div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Stakeholder role chips */}
