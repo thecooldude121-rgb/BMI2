@@ -60,6 +60,14 @@ export interface DealPayload {
   contact_name?: string;
   contact_email?: string;
   contact_title?: string;
+  stakeholders?: Array<{
+    id: string;
+    name: string;
+    email?: string;
+    title?: string;
+    role: string;
+    isPrimary: boolean;
+  }>;
   source?: string;
   priority?: string;
   tags?: string[];

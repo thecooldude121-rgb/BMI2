@@ -22,6 +22,7 @@ import { BASE_CURRENCY_CODE } from '../../config/currencies';
 import { generateDealName } from '../../utils/dealNameGenerator';
 import { DEFAULT_PIPELINE, getPipeline, getStageProbability } from '../../config/pipelines';
 import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
+import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -44,8 +45,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     accountName: '',
     primaryContactId: '',
     primaryContactName: '',
-    contactRole: 'Champion',
-    additionalContacts: [],
+    contactRole: DEFAULT_CONTACT_ROLE.id,
+    additionalContacts: [] as StakeholderContact[],
     owner: 'current-user',
     source: '',
     hrmsConnection: null,
@@ -458,9 +459,14 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     // Base probability comes from the pipeline config — never stale across pipelines
     let probability = getStageProbability(data.pipelineId || DEFAULT_PIPELINE.id, data.stage);
 
-    // Contact level boost
-    if (data.contactRole === 'Decision Maker') probability += 10;
-    if (data.contactRole === 'Champion') probability += 15;
+    // Contact level boost — check primary and all additional stakeholders
+    const allRoles: string[] = [
+      data.contactRole,
+      ...((data.additionalContacts ?? []) as StakeholderContact[]).map(c => c.role),
+    ];
+    if (allRoles.some(r => getContactRole(r).id === 'decision-maker')) probability += 10;
+    if (allRoles.some(r => getContactRole(r).id === 'champion'))       probability += 15;
+    if (allRoles.some(r => getContactRole(r).id === 'economic-buyer')) probability += 10;
 
     // HRMS connection boost
     if (data.source === 'hrms' || data.hrmsConnection) probability += 15;
@@ -547,7 +553,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }));
 
     // Auto-update probability based on multiple factors
-    if (['stage', 'contactRole', 'source', 'dealValue', 'hrmsConnection'].includes(field)) {
+    if (['stage', 'contactRole', 'additionalContacts', 'source', 'dealValue', 'hrmsConnection'].includes(field)) {
       const newProbability = calculateWinProbability(newData);
       setFormData(prev => ({ ...prev, probability: newProbability }));
     }
@@ -578,6 +584,19 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       company_name: formData.accountName || undefined,
       contact_name: formData.primaryContactName || undefined,
       contact_title: formData.contactRole || undefined,
+      stakeholders: [
+        // Primary contact always first
+        ...(formData.primaryContactName ? [{
+          id: formData.primaryContactId || 'primary',
+          name: formData.primaryContactName,
+          role: formData.contactRole || DEFAULT_CONTACT_ROLE.id,
+          isPrimary: true,
+        }] : []),
+        // Additional stakeholders
+        ...((formData.additionalContacts ?? []) as StakeholderContact[])
+          .filter(c => c.name.trim())
+          .map(c => ({ ...c, isPrimary: false })),
+      ],
       source: formData.source || undefined,
       priority: formData.priority || undefined,
       tags: formData.tags.length > 0 ? formData.tags : undefined,
@@ -644,8 +663,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             accountName: '',
             primaryContactId: '',
             primaryContactName: '',
-            contactRole: 'Champion',
-            additionalContacts: [],
+            contactRole: DEFAULT_CONTACT_ROLE.id,
+            additionalContacts: [] as StakeholderContact[],
             owner: 'current-user',
             source: '',
             hrmsConnection: null,

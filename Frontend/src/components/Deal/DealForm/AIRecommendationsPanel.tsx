@@ -1,5 +1,6 @@
 import React from 'react';
 import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2 } from 'lucide-react';
+import { hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
 interface AIRecommendationsPanelProps {
   formData: any;
@@ -32,11 +33,12 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
     });
   }
 
-  if (!formData.tags.includes('CEO Approval')) {
+  const additionalContacts: StakeholderContact[] = formData.additionalContacts ?? [];
+  if (!hasSeniorBuyer(formData.contactRole, additionalContacts)) {
     recommendations.push({
       id: 3,
-      title: 'Add Contact: CEO',
-      reason: `$${(parseFloat(formData.dealValue) / 1000).toFixed(0)}K deals need exec approval`,
+      title: 'Add a Decision Maker or Economic Buyer',
+      reason: 'Deals without a senior buyer role close 40% less often',
       action: () => {},
       icon: User
     });

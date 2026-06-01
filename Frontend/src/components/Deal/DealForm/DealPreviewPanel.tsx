@@ -4,6 +4,7 @@ import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUt
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getPipeline, getPipelineStage } from '../../../config/pipelines';
 import { getDealType } from '../../../config/dealTypes';
+import { getContactRole, roleChipClasses, StakeholderContact } from '../../../config/contactRoles';
 
 interface DealPreviewPanelProps {
   formData: any;
@@ -118,11 +119,32 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
             </div>
           </div>
 
-          {formData.primaryContactName && (
-            <div className="text-sm text-gray-700">
-              👤 {formData.primaryContactName} ({formData.contactRole})
-            </div>
-          )}
+          {/* Stakeholder role chips */}
+          {formData.primaryContactName && (() => {
+            const additional: StakeholderContact[] = formData.additionalContacts ?? [];
+            const all = [
+              { name: formData.primaryContactName, role: formData.contactRole, isPrimary: true },
+              ...additional.filter(c => c.name.trim()),
+            ];
+            return (
+              <div className="space-y-1.5">
+                {all.map((s, i) => {
+                  const roleObj = getContactRole(s.role);
+                  return (
+                    <div key={i} className="flex items-center space-x-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleChipClasses(roleObj.chipColor)}`}>
+                        {roleObj.label}
+                      </span>
+                      <span className="text-sm text-gray-700 truncate">
+                        {s.name}
+                        {s.isPrimary && <span className="ml-1 text-xs text-gray-400">(primary)</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className="text-sm text-gray-700">
             Owner: {formData.owner === 'current-user' ? 'Alex Rodriguez' : 'Owner'}
