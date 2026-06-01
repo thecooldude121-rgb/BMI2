@@ -15,7 +15,6 @@ import { AIRecommendationsPanel } from '../../components/Deal/DealForm/AIRecomme
 import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
 import { PostSaveModal, PostSaveAction } from '../../components/Deal/DealForm/PostSaveModal';
 import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPanel';
-import { WizardStepIndicator } from '../../components/Deal/DealForm/WizardStepIndicator';
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
@@ -80,8 +79,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [fieldWarnings, setFieldWarnings] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
-  const [stepVisible, setStepVisible] = useState(true);
   const [postSaveModal, setPostSaveModal] = useState<{ open: boolean; dealId: string | undefined; dealName: string }>({
     open: false,
     dealId: undefined,
@@ -431,46 +428,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const handleClearDraft = () => {
     localStorage.removeItem('deal-form-draft');
     showToast('info', 'Draft cleared');
-  };
-
-  // ── Wizard navigation ────────────────────────────────────────────────────
-
-  const validateStep = (step: number): boolean => {
-    const stepFields: Record<number, string[]> = {
-      1: ['dealName', 'dealValue', 'closeDate'],
-      2: ['accountName', 'primaryContactName'],
-      3: ['owner', 'source'],
-    };
-    const fields = stepFields[step] ?? [];
-    const errors: Record<string, string> = {};
-    fields.forEach(field => {
-      const err = validateField(field, formData[field as keyof typeof formData]);
-      if (err) errors[field] = err;
-    });
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(prev => ({ ...prev, ...errors }));
-      showToast('error', 'Please fill the required fields before continuing');
-      return false;
-    }
-    return true;
-  };
-
-  const goToStep = (newStep: 1 | 2 | 3) => {
-    setStepVisible(false);
-    setTimeout(() => {
-      setCurrentStep(newStep);
-      setStepVisible(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 150);
-  };
-
-  const handleNext = () => {
-    if (!validateStep(currentStep)) return;
-    goToStep((currentStep + 1) as 1 | 2 | 3);
-  };
-
-  const handleBack = () => {
-    goToStep((currentStep - 1) as 1 | 2 | 3);
   };
 
   // Validation functions
@@ -934,6 +891,20 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             >
               Cancel
             </button>
+            <button
+              onClick={() => handleSave(true)}
+              disabled={isSaving}
+              className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
+            >
+              Save as Draft
+            </button>
+            <button
+              onClick={() => handleSave(false)}
+              disabled={isSaving || !validation.isValid}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Deal'}
+            </button>
           </div>
         </div>
         <div className="flex items-center justify-between">
@@ -949,24 +920,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Step indicator — sticky so it stays visible while scrolling */}
-      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 shadow-sm">
-        <WizardStepIndicator currentStep={currentStep} />
-      </div>
-
       {/* Main Content */}
       <div className="max-w-[1920px] mx-auto px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column (65% width) */}
-          <div className="lg:col-span-2">
-            <div
-              className={`space-y-6 transition-opacity duration-150 ${
-                stepVisible ? 'opacity-100' : 'opacity-0'
-              }`}
-            >
-            {/* ── Step 1: Core Info ─────────────────────────────────────── */}
-            {currentStep === 1 && (
-              <>
+          <div className="lg:col-span-2 space-y-6">
             {/* Email-to-Deal Assist */}
             <EmailToDealPanel
               formData={formData}
@@ -1060,50 +1018,40 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               onApplyCatalogPrice={(amount) => {
                 setDealValueUserEdited(false);
                 handleFieldChange('dealValue', String(amount));
+                // Re-lock immediately so the field shows the applied value
                 setTimeout(() => setDealValueUserEdited(false), 0);
               }}
             />
-              </>
-            )}
 
-            {/* ── Step 2: Stakeholders ───────────────────────────────────── */}
-            {currentStep === 2 && (
-              <DealFormAccountContacts
-                formData={formData}
-                onChange={handleFieldChange}
-                selectedAccount={selectedAccount}
-                selectedContact={selectedContact}
-                onSearchAccount={() => setShowSmartSearch(true)}
-                validationErrors={validationErrors}
-              />
-            )}
+            <DealFormAccountContacts
+              formData={formData}
+              onChange={handleFieldChange}
+              selectedAccount={selectedAccount}
+              selectedContact={selectedContact}
+              onSearchAccount={() => setShowSmartSearch(true)}
+              validationErrors={validationErrors}
+            />
 
-            {/* ── Step 3: Product & Close ────────────────────────────────── */}
-            {currentStep === 3 && (
-              <>
-                <DealFormOwnership
-                  formData={formData}
-                  onChange={handleFieldChange}
-                  validationErrors={validationErrors}
-                />
+            <DealFormOwnership
+              formData={formData}
+              onChange={handleFieldChange}
+              validationErrors={validationErrors}
+            />
 
-                <DealFormProductDetails
-                  formData={formData}
-                  onChange={handleFieldChange}
-                />
+            <DealFormProductDetails
+              formData={formData}
+              onChange={handleFieldChange}
+            />
 
-                <DealFormDescription
-                  formData={formData}
-                  onChange={handleFieldChange}
-                />
+            <DealFormDescription
+              formData={formData}
+              onChange={handleFieldChange}
+            />
 
-                <DealFormAttachments
-                  attachments={attachments}
-                  onChange={setAttachments}
-                />
-              </>
-            )}
-            </div>
+            <DealFormAttachments
+              attachments={attachments}
+              onChange={setAttachments}
+            />
           </div>
 
           {/* Right Column (35% width) */}
@@ -1146,51 +1094,30 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       )}
 
       {/* Sticky Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-8 py-4 shadow-lg z-10">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-8 py-4 shadow-lg">
         <div className="max-w-[1920px] mx-auto flex items-center justify-between">
-          {/* Left: step label on step 1, Back button on steps 2–3 */}
+          <span className="text-sm text-gray-600">* Required fields</span>
           <div className="flex items-center space-x-3">
-            {currentStep === 1 && (
-              <span className="text-sm text-gray-500">* Required fields</span>
-            )}
-            {currentStep > 1 && (
-              <button
-                onClick={handleBack}
-                className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors flex items-center gap-2"
-              >
-                ← Back
-              </button>
-            )}
-          </div>
-
-          {/* Right: Next on steps 1–2, Save buttons on step 3 */}
-          <div className="flex items-center space-x-3">
-            {currentStep < 3 && (
-              <button
-                onClick={handleNext}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
-              >
-                Next →
-              </button>
-            )}
-            {currentStep === 3 && (
-              <>
-                <button
-                  onClick={() => handleSave(true)}
-                  disabled={isSaving}
-                  className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
-                >
-                  Save as Draft
-                </button>
-                <button
-                  onClick={() => handleSave(false)}
-                  disabled={isSaving || !validation.isValid}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
-                >
-                  {isSaving ? 'Saving...' : 'Save Deal'}
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => navigate('/crm/deals')}
+              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleSave(true)}
+              disabled={isSaving}
+              className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
+            >
+              Save as Draft
+            </button>
+            <button
+              onClick={() => handleSave(false)}
+              disabled={isSaving || !validation.isValid}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Deal'}
+            </button>
           </div>
         </div>
       </div>
