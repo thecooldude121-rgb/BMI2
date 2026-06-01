@@ -14,6 +14,7 @@ import { AIInsightsPanel } from '../../components/Deal/DealForm/AIInsightsPanel'
 import { AIRecommendationsPanel } from '../../components/Deal/DealForm/AIRecommendationsPanel';
 import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
 import { PostSaveModal, PostSaveAction } from '../../components/Deal/DealForm/PostSaveModal';
+import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPanel';
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
@@ -906,6 +907,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column (65% width) */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Email-to-Deal Assist */}
+            <EmailToDealPanel
+              formData={formData}
+              onApplyField={handleFieldChange}
+            />
+
             {/* Smart Deal Creation */}
             {showSmartSearch && (
               <SmartSearchPanel
