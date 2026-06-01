@@ -1,40 +1,76 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Bell, Mail, Plus, Settings, LogOut, ChevronDown,
   UserPlus, DollarSign, Users, Building2, Calendar, Phone
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
+// Derives a human-readable page label from the current pathname
+const getPageLabel = (pathname: string): string => {
+  if (pathname.startsWith('/crm/deals/add') || pathname.startsWith('/crm/deals/create')) return 'Add New Deal';
+  if (/\/crm\/deals\/[^/]+\/edit/.test(pathname)) return 'Edit Deal';
+  if (pathname.startsWith('/crm/deals'))         return 'Deals';
+  if (pathname.startsWith('/crm/leads'))         return 'Leads';
+  if (pathname.startsWith('/crm/contacts'))      return 'Contacts';
+  if (pathname.startsWith('/crm/accounts'))      return 'Accounts';
+  if (pathname.startsWith('/crm/activities'))    return 'Activities';
+  if (pathname.startsWith('/crm/tasks'))         return 'Tasks';
+  if (pathname.startsWith('/crm/meetings'))      return 'Meetings';
+  if (pathname.startsWith('/crm/calls'))         return 'Calls';
+  if (pathname.startsWith('/crm/reports'))       return 'Reports';
+  if (pathname.startsWith('/crm/pipeline'))      return 'Pipeline';
+  if (pathname.startsWith('/crm'))               return 'CRM';
+  if (pathname.startsWith('/accounts'))          return 'Accounts';
+  if (pathname.startsWith('/hrms'))              return 'HRMS';
+  if (pathname.startsWith('/analytics'))         return 'Analytics';
+  if (pathname.startsWith('/calendar'))          return 'Calendar';
+  if (pathname.startsWith('/lead-generation'))   return 'Lead Generation';
+  if (pathname.startsWith('/sequences'))         return 'Sequences';
+  if (pathname.startsWith('/integrations'))      return 'Integrations';
+  if (pathname.startsWith('/team'))              return 'Team';
+  if (pathname.startsWith('/settings'))          return 'Settings';
+  if (pathname.startsWith('/dashboard'))         return 'Dashboard';
+  return 'BMI Platform';
+};
+
 const TopBar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  const pageLabel = getPageLabel(pathname);
+
   const createMenuItems = [
-    { name: 'Add Lead',        action: () => navigate('/crm/leads/new'),    icon: UserPlus },
-    { name: 'Create Deal',     action: () => navigate('/deals/create'),     icon: DollarSign },
-    { name: 'Add Contact',     action: () => navigate('/crm/contacts/new'), icon: Users },
-    { name: 'Add Company',     action: () => navigate('/accounts/new'),     icon: Building2 },
-    { name: 'Schedule Meeting',action: () => navigate('/calendar/new'),     icon: Calendar },
-    { name: 'Add Task',        action: () => navigate('/crm/tasks/new'),    icon: Phone },
+    { name: 'Add Lead',         action: () => navigate('/crm/leads/new'),    icon: UserPlus },
+    { name: 'Create Deal',      action: () => navigate('/crm/deals/add'),    icon: DollarSign },
+    { name: 'Add Contact',      action: () => navigate('/crm/contacts/new'), icon: Users },
+    { name: 'Add Company',      action: () => navigate('/accounts/new'),     icon: Building2 },
+    { name: 'Schedule Meeting', action: () => navigate('/calendar/new'),     icon: Calendar },
+    { name: 'Add Task',         action: () => navigate('/crm/tasks/new'),    icon: Phone },
   ];
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-40 sticky top-0">
-      {/* Search */}
-      <div className="relative w-80">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-        <input
-          type="text"
-          placeholder="Search leads, deals, contacts..."
-          className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-gray-50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white"
-        />
+      {/* Page context label — left */}
+      <div className="flex items-center min-w-0">
+        <span className="text-base font-semibold text-gray-800 truncate">{pageLabel}</span>
       </div>
 
-      {/* Right actions */}
-      <div className="flex items-center gap-1">
+      {/* Search + actions — right */}
+      <div className="flex items-center gap-3">
+        {/* Search */}
+        <div className="relative w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search leads, deals, contacts..."
+            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-gray-50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white"
+          />
+        </div>
+
         {/* Quick Create */}
         <div className="relative">
           <button
@@ -81,7 +117,7 @@ const TopBar: React.FC = () => {
         </button>
 
         {/* Profile */}
-        <div className="relative ml-1">
+        <div className="relative">
           <button
             onClick={() => setShowProfileMenu(!showProfileMenu)}
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"

@@ -853,24 +853,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Breadcrumb */}
-      <div className="bg-white border-b border-gray-200 px-8 py-3">
-        <div className="flex items-center space-x-2 text-sm">
-          <button
-            onClick={() => navigate('/crm/deals')}
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
-            Deals
-          </button>
-          <ChevronRight className="h-4 w-4 text-gray-400" />
-          <span className="text-gray-900 font-medium">
-            {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
-          </span>
-        </div>
-      </div>
-
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
+      {/* Frozen header — sticks directly below the 56px global TopBar */}
+      <div className="sticky top-14 z-10 bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-2xl font-semibold text-gray-900">
             {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
