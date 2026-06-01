@@ -1,7 +1,8 @@
 import React from 'react';
-import { Sparkles, Calendar, Info } from 'lucide-react';
+import { Sparkles, Calendar, Info, GitBranch } from 'lucide-react';
 import { SUPPORTED_CURRENCIES, getCurrency, BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, validateDealValue } from '../../../utils/currencyUtils';
+import { PIPELINES, getPipeline, stageButtonClasses } from '../../../config/pipelines';
 
 interface DealFormBasicInfoProps {
   formData: any;
@@ -23,14 +24,9 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
   onRegenerateName,
 }) => {
   const hasNameContext = !!(formData.accountName || formData.product);
-  const stages = [
-    { id: 'prospecting', name: 'Prospecting', probability: 25 },
-    { id: 'qualified', name: 'Qualified', probability: 45 },
-    { id: 'proposal', name: 'Proposal', probability: 67 },
-    { id: 'negotiation', name: 'Negotiation', probability: 85 },
-    { id: 'closed-won', name: 'Closed-Won', probability: 100 },
-    { id: 'closed-lost', name: 'Closed-Lost', probability: 0 }
-  ];
+  // Derive stages from the selected pipeline — never stale
+  const currentPipeline = getPipeline(formData.pipelineId || '');
+  const stages = currentPipeline.stages;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -236,7 +232,33 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           )}
         </div>
 
-        {/* Stage — horizontal bar */}
+        {/* Pipeline selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Pipeline <span className="text-red-500">*</span>
+          </label>
+          <div className="flex items-center space-x-2">
+            <div className="p-2 bg-gray-100 rounded-lg flex-shrink-0">
+              <GitBranch className="h-4 w-4 text-gray-500" />
+            </div>
+            <select
+              value={formData.pipelineId || ''}
+              onChange={(e) => onChange('pipelineId', e.target.value)}
+              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              {PIPELINES.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-1.5 text-xs text-gray-400">
+            {currentPipeline.description} · {stages.length} stages
+          </p>
+        </div>
+
+        {/* Stage — horizontal bar (stages depend on selected pipeline) */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Stage <span className="text-red-500">*</span>
@@ -244,25 +266,24 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
             {stages.map((stage, idx) => {
               const isActive = formData.stage === stage.id;
-              const isWon = stage.id === 'closed-won';
-              const isLost = stage.id === 'closed-lost';
               return (
                 <button
                   key={stage.id}
                   type="button"
                   onClick={() => onChange('stage', stage.id)}
-                  className={`flex-1 py-2.5 text-xs font-medium transition-all relative
+                  title={`${stage.probability}% base probability`}
+                  className={`flex-1 py-2.5 text-xs font-medium transition-all
                     ${idx !== 0 ? 'border-l border-gray-200' : ''}
-                    ${isActive
-                      ? isWon ? 'bg-green-600 text-white' : isLost ? 'bg-red-500 text-white' : 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
+                    ${stageButtonClasses(stage, isActive)}`}
                 >
                   {stage.name}
                 </button>
               );
             })}
           </div>
+          <p className="mt-1.5 text-xs text-gray-400">
+            Stages shown are specific to the <span className="font-medium text-gray-600">{currentPipeline.name}</span> pipeline
+          </p>
         </div>
 
         {/* Win Probability — compact row with collapsible breakdown */}

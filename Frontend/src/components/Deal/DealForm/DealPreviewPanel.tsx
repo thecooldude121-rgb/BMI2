@@ -2,36 +2,13 @@ import React from 'react';
 import { Eye } from 'lucide-react';
 import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
+import { getPipeline, getPipelineStage } from '../../../config/pipelines';
 
 interface DealPreviewPanelProps {
   formData: any;
 }
 
 export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) => {
-  const getStageEmoji = (stage: string) => {
-    const emojiMap: Record<string, string> = {
-      'prospecting': '🔵',
-      'qualified': '🟢',
-      'proposal': '🟠',
-      'negotiation': '🤝',
-      'closed-won': '🎉',
-      'closed-lost': '❌'
-    };
-    return emojiMap[stage] || '📊';
-  };
-
-  const getStageName = (stage: string) => {
-    const nameMap: Record<string, string> = {
-      'prospecting': 'Prospecting',
-      'qualified': 'Qualified',
-      'proposal': 'Proposal',
-      'negotiation': 'Negotiation',
-      'closed-won': 'Closed-Won',
-      'closed-lost': 'Closed-Lost'
-    };
-    return nameMap[stage] || 'Unknown';
-  };
-
   const getInitials = (name: string) => {
     if (!name) return 'NA';
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -41,6 +18,18 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
   const rawAmount = parseFloat((formData.dealValue || '0').toString().replace(/,/g, ''));
   const amount = isNaN(rawAmount) ? 0 : rawAmount;
   const baseAmount = convertToBaseCurrency(amount, currency);
+
+  // Resolve pipeline and stage from config — always current, never stale
+  const pipeline = getPipeline(formData.pipelineId || '');
+  const stageObj = getPipelineStage(pipeline.id, formData.stage);
+  const stageIndex = pipeline.stages.findIndex(s => s.id === formData.stage);
+  const stagePosition = stageIndex >= 0 ? stageIndex + 1 : 1;
+
+  const stageColorDot: Record<string, string> = {
+    gray: '🔵', blue: '🔵', amber: '🟠', purple: '🟣', green: '🟢', red: '🔴',
+  };
+  const stageEmoji = stageObj ? (stageColorDot[stageObj.color] ?? '📊') : '📊';
+  const stageName = stageObj?.name ?? 'Unknown';
 
   const getDaysAway = (closeDate: string) => {
     if (!closeDate) return '-- days away';
@@ -54,8 +43,8 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       <div className="flex items-center space-x-2 mb-4">
-        <Eye className="h-6 w-6 text-gray-600" />
-        <h2 className="text-lg font-bold text-gray-900">👁️ DEAL PREVIEW</h2>
+        <Eye className="h-5 w-5 text-gray-500" />
+        <h2 className="text-base font-semibold text-gray-900">Deal Preview</h2>
       </div>
 
       <p className="text-sm text-gray-600 mb-4">How this deal will appear:</p>
@@ -84,9 +73,20 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
             )}
           </div>
 
-          <div className="flex items-center space-x-2">
-            <span className="text-lg">{getStageEmoji(formData.stage)}</span>
-            <span className="font-medium text-gray-900">{getStageName(formData.stage)} (Stage 1 of 6)</span>
+          {/* Pipeline + stage */}
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-lg">{stageEmoji}</span>
+              <span className="font-medium text-gray-900">
+                {stageName}
+                <span className="text-xs text-gray-400 font-normal ml-1">
+                  (Stage {stagePosition} of {pipeline.stages.length})
+                </span>
+              </span>
+            </div>
+            <div className="text-xs text-gray-400 pl-7">
+              {pipeline.name} pipeline
+            </div>
           </div>
 
           <div>

@@ -46,6 +46,8 @@ export interface DealPayload {
   value: number;
   currency: string;          // ISO 4217 code e.g. 'AED'
   base_amount_usd: number;   // value converted to USD for reporting
+  pipeline_id: string;       // e.g. 'new-business'
+  pipeline_name: string;     // e.g. 'New Business'
   stage: string;
   probability: number;
   expected_close_date?: string;

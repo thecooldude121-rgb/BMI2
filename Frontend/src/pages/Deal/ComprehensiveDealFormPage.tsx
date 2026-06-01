@@ -20,6 +20,7 @@ import { createDeal, updateDeal } from '../../utils/dealsApi';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
 import { generateDealName } from '../../utils/dealNameGenerator';
+import { DEFAULT_PIPELINE, getPipeline, getStageProbability } from '../../config/pipelines';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -33,8 +34,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     dealValue: '',
     currency: 'USD',
     closeDate: '',
-    stage: 'prospecting',
-    probability: 25,
+    pipelineId: DEFAULT_PIPELINE.id,
+    pipelineName: DEFAULT_PIPELINE.name,
+    stage: DEFAULT_PIPELINE.stages[0].id,
+    probability: DEFAULT_PIPELINE.stages[0].probability,
     accountId: '',
     accountName: '',
     primaryContactId: '',
@@ -450,17 +453,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   // Calculate win probability based on multiple factors
   const calculateWinProbability = (data: any): number => {
-    // Base probability from stage
-    const stageProbability: Record<string, number> = {
-      'prospecting': 20,
-      'qualified': 40,
-      'proposal': 60,
-      'negotiation': 80,
-      'closed-won': 100,
-      'closed-lost': 0
-    };
-
-    let probability = stageProbability[data.stage] || 20;
+    // Base probability comes from the pipeline config — never stale across pipelines
+    let probability = getStageProbability(data.pipelineId || DEFAULT_PIPELINE.id, data.stage);
 
     // Contact level boost
     if (data.contactRole === 'Decision Maker') probability += 10;
@@ -492,7 +486,34 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }
   };
 
+  const handlePipelineChange = (pipelineId: string) => {
+    const pipeline = getPipeline(pipelineId);
+    const firstStage = pipeline.stages[0];
+
+    // Check if the current stage exists in the new pipeline
+    const stageStillValid = pipeline.stages.some(s => s.id === formData.stage);
+    const newStage = stageStillValid ? formData.stage : firstStage.id;
+
+    const newData = {
+      ...formData,
+      pipelineId: pipeline.id,
+      pipelineName: pipeline.name,
+      stage: newStage,
+    };
+
+    setFormData({
+      ...newData,
+      probability: calculateWinProbability(newData),
+    });
+  };
+
   const handleFieldChange = (field: string, value: any) => {
+    // Pipeline changes are handled by a dedicated handler
+    if (field === 'pipelineId') {
+      handlePipelineChange(value);
+      return;
+    }
+
     // When the user types in the deal name field, lock it from auto-overwriting
     if (field === 'dealName') {
       setDealNameUserEdited(value.length > 0);
@@ -545,6 +566,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       value: rawValue,
       currency,
       base_amount_usd: baseAmountUsd,
+      pipeline_id: formData.pipelineId,
+      pipeline_name: formData.pipelineName,
       stage: formData.stage,
       probability: formData.probability,
       expected_close_date: formData.closeDate || undefined,
@@ -609,8 +632,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             dealValue: '',
             currency: 'USD',
             closeDate: '',
-            stage: 'prospecting',
-            probability: 25,
+            pipelineId: DEFAULT_PIPELINE.id,
+            pipelineName: DEFAULT_PIPELINE.name,
+            stage: DEFAULT_PIPELINE.stages[0].id,
+            probability: DEFAULT_PIPELINE.stages[0].probability,
             accountId: '',
             accountName: '',
             primaryContactId: '',
