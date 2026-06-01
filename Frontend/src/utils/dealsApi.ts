@@ -52,6 +52,8 @@ export interface DealPayload {
   stage: string;
   probability: number;
   expected_close_date?: string;
+  close_date_is_past?: boolean;
+  close_date_override_reason?: string;
   assigned_to?: string;
   description?: string;
   next_step?: string;

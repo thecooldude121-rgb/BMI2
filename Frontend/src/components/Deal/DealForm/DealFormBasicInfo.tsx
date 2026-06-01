@@ -185,53 +185,102 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
         </div>
 
         {/* Close Date */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Close Date: <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <input
-              type="date"
-              value={formData.closeDate}
-              onChange={(e) => onChange('closeDate', e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
-                validationErrors.closeDate
-                  ? 'border-red-500 focus:ring-red-500'
-                  : fieldWarnings.closeDate
-                  ? 'border-yellow-500 focus:ring-yellow-500'
-                  : 'border-gray-300 focus:ring-blue-500'
-              }`}
-            />
-            <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
-          </div>
-          {validationErrors.closeDate && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.closeDate}</p>
-          )}
-          {fieldWarnings.closeDate && !validationErrors.closeDate && (
-            <p className="mt-1 text-sm text-yellow-600 flex items-center space-x-1">
-              <span>⚠️</span>
-              <span>{fieldWarnings.closeDate}</span>
-            </p>
-          )}
-          {!validationErrors.closeDate && (
-            <div className="mt-1 text-xs text-gray-500">Must be a future date</div>
-          )}
-          {aiSuggestions && !validationErrors.closeDate && (
-            <div className="mt-2">
-              <div className="flex items-center space-x-2 text-sm text-purple-600">
-                <Sparkles className="h-4 w-4" />
-                <span>Suggested: {aiSuggestions.closeDays} days from today (Industry avg)</span>
+        {(() => {
+          const isPast = !!formData.closeDate && new Date(formData.closeDate) < (() => {
+            const t = new Date(); t.setHours(0,0,0,0); return t;
+          })();
+          return (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Close Date <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={formData.closeDate}
+                  onChange={(e) => onChange('closeDate', e.target.value)}
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
+                    validationErrors.closeDate
+                      ? 'border-red-500 focus:ring-red-500'
+                      : isPast
+                      ? 'border-amber-400 focus:ring-amber-400 bg-amber-50/30'
+                      : fieldWarnings.closeDate
+                      ? 'border-yellow-400 focus:ring-yellow-400'
+                      : 'border-gray-300 focus:ring-blue-500'
+                  }`}
+                />
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
               </div>
-              <button
-                onClick={() => onChange('closeDate', aiSuggestions.closeDate)}
-                className="mt-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-sm font-medium transition-colors"
-              >
-                Apply Suggestion
-              </button>
+
+              {/* Hard error (empty) */}
+              {validationErrors.closeDate && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.closeDate}</p>
+              )}
+
+              {/* Past-date warning block */}
+              {isPast && !validationErrors.closeDate && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-start space-x-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                    <span className="text-amber-500 text-sm flex-shrink-0">⚠</span>
+                    <div>
+                      <p className="text-sm font-medium text-amber-800">Close date is in the past</p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        Allowed for data migrations, late entry, and admin corrections. A reason is required for final save.
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-amber-800 mb-1">
+                      Reason for past close date <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={formData.closeDateOverrideReason ?? ''}
+                      onChange={(e) => onChange('closeDateOverrideReason', e.target.value)}
+                      placeholder="e.g. Migrating deal from previous CRM, late entry after verbal close, admin correction…"
+                      rows={2}
+                      maxLength={500}
+                      className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-none"
+                    />
+                    <div className="flex justify-between mt-1">
+                      <p className="text-xs text-amber-600">Required before you can save the deal.</p>
+                      <span className="text-xs text-gray-400">{(formData.closeDateOverrideReason ?? '').length}/500</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Far-future warning */}
+              {fieldWarnings.closeDate && !isPast && !validationErrors.closeDate && (
+                <p className="mt-1 text-sm text-yellow-600 flex items-center space-x-1">
+                  <span>⚠️</span>
+                  <span>{fieldWarnings.closeDate}</span>
+                </p>
+              )}
+
+              {/* Default helper text */}
+              {!validationErrors.closeDate && !isPast && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Future date recommended. Past dates allowed for migrations or corrections.
+                </p>
+              )}
+
+              {aiSuggestions && !validationErrors.closeDate && !isPast && (
+                <div className="mt-2">
+                  <div className="flex items-center space-x-2 text-sm text-purple-600">
+                    <Sparkles className="h-4 w-4" />
+                    <span>Suggested: {aiSuggestions.closeDays} days from today (Industry avg)</span>
+                  </div>
+                  <button
+                    onClick={() => onChange('closeDate', aiSuggestions.closeDate)}
+                    className="mt-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-sm font-medium transition-colors"
+                  >
+                    Apply Suggestion
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Pipeline selector */}
         <div>

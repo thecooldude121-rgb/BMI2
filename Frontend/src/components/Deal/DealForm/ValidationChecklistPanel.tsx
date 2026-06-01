@@ -12,17 +12,30 @@ interface ValidationChecklistPanelProps {
 }
 
 export const ValidationChecklistPanel: React.FC<ValidationChecklistPanelProps> = ({ validation, formData }) => {
+  const closeDateIsPast = !!formData.closeDate && (() => {
+    const t = new Date(); t.setHours(0,0,0,0);
+    return new Date(formData.closeDate) < t;
+  })();
+  const closeDateNeedsReason = closeDateIsPast && !formData.closeDateOverrideReason?.trim();
+
+  // status: 'complete' | 'warning' | 'incomplete'
+  const closeDateStatus = !formData.closeDate
+    ? 'incomplete'
+    : closeDateNeedsReason
+    ? 'warning'
+    : 'complete';
+
   const requiredFields = [
-    { field: 'dealName', label: 'Deal Name', completed: !!formData.dealName },
-    { field: 'dealValue', label: 'Deal Value', completed: !!formData.dealValue },
-    { field: 'closeDate', label: 'Close Date', completed: !!formData.closeDate },
-    { field: 'dealType', label: 'Deal Type', completed: !!formData.dealType },
-    { field: 'stage', label: 'Stage', completed: !!formData.stage },
-    { field: 'accountName', label: 'Account', completed: !!formData.accountName },
-    { field: 'primaryContactName', label: 'Primary Contact', completed: !!formData.primaryContactName },
-    { field: 'owner', label: 'Owner', completed: !!formData.owner },
-    { field: 'source', label: 'Source', completed: !!formData.source }
-  ];
+    { field: 'dealName',           label: 'Deal Name',       status: formData.dealName           ? 'complete' : 'incomplete' },
+    { field: 'dealValue',          label: 'Deal Value',       status: formData.dealValue          ? 'complete' : 'incomplete' },
+    { field: 'closeDate',          label: 'Close Date',       status: closeDateStatus,             note: closeDateNeedsReason ? 'Override reason required' : undefined },
+    { field: 'dealType',           label: 'Deal Type',        status: formData.dealType           ? 'complete' : 'incomplete' },
+    { field: 'stage',              label: 'Stage',            status: formData.stage              ? 'complete' : 'incomplete' },
+    { field: 'accountName',        label: 'Account',          status: formData.accountName        ? 'complete' : 'incomplete' },
+    { field: 'primaryContactName', label: 'Primary Contact',  status: formData.primaryContactName ? 'complete' : 'incomplete' },
+    { field: 'owner',              label: 'Owner',            status: formData.owner              ? 'complete' : 'incomplete' },
+    { field: 'source',             label: 'Source',           status: formData.source             ? 'complete' : 'incomplete' },
+  ] as Array<{ field: string; label: string; status: 'complete'|'warning'|'incomplete'; note?: string }>;
 
   const recommendedFields = [
     { field: 'product', label: 'Product/Package', message: 'Add for better tracking', completed: !!formData.product },
@@ -42,15 +55,30 @@ export const ValidationChecklistPanel: React.FC<ValidationChecklistPanelProps> =
           <div className="text-sm font-semibold text-gray-700 mb-3">Required Fields:</div>
           <div className="space-y-2">
             {requiredFields.map((field) => (
-              <div key={field.field} className="flex items-center space-x-2">
-                {field.completed ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                ) : (
-                  <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+              <div key={field.field} className="space-y-0.5">
+                <div className="flex items-center space-x-2">
+                  {field.status === 'complete' ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  ) : field.status === 'warning' ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                  )}
+                  <span className={`text-sm ${
+                    field.status === 'complete'  ? 'text-gray-900' :
+                    field.status === 'warning'   ? 'text-amber-700 font-medium' :
+                    'text-gray-500'
+                  }`}>
+                    {field.label}: {
+                      field.status === 'complete'  ? 'Completed' :
+                      field.status === 'warning'   ? 'Needs attention' :
+                      'Required'
+                    }
+                  </span>
+                </div>
+                {field.note && (
+                  <p className="text-xs text-amber-600 pl-6">{field.note}</p>
                 )}
-                <span className={`text-sm ${field.completed ? 'text-gray-900' : 'text-gray-500'}`}>
-                  {field.label}: {field.completed ? 'Completed' : 'Required'}
-                </span>
               </div>
             ))}
           </div>

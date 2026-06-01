@@ -57,6 +57,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     paymentTerms: '',
     description: '',
     nextSteps: '',
+    closeDateOverrideReason: '',
     sourceJourney: null as { type: 'lead' | 'contact' | 'account'; name: string; id: string } | null
   });
 
@@ -415,10 +416,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
       case 'closeDate':
         if (!value) return 'Close date is required';
-        const selectedDate = new Date(value);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate < today) return 'Close date cannot be in the past';
         return null;
 
       case 'accountName':
@@ -442,9 +439,22 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }
   };
 
+  const isCloseDatePast = (dateStr: string): boolean => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return d < today;
+  };
+
   const checkFieldWarning = (field: string, value: any): string | null => {
     if (field === 'closeDate' && value) {
       const selectedDate = new Date(value);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        return 'Close date is in the past. An override reason is required to save.';
+      }
       const oneYearFromNow = new Date();
       oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
       if (selectedDate > oneYearFromNow) {
@@ -580,6 +590,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       stage: formData.stage,
       probability: formData.probability,
       expected_close_date: formData.closeDate || undefined,
+      close_date_is_past: isCloseDatePast(formData.closeDate),
+      close_date_override_reason: formData.closeDateOverrideReason?.trim() || undefined,
       assigned_to: formData.owner !== 'current-user' ? formData.owner : undefined,
       company_name: formData.accountName || undefined,
       contact_name: formData.primaryContactName || undefined,
@@ -610,6 +622,13 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const handleSave = async (draft: boolean = false) => {
     if (!draft) {
+      // Past close date requires an override reason before final save
+      if (isCloseDatePast(formData.closeDate) && !formData.closeDateOverrideReason?.trim()) {
+        showToast('error', 'A reason is required when saving with a past close date');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
       const errors: Record<string, string> = {};
       Object.keys(formData).forEach(key => {
         const error = validateField(key, formData[key as keyof typeof formData]);
@@ -675,6 +694,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             paymentTerms: '',
             description: '',
             nextSteps: '',
+            closeDateOverrideReason: '',
             sourceJourney: null
           });
           setShowSmartSearch(true);
@@ -700,10 +720,13 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const getValidationStatus = () => {
     const total = 9;
+    // Close date counts as complete only when: set AND (future date OR has override reason)
+    const closeDateComplete = formData.closeDate &&
+      (!isCloseDatePast(formData.closeDate) || !!formData.closeDateOverrideReason?.trim());
     const completed = [
       formData.dealName,
       formData.dealValue,
-      formData.closeDate,
+      closeDateComplete ? formData.closeDate : '',
       formData.dealType,
       formData.stage,
       formData.accountName,
