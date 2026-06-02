@@ -12,7 +12,6 @@ import { DealPreviewPanel } from '../../components/Deal/DealForm/DealPreviewPane
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
 import { AIInsightsPanel } from '../../components/Deal/DealForm/AIInsightsPanel';
 import { AIRecommendationsPanel } from '../../components/Deal/DealForm/AIRecommendationsPanel';
-import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
 import { PostSaveModal, PostSaveAction } from '../../components/Deal/DealForm/PostSaveModal';
 import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPanel';
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
@@ -1112,7 +1111,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               formData={formData}
               onApplyRecommendation={(field, value) => handleFieldChange(field, value)}
             />
-            <ValidationChecklistPanel validation={validation} formData={formData} />
             <TipsHelpPanel />
             {duplicateDeals.length > 0 && (
               <DuplicateCheckPanel
