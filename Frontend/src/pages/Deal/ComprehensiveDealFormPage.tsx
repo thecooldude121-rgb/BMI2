@@ -417,12 +417,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const handleApplyAISuggestions = () => {
     if (aiSuggestions) {
-      setFormData(prev => ({
-        ...prev,
-        dealValue: aiSuggestions.dealValue,
-        closeDate: aiSuggestions.closeDate,
-        probability: aiSuggestions.probability
-      }));
+      // Route through handleFieldChange so dealValueUserEdited is set to true,
+      // preventing the catalog auto-apply effect from overwriting the value.
+      handleFieldChange('dealValue', String(aiSuggestions.dealValue));
+      handleFieldChange('closeDate', aiSuggestions.closeDate);
+      // Probability is derived, update directly without triggering field-level side effects
+      setFormData(prev => ({ ...prev, probability: aiSuggestions.probability }));
       showToast('success', 'Form auto-populated from AI suggestions');
     }
   };
@@ -773,6 +773,13 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
     try {
       const payload = buildPayload();
+      if (import.meta.env.DEV) {
+        console.log('[DealForm] Saving payload — value check:', {
+          formDataDealValue: formData.dealValue,
+          payloadValue: payload.value,
+          dealValueUserEdited,
+        });
+      }
       let savedDealId = id;
 
       if (isEditMode && id) {
@@ -1063,10 +1070,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               catalogSuggestion={catalogSuggestion}
               dealValueUserEdited={dealValueUserEdited}
               onApplyCatalogPrice={(amount) => {
-                setDealValueUserEdited(false);
+                // Apply through handleFieldChange so dealValueUserEdited is set to true
+                // and the catalog auto-apply effect cannot override this value again.
                 handleFieldChange('dealValue', String(amount));
-                // Re-lock immediately so the field shows the applied value
-                setTimeout(() => setDealValueUserEdited(false), 0);
               }}
             />
 
