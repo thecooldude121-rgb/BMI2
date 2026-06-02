@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Eye, CheckSquare, Mail, Calendar, Plus, X } from 'lucide-react';
 
 export type PostSaveAction = 'view' | 'task' | 'email' | 'meeting' | 'another' | 'dismiss';
@@ -50,7 +49,6 @@ const ACTIONS = [
 ] as const;
 
 export const PostSaveModal: React.FC<PostSaveModalProps> = ({ isOpen, dealName, dealId, onAction }) => {
-  const navigate = useNavigate();
   const defaultBtnRef = useRef<HTMLButtonElement>(null);
 
   // Auto-focus the primary action when modal opens
@@ -112,15 +110,7 @@ export const PostSaveModal: React.FC<PostSaveModalProps> = ({ isOpen, dealName, 
             <button
               key={id}
               ref={primary ? defaultBtnRef : undefined}
-              onClick={() => {
-                if (id === 'view') {
-                  // Navigate directly with the explicit dealId prop — no closure dependency
-                  navigate(dealId ? `/crm/deals/${dealId}` : '/crm/deals');
-                  onAction('dismiss');
-                } else {
-                  onAction(id);
-                }
-              }}
+              onClick={() => onAction(id)}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl border text-left transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
                 primary
                   ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
