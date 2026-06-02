@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
+import { calculateDealHealthScore } from '../../utils/dealHealthScore';
+import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
 import { ChevronRight } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
@@ -71,6 +73,10 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     contractTerm: '',
     paymentTerms: '',
     tags: [] as string[],
+    nextStep: '',
+    description: '',
+    dealType: '',
+    stakeholders: [] as any[],
   });
 
   useEffect(() => {
@@ -132,15 +138,39 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           contractTerm: data.contract_term || '',
           paymentTerms: data.payment_terms || '',
           tags,
+          nextStep: data.next_step || '',
+          description: data.description || '',
+          dealType: data.deal_type || '',
+          stakeholders: Array.isArray(data.stakeholders) ? data.stakeholders : [],
         });
       })
       .catch((err) => setFetchError(err.message ?? 'Failed to load deal'))
       .finally(() => setLoading(false));
   }, [id]);
 
+  // Map loaded deal → formData shape expected by calculateDealHealthScore.
+  // contactTitle is stored as the CRM role ID (champion, decision-maker, etc.)
+  // because buildPayload sends contactRole as contact_title to the backend.
+  const healthFormData = useMemo(() => ({
+    dealName: deal.dealName,
+    dealValue: String(deal.amount),
+    closeDate: deal.closeDate,
+    accountName: deal.accountName,
+    primaryContactName: deal.contactName,
+    contactRole: deal.contactTitle,
+    additionalContacts: deal.stakeholders.filter((s: any) => !s.isPrimary),
+    nextSteps: deal.nextStep,
+    product: deal.package,
+    source: deal.source,
+    description: deal.description,
+    dealType: deal.dealType,
+  }), [deal]);
+
+  const healthResult = useMemo(() => calculateDealHealthScore(healthFormData), [healthFormData]);
+
   const aiIntelligenceData = {
-    winProbability: 67,
-    healthScore: 78,
+    winProbability: deal.probability || 67,
+    healthScore: healthResult.score,
     insights: {
       positive: [
         { type: 'positive' as const, text: 'Deal size matches typical wins ($45-55K)', impact: '+15%' },
@@ -591,7 +621,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
       {/* Hero Section */}
       <DealHeroSection
-        deal={deal}
+        deal={{ ...deal, aiScore: healthResult.score, aiHealth: healthResult.label }}
         onEdit={() => navigate(`/crm/deals/${id}/edit`)}
         onMoreAction={handleMoreAction}
         onEmail={() => handleSendEmail('john@acme.com', 'Following up on proposal', '')}
@@ -632,7 +662,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           </div>
 
           {/* Right Sidebar (35% width) */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
+            <DealHealthScorePanel formData={healthFormData} subtitle="Based on current deal completeness" />
             <DealRightSidebar {...sidebarData} />
           </div>
         </div>

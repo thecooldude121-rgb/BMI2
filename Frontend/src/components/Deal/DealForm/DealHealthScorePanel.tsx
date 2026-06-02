@@ -4,6 +4,7 @@ import { calculateDealHealthScore, HealthTier, ItemStatus } from '../../../utils
 
 interface DealHealthScorePanelProps {
   formData: any;
+  subtitle?: string;
 }
 
 // ─── SVG circular gauge ───────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ const itemPointsColor = (status: ItemStatus) =>
   'text-gray-300';
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
-export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ formData }) => {
+export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ formData, subtitle }) => {
   const result = calculateDealHealthScore(formData);
 
   const tierBadge =
@@ -88,7 +89,7 @@ export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ form
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Deal Health Score</h2>
-          <p className="text-xs text-gray-400 mt-0.5">Updates as you fill the form</p>
+          <p className="text-xs text-gray-400 mt-0.5">{subtitle ?? 'Updates as you fill the form'}</p>
         </div>
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${tierBadge}`}>
           {result.label}
