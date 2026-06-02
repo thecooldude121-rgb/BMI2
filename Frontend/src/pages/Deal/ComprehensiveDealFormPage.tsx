@@ -923,7 +923,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-1 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <h1 className="text-sm font-semibold text-gray-900">
+            <h1 className="text-base font-semibold text-gray-900">
               {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
             </h1>
             {hasDraftRestored && !isEditMode && (
