@@ -247,14 +247,25 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             ? (() => { const d = new Date(formData.closeDate + 'T12:00:00'); return isNaN(d.getTime()) ? null : d; })()
             : null;
 
+          // Guard: only treat a date as valid when the year is in a sensible range.
+          // This prevents partial/junk years (0001, 262026, etc.) from triggering
+          // the "past date" reason field or the far-future warning.
+          const isValidDate = (d: Date | null): d is Date => {
+            if (!d || isNaN(d.getTime())) return false;
+            const y = d.getFullYear();
+            return y >= 2000 && y <= 2099;
+          };
+
           const today = new Date(); today.setHours(0, 0, 0, 0);
-          const isPast = selectedDate instanceof Date && !isNaN(selectedDate.getTime()) && selectedDate < today;
-          const isFarFuture = selectedDate instanceof Date && !isNaN(selectedDate.getTime()) &&
+          const isPast = isValidDate(selectedDate) && selectedDate < today;
+          const isFarFuture = isValidDate(selectedDate) &&
             selectedDate > new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
 
           const handleDateChange = (date: Date | null) => {
-            if (!date) { onChange('closeDate', ''); return; }
-            // Store as YYYY-MM-DD to match all existing form state consumers
+            if (!date) {
+              onChange('closeDate', '');
+              return;
+            }
             const yyyy = date.getFullYear();
             const mm = String(date.getMonth() + 1).padStart(2, '0');
             const dd = String(date.getDate()).padStart(2, '0');
@@ -304,7 +315,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
                     <div>
                       <p className="text-sm font-medium text-amber-800">Close date is in the past. Allowed for migrations or corrections.</p>
                       <p className="text-xs text-amber-700 mt-0.5">
-                        A reason is required before saving.
+                        Adding a reason is recommended but not required.
                       </p>
                     </div>
                   </div>
@@ -321,7 +332,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
                       className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-none"
                     />
                     <div className="flex justify-between mt-1">
-                      <p className="text-xs text-amber-600">Required before you can save the deal.</p>
+                      <p className="text-xs text-amber-600">Optional — saved with the deal if provided.</p>
                       <span className="text-xs text-gray-400">{(formData.closeDateOverrideReason ?? '').length}/500</span>
                     </div>
                   </div>

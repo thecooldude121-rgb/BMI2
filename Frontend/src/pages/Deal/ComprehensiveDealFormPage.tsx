@@ -514,21 +514,29 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }
   };
 
-  const isCloseDatePast = (dateStr: string): boolean => {
+  // Returns true only for fully valid dates (year 2000-2099) that are before today
+  const isValidCloseDate = (dateStr: string): boolean => {
     if (!dateStr) return false;
-    const d = new Date(dateStr);
+    const d = new Date(dateStr + 'T12:00:00');
+    if (isNaN(d.getTime())) return false;
+    const y = d.getFullYear();
+    return y >= 2000 && y <= 2099;
+  };
+
+  const isCloseDatePast = (dateStr: string): boolean => {
+    if (!isValidCloseDate(dateStr)) return false;
+    const d = new Date(dateStr + 'T12:00:00');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return d < today;
   };
 
   const checkFieldWarning = (field: string, value: any): string | null => {
-    if (field === 'closeDate' && value) {
-      const selectedDate = new Date(value);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    if (field === 'closeDate' && value && isValidCloseDate(value)) {
+      const selectedDate = new Date(value + 'T12:00:00');
+      const today = new Date(); today.setHours(0, 0, 0, 0);
       if (selectedDate < today) {
-        return 'Close date is in the past. An override reason is required to save.';
+        return 'Close date is in the past. Allowed for migrations or corrections.';
       }
       const oneYearFromNow = new Date();
       oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
@@ -645,7 +653,14 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }
 
     // Update form data
-    const newData = { ...formData, [field]: value };
+    let newData = { ...formData, [field]: value };
+
+    // When closeDate changes to a non-past (or invalid) date, clear the override reason
+    // in the same state update to avoid the stale-formData two-setState bug
+    if (field === 'closeDate' && !isCloseDatePast(value)) {
+      newData = { ...newData, closeDateOverrideReason: '' };
+    }
+
     setFormData(newData);
 
     // Validate field
@@ -730,13 +745,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const handleSave = async (draft: boolean = false) => {
     if (!draft) {
-      // Past close date requires an override reason before final save
-      if (isCloseDatePast(formData.closeDate) && !formData.closeDateOverrideReason?.trim()) {
-        showToast('error', 'A reason is required when saving with a past close date');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
-      }
-
       const errors: Record<string, string> = {};
       Object.keys(formData).forEach(key => {
         const error = validateField(key, formData[key as keyof typeof formData]);
@@ -874,9 +882,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const getValidationStatus = () => {
     const total = 9;
-    // Close date counts as complete only when: set AND (future date OR has override reason)
-    const closeDateComplete = formData.closeDate &&
-      (!isCloseDatePast(formData.closeDate) || !!formData.closeDateOverrideReason?.trim());
+    // Close date is complete whenever it holds a valid, reasonable date value
+    const closeDateComplete = isValidCloseDate(formData.closeDate);
     const completed = [
       formData.dealName,
       formData.dealValue,
