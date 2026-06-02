@@ -620,10 +620,16 @@ const DealsKanbanPage: React.FC = () => {
   }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedOwner, setSelectedOwner] = useState('all');
   const [selectedCloseDateFilter, setSelectedCloseDateFilter] = useState('all');
   const [selectedValueFilter, setSelectedValueFilter] = useState('all');
   const [selectedSourceFilter, setSelectedSourceFilter] = useState('all');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 200);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
   const kpis = useMemo(() => {
     const allDeals = stages.flatMap(stage => stage.deals);
@@ -1034,14 +1040,24 @@ const DealsKanbanPage: React.FC = () => {
     };
   }, []);
 
+  const filterDealsBySearch = (deals: PipelineStage['deals']) => {
+    if (!debouncedSearch) return deals;
+    const q = debouncedSearch.toLowerCase();
+    return deals.filter(d =>
+      [d.dealName, d.accountName, d.contactName].some(f => f?.toLowerCase().includes(q))
+    );
+  };
+
   const getVisibleDeals = (stage: PipelineStage) => {
+    const filtered = filterDealsBySearch(stage.deals);
     const count = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
-    return stage.deals.slice(0, count);
+    return filtered.slice(0, count);
   };
 
   const hasMoreDeals = (stage: PipelineStage) => {
+    const filtered = filterDealsBySearch(stage.deals);
     const count = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
-    return count < stage.deals.length;
+    return count < filtered.length;
   };
 
   return (
@@ -1504,7 +1520,10 @@ const DealsKanbanPage: React.FC = () => {
           <div className="flex gap-4 min-w-max">
             {displayedStages.map((stage) => {
               const isCollapsed = collapsedStages.includes(stage.id);
-              const stageTotal = stage.deals.reduce((sum, d) => sum + d.amount, 0);
+              const filteredDeals = filterDealsBySearch(stage.deals);
+              // Hide column entirely when search is active and nothing matches
+              if (debouncedSearch && filteredDeals.length === 0) return null;
+              const stageTotal = filteredDeals.reduce((sum, d) => sum + d.amount, 0);
 
               const getStageHeaderColor = () => {
                 switch(stage.id) {
@@ -1537,7 +1556,10 @@ const DealsKanbanPage: React.FC = () => {
                         onClick={(e) => handleStageCountClick(e, stage.id)}
                         className="hover:opacity-80 transition-opacity font-medium"
                       >
-                        {stage.deals.length} deals
+                        {filteredDeals.length} deal{filteredDeals.length !== 1 ? 's' : ''}
+                        {debouncedSearch && filteredDeals.length !== stage.deals.length && (
+                          <span style={{ opacity: 0.75 }}> / {stage.deals.length}</span>
+                        )}
                       </button>
                       <button
                         onClick={(e) => handleStageValueClick(e, stage)}
