@@ -1064,6 +1064,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       <PostSaveModal
         isOpen={postSaveModal.open}
         dealName={postSaveModal.dealName}
+        dealId={postSaveModal.dealId}
         onAction={handlePostSaveAction}
       />
 

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getDeal } from '../../utils/dealsApi';
 import { ChevronRight } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
@@ -35,38 +36,114 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const mockDeal = {
+  // Baseline deal shape — overwritten by API data on mount
+  const [deal, setDeal] = useState<any>({
     id: id || '1',
-    companyName: 'Acme Corp',
-    dealName: 'Acme Corp - Enterprise Plan',
-    amount: 50000,
-    stage: 'proposal',
-    stageName: 'Proposal',
-    stageNumber: 3,
+    companyName: 'Loading…',
+    dealName: 'Loading…',
+    amount: 0,
+    stage: 'prospecting',
+    stageName: 'Prospecting',
+    stageNumber: 1,
     totalStages: 6,
-    closeDate: 'March 15, 2026',
-    expectedCloseDate: 'March 12, 2026',
-    owner: 'Alex Rodriguez',
-    ownerId: '3',
-    createdDate: 'Nov 15, 2025',
-    accountName: 'Acme Corp',
-    accountSize: '75 employees',
-    accountIndustry: 'SaaS',
-    contactName: 'John Smith',
-    contactTitle: 'VP Sales',
-    source: 'Apollo.io',
-    aiScore: 78,
-    aiHealth: 'Good',
-    daysAway: 45,
-    probability: 67,
-    daysInStage: 8,
-    totalDealAge: 32,
-    package: 'Enterprise Plan',
-    contractTerm: 'Annual',
-    paymentTerms: 'Net 30',
-    tags: ['VIP', 'High Priority', 'Enterprise']
-  };
+    closeDate: '',
+    expectedCloseDate: '',
+    owner: '',
+    ownerId: '',
+    createdDate: '',
+    accountName: '',
+    accountSize: '',
+    accountIndustry: '',
+    contactName: '',
+    contactTitle: '',
+    source: '',
+    aiScore: 0,
+    aiHealth: 'Unknown',
+    daysAway: 0,
+    probability: 0,
+    daysInStage: 0,
+    totalDealAge: 0,
+    package: '',
+    contractTerm: '',
+    paymentTerms: '',
+    tags: [] as string[],
+  });
+
+  useEffect(() => {
+    if (!id) { setLoading(false); return; }
+
+    const STAGE_MAP: Record<string, { name: string; number: number }> = {
+      prospecting:  { name: 'Prospecting', number: 1 },
+      qualified:    { name: 'Qualified',   number: 2 },
+      proposal:     { name: 'Proposal',    number: 3 },
+      negotiation:  { name: 'Negotiation', number: 4 },
+      'closed-won': { name: 'Closed Won',  number: 5 },
+      'closed-lost':{ name: 'Closed Lost', number: 6 },
+    };
+
+    const fmt = (iso: string) => {
+      if (!iso) return '';
+      const d = new Date(iso + 'T12:00:00');
+      return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    };
+
+    getDeal(id)
+      .then(({ data }) => {
+        const stage = data.stage || 'prospecting';
+        const stageInfo = STAGE_MAP[stage] ?? { name: stage.charAt(0).toUpperCase() + stage.slice(1), number: 1 };
+        const closeDateIso: string = data.expected_close_date ?? '';
+        const daysAway = closeDateIso
+          ? Math.round((new Date(closeDateIso + 'T12:00:00').getTime() - Date.now()) / 86400000)
+          : 0;
+        const createdIso: string = data.created_at ?? '';
+        const totalDealAge = createdIso
+          ? Math.round((Date.now() - new Date(createdIso).getTime()) / 86400000)
+          : 0;
+        const rawTags = data.tags;
+        const tags: string[] = Array.isArray(rawTags)
+          ? rawTags
+          : typeof rawTags === 'string'
+            ? rawTags.replace(/[{}"]/g, '').split(',').filter(Boolean)
+            : [];
+
+        setDeal({
+          id: data.id,
+          dealName: data.name || data.title || 'Untitled Deal',
+          companyName: data.company_name || '',
+          accountName: data.company_name || '',
+          amount: Number(data.value) || 0,
+          stage,
+          stageName: stageInfo.name,
+          stageNumber: stageInfo.number,
+          totalStages: 6,
+          closeDate: fmt(closeDateIso),
+          expectedCloseDate: fmt(closeDateIso),
+          owner: data.assigned_to || '',
+          ownerId: '',
+          createdDate: fmt(createdIso.split('T')[0]),
+          accountSize: '',
+          accountIndustry: '',
+          contactName: data.contact_name || '',
+          contactTitle: data.contact_title || '',
+          source: data.source || '',
+          aiScore: 0,
+          aiHealth: 'Unknown',
+          daysAway,
+          probability: Number(data.probability) || 0,
+          daysInStage: 0,
+          totalDealAge,
+          package: data.product || '',
+          contractTerm: data.contract_term || '',
+          paymentTerms: data.payment_terms || '',
+          tags,
+        });
+      })
+      .catch((err) => setFetchError(err.message ?? 'Failed to load deal'))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const aiIntelligenceData = {
     winProbability: 67,
@@ -480,6 +557,21 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     setShowEmailComposer(true);
   };
 
+  if (loading) return (
+    <div className="flex items-center justify-center h-64 text-gray-500">
+      <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mr-3" />
+      Loading deal…
+    </div>
+  );
+
+  if (fetchError) return (
+    <div className="flex flex-col items-center justify-center h-64 text-center">
+      <p className="text-red-600 font-medium mb-2">Could not load deal</p>
+      <p className="text-sm text-gray-500 mb-4">{fetchError}</p>
+      <button onClick={() => navigate('/crm/deals')} className="text-blue-600 text-sm hover:underline">← Back to Deals</button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 -mt-6">
       {/* sticky top-14 sticks at 56px (TopBar h-14) from viewport; -mt-6 on parent cancels main's p-6 padding */}
@@ -493,7 +585,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
               ← Deals
             </button>
             <span className="text-gray-300">/</span>
-            <h1 className="text-lg font-semibold text-gray-900 truncate">{mockDeal.dealName}</h1>
+            <h1 className="text-lg font-semibold text-gray-900 truncate">{deal.dealName}</h1>
           </div>
           <button
             onClick={() => navigate(`/crm/deals/${id}/edit`)}
@@ -506,7 +598,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
       {/* Hero Section */}
       <DealHeroSection
-        deal={mockDeal}
+        deal={deal}
         onEdit={() => navigate(`/crm/deals/${id}/edit`)}
         onMoreAction={handleMoreAction}
         onEmail={() => handleSendEmail('john@acme.com', 'Following up on proposal', '')}
@@ -528,7 +620,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
               onScheduleMeeting={() => setShowMeetingScheduler(true)}
               onFindBestTime={() => setShowBestTime(true)}
             />
-            <DealDetailsPanel deal={mockDeal} stageHistory={stageHistory} />
+            <DealDetailsPanel deal={deal} stageHistory={stageHistory} />
             <DealAccountContacts
               account={accountData}
               contacts={contacts}
@@ -565,7 +657,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       <UpdateAmountModal
         isOpen={showUpdateAmount}
         onClose={() => setShowUpdateAmount(false)}
-        currentAmount={mockDeal.amount}
+        currentAmount={deal.amount}
         onUpdate={handleUpdateAmount}
       />
 
