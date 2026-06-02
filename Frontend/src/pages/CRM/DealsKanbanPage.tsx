@@ -617,7 +617,7 @@ const DealsKanbanPage: React.FC = () => {
         });
       });
     });
-  }, []);
+  }, [contextDeals.length]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -632,26 +632,28 @@ const DealsKanbanPage: React.FC = () => {
   }, [searchTerm]);
 
   const kpis = useMemo(() => {
+    // Always computed from the FULL unfiltered dataset — never from search/filter subsets
     const allDeals = stages.flatMap(stage => stage.deals);
-    const totalDeals = 23;
-    const totalValue = 2400000;
+    const totalDeals = allDeals.length;
+    const totalValue = allDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
+
     const wonDeals = stages.find(s => s.id === 'closed-won')?.deals.length || 0;
     const lostDeals = stages.find(s => s.id === 'closed-lost')?.deals.length || 0;
-    const completedDeals = wonDeals + lostDeals;
-    const winRate = 67;
+    const closedTotal = wonDeals + lostDeals;
+    const winRate = closedTotal > 0 ? Math.round((wonDeals / closedTotal) * 100) : 0;
 
-    const closingThisWeek = 5;
-    const stalledDeals = 8;
-    const avgCycle = 45;
+    const now = Date.now();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const closingThisWeek = allDeals.filter(d => {
+      if (!d.closeDate) return false;
+      const ms = new Date(d.closeDate + 'T12:00:00').getTime();
+      return ms >= now && ms <= now + weekMs;
+    }).length;
 
-    return {
-      totalDeals,
-      totalValue,
-      winRate,
-      closingThisWeek,
-      stalledDeals,
-      avgCycle
-    };
+    const stalledDeals = allDeals.filter(d => d.daysSinceContact >= 5).length;
+    const avgCycle = 45; // kept as a fixed benchmark; no creation-date data in DealCard
+
+    return { totalDeals, totalValue, winRate, closingThisWeek, stalledDeals, avgCycle };
   }, [stages]);
 
   const aiInsights = useMemo(() => {
