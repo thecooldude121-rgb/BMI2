@@ -1,4 +1,6 @@
 import React from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import { Sparkles, Calendar, Info, GitBranch } from 'lucide-react';
 import { SUPPORTED_CURRENCIES, getCurrency, BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, validateDealValue } from '../../../utils/currencyUtils';
@@ -240,25 +242,48 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
 
         {/* Close Date */}
         {(() => {
-          const isPast = !!formData.closeDate && new Date(formData.closeDate) < (() => {
-            const t = new Date(); t.setHours(0,0,0,0); return t;
-          })();
+          // Parse stored YYYY-MM-DD string → Date object for DatePicker
+          const selectedDate = formData.closeDate
+            ? (() => { const d = new Date(formData.closeDate + 'T12:00:00'); return isNaN(d.getTime()) ? null : d; })()
+            : null;
+
+          const today = new Date(); today.setHours(0, 0, 0, 0);
+          const isPast = selectedDate instanceof Date && !isNaN(selectedDate.getTime()) && selectedDate < today;
+          const isFarFuture = selectedDate instanceof Date && !isNaN(selectedDate.getTime()) &&
+            selectedDate > new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+          const handleDateChange = (date: Date | null) => {
+            if (!date) { onChange('closeDate', ''); return; }
+            // Store as YYYY-MM-DD to match all existing form state consumers
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            onChange('closeDate', `${yyyy}-${mm}-${dd}`);
+          };
+
           return (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Close Date <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={formData.closeDate}
-                  onChange={(e) => onChange('closeDate', e.target.value)}
+              <div className={`relative w-full [&_.react-datepicker-wrapper]:w-full [&_.react-datepicker__input-container]:w-full`}>
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={handleDateChange}
+                  dateFormat="dd/MM/yyyy"
+                  placeholderText="DD/MM/YYYY"
+                  showMonthDropdown
+                  showYearDropdown
+                  dropdownMode="select"
+                  yearDropdownItemNumber={10}
+                  scrollableYearDropdown
+                  popperPlacement="bottom-start"
                   className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
                     validationErrors.closeDate
                       ? 'border-red-500 focus:ring-red-500'
                       : isPast
                       ? 'border-amber-400 focus:ring-amber-400 bg-amber-50/30'
-                      : fieldWarnings.closeDate
+                      : isFarFuture
                       ? 'border-yellow-400 focus:ring-yellow-400'
                       : 'border-gray-300 focus:ring-blue-500'
                   }`}
@@ -266,26 +291,26 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
                 <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
               </div>
 
-              {/* Hard error (empty) */}
+              {/* Hard error */}
               {validationErrors.closeDate && (
                 <p className="mt-1 text-sm text-red-600">{validationErrors.closeDate}</p>
               )}
 
-              {/* Past-date warning block */}
+              {/* Past-date warning + reason textarea */}
               {isPast && !validationErrors.closeDate && (
                 <div className="mt-2 space-y-2">
                   <div className="flex items-start space-x-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
-                    <span className="text-amber-500 text-sm flex-shrink-0">⚠</span>
+                    <span className="text-amber-500 text-sm flex-shrink-0">⚠️</span>
                     <div>
-                      <p className="text-sm font-medium text-amber-800">Close date is in the past</p>
+                      <p className="text-sm font-medium text-amber-800">Close date is in the past. Allowed for migrations or corrections.</p>
                       <p className="text-xs text-amber-700 mt-0.5">
-                        Allowed for data migrations, late entry, and admin corrections. A reason is required for final save.
+                        A reason is required before saving.
                       </p>
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-amber-800 mb-1">
-                      Reason for past close date <span className="text-red-500">*</span>
+                      Reason for past close date (recommended)
                     </label>
                     <textarea
                       value={formData.closeDateOverrideReason ?? ''}
@@ -304,15 +329,15 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
               )}
 
               {/* Far-future warning */}
-              {fieldWarnings.closeDate && !isPast && !validationErrors.closeDate && (
+              {isFarFuture && !isPast && !validationErrors.closeDate && (
                 <p className="mt-1 text-sm text-yellow-600 flex items-center space-x-1">
                   <span>⚠️</span>
-                  <span>{fieldWarnings.closeDate}</span>
+                  <span>This close date is more than 1 year away. Are you sure?</span>
                 </p>
               )}
 
               {/* Default helper text */}
-              {!validationErrors.closeDate && !isPast && (
+              {!validationErrors.closeDate && !isPast && !isFarFuture && (
                 <p className="mt-1 text-xs text-gray-400">
                   Future date recommended. Past dates allowed for migrations or corrections.
                 </p>

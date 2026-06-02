@@ -852,9 +852,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     : { hasData: false, reason: 'No product selected' };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Frozen header — sticks directly below the 56px global TopBar */}
-      <div className="sticky top-14 z-10 bg-white border-b border-gray-200 px-8 py-2 shadow-sm">
+    <div className="min-h-screen bg-gray-50 -mt-6">
+      {/* sticky top-14 = sticks at 56px (TopBar h-14) from viewport; -mt-6 on parent cancels p-6 padding so header lands flush under TopBar immediately */}
+      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-2 shadow-sm">
         <div className="flex items-center justify-between mb-0.5">
           <h1 className="text-lg font-semibold text-gray-900">
             {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
@@ -905,7 +905,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-[1920px] mx-auto px-8 py-8">
+      <div className="max-w-[1920px] mx-auto px-8 pt-3 pb-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column (65% width) */}
           <div className="lg:col-span-2 space-y-6">
@@ -1076,35 +1076,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           hrmsData={hrmsModalData}
         />
       )}
-
-      {/* Sticky Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-8 py-4 shadow-lg">
-        <div className="max-w-[1920px] mx-auto flex items-center justify-between">
-          <span className="text-sm text-gray-600">* Required fields</span>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => navigate('/crm/deals')}
-              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleSave(true)}
-              disabled={isSaving}
-              className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
-            >
-              Save as Draft
-            </button>
-            <button
-              onClick={() => handleSave(false)}
-              disabled={isSaving || !validation.isValid}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Deal'}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

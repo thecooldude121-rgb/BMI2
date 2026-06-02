@@ -47,7 +47,7 @@ import { TeamPerformancePage } from '../Team';
 const CRMModule = () => {
   return (
     <AccountsProvider>
-      <div className="h-full overflow-auto bg-gray-50">
+      <div className="min-h-full bg-gray-50">
         <Routes>
           <Route path="/" element={<CRMDashboard />} />
           <Route path="/dashboard" element={<CRMDashboard />} />

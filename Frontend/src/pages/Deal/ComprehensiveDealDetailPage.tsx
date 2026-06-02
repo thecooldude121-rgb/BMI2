@@ -481,18 +481,26 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Breadcrumb */}
-      <div className="bg-white border-b border-gray-200 px-8 py-3">
-        <div className="flex items-center space-x-2 text-sm">
+    <div className="min-h-screen bg-gray-50 -mt-6">
+      {/* sticky top-14 sticks at 56px (TopBar h-14) from viewport; -mt-6 on parent cancels main's p-6 padding */}
+      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-3 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3 min-w-0">
+            <button
+              onClick={() => navigate('/crm/deals')}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium shrink-0"
+            >
+              ← Deals
+            </button>
+            <span className="text-gray-300">/</span>
+            <h1 className="text-lg font-semibold text-gray-900 truncate">{mockDeal.dealName}</h1>
+          </div>
           <button
-            onClick={() => navigate('/crm/deals')}
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            onClick={() => navigate(`/crm/deals/${id}/edit`)}
+            className="shrink-0 px-4 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
           >
-            Deals
+            Edit
           </button>
-          <ChevronRight className="h-4 w-4 text-gray-400" />
-          <span className="text-gray-900 font-medium">{mockDeal.dealName}</span>
         </div>
       </div>
 

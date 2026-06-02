@@ -1046,16 +1046,16 @@ const DealsKanbanPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-white border-b border-gray-200">
-        <div className="px-8 py-6">
-          <div className="flex items-center justify-between mb-2">
+      {/* Frozen title bar */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6 px-8 py-3">
+          <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Target className="h-6 w-6 text-blue-600" />
+              <div className="p-1.5 bg-blue-100 rounded-lg">
+                <Target className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Deals Pipeline</h1>
-                <p className="text-sm text-gray-600">Manage your sales pipeline and forecast revenue</p>
+                <h1 className="text-lg font-semibold text-gray-900">Deals Pipeline</h1>
+                <p className="text-xs text-gray-500">Manage your sales pipeline and forecast revenue</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -1139,9 +1139,9 @@ const DealsKanbanPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+      </div>
 
-        <div className="px-8 pb-6">
+      <div className="bg-white border-b border-gray-200 px-8 py-4">
           <div className="grid grid-cols-6 gap-4">
             <button
               onClick={() => handleStatClick('total')}
@@ -1209,7 +1209,6 @@ const DealsKanbanPage: React.FC = () => {
               <div className="text-2xl font-bold text-gray-900">{kpis.avgCycle}</div>
             </button>
           </div>
-        </div>
       </div>
 
       <div className="px-8 py-6" style={{ background: '#667eea' }}>
