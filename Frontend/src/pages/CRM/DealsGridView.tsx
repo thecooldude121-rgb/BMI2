@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
+import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Settings, BarChart3, ChevronDown,
@@ -496,7 +496,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                     <span className="font-medium text-gray-900">Close: {formatDate(deal.closeDate)}</span>
                   </div>
                   <div className="text-xs text-gray-500 ml-6">
-                    {daysAway} days away
+                    {daysFromNowLabel(deal.closeDate)}
                   </div>
                 </div>
 

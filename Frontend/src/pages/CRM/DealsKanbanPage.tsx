@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { fetchDeals } from '../../utils/dealsApi';
-import { formatDisplayDate } from '../../utils/dateUtils';
+import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Plus,
@@ -647,8 +647,8 @@ const DealsKanbanPage: React.FC = () => {
     const weekMs = 7 * 24 * 60 * 60 * 1000;
     const closingThisWeek = allDeals.filter(d => {
       if (!d.closeDate) return false;
-      const ms = new Date(d.closeDate + 'T12:00:00').getTime();
-      return ms >= now && ms <= now + weekMs;
+      const days = daysFromNow(d.closeDate);
+      return days !== null && days >= 0 && days <= 7;
     }).length;
 
     const stalledDeals = allDeals.filter(d => d.daysSinceContact >= 5).length;

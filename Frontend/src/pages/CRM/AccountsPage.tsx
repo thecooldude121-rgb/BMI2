@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Eye, Edit, Trash2, Users, DollarSign, Calendar, Tag, ExternalLink, Briefcase, Target, UserPlus, X, Copy, UserCog, FileText, GitMerge } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
@@ -753,7 +754,7 @@ const AccountsPage: React.FC = () => {
                                     {account.relatedDeals[0].name} ({formatRevenue(account.relatedDeals[0].amount)})
                                   </button>
                                   <div className="text-xs text-gray-600 mt-1">
-                                    Stage: {account.relatedDeals[0].stage} | Close: {new Date(account.relatedDeals[0].closeDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                    Stage: {account.relatedDeals[0].stage} | Close: {formatDisplayDate(account.relatedDeals[0].closeDate)}
                                   </div>
                                 </div>
                               ) : (

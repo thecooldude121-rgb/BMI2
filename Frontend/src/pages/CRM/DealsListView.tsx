@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
+import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
@@ -577,7 +577,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                       </td>
                       <td className="px-4 py-4">
                         <div className="text-sm text-gray-900">{formatDate(deal.closeDate)}</div>
-                        <div className="text-xs text-gray-500">{daysAway} days away</div>
+                        <div className="text-xs text-gray-500">{daysFromNowLabel(deal.closeDate)}</div>
                       </td>
                       <td className="px-4 py-4">
                         <div className="relative">
