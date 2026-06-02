@@ -87,6 +87,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   });
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
+  const [allDeals, setAllDeals] = useState<any[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showHRMSModal, setShowHRMSModal] = useState(false);
   const [hrmsModalData, setHrmsModalData] = useState<any>(null);
@@ -99,6 +100,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const [dealValueUserEdited, setDealValueUserEdited] = useState(false);
   // File attachments — kept outside formData because File objects are not JSON-serializable
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+
+  // Fetch all deals once on mount — used for both duplicate deal check and account warning
+  useEffect(() => {
+    fetchDeals().then(setAllDeals).catch(() => {});
+  }, []);
 
   // Load deal data if editing
   useEffect(() => {
@@ -256,7 +262,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const checkForDuplicates = async () => {
     if (!formData.accountName.trim()) { setDuplicateDeals([]); return; }
     try {
-      const all = await fetchDeals();
+      const all = allDeals.length ? allDeals : await fetchDeals();
       const q = formData.accountName.toLowerCase();
       const matches = all
         .filter((d: any) => (d.company_name || d.name || '').toLowerCase().includes(q))
@@ -1069,6 +1075,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               selectedContact={selectedContact}
               onSearchAccount={() => setShowSmartSearch(true)}
               validationErrors={validationErrors}
+              allDeals={allDeals}
             />
 
             <DealFormOwnership

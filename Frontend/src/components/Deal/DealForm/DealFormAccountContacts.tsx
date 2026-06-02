@@ -1,11 +1,17 @@
-import React from 'react';
-import { Building2, User, Eye, Search, Plus, X, AlertTriangle, Users } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Building2, User, Eye, Search, Plus, X, AlertTriangle, Users, CheckCircle2 } from 'lucide-react';
 import {
   CONTACT_ROLES,
   DEFAULT_CONTACT_ROLE,
   hasSeniorBuyer,
   StakeholderContact,
 } from '../../../config/contactRoles';
+
+interface AccountMatch {
+  name: string;
+  dealCount: number;
+  totalValue: number;
+}
 
 interface DealFormAccountContactsProps {
   formData: any;
@@ -14,10 +20,18 @@ interface DealFormAccountContactsProps {
   selectedContact?: any;
   onSearchAccount: () => void;
   validationErrors?: Record<string, string>;
+  allDeals?: any[];
 }
 
 let _tempIdCounter = 0;
 const tempId = () => `tmp-${++_tempIdCounter}-${Date.now()}`;
+
+const fmt = (n: number) =>
+  n >= 1_000_000
+    ? `$${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000
+    ? `$${(n / 1_000).toFixed(0)}K`
+    : `$${n.toFixed(0)}`;
 
 export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = ({
   formData,
@@ -26,8 +40,74 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
   selectedContact,
   onSearchAccount,
   validationErrors = {},
+  allDeals = [],
 }) => {
   const additionalContacts: StakeholderContact[] = formData.additionalContacts ?? [];
+
+  // Account duplicate-warning state
+  const [accountMatches, setAccountMatches] = useState<AccountMatch[]>([]);
+  const [suppressedFor, setSuppressedFor] = useState<string>('');
+  const [isVerified, setIsVerified] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset verified badge when the user manually changes the account name
+  const prevAccountName = useRef(formData.accountName);
+  useEffect(() => {
+    if (formData.accountName !== prevAccountName.current) {
+      prevAccountName.current = formData.accountName;
+      setIsVerified(false);
+    }
+  }, [formData.accountName]);
+
+  // Debounced fuzzy match against allDeals company names
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const q = (formData.accountName ?? '').trim();
+
+    if (q.length < 3 || !allDeals.length || q === suppressedFor || isVerified) {
+      setAccountMatches([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(() => {
+      const ql = q.toLowerCase();
+
+      // Build company → {dealCount, totalValue} map from all deals
+      const companyMap = new Map<string, AccountMatch>();
+      allDeals.forEach((d: any) => {
+        const name: string = d.company_name || '';
+        if (!name) return;
+        const key = name.toLowerCase();
+        const entry = companyMap.get(key) ?? { name, dealCount: 0, totalValue: 0 };
+        entry.dealCount += 1;
+        entry.totalValue += parseFloat(d.value) || 0;
+        companyMap.set(key, entry);
+      });
+
+      const matches: AccountMatch[] = [];
+      companyMap.forEach((entry, key) => {
+        if (key.includes(ql) || ql.includes(key)) matches.push(entry);
+      });
+
+      setAccountMatches(matches.slice(0, 3));
+    }, 500);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [formData.accountName, allDeals, suppressedFor, isVerified]);
+
+  const handleUseExisting = (match: AccountMatch) => {
+    onChange('accountName', match.name);
+    onChange('accountId', '');
+    setIsVerified(true);
+    setSuppressedFor(match.name);
+    setAccountMatches([]);
+  };
+
+  const handleContinueNew = () => {
+    setSuppressedFor(formData.accountName ?? '');
+    setAccountMatches([]);
+  };
   const missingBuyer = !hasSeniorBuyer(formData.contactRole, additionalContacts);
 
   const addContact = () => {
@@ -63,8 +143,14 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
       <div className="space-y-6">
         {/* ── Account ─────────────────────────────────────────────── */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
             Account <span className="text-red-500">*</span>
+            {isVerified && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                <CheckCircle2 className="h-3 w-3" />
+                Verified Account
+              </span>
+            )}
           </label>
           <div className="flex items-center space-x-2">
             <input
@@ -86,6 +172,43 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
               <span>Link</span>
             </button>
           </div>
+
+          {/* Duplicate account warning */}
+          {accountMatches.length > 0 && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+              {accountMatches.map((match) => (
+                <div key={match.name} className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm min-w-0">
+                      <span className="font-semibold text-amber-900">"{match.name}"</span>
+                      <span className="text-amber-700"> already exists with </span>
+                      <span className="font-medium text-amber-900">
+                        {match.dealCount} deal{match.dealCount !== 1 ? 's' : ''} totalling {fmt(match.totalValue)}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUseExisting(match)}
+                    className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors whitespace-nowrap"
+                  >
+                    Use This
+                  </button>
+                </div>
+              ))}
+              <div className="pt-1 border-t border-amber-200 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleContinueNew}
+                  className="text-xs text-amber-600 hover:text-amber-800 underline underline-offset-2 transition-colors"
+                >
+                  Continue with new entry
+                </button>
+              </div>
+            </div>
+          )}
+
           {validationErrors.accountName && (
             <p className="mt-1 text-sm text-red-600">{validationErrors.accountName}</p>
           )}
