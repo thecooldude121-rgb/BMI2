@@ -969,7 +969,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-[1920px] mx-auto px-1.5 pt-3 pb-8">
+      <div className="-mx-6 px-2 pt-3 pb-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column (65% width) */}
           <div className="lg:col-span-2 space-y-6">
