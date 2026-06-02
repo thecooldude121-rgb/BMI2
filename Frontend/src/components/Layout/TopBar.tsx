@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Search, Bell, Mail, Plus, Settings, LogOut, ChevronDown,
-  UserPlus, DollarSign, Users, Building2, Calendar, Phone
+  Search, Bell, Mail, Settings, LogOut, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -36,21 +35,11 @@ const TopBar: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const pageLabel = getPageLabel(pathname);
 
-  const createMenuItems = [
-    { name: 'Add Lead',         action: () => navigate('/crm/leads/new'),    icon: UserPlus },
-    { name: 'Create Deal',      action: () => navigate('/crm/deals/add'),    icon: DollarSign },
-    { name: 'Add Contact',      action: () => navigate('/crm/contacts/new'), icon: Users },
-    { name: 'Add Company',      action: () => navigate('/accounts/new'),     icon: Building2 },
-    { name: 'Schedule Meeting', action: () => navigate('/calendar/new'),     icon: Calendar },
-    { name: 'Add Task',         action: () => navigate('/crm/tasks/new'),    icon: Phone },
-  ];
-
-  return (
+return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-40 sticky top-0">
       {/* Page context label — left */}
       <div className="flex items-center min-w-0">
@@ -69,36 +58,6 @@ const TopBar: React.FC = () => {
           />
         </div>
 
-        {/* Quick Create */}
-        <div className="relative">
-          <button
-            onClick={() => setShowCreateMenu(!showCreateMenu)}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Create
-          </button>
-          {showCreateMenu && (
-            <div className="absolute right-0 mt-2 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-              <p className="px-4 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                Quick Create
-              </p>
-              {createMenuItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.name}
-                    onClick={() => { item.action(); setShowCreateMenu(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Icon className="h-4 w-4 text-gray-400" />
-                    {item.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
         {/* Notifications */}
         <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
@@ -158,10 +117,10 @@ const TopBar: React.FC = () => {
       </div>
 
       {/* Close dropdowns on outside click */}
-      {(showCreateMenu || showProfileMenu) && (
+      {showProfileMenu && (
         <div
           className="fixed inset-0 z-40"
-          onClick={() => { setShowCreateMenu(false); setShowProfileMenu(false); }}
+          onClick={() => { setShowProfileMenu(false); }}
         />
       )}
     </header>
