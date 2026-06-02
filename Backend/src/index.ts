@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { connectDB } from './config/database';
+import { connectDB, pool } from './config/database';
 import routes from './routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
@@ -27,8 +27,17 @@ app.use('/api/v1', routes);
 app.use(notFound);
 app.use(errorHandler);
 
+const runMigrations = async () => {
+  // Idempotent column additions — safe to run on every startup
+  await pool.query(`
+    ALTER TABLE deals
+      ADD COLUMN IF NOT EXISTS attachment_metadata JSONB DEFAULT '[]'
+  `);
+};
+
 const start = async () => {
   await connectDB();
+  await runMigrations();
   app.listen(PORT, () => {
     console.log(`🚀 BMI2 Backend running on http://localhost:${PORT}`);
     console.log(`📋 API base: http://localhost:${PORT}/api/v1`);

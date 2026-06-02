@@ -18,7 +18,7 @@ import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPane
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
-import { createDeal, updateDeal } from '../../utils/dealsApi';
+import { createDeal, updateDeal, fetchDeals } from '../../utils/dealsApi';
 import { useData } from '../../contexts/DataContext';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
@@ -53,6 +53,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     accountName: '',
     primaryContactId: '',
     primaryContactName: '',
+    contactEmail: '',
     contactRole: DEFAULT_CONTACT_ROLE.id,
     additionalContacts: [] as StakeholderContact[],
     competitors: [] as Competitor[],
@@ -85,6 +86,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     dealName: '',
   });
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [hasDraftRestored, setHasDraftRestored] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showHRMSModal, setShowHRMSModal] = useState(false);
   const [hrmsModalData, setHrmsModalData] = useState<any>(null);
@@ -107,28 +109,45 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       const savedDraft = localStorage.getItem('deal-form-draft');
       if (savedDraft) {
         try {
-          const draft = JSON.parse(savedDraft);
-          setFormData(draft);
+          const { formData: savedForm, attachmentMeta } = JSON.parse(savedDraft);
+          setFormData(savedForm);
+          setHasDraftRestored(true);
+          // Restore uploaded attachment metadata (File objects can't be serialised,
+          // so we restore as display-only items with no file reference)
+          if (Array.isArray(attachmentMeta) && attachmentMeta.length > 0) {
+            setAttachments(attachmentMeta.map((m: any) => ({
+              id: m.id,
+              file: null as any,
+              name: m.name,
+              size: m.size,
+              type: m.type,
+              status: 'uploaded' as const,
+              uploadedUrl: m.uploadedUrl,
+            })));
+          }
           showToast('info', 'Draft restored from previous session');
-        } catch (e) {
-          console.error('Failed to restore draft', e);
+        } catch {
+          localStorage.removeItem('deal-form-draft');
         }
       }
     }
   }, [id, isEditMode]);
 
-  // Auto-save to localStorage every 30 seconds
+  // Auto-save to localStorage every 30 seconds (File objects stripped — not serialisable)
   useEffect(() => {
     if (!isEditMode && hasUnsavedChanges) {
       setAutoSaveStatus('saving');
       const timer = setTimeout(() => {
-        localStorage.setItem('deal-form-draft', JSON.stringify(formData));
+        const attachmentMeta = attachments
+          .filter(a => a.status === 'uploaded' && a.uploadedUrl)
+          .map(a => ({ id: a.id, name: a.name, size: a.size, type: a.type, uploadedUrl: a.uploadedUrl }));
+        localStorage.setItem('deal-form-draft', JSON.stringify({ formData, attachmentMeta }));
         setAutoSaveStatus('saved');
       }, 30000);
 
       return () => clearTimeout(timer);
     }
-  }, [formData, hasUnsavedChanges, isEditMode]);
+  }, [formData, attachments, hasUnsavedChanges, isEditMode]);
 
   // Auto-generate deal name when account, product, or close date changes.
   // Skipped if the user has manually edited the name (dealNameUserEdited === true).
@@ -235,21 +254,24 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   };
 
   const checkForDuplicates = async () => {
-    // Mock duplicate check
-    const mockDuplicates = [
-      {
-        id: 'deal-123',
-        name: 'Acme Corp - Enterprise',
-        value: 50000,
-        stage: 'Proposal',
-        owner: 'Alex Rodriguez',
-        createdDate: 'Nov 15, 2025'
-      }
-    ];
-    // Only show if similar deal exists
-    if (formData.accountName.toLowerCase().includes('acme') && formData.dealValue === '50000') {
-      setDuplicateDeals(mockDuplicates);
-    } else {
+    if (!formData.accountName.trim()) { setDuplicateDeals([]); return; }
+    try {
+      const all = await fetchDeals();
+      const q = formData.accountName.toLowerCase();
+      const matches = all
+        .filter((d: any) => (d.company_name || d.name || '').toLowerCase().includes(q))
+        .filter((d: any) => !isEditMode || d.id !== id) // exclude self in edit mode
+        .slice(0, 5)
+        .map((d: any) => ({
+          id: d.id,
+          name: d.name || d.title || 'Untitled',
+          value: parseFloat(d.value) || 0,
+          stage: d.stage || '',
+          owner: d.assigned_to || '',
+          createdDate: d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+        }));
+      setDuplicateDeals(matches);
+    } catch {
       setDuplicateDeals([]);
     }
   };
@@ -360,6 +382,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       ...prev,
       primaryContactId: contact.id,
       primaryContactName: contact.name,
+      contactEmail: contact.email || '',
       // If no account is linked yet, auto-fill company from the contact so
       // the deal name generator has enough context to fire
       ...(!prev.accountName && contact.company ? { accountName: contact.company } : {}),
@@ -427,7 +450,25 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const handleClearDraft = () => {
     localStorage.removeItem('deal-form-draft');
-    showToast('info', 'Draft cleared');
+    setHasDraftRestored(false);
+    setFormData({
+      dealName: '', dealValue: '', currency: 'USD', closeDate: '',
+      pipelineId: DEFAULT_PIPELINE.id, pipelineName: DEFAULT_PIPELINE.name,
+      dealType: DEFAULT_DEAL_TYPE.id, stage: DEFAULT_PIPELINE.stages[0].id,
+      probability: DEFAULT_PIPELINE.stages[0].probability,
+      accountId: '', accountName: '', primaryContactId: '', primaryContactName: '',
+      contactEmail: '', contactRole: DEFAULT_CONTACT_ROLE.id,
+      additionalContacts: [] as StakeholderContact[], competitors: [] as Competitor[],
+      forecastCategory: '', owner: 'current-user', source: '', hrmsConnection: null,
+      priority: 'Medium', tags: [], product: '', contractTerm: '', paymentTerms: '',
+      description: '', nextSteps: '', closeDateOverrideReason: '', sourceJourney: null,
+    });
+    setAttachments([]);
+    setShowSmartSearch(true);
+    setSelectedAccount(null);
+    setSelectedContact(null);
+    setAiSuggestions(null);
+    showToast('info', 'Draft discarded — starting fresh');
   };
 
   // Validation functions
@@ -544,6 +585,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       ? getSuggestedForecastCategory(newStage)
       : formData.forecastCategory;
 
+    if (!forecastCategoryUserSet && suggestedCategory && suggestedCategory !== formData.forecastCategory) {
+      showToast('info', `Forecast category updated to "${suggestedCategory}" based on pipeline`);
+    }
+
     const newData = {
       ...formData,
       pipelineId: pipeline.id,
@@ -641,9 +686,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       expected_close_date: formData.closeDate || undefined,
       close_date_is_past: isCloseDatePast(formData.closeDate),
       close_date_override_reason: formData.closeDateOverrideReason?.trim() || undefined,
-      assigned_to: formData.owner !== 'current-user' ? formData.owner : undefined,
+      assigned_to: formData.owner || undefined,
       company_name: formData.accountName || undefined,
       contact_name: formData.primaryContactName || undefined,
+      contact_email: formData.contactEmail || undefined,
       contact_title: formData.contactRole || undefined,
       stakeholders: [
         // Primary contact always first
@@ -763,6 +809,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       accountName: '',
       primaryContactId: '',
       primaryContactName: '',
+      contactEmail: '',
       contactRole: DEFAULT_CONTACT_ROLE.id,
       additionalContacts: [] as StakeholderContact[],
       competitors: [] as Competitor[],
@@ -892,8 +939,16 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-600">
-            {isEditMode ? 'Last Modified: Dec 7, 2025 by Alex Rodriguez' : 'Creating new deal...'}
+          <div className="flex items-center space-x-3 text-sm text-gray-600">
+            <span>{isEditMode ? 'Last Modified: Dec 7, 2025 by Alex Rodriguez' : 'Creating new deal...'}</span>
+            {hasDraftRestored && !isEditMode && (
+              <button
+                onClick={handleClearDraft}
+                className="text-xs text-red-500 hover:text-red-700 underline underline-offset-2 transition-colors"
+              >
+                Discard draft
+              </button>
+            )}
           </div>
           {autoSaveStatus === 'saved' && hasUnsavedChanges && !isEditMode && (
             <div className="text-xs text-green-600 flex items-center space-x-1">

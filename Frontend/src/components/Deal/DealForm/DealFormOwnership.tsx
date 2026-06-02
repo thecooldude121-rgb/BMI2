@@ -14,7 +14,8 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({ formData, 
   useEffect(() => {
     getUsers().then((users) => {
       setOwners(users);
-      if (!formData.owner && users.length > 0) {
+      // Also replace the 'current-user' placeholder with a real name on first load
+      if ((!formData.owner || formData.owner === 'current-user') && users.length > 0) {
         onChange('owner', `${users[0].first_name} ${users[0].last_name}`);
       }
     }).catch(() => {});
