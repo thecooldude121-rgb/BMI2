@@ -920,46 +920,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 -mt-6">
       {/* sticky top-14 = sticks at 56px (TopBar h-14) from viewport; -mt-6 on parent cancels p-6 padding so header lands flush under TopBar immediately */}
-      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-2 shadow-sm">
-        <div className="flex items-center justify-between mb-0.5">
-          <h1 className="text-lg font-semibold text-gray-900">
-            {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
-          </h1>
-          <div className="flex items-center space-x-3">
-            {autoSaveStatus !== 'saved' && !isEditMode && (
-              <div className="flex items-center space-x-2 text-sm text-gray-600 mr-2">
-                <div className="flex items-center space-x-1">
-                  {autoSaveStatus === 'saving' && <span className="animate-pulse">💾</span>}
-                  {autoSaveStatus === 'unsaved' && <span>⚠️</span>}
-                  <span>{autoSaveStatus === 'saving' ? 'Auto-saving...' : 'Unsaved changes'}</span>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={handleCancel}
-              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleSave(true)}
-              disabled={isSaving}
-              className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
-            >
-              Save as Draft
-            </button>
-            <button
-              onClick={() => handleSave(false)}
-              disabled={isSaving || !validation.isValid}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Deal'}
-            </button>
-          </div>
-        </div>
+      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-1 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3 text-sm text-gray-600">
-            <span>{isEditMode ? 'Last Modified: Dec 7, 2025 by Alex Rodriguez' : 'Creating new deal...'}</span>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-sm font-semibold text-gray-900">
+              {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
+            </h1>
             {hasDraftRestored && !isEditMode && (
               <button
                 onClick={handleClearDraft}
@@ -968,13 +934,37 @@ export const ComprehensiveDealFormPage: React.FC = () => {
                 Discard draft
               </button>
             )}
+            {autoSaveStatus === 'saved' && hasUnsavedChanges && !isEditMode && (
+              <span className="text-xs text-green-600">✅ Auto-saved</span>
+            )}
+            {autoSaveStatus !== 'saved' && !isEditMode && (
+              <span className="text-xs text-gray-500">
+                {autoSaveStatus === 'saving' ? '💾 Saving...' : '⚠️ Unsaved'}
+              </span>
+            )}
           </div>
-          {autoSaveStatus === 'saved' && hasUnsavedChanges && !isEditMode && (
-            <div className="text-xs text-green-600 flex items-center space-x-1">
-              <span>✅</span>
-              <span>Draft auto-saved</span>
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleCancel}
+              className="px-4 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleSave(true)}
+              disabled={isSaving}
+              className="px-4 py-1.5 text-xs bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
+            >
+              Save as Draft
+            </button>
+            <button
+              onClick={() => handleSave(false)}
+              disabled={isSaving || !validation.isValid}
+              className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Deal'}
+            </button>
+          </div>
         </div>
       </div>
 
