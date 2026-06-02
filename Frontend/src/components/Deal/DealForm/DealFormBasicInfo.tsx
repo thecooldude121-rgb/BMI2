@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Sparkles, Calendar, Info, GitBranch } from 'lucide-react';
@@ -44,6 +44,26 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
   // Derive stages from the selected pipeline — never stale
   const currentPipeline = getPipeline(formData.pipelineId || '');
   const stages = currentPipeline.stages;
+
+  // ── Deal Value display formatting ─────────────────────────────────────────
+  // formData.dealValue holds raw digits ("75000"); displayValue shows commas.
+  const toDisplay = (raw: any): string => {
+    const digits = (raw ?? '').toString().replace(/[^0-9]/g, '');
+    return digits ? Number(digits).toLocaleString('en-US') : '';
+  };
+  const [displayValue, setDisplayValue] = useState(() => toDisplay(formData.dealValue));
+
+  // Sync when the parent changes dealValue externally (AI suggestions, draft
+  // restore, catalog price apply) without going through handleValueChange.
+  useEffect(() => {
+    setDisplayValue(toDisplay(formData.dealValue));
+  }, [formData.dealValue]);
+
+  const handleValueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/[^0-9]/g, '');
+    setDisplayValue(digits ? Number(digits).toLocaleString('en-US') : '');
+    onChange('dealValue', digits);
+  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -135,8 +155,9 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             </span>
             <input
               type="text"
-              value={formData.dealValue}
-              onChange={(e) => onChange('dealValue', e.target.value)}
+              inputMode="numeric"
+              value={displayValue}
+              onChange={handleValueChange}
               placeholder="50,000"
               className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
                 validationErrors.dealValue
