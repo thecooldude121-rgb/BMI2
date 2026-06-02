@@ -116,6 +116,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       if (savedDraft) {
         try {
           const { formData: savedForm, attachmentMeta } = JSON.parse(savedDraft);
+          // Discard the draft if formData is missing or not a plain object —
+          // a corrupted/partial draft would set formData to undefined and crash.
+          if (!savedForm || typeof savedForm !== 'object' || Array.isArray(savedForm)) {
+            localStorage.removeItem('deal-form-draft');
+            return;
+          }
           setFormData(savedForm);
           setHasDraftRestored(true);
           // Restore uploaded attachment metadata (File objects can't be serialised,
