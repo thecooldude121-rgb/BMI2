@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { formatCurrencyCompact, convertToBaseCurrency } from '../../../utils/currencyUtils';
+import { formatDisplayDate } from '../../../utils/dateUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getStageProbability, DEFAULT_PIPELINE } from '../../../config/pipelines';
 import { getContactRole } from '../../../config/contactRoles';
@@ -131,9 +132,7 @@ export const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ formData }) =>
             <div className="flex justify-between">
               <span>• Expected Close:</span>
               <span className="font-medium">
-                {formData.closeDate
-                  ? new Date(formData.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'Not set'}
+                {formatDisplayDate(formData.closeDate)}
               </span>
             </div>
             <div className="flex justify-between">

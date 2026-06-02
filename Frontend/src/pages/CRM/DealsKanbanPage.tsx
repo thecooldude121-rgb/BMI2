@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { fetchDeals } from '../../utils/dealsApi';
+import { formatDisplayDate } from '../../utils/dateUtils';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Plus,
@@ -1655,7 +1656,7 @@ const DealsKanbanPage: React.FC = () => {
 
                               <div className="flex items-center space-x-1 text-sm text-gray-600 mb-3">
                                 <Calendar className="h-3.5 w-3.5" />
-                                <span>{new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                <span>{formatDisplayDate(deal.closeDate)}</span>
                               </div>
 
                               {!['closed-won', 'closed-lost'].includes(stage.id) && (
@@ -2168,7 +2169,7 @@ const DealsKanbanPage: React.FC = () => {
                           )}
                         </div>
                         <div className="text-sm text-gray-600">
-                          {deal.contactName} • Close: {new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {deal.contactName} • Close: {formatDisplayDate(deal.closeDate)}
                         </div>
                       </div>
                       <div className="text-right">

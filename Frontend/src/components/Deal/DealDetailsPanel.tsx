@@ -1,5 +1,6 @@
 import React from 'react';
 import { DollarSign, TrendingUp, Calendar, Package, CreditCard, Clock, Sparkles, CheckCircle2, Circle, ArrowRight, Tag } from 'lucide-react';
+import { formatDisplayDate } from '../../utils/dateUtils';
 
 interface Stage {
   name: string;
@@ -56,7 +57,7 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({ deal, stageH
           </div>
           <div className="flex items-start">
             <span className="text-sm text-gray-600 w-40">Close Date:</span>
-            <span className="text-sm font-medium text-gray-900">{deal.closeDate}</span>
+            <span className="text-sm font-medium text-gray-900">{formatDisplayDate(deal.closeDate)}</span>
           </div>
           <div className="flex items-start">
             <span className="text-sm text-gray-600 w-40">Expected Close:</span>

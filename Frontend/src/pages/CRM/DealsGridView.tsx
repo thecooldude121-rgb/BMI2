@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Settings, BarChart3, ChevronDown,
@@ -121,18 +122,8 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     return `$${amount}`;
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const getDaysAway = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const diffTime = date.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
+  const formatDate = formatDisplayDate;
+  const getDaysAway = daysFromNow;
 
   const getStageColor = (stageId: string) => {
     switch(stageId) {

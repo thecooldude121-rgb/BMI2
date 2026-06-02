@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Edit, MoreVertical, Building2, User, Target, Calendar, Sparkles, Mail, Phone, CalendarDays, FileText, TrendingUp, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MoreOptionsDropdown } from './DealModals';
+import { daysFromNowLabel } from '../../utils/dateUtils';
 
 interface DealHeroSectionProps {
   deal: {
@@ -137,7 +138,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border border-green-200">
             <div className="text-sm font-medium text-green-700 mb-1">Close Date</div>
             <div className="text-lg font-bold text-green-900">{deal.closeDate}</div>
-            <div className="text-xs text-green-700 mt-1">{deal.daysAway} days away</div>
+            <div className="text-xs text-green-700 mt-1">{daysFromNowLabel(deal.closeDate)}</div>
           </div>
           <div
             className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200 hover:from-purple-100 hover:to-purple-200 transition-all cursor-pointer"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeal } from '../../utils/dealsApi';
+import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { ChevronRight } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
@@ -84,20 +85,12 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       'closed-lost':{ name: 'Closed Lost', number: 6 },
     };
 
-    const fmt = (iso: string) => {
-      if (!iso) return '';
-      const d = new Date(iso + 'T12:00:00');
-      return isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    };
-
     getDeal(id)
       .then(({ data }) => {
         const stage = data.stage || 'prospecting';
         const stageInfo = STAGE_MAP[stage] ?? { name: stage.charAt(0).toUpperCase() + stage.slice(1), number: 1 };
         const closeDateIso: string = data.expected_close_date ?? '';
-        const daysAway = closeDateIso
-          ? Math.round((new Date(closeDateIso + 'T12:00:00').getTime() - Date.now()) / 86400000)
-          : 0;
+        const daysAway = daysFromNow(closeDateIso);
         const createdIso: string = data.created_at ?? '';
         const totalDealAge = createdIso
           ? Math.round((Date.now() - new Date(createdIso).getTime()) / 86400000)
@@ -119,11 +112,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           stageName: stageInfo.name,
           stageNumber: stageInfo.number,
           totalStages: 6,
-          closeDate: fmt(closeDateIso),
-          expectedCloseDate: fmt(closeDateIso),
+          closeDate: formatDisplayDate(closeDateIso),
+          expectedCloseDate: formatDisplayDate(closeDateIso),
           owner: data.assigned_to || '',
           ownerId: '',
-          createdDate: fmt(createdIso.split('T')[0]),
+          createdDate: formatDisplayDate(createdIso.split('T')[0]),
           accountSize: '',
           accountIndustry: '',
           contactName: data.contact_name || '',

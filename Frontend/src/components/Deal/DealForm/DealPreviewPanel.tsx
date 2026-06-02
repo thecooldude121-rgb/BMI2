@@ -1,6 +1,7 @@
 import React from 'react';
 import { Eye, Info } from 'lucide-react';
 import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUtils';
+import { formatDisplayDate, daysFromNowLabel } from '../../../utils/dateUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getPipeline, getPipelineStage, getStageProbability, DEFAULT_PIPELINE } from '../../../config/pipelines';
 import { getDealType } from '../../../config/dealTypes';
@@ -38,14 +39,6 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
   const stageEmoji = stageObj ? (stageColorDot[stageObj.color] ?? '📊') : '📊';
   const stageName = stageObj?.name ?? 'Unknown';
 
-  const getDaysAway = (closeDate: string) => {
-    if (!closeDate) return '-- days away';
-    const today = new Date();
-    const target = new Date(closeDate);
-    const diffTime = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return `${diffDays} days away`;
-  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -116,8 +109,8 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
           )}
 
           <div>
-            <div className="text-sm text-gray-600">Close: {formData.closeDate || 'Not set'}</div>
-            <div className="text-sm text-gray-600">{getDaysAway(formData.closeDate)}</div>
+            <div className="text-sm text-gray-600">Close: {formatDisplayDate(formData.closeDate)}</div>
+            <div className="text-sm text-gray-600">{daysFromNowLabel(formData.closeDate)}</div>
           </div>
 
           <div>
