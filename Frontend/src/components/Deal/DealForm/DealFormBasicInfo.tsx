@@ -3,7 +3,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Sparkles, Calendar, Info, GitBranch } from 'lucide-react';
 import { SUPPORTED_CURRENCIES, getCurrency, BASE_CURRENCY_CODE } from '../../../config/currencies';
-import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, validateDealValue } from '../../../utils/currencyUtils';
+import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, validateDealValue, getRateToUsdDisplay, RATES_SNAPSHOT_DATE } from '../../../utils/currencyUtils';
 import { PIPELINES, getPipeline, stageButtonClasses } from '../../../config/pipelines';
 import { DEAL_TYPES } from '../../../config/dealTypes';
 import {
@@ -193,7 +193,13 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
                 <Info className="h-3 w-3 flex-shrink-0" />
                 <span>
                   ≈ {formatCurrencyCompact(baseAmt, BASE_CURRENCY_CODE)} {BASE_CURRENCY_CODE} for reporting
-                  <span className="text-gray-400 ml-1">(mock rate — live FX coming)</span>
+                </span>
+                <span
+                  title={`Rate: 1 ${formData.currency} ≈ $${getRateToUsdDisplay(formData.currency)} USD · ${RATES_SNAPSHOT_DATE}`}
+                  className="cursor-help text-gray-400 hover:text-gray-600 transition-colors"
+                  aria-label="Exchange rate info"
+                >
+                  ⓘ
                 </span>
               </p>
             );

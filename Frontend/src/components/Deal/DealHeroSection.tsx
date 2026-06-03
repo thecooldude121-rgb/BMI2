@@ -3,6 +3,7 @@ import { Edit, MoreVertical, Building2, User, Target, Calendar, Sparkles, Mail, 
 import { useNavigate } from 'react-router-dom';
 import { MoreOptionsDropdown } from './DealModals';
 import { daysFromNowLabel, closeDateUrgencyClass } from '../../utils/dateUtils';
+import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 
 interface DealHeroSectionProps {
   deal: {
@@ -10,6 +11,8 @@ interface DealHeroSectionProps {
     companyName: string;
     dealName: string;
     amount: number;
+    currency?: string;
+    base_amount_usd?: number;
     stage: string;
     stageName: string;
     closeDate: string;
@@ -125,7 +128,17 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         <div className="grid grid-cols-4 gap-6 mb-6">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
             <div className="text-sm font-medium text-blue-700 mb-1">Value</div>
-            <div className="text-3xl font-bold text-blue-900">${(deal.amount / 1000).toFixed(0)}K</div>
+            <div className="text-3xl font-bold text-blue-900">
+              {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
+            </div>
+            {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
+              <div className="text-xs text-blue-600 mt-0.5 opacity-80">
+                ≈ {formatCurrencyCompact(
+                    deal.base_amount_usd || convertToBaseCurrency(deal.amount, deal.currency),
+                    BASE_CURRENCY_CODE
+                  )} USD
+              </div>
+            )}
           </div>
           <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border border-orange-200">
             <div className="text-sm font-medium text-orange-700 mb-1">Stage</div>

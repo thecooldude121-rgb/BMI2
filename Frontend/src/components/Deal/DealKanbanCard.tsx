@@ -44,6 +44,7 @@ import {
   resolveDealState,
   STATE_TOKENS,
 } from '../../utils/dealState';
+import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 
 // ── Type definitions ──────────────────────────────────────────────────────────
 
@@ -53,6 +54,8 @@ export interface DealCard {
   dealName: string;
   accountName: string;
   amount: number;
+  currency?: string;
+  baseAmountUsd?: number;
   closeDate: string;
   stage: string;
   aiScore: number;
@@ -196,7 +199,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
           padding: '9px 12px',
           opacity: isDragging ? 0.92 : 1,
         }}
-        aria-label={`Deal: ${deal.dealName}, ${formatCurrency(deal.amount)}, ${state.description}`}
+        aria-label={`Deal: ${deal.dealName}, ${formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}, ${state.description}`}
         title={state.description}
       >
         {/* Row A: Deal name (left) + value (right) — two most critical fields at a glance */}
@@ -204,13 +207,19 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
           <span className="text-[13px] font-semibold text-gray-900 leading-snug line-clamp-1 flex-1">
             {deal.dealName}
           </span>
-          <span className="flex items-center space-x-0.5 text-[13px] font-bold text-indigo-600 whitespace-nowrap flex-shrink-0">
-            {/* ◆ prefix only on high-value deals — typographic modifier, no extra badge */}
-            {state.isHighValue && (
-              <span className="text-amber-500 text-[10px] mr-0.5" title="High-value deal">◆</span>
+          <div className="flex flex-col items-end flex-shrink-0">
+            <span className="flex items-center space-x-0.5 text-[13px] font-bold text-indigo-600 whitespace-nowrap">
+              {state.isHighValue && (
+                <span className="text-amber-500 text-[10px] mr-0.5" title="High-value deal">◆</span>
+              )}
+              {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
+            </span>
+            {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
+              <span className="text-[10px] text-gray-400 leading-none mt-0.5">
+                ≈ {formatCurrencyCompact(deal.baseAmountUsd || convertToBaseCurrency(deal.amount, deal.currency), BASE_CURRENCY_CODE)} USD
+              </span>
             )}
-            {formatCurrency(deal.amount)}
-          </span>
+          </div>
         </div>
 
         {/* Row B: Company + urgency dot + date */}
@@ -278,7 +287,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         padding: '11px 13px 10px',
         opacity: isDragging ? 0.92 : 1,
       }}
-      aria-label={`Deal: ${deal.dealName}, ${formatCurrency(deal.amount)}, ${state.description}`}
+      aria-label={`Deal: ${deal.dealName}, ${formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}, ${state.description}`}
       title={state.description}
     >
 
@@ -316,13 +325,20 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         Urgency dot encodes deadline risk as a 2px visual before the date text.
       */}
       <div className="flex items-center justify-between mb-2 pt-1.5 border-t border-gray-100">
-        <div className="flex items-center space-x-1">
-          {state.isHighValue && (
-            <span className="text-amber-500 text-[11px] leading-none" title="High-value deal (≥$100K)">◆</span>
+        <div className="flex flex-col">
+          <div className="flex items-center space-x-1">
+            {state.isHighValue && (
+              <span className="text-amber-500 text-[11px] leading-none" title="High-value deal (≥$100K)">◆</span>
+            )}
+            <span className="text-[15px] font-bold text-indigo-600">
+              {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
+            </span>
+          </div>
+          {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
+            <span className="text-[10px] text-gray-400 leading-none mt-0.5">
+              ≈ {formatCurrencyCompact(deal.baseAmountUsd || convertToBaseCurrency(deal.amount, deal.currency), BASE_CURRENCY_CODE)} USD
+            </span>
           )}
-          <span className="text-[15px] font-bold text-indigo-600">
-            {formatCurrency(deal.amount)}
-          </span>
         </div>
         <div className="flex items-center space-x-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${closeDateDotClass(closeDaysLeft)}`} />

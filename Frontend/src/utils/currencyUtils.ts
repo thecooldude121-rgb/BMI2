@@ -156,6 +156,21 @@ export const validateDealValue = (raw: string, currencyCode: string): string | n
   return null;
 };
 
+/**
+ * Returns a display string for the exchange rate of 1 unit of `currency` in USD.
+ * Used in informational tooltips. Examples: "0.2725", "1.087", "0.0120"
+ */
+export const getRateToUsdDisplay = (currency: string): string => {
+  if (currency === BASE_CURRENCY_CODE) return '1.0000';
+  const rate = convertToBaseCurrency(1, currency);
+  if (rate >= 1)    return rate.toFixed(2);
+  if (rate >= 0.01) return rate.toFixed(4);
+  return rate.toFixed(6);
+};
+
+/** Last date the MOCK_RATES table was reviewed. Update when rates are refreshed. */
+export const RATES_SNAPSHOT_DATE = 'Jun 2026 (approximate)';
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;

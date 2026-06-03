@@ -1,6 +1,7 @@
 import React from 'react';
 import { DollarSign, TrendingUp, Calendar, Package, CreditCard, Clock, Sparkles, CheckCircle2, Circle, ArrowRight, Tag } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils';
+import { formatCurrency, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 
 interface Stage {
   name: string;
@@ -14,6 +15,8 @@ interface DealDetailsPanelProps {
   deal: {
     dealName: string;
     amount: number;
+    currency?: string;
+    base_amount_usd?: number;
     stage: string;
     stageName: string;
     stageNumber: number;
@@ -49,7 +52,19 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({ deal, stageH
           </div>
           <div className="flex items-start">
             <span className="text-sm text-gray-600 w-40">Value:</span>
-            <span className="text-sm font-medium text-gray-900">${deal.amount.toLocaleString()}</span>
+            <div>
+              <span className="text-sm font-medium text-gray-900">
+                {formatCurrency(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
+              </span>
+              {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
+                <div className="text-xs text-gray-400 mt-0.5">
+                  ≈ {formatCurrency(
+                      deal.base_amount_usd || convertToBaseCurrency(deal.amount, deal.currency),
+                      BASE_CURRENCY_CODE
+                    )} USD
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-start">
             <span className="text-sm text-gray-600 w-40">Stage:</span>
