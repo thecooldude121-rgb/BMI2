@@ -42,6 +42,7 @@ import {
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
 import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
+import DealSlideoutPanel from '../../components/Deal/DealSlideoutPanel';
 
 interface PipelineStage {
   id: string;
@@ -80,6 +81,8 @@ const DealsKanbanPage: React.FC = () => {
   const [deleteConfirmDeal, setDeleteConfirmDeal] = useState<{ id: string; name: string } | null>(null);
   // Card density — 'standard' shows all 4 zones, 'compact' collapses to 3 rows
   const [cardDensity, setCardDensity] = useState<'standard' | 'compact'>('standard');
+  // Slideout panel — stores the deal ID to preview; null = panel closed
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [visibleDealsCount, setVisibleDealsCount] = useState<Record<string, number>>({});
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
   const DEALS_PER_PAGE = 10;
@@ -153,6 +156,8 @@ const DealsKanbanPage: React.FC = () => {
             dealName: d.name || d.title || 'Untitled',
             accountName: d.company_name || d.name || '',
             amount: parseFloat(d.value) || 0,
+            currency: d.currency || 'USD',
+            baseAmountUsd: parseFloat(d.base_amount_usd) || parseFloat(d.value) || 0,
             // Strip time component so formatDisplayDate renders cleanly
             closeDate: d.expected_close_date
               ? d.expected_close_date.split('T')[0]
@@ -497,8 +502,25 @@ const DealsKanbanPage: React.FC = () => {
     setShowActivityModal(true);
   };
 
+  // Kanban card click → open slideout panel (board stays mounted).
+  // List/Grid views keep their own navigate-to-full-page behavior.
   const handleCardClick = (dealId: string) => {
+    setSelectedDealId(dealId);
+  };
+
+  // Called by the panel's "Open full record" button — only navigates when the
+  // user explicitly requests the full detail page.
+  const handlePanelNavigate = (dealId: string) => {
     navigate(`/crm/deals/${dealId}`);
+  };
+
+  // Patches a card in the stages state after a panel quick-edit save so the
+  // board stays in sync without a full refetch.
+  const handlePanelUpdate = (dealId: string, patch: Partial<DealCard>) => {
+    setStages(prev => prev.map(stage => ({
+      ...stage,
+      deals: stage.deals.map(d => d.id === dealId ? { ...d, ...patch } : d),
+    })));
   };
 
   // Quick-action handlers — surfaced on card hover so daily actions are 1-click
@@ -1829,6 +1851,17 @@ const DealsKanbanPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ── Deal slideout panel ─────────────────────────────────────────────
+          Rendered via createPortal at document.body level so it sits above
+          the overflow-x-auto board container without being clipped.
+          selectedDealId drives mount; panel handles its own animation.  */}
+      <DealSlideoutPanel
+        dealId={selectedDealId}
+        onClose={() => setSelectedDealId(null)}
+        onNavigateToFull={handlePanelNavigate}
+        onDealUpdate={handlePanelUpdate}
+      />
     </div>
   );
 };
