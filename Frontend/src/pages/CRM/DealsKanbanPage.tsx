@@ -38,11 +38,20 @@ import {
   Columns,
   LayoutList,
   AlignJustify,
+  RotateCcw,
+  X as XIcon,
 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
 import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
 import DealSlideoutPanel from '../../components/Deal/DealSlideoutPanel';
+import {
+  SAVED_VIEWS,
+  findView,
+  getActiveFilterPills,
+  isAnyFilterActive,
+  type SavedView,
+} from '../../utils/dealViews';
 
 interface PipelineStage {
   id: string;
@@ -195,6 +204,11 @@ const DealsKanbanPage: React.FC = () => {
   const [selectedCloseDateFilter, setSelectedCloseDateFilter] = useState('all');
   const [selectedValueFilter, setSelectedValueFilter] = useState('all');
   const [selectedSourceFilter, setSelectedSourceFilter] = useState('all');
+
+  // Saved-view state — activeViewId tracks which chip is highlighted;
+  // viewPredicate is the view's extra filter function (null for dropdown-only views).
+  const [activeViewId, setActiveViewId] = useState('all');
+  const [viewPredicate, setViewPredicate] = useState<((d: DealCard) => boolean) | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 200);
@@ -624,6 +638,44 @@ const DealsKanbanPage: React.FC = () => {
     navigate(`/crm/deals/add?stage=${stageId}`);
   };
 
+  // Apply a saved view — presets the dropdown controls and sets the custom
+  // predicate.  The user can then further refine with manual dropdown changes.
+  const applyView = (view: SavedView) => {
+    setActiveViewId(view.id);
+    // Only override the dropdown values explicitly specified by the view
+    if (view.filterPreset.owner     !== undefined) setSelectedOwner(view.filterPreset.owner);
+    if (view.filterPreset.closeDate !== undefined) setSelectedCloseDateFilter(view.filterPreset.closeDate);
+    if (view.filterPreset.value     !== undefined) setSelectedValueFilter(view.filterPreset.value);
+    if (view.filterPreset.source    !== undefined) setSelectedSourceFilter(view.filterPreset.source);
+    if (view.filterPreset.sortBy    !== undefined) setSortBy(view.filterPreset.sortBy);
+    // Bind the view's predicate (if any) so filterDeals picks it up
+    setViewPredicate(view.predicate ? () => view.predicate! : null);
+  };
+
+  // Reset every filter, saved view, and search back to defaults.
+  const resetFilters = () => {
+    setActiveViewId('all');
+    setViewPredicate(null);
+    setSelectedOwner('all');
+    setSelectedCloseDateFilter('all');
+    setSelectedValueFilter('all');
+    setSelectedSourceFilter('all');
+    setSearchTerm('');
+    setSortBy('closeDate');
+  };
+
+  // Clear a single active-filter pill by its key.
+  const clearFilterPill = (key: string) => {
+    switch (key) {
+      case 'view':      setActiveViewId('all'); setViewPredicate(null); break;
+      case 'owner':     setSelectedOwner('all'); break;
+      case 'closeDate': setSelectedCloseDateFilter('all'); break;
+      case 'value':     setSelectedValueFilter('all'); break;
+      case 'source':    setSelectedSourceFilter('all'); break;
+      case 'search':    setSearchTerm(''); break;
+    }
+  };
+
   const displayedStages = focusedStage
     ? stages.filter(s => s.id === focusedStage)
     : stages;
@@ -721,6 +773,10 @@ const DealsKanbanPage: React.FC = () => {
       if (selectedSourceFilter === 'website' && !d.source?.toLowerCase().includes('website')) return false;
       if (selectedSourceFilter === 'leadgen' && !d.source?.toLowerCase().includes('lead gen')) return false;
       if (selectedSourceFilter === 'manual'  && d.isHRMS) return false;
+
+      // Apply the active saved view's custom predicate — handles conditions that
+      // the dropdown controls cannot express (aiScore, daysSinceContact, etc.)
+      if (viewPredicate && !viewPredicate(d)) return false;
 
       return true;
     });
@@ -1036,7 +1092,40 @@ const DealsKanbanPage: React.FC = () => {
       </div>
 
       <div className="bg-white border-b border-gray-200 px-8 py-4">
-        <div className="flex flex-wrap items-center gap-4 mb-4">
+
+        {/* ── Saved views chip bar ────────────────────────────────────────
+            Horizontal scrollable row of view pills.  Clicking a chip applies
+            that view's preset filters + custom predicate in one action.
+            The "All Deals" chip acts as a reset.  No overflow on desktop —
+            scrollable on narrow screens.                                    */}
+        <div className="flex items-center space-x-2 mb-4 overflow-x-auto pb-1 scrollbar-thin">
+          {SAVED_VIEWS.map(view => {
+            const isActive = activeViewId === view.id;
+            return (
+              <button
+                key={view.id}
+                onClick={() => applyView(view)}
+                title={view.description}
+                className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium
+                  transition-all duration-150 whitespace-nowrap border
+                  ${isActive
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                  }`}
+                aria-pressed={isActive}
+                aria-label={`${view.label}: ${view.description}`}
+              >
+                <span className="text-[12px]">{view.emoji}</span>
+                <span>{view.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Manual filter dropdowns ─────────────────────────────────────
+            Unchanged from before — manual filters combine additively with
+            any active saved view.                                          */}
+        <div className="flex flex-wrap items-center gap-4 mb-3">
           <div className="flex items-center space-x-2">
             <span className="text-sm font-medium text-gray-700">Owner:</span>
             <select
@@ -1095,6 +1184,52 @@ const DealsKanbanPage: React.FC = () => {
             </select>
           </div>
         </div>
+
+        {/* ── Active filter pills ─────────────────────────────────────────
+            One dismissible pill per active filter.  Each pill has an ×
+            to individually clear that filter without resetting everything.
+            The "Reset all" button clears every filter including the view.
+            Hidden entirely when no filters are active.                    */}
+        {(() => {
+          const pills = getActiveFilterPills(
+            activeViewId,
+            selectedOwner,
+            selectedCloseDateFilter,
+            selectedValueFilter,
+            selectedSourceFilter,
+            searchTerm,
+          );
+          if (pills.length === 0) return null;
+          return (
+            <div className="flex items-center flex-wrap gap-2 mb-3">
+              <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Active:</span>
+              {pills.map(pill => (
+                <span
+                  key={pill.key}
+                  className="inline-flex items-center space-x-1 pl-2.5 pr-1.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[12px] font-medium rounded-full"
+                >
+                  <span>{pill.label}</span>
+                  <button
+                    onClick={() => clearFilterPill(pill.key)}
+                    className="ml-0.5 p-0.5 rounded-full hover:bg-indigo-200 transition-colors"
+                    aria-label={`Remove ${pill.label} filter`}
+                  >
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <button
+                onClick={resetFilters}
+                className="inline-flex items-center space-x-1 px-2.5 py-1 text-[12px] text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full border border-gray-200 hover:border-red-200 transition-colors"
+                title="Clear all filters"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>Reset all</span>
+              </button>
+            </div>
+          );
+        })()}
+
 
         <div className="flex items-center justify-between">
           <div className="flex-1 max-w-md relative">
