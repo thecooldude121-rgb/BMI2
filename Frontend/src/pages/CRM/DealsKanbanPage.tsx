@@ -3,7 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchDeals } from '../../utils/dealsApi';
-import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
+import {
+  formatDisplayDate,
+  formatRelativeTime,
+  formatCloseDate,
+  daysFromNow,
+  daysFromNowLabel,
+  isWithinDays,
+  parseDateMs,
+} from '../../utils/dateUtils';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Plus,
@@ -172,7 +180,7 @@ const DealsKanbanPage: React.FC = () => {
             contactName: d.contact_name || '',
             contactTitle: d.contact_title || '',
             owner: d.assigned_to || 'Unassigned',
-            // Store raw ISO; formatLastActivity() renders it human-readable on card
+            // Store raw ISO; formatRelativeTime() from dateUtils renders it human-readable on card
             lastActivity: d.updated_at || d.created_at || '',
             daysSinceContact: d.days_since_contact ?? 0,
             isHRMS: Boolean(d.is_hrms),
@@ -241,11 +249,13 @@ const DealsKanbanPage: React.FC = () => {
     const wonWithDates = (stages.find(s => s.id === 'closed-won')?.deals || []).filter(
       d => d.createdAt && d.closeDate
     );
+    // parseDateMs returns Infinity for bad dates — Math.max(0,…) clamps those to 0
     const avgCycle = wonWithDates.length > 0
       ? Math.round(wonWithDates.reduce((sum, d) => {
-          const created = new Date(d.createdAt!).getTime();
-          const closed  = new Date(d.closeDate + 'T12:00:00').getTime();
-          return sum + Math.max(0, (closed - created) / 86_400_000);
+          const createdMs = parseDateMs(d.createdAt);
+          const closedMs  = parseDateMs(d.closeDate);
+          const cycleDays = (closedMs - createdMs) / 86_400_000;
+          return sum + Math.max(0, isFinite(cycleDays) ? cycleDays : 0);
         }, 0) / wonWithDates.length)
       : null;
 
@@ -311,24 +321,8 @@ const DealsKanbanPage: React.FC = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Convert a raw ISO timestamp or human-readable string to a friendly label.
-  // Backend-injected deals carry ISO strings (e.g. "2026-01-15T10:30:00Z").
-  // Sample/dragged deals already carry strings like "3 days ago" — pass those through.
-  const formatLastActivity = (lastActivity: string): string => {
-    if (!lastActivity) return 'No activity';
-    if (/^\d{4}-\d{2}-\d{2}T/.test(lastActivity)) {
-      const d = new Date(lastActivity);
-      if (!isNaN(d.getTime())) {
-        const daysAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysAgo === 0) return 'Today';
-        if (daysAgo === 1) return '1 day ago';
-        if (daysAgo < 30) return `${daysAgo} days ago`;
-        if (daysAgo < 365) return `${Math.floor(daysAgo / 30)}mo ago`;
-        return formatDisplayDate(d);
-      }
-    }
-    return lastActivity;
-  };
+  // formatRelativeTime from dateUtils replaces the old local formatLastActivity.
+  // It handles ISO strings, already-human strings, null, and timezone-safe parsing.
 
   const formatCurrency = (amount: number) => {
     if (amount >= 1000000) {
@@ -691,23 +685,10 @@ const DealsKanbanPage: React.FC = () => {
       if (selectedOwner === 'me' && user && d.owner !== user.name) return false;
       if (selectedOwner === 'unassigned' && d.owner && d.owner !== 'Unassigned') return false;
 
-      // Close date filter
-      if (selectedCloseDateFilter !== 'all' && d.closeDate) {
-        const closeMs = new Date(d.closeDate + 'T12:00:00').getTime();
-        const now = Date.now();
-        if (selectedCloseDateFilter === 'week' && closeMs > now + 7 * 86_400_000) return false;
-        if (selectedCloseDateFilter === 'month') {
-          const n = new Date();
-          const endOfMonth = new Date(n.getFullYear(), n.getMonth() + 1, 0, 23, 59, 59).getTime();
-          if (closeMs > endOfMonth) return false;
-        }
-        if (selectedCloseDateFilter === 'quarter') {
-          const n = new Date();
-          const qEnd = Math.floor(n.getMonth() / 3) + 1;
-          const endOfQ = new Date(n.getFullYear(), qEnd * 3, 0, 23, 59, 59).getTime();
-          if (closeMs > endOfQ) return false;
-        }
-      }
+      // Close date filter — isWithinDays uses parseDate internally, null-safe
+      if (selectedCloseDateFilter === 'week'    && !isWithinDays(d.closeDate, 7))  return false;
+      if (selectedCloseDateFilter === 'month'   && !isWithinDays(d.closeDate, 30)) return false;
+      if (selectedCloseDateFilter === 'quarter' && !isWithinDays(d.closeDate, 90)) return false;
 
       // Value range filter
       if (selectedValueFilter === '0-25k'  && d.amount > 25_000)  return false;
@@ -732,11 +713,9 @@ const DealsKanbanPage: React.FC = () => {
         case 'value':    return b.amount - a.amount;
         case 'health':   return b.aiScore - a.aiScore;
         case 'activity': return a.daysSinceContact - b.daysSinceContact;
-        case 'closeDate': {
-          const aMs = a.closeDate ? new Date(a.closeDate + 'T12:00:00').getTime() : Infinity;
-          const bMs = b.closeDate ? new Date(b.closeDate + 'T12:00:00').getTime() : Infinity;
-          return aMs - bMs;
-        }
+        case 'closeDate':
+          // parseDateMs returns Infinity for missing/invalid dates → sorts to end safely
+          return parseDateMs(a.closeDate) - parseDateMs(b.closeDate);
         default: return 0;
       }
     });
@@ -1317,10 +1296,8 @@ const DealsKanbanPage: React.FC = () => {
                         const isStalled = deal.daysSinceContact >= 5;
                         const isHighPriority = deal.priority === 'high';
 
-                        // Close date urgency for at-a-glance scanning
-                        const closeDaysLeft = deal.closeDate
-                          ? Math.ceil((new Date(deal.closeDate + 'T12:00:00').getTime() - Date.now()) / 86_400_000)
-                          : null;
+                        // Use daysFromNow from dateUtils — timezone-safe, returns null for missing dates
+                        const closeDaysLeft = daysFromNow(deal.closeDate);
                         const closeDateColor =
                           closeDaysLeft === null ? 'text-gray-500' :
                           closeDaysLeft < 0    ? 'text-red-600 font-semibold' :
@@ -1390,7 +1367,8 @@ const DealsKanbanPage: React.FC = () => {
                               {/* Row 4: Close date with urgency colour */}
                               <div className={`flex items-center space-x-1 text-xs mb-2 ${closeDateColor}`}>
                                 <Calendar className="h-3 w-3 flex-shrink-0" />
-                                <span>{formatDisplayDate(deal.closeDate)}</span>
+                                {/* formatCloseDate returns "No close date" for null/empty — never "Invalid Date" */}
+                                <span>{formatCloseDate(deal.closeDate)}</span>
                                 {closeDaysLeft !== null && closeDaysLeft < 0 && (
                                   <span className="ml-1 px-1 py-0.5 bg-red-100 text-red-700 rounded text-xs">Overdue</span>
                                 )}
@@ -1495,7 +1473,7 @@ const DealsKanbanPage: React.FC = () => {
                                       {getHealthIcon(deal.health)}
                                       {isStalled
                                         ? <span>{deal.daysSinceContact}d stalled</span>
-                                        : <span>{formatLastActivity(deal.lastActivity)}</span>
+                                        : <span>{formatRelativeTime(deal.lastActivity, 'No recent activity')}</span>
                                       }
                                     </>
                                   )}
@@ -1725,7 +1703,10 @@ const DealsKanbanPage: React.FC = () => {
 
               <div>
                 <div className="text-sm font-medium text-gray-700 mb-2">Last Activity:</div>
-                <div className="text-sm text-gray-900">{selectedActivityDeal.lastActivity}</div>
+                {/* formatRelativeTime converts raw ISO strings to "Today", "3 days ago" etc. */}
+                <div className="text-sm text-gray-900">
+                  {formatRelativeTime(selectedActivityDeal.lastActivity, 'No recent activity')}
+                </div>
                 <div className="text-xs text-gray-600 mt-1">
                   {selectedActivityDeal.daysSinceContact} days since last contact
                 </div>
@@ -1942,7 +1923,7 @@ const DealsKanbanPage: React.FC = () => {
                           )}
                         </div>
                         <div className="text-sm text-gray-600">
-                          {deal.contactName} • Close: {formatDisplayDate(deal.closeDate)}
+                          {deal.contactName} • Close: {formatCloseDate(deal.closeDate)}
                         </div>
                       </div>
                       <div className="text-right">

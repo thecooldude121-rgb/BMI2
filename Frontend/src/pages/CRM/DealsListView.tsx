@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
+import { formatDisplayDate, formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
@@ -79,9 +79,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     const matchesOwner = selectedOwner === 'all' || deal.owner === selectedOwner;
 
     const matchesCloseDate = selectedCloseDate === 'all' ||
-      (selectedCloseDate === 'week' && isWithinWeek(deal.closeDate)) ||
-      (selectedCloseDate === 'month' && isWithinMonth(deal.closeDate)) ||
-      (selectedCloseDate === 'quarter' && isWithinQuarter(deal.closeDate));
+      (selectedCloseDate === 'week'    && isWithinDays(deal.closeDate, 7))  ||
+      (selectedCloseDate === 'month'   && isWithinDays(deal.closeDate, 30)) ||
+      (selectedCloseDate === 'quarter' && isWithinDays(deal.closeDate, 90));
 
     const matchesValue = selectedValue === 'all' ||
       (selectedValue === '0-25k' && deal.amount < 25000) ||
@@ -108,7 +108,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         comparison = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
         break;
       case 'closeDate':
-        comparison = new Date(a.closeDate).getTime() - new Date(b.closeDate).getTime();
+        // parseDateMs returns Infinity for empty/invalid dates — sorts them to end, never NaN
+        comparison = parseDateMs(a.closeDate) - parseDateMs(b.closeDate);
         break;
       case 'health':
         comparison = a.aiScore - b.aiScore;
@@ -117,26 +118,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 
-  const isWithinWeek = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return date >= today && date <= weekFromNow;
-  };
-
-  const isWithinMonth = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const monthFromNow = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
-    return date >= today && date <= monthFromNow;
-  };
-
-  const isWithinQuarter = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const quarterFromNow = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
-    return date >= today && date <= quarterFromNow;
-  };
+  // Replaced three duplicated isWithinWeek/Month/Quarter with isWithinDays from dateUtils.
+  // The old versions used bare new Date() with no null guard — invalid dates silently
+  // returned false rather than being excluded. isWithinDays handles all edge cases.
 
   const formatCurrency = (amount: number) => {
     if (amount >= 1000000) {
@@ -147,7 +131,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     return `$${amount}`;
   };
 
-  const formatDate = formatDisplayDate;
+  const formatDate = formatCloseDate; // formatCloseDate returns "No close date" for missing values
   const getDaysAway = daysFromNow;
 
   const getStageColor = (stageId: string) => {
@@ -254,7 +238,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
 
   const totalValue = sortedDeals.reduce((sum, deal) => sum + deal.amount, 0);
   const avgWinRate = 67;
-  const closingThisWeek = sortedDeals.filter(d => isWithinWeek(d.closeDate)).length;
+  const closingThisWeek = sortedDeals.filter(d => isWithinDays(d.closeDate, 7)).length;
   const stalledDeals = sortedDeals.filter(d => d.daysSinceContact >= 5).length;
   const avgDaysCycle = 45;
 

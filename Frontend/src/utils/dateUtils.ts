@@ -90,3 +90,88 @@ export const closeDateUrgencyClass = (input: string | Date | null | undefined): 
   if (days >= 8)      return 'bg-amber-50 border-amber-200 text-amber-900';
   return                     'bg-red-50 border-red-200 text-red-900';
 };
+
+/**
+ * Converts any date input (ISO timestamp, YYYY-MM-DD, Date, null) to a
+ * human-readable relative label.
+ *
+ * Rules:
+ *   - within the same calendar day  → "Today"
+ *   - yesterday                     → "Yesterday"
+ *   - 2–6 days ago                  → "N days ago"
+ *   - 7–29 days ago                 → "X days ago"   (keeps it specific for CRM)
+ *   - 30+ days ago                  → "Jun 2, 2026"  (absolute, no ambiguity)
+ *   - future timestamps             → formatted date (e.g. scheduled activities)
+ *   - null / invalid / ""           → fallback string (default "No recent activity")
+ *
+ * Used for: lastActivity on cards, modal timestamps, created/updated labels.
+ */
+export const formatRelativeTime = (
+  input: string | Date | null | undefined,
+  fallback = 'No recent activity',
+): string => {
+  const d = parseDate(input);
+  if (!d) return fallback;
+
+  const nowMs  = Date.now();
+  const diffMs = nowMs - d.getTime();
+  const days   = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Future or exactly now
+  if (diffMs < 0) {
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 30)  return `${days} days ago`;
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return months === 1 ? '1 month ago' : `${months} months ago`;
+  }
+  // Older than a year — show the absolute date
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+/**
+ * Close-date display with a CRM-specific "No close date" fallback.
+ * Use this everywhere a deal's close date is rendered — never use
+ * formatDisplayDate directly for close dates.
+ */
+export const formatCloseDate = (input: string | Date | null | undefined): string => {
+  const d = parseDate(input);
+  if (!d) return 'No close date';
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+/**
+ * Returns true when the input date falls between now and `n` calendar days
+ * from now (inclusive). Returns false for missing, invalid, or past dates.
+ *
+ * Replaces the three duplicated isWithinWeek / isWithinMonth / isWithinQuarter
+ * functions that existed independently in DealsListView and DealsGridView.
+ *
+ *   isWithinDays(closeDate, 7)  → this week
+ *   isWithinDays(closeDate, 30) → this month
+ *   isWithinDays(closeDate, 90) → this quarter
+ */
+export const isWithinDays = (
+  input: string | Date | null | undefined,
+  n: number,
+): boolean => {
+  const days = daysFromNow(input);
+  if (days === null) return false;
+  return days >= 0 && days <= n;
+};
+
+/**
+ * Returns the date as milliseconds-since-epoch, or Infinity when the input is
+ * missing or invalid. Safe to use in Array.sort() comparators — invalid/empty
+ * dates sort to the end rather than producing NaN (which breaks V8's sort).
+ *
+ *   deals.sort((a, b) => parseDateMs(a.closeDate) - parseDateMs(b.closeDate))
+ */
+export const parseDateMs = (input: string | Date | null | undefined): number => {
+  const d = parseDate(input);
+  return d ? d.getTime() : Infinity;
+};

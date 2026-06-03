@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
+import { formatDisplayDate, formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Download, Settings, BarChart3, ChevronDown,
@@ -75,9 +75,9 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     const matchesOwner = selectedOwner === 'all' || deal.owner === selectedOwner;
 
     const matchesCloseDate = selectedCloseDate === 'all' ||
-      (selectedCloseDate === 'week' && isWithinWeek(deal.closeDate)) ||
-      (selectedCloseDate === 'month' && isWithinMonth(deal.closeDate)) ||
-      (selectedCloseDate === 'quarter' && isWithinQuarter(deal.closeDate));
+      (selectedCloseDate === 'week'    && isWithinDays(deal.closeDate, 7))  ||
+      (selectedCloseDate === 'month'   && isWithinDays(deal.closeDate, 30)) ||
+      (selectedCloseDate === 'quarter' && isWithinDays(deal.closeDate, 90));
 
     const matchesValue = selectedValue === 'all' ||
       (selectedValue === '0-25k' && deal.amount < 25000) ||
@@ -92,26 +92,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
   const displayedDeals = filteredDeals.slice(0, displayLimit);
 
-  const isWithinWeek = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return date >= today && date <= weekFromNow;
-  };
-
-  const isWithinMonth = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const monthFromNow = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
-    return date >= today && date <= monthFromNow;
-  };
-
-  const isWithinQuarter = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const quarterFromNow = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
-    return date >= today && date <= quarterFromNow;
-  };
+  // Replaced isWithinWeek/Month/Quarter with isWithinDays from dateUtils — null-safe, no duplication.
 
   const formatCurrency = (amount: number) => {
     if (amount >= 1000000) {
@@ -122,7 +103,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     return `$${amount}`;
   };
 
-  const formatDate = formatDisplayDate;
+  const formatDate = formatCloseDate; // formatCloseDate returns "No close date" for missing values
   const getDaysAway = daysFromNow;
 
   const getStageColor = (stageId: string) => {
@@ -246,7 +227,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
   const totalValue = filteredDeals.reduce((sum, deal) => sum + deal.amount, 0);
   const avgWinRate = 67;
-  const closingThisWeek = filteredDeals.filter(d => isWithinWeek(d.closeDate)).length;
+  const closingThisWeek = filteredDeals.filter(d => isWithinDays(d.closeDate, 7)).length;
   const stalledDeals = filteredDeals.filter(d => d.daysSinceContact >= 5).length;
   const avgDaysCycle = 45;
 
