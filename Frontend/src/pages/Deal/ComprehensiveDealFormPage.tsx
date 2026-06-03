@@ -657,16 +657,17 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       value = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : stripped;
     }
 
-    // Update form data
-    let newData = { ...formData, [field]: value };
-
-    // When closeDate changes to a non-past (or invalid) date, clear the override reason
-    // in the same state update to avoid the stale-formData two-setState bug
-    if (field === 'closeDate' && !isCloseDatePast(value)) {
-      newData = { ...newData, closeDateOverrideReason: '' };
-    }
-
-    setFormData(newData);
+    // newData is used below by calculateWinProbability; keep it in scope.
+    // setFormData uses a functional updater so that batched calls (e.g. bulk AI accept)
+    // chain off each other instead of all overwriting the same stale snapshot.
+    const newData = { ...formData, [field]: value };
+    setFormData(prev => {
+      let updated = { ...prev, [field]: value };
+      if (field === 'closeDate' && !isCloseDatePast(value)) {
+        updated = { ...updated, closeDateOverrideReason: '' };
+      }
+      return updated;
+    });
 
     // Validate field
     const error = validateField(field, value);
