@@ -52,10 +52,8 @@ export const IntegrationsProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const fetchIntegrations = async () => {
-    console.log('IntegrationsContext: fetchIntegrations called');
     setIsLoading(true);
     try {
-      console.log('IntegrationsContext: Creating mock data');
       const mockConnected: ConnectedIntegration[] = [
         {
           id: '1',
@@ -281,14 +279,9 @@ export const IntegrationsProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setConnectedIntegrations(mockConnected);
       setAvailableIntegrations(mockAvailable);
       setApiCredentials(mockApiCredentials);
-      console.log('IntegrationsContext: Data set successfully', {
-        connectedCount: mockConnected.length,
-        availableCount: mockAvailable.length
-      });
     } catch (error) {
-      console.error('IntegrationsContext: Failed to fetch integrations:', error);
+      console.error('IntegrationsContext: Failed to load integrations:', error);
     } finally {
-      console.log('IntegrationsContext: Setting isLoading to false');
       setIsLoading(false);
     }
   };

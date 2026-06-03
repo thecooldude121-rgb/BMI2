@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import {
   Lead,
@@ -120,6 +120,14 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
 
   const fetchLeads = useCallback(async (filters?: LeadFilters) => {
     if (!user) return;
+    // Guard: skip the Supabase call when credentials are not configured.
+    // Without this, every app load fires net::ERR_NAME_NOT_RESOLVED against
+    // the placeholder Supabase URL set in supabase.ts.
+    if (!isSupabaseConfigured) {
+      setLeads([]);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -826,7 +834,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   };
 
   const fetchViews = async () => {
-    if (!user) return;
+    if (!user || !isSupabaseConfigured) return;
 
     try {
       const { data, error } = await supabase
@@ -910,6 +918,8 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   };
 
   const fetchPipelines = async () => {
+    if (!isSupabaseConfigured) return;
+
     try {
       const { data, error } = await supabase
         .from('lead_pipelines')
@@ -925,6 +935,8 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   };
 
   const fetchTags = async () => {
+    if (!isSupabaseConfigured) return;
+
     try {
       const { data, error } = await supabase
         .from('tags')

@@ -995,11 +995,34 @@ const DealsKanbanPage: React.FC = () => {
                 <Building2 className="h-5 w-5 text-orange-100 flex-shrink-0" />
               </div>
               <div className="flex-1">
-                <p className="text-white font-semibold mb-1 flex items-center space-x-2">
-                  <span>🏢 {aiInsights.hrmsDeals.length} deals with HRMS connections progressing well</span>
+                <p className="text-white font-semibold mb-1">
+                  🏢 {aiInsights.hrmsDeals.length} deal{aiInsights.hrmsDeals.length !== 1 ? 's' : ''} with HRMS connections progressing well
                 </p>
+                {/* Dynamic description — lists top 2 HRMS deals by value with avg AI score */}
                 <p className="text-white/90 text-sm mb-3">
-                  TechStart ({formatCurrency(42000)}) and DataFlow ({formatCurrency(95000)}) - 92% avg score
+                  {aiInsights.hrmsDeals.length > 0
+                    ? (() => {
+                        const top = aiInsights.hrmsDeals
+                          .sort((a, b) => b.amount - a.amount)
+                          .slice(0, 2);
+                        const avgScore = Math.round(
+                          aiInsights.hrmsDeals.reduce((s, d) => s + d.aiScore, 0) /
+                          aiInsights.hrmsDeals.length
+                        );
+                        return (
+                          <>
+                            {top.map((d, i) => (
+                              <span key={d.id}>
+                                {d.companyName} ({formatCurrency(d.amount)})
+                                {i < top.length - 1 ? ' and ' : ''}
+                              </span>
+                            ))}
+                            {' '}&mdash; {avgScore}% avg score
+                          </>
+                        );
+                      })()
+                    : 'No active HRMS-connected deals at the moment.'
+                  }
                 </p>
                 <button
                   onClick={handleViewHRMSDeals}

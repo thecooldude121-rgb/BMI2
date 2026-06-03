@@ -1,10 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     || 'https://placeholder.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
 
-if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-  console.warn('Supabase environment variables not set — running with mock data only.');
+// True only when real credentials are present.
+// Contexts import this flag to skip live Supabase calls and avoid
+// net::ERR_NAME_NOT_RESOLVED errors when running without a .env file.
+export const isSupabaseConfigured =
+  Boolean(import.meta.env.VITE_SUPABASE_URL) &&
+  Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+if (!isSupabaseConfigured) {
+  console.warn('[Supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY not set — running with mock data only.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
