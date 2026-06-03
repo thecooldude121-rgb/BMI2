@@ -1,6 +1,7 @@
 import React from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { Plus, DollarSign, Users, Calendar, Clock, MoreHorizontal, Star, TrendingUp, AlertTriangle } from 'lucide-react';
+import { formatDisplayDate } from '../../utils/dateUtils';
 import { Deal, Pipeline } from '../../types/deals';
 
 interface DealKanbanProps {
@@ -224,7 +225,8 @@ const DealKanban: React.FC<DealKanbanProps> = ({
                                 {deal.expectedCloseDate && (
                                   <div className="flex items-center space-x-1 text-xs text-gray-600">
                                     <Calendar className="h-3 w-3" />
-                                    <span>{new Date(deal.expectedCloseDate).toLocaleDateString()}</span>
+                                    {/* formatDisplayDate guards against null/invalid dates */}
+                                    <span>{formatDisplayDate(deal.expectedCloseDate)}</span>
                                   </div>
                                 )}
                               </div>
@@ -287,7 +289,7 @@ const DealKanban: React.FC<DealKanbanProps> = ({
                                   )}
                                 </div>
                                 <span className="text-xs text-gray-400">
-                                  {new Date(deal.updatedAt).toLocaleDateString()}
+                                  {formatDisplayDate(deal.updatedAt)}
                                 </span>
                               </div>
                             </div>

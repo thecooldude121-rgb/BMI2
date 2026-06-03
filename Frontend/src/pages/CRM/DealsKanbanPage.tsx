@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { fetchDeals } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow, daysFromNowLabel } from '../../utils/dateUtils';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
@@ -15,7 +16,6 @@ import {
   Clock,
   DollarSign,
   Target,
-  Eye,
   Building2,
   User,
   Calendar,
@@ -52,6 +52,7 @@ interface DealCard {
   health: 'healthy' | 'at-risk' | 'stalled';
   source: string;
   status?: string;
+  createdAt?: string;
 }
 
 interface PipelineStage {
@@ -64,6 +65,7 @@ interface PipelineStage {
 const DealsKanbanPage: React.FC = () => {
   const navigate = useNavigate();
   const { deals: contextDeals } = useData();
+  const { user } = useAuth();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
@@ -86,537 +88,65 @@ const DealsKanbanPage: React.FC = () => {
   const [focusedStage, setFocusedStage] = useState<string | null>(null);
   const [showValueBreakdown, setShowValueBreakdown] = useState(false);
   const [selectedStageForBreakdown, setSelectedStageForBreakdown] = useState<PipelineStage | null>(null);
+  // Delete confirmation — stores the deal to be deleted until user confirms
+  const [deleteConfirmDeal, setDeleteConfirmDeal] = useState<{ id: string; name: string } | null>(null);
   const [visibleDealsCount, setVisibleDealsCount] = useState<Record<string, number>>({});
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
   const DEALS_PER_PAGE = 10;
   const observerRefs = useRef<Record<string, IntersectionObserver | null>>({});
 
+  // Stage skeletons — deals are populated exclusively from the backend fetch below.
+  // Never seed hardcoded sample deals here: they cause duplicate cards when the
+  // API returns real data and the two datasets share IDs.
   const [stages, setStages] = useState<PipelineStage[]>([
-    {
-      id: 'prospecting',
-      name: 'Prospecting',
-      color: 'bg-blue-100',
-      deals: [
-        {
-          id: 'deal-2',
-          companyName: 'NextGen Tech',
-          dealName: 'Platform License',
-          accountName: 'NextGen Technologies',
-          amount: 35000,
-          closeDate: '2026-03-10',
-          stage: 'prospecting',
-          aiScore: 65,
-          contactName: 'Emily Davis',
-          contactTitle: 'CTO',
-          owner: 'Sarah Chen',
-          lastActivity: '1 day ago',
-          daysSinceContact: 1,
-          isHRMS: false,
-          priority: 'medium',
-          health: 'healthy',
-          source: 'Website'
-        },
-        {
-          id: 'deal-3',
-          companyName: 'CloudServe',
-          dealName: 'Basic Plan',
-          accountName: 'CloudServe Inc',
-          amount: 22000,
-          closeDate: '2026-03-25',
-          stage: 'prospecting',
-          aiScore: 58,
-          contactName: 'Robert Chang',
-          contactTitle: 'Director',
-          owner: 'Mike Johnson',
-          lastActivity: '7 days ago',
-          daysSinceContact: 7,
-          isHRMS: false,
-          priority: 'medium',
-          health: 'at-risk',
-          source: 'Lead Gen (ZoomInfo)'
-        },
-        {
-          id: 'deal-4',
-          companyName: 'RetailPro',
-          dealName: 'Integration Package',
-          accountName: 'RetailPro Solutions',
-          amount: 48000,
-          closeDate: '2026-04-05',
-          stage: 'prospecting',
-          aiScore: 71,
-          contactName: 'Jennifer Wu',
-          contactTitle: 'VP Ops',
-          owner: 'Alex Rodriguez',
-          lastActivity: '2 days ago',
-          daysSinceContact: 2,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Referral'
-        },
-        {
-          id: 'deal-5',
-          companyName: 'FinanceHub',
-          dealName: 'Enterprise Suite',
-          accountName: 'FinanceHub Corp',
-          amount: 85000,
-          closeDate: '2026-04-20',
-          stage: 'prospecting',
-          aiScore: 82,
-          contactName: 'Thomas Lee',
-          contactTitle: 'CFO',
-          owner: 'Emily Davis',
-          lastActivity: '1 day ago',
-          daysSinceContact: 1,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Event/Conference'
-        },
-        {
-          id: 'deal-6',
-          companyName: 'MediaCorp',
-          dealName: 'Custom Solution',
-          accountName: 'MediaCorp International',
-          amount: 120000,
-          closeDate: '2026-05-15',
-          stage: 'prospecting',
-          aiScore: 76,
-          contactName: 'Patricia Moore',
-          contactTitle: 'CMO',
-          owner: 'Sarah Chen',
-          lastActivity: '3 days ago',
-          daysSinceContact: 3,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Manual (Cold outreach)'
-        },
-        {
-          id: 'deal-7',
-          companyName: 'LogiTech',
-          dealName: 'Standard Package',
-          accountName: 'LogiTech Industries',
-          amount: 90000,
-          closeDate: '2026-04-30',
-          stage: 'prospecting',
-          aiScore: 69,
-          contactName: 'Kevin Brown',
-          contactTitle: 'Director IT',
-          owner: 'Mike Johnson',
-          lastActivity: '6 days ago',
-          daysSinceContact: 6,
-          isHRMS: false,
-          priority: 'high',
-          health: 'at-risk',
-          source: 'Lead Gen (Apollo.io)'
-        }
-      ]
-    },
-    {
-      id: 'qualified',
-      name: 'Qualified',
-      color: 'bg-green-100',
-      deals: [
-        {
-          id: 'deal-8',
-          companyName: 'TechStart Inc',
-          dealName: 'Growth Plan',
-          accountName: 'TechStart Inc',
-          amount: 42000,
-          closeDate: '2026-03-30',
-          stage: 'qualified',
-          aiScore: 92,
-          contactName: 'Sarah Lee',
-          contactTitle: 'CFO',
-          owner: 'Alex Rodriguez',
-          lastActivity: '2 days ago',
-          daysSinceContact: 2,
-          isHRMS: true,
-          hrmsDetails: 'Recruited Sarah Lee (CFO) - Nov 2024',
-          priority: 'high',
-          health: 'healthy',
-          source: 'HRMS (Recruitment)'
-        },
-        {
-          id: 'deal-9',
-          companyName: 'InnovateLabs',
-          dealName: 'Basic Platform',
-          accountName: 'Innovation Labs',
-          amount: 38000,
-          closeDate: '2026-02-28',
-          stage: 'qualified',
-          aiScore: 74,
-          contactName: 'David Kumar',
-          contactTitle: 'CTO',
-          owner: 'Mike Johnson',
-          lastActivity: '3 days ago',
-          daysSinceContact: 3,
-          isHRMS: false,
-          priority: 'medium',
-          health: 'healthy',
-          source: 'Lead Gen (ZoomInfo)'
-        },
-        {
-          id: 'deal-10',
-          companyName: 'HealthPlus',
-          dealName: 'Integration Module',
-          accountName: 'HealthPlus Medical',
-          amount: 55000,
-          closeDate: '2026-03-18',
-          stage: 'qualified',
-          aiScore: 79,
-          contactName: 'Dr. Amanda Singh',
-          contactTitle: 'VP',
-          owner: 'Emily Davis',
-          lastActivity: '1 day ago',
-          daysSinceContact: 1,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Partner referral'
-        },
-        {
-          id: 'deal-11',
-          companyName: 'EduTech Solutions',
-          dealName: 'Enterprise',
-          accountName: 'EduTech Solutions',
-          amount: 95000,
-          closeDate: '2026-04-10',
-          stage: 'qualified',
-          aiScore: 84,
-          contactName: 'Mark Thompson',
-          contactTitle: 'CEO',
-          owner: 'Sarah Chen',
-          lastActivity: '2 days ago',
-          daysSinceContact: 2,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Inbound marketing'
-        },
-        {
-          id: 'deal-12',
-          companyName: 'AutoParts Co',
-          dealName: 'Standard Plan',
-          accountName: 'AutoParts Company',
-          amount: 150000,
-          closeDate: '2026-05-01',
-          stage: 'qualified',
-          aiScore: 88,
-          contactName: 'Linda Garcia',
-          contactTitle: 'COO',
-          owner: 'Alex Rodriguez',
-          lastActivity: '1 day ago',
-          daysSinceContact: 1,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Trade show'
-        }
-      ]
-    },
-    {
-      id: 'proposal',
-      name: 'Proposal',
-      color: 'bg-orange-100',
-      deals: [
-        {
-          id: 'deal-1',
-          companyName: 'Acme Corp',
-          dealName: 'Enterprise Plan',
-          accountName: 'Acme Corporation',
-          amount: 50000,
-          closeDate: '2026-03-15',
-          stage: 'proposal',
-          aiScore: 78,
-          contactName: 'John Smith',
-          contactTitle: 'VP Sales',
-          owner: 'Alex Rodriguez',
-          lastActivity: '5 days ago',
-          daysSinceContact: 5,
-          isHRMS: false,
-          priority: 'high',
-          health: 'at-risk',
-          source: 'Lead Gen (Apollo.io)'
-        },
-        {
-          id: 'deal-13',
-          companyName: 'BigCo Enterprise',
-          dealName: 'Platform Implementation',
-          accountName: 'BigCo Enterprise',
-          amount: 75000,
-          closeDate: '2026-04-15',
-          stage: 'proposal',
-          aiScore: 85,
-          contactName: 'Mike Chen',
-          contactTitle: 'Director Ops',
-          owner: 'Sarah Chen',
-          lastActivity: '12 days ago',
-          daysSinceContact: 12,
-          isHRMS: false,
-          priority: 'high',
-          health: 'at-risk',
-          source: 'Manual (Trade Show)'
-        },
-        {
-          id: 'deal-14',
-          companyName: 'StartCo',
-          dealName: 'Basic Package',
-          accountName: 'StartCo Solutions',
-          amount: 28000,
-          closeDate: '2026-03-20',
-          stage: 'proposal',
-          aiScore: 74,
-          contactName: 'Lisa Wong',
-          contactTitle: 'CEO',
-          owner: 'Alex Rodriguez',
-          lastActivity: '8 days ago',
-          daysSinceContact: 8,
-          isHRMS: false,
-          priority: 'medium',
-          health: 'at-risk',
-          source: 'Website (Contact form)',
-          status: 'Proposal sent, not opened'
-        },
-        {
-          id: 'deal-15',
-          companyName: 'BankTech',
-          dealName: 'Custom Integration',
-          accountName: 'BankTech Financial',
-          amount: 135000,
-          closeDate: '2026-05-05',
-          stage: 'proposal',
-          aiScore: 80,
-          contactName: 'Richard Martinez',
-          contactTitle: 'VP Tech',
-          owner: 'Emily Davis',
-          lastActivity: '4 days ago',
-          daysSinceContact: 4,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Lead Gen (Apollo.io)'
-        },
-        {
-          id: 'deal-16',
-          companyName: 'GreenEnergy',
-          dealName: 'Growth Plan',
-          accountName: 'GreenEnergy Corp',
-          amount: 82000,
-          closeDate: '2026-04-25',
-          stage: 'proposal',
-          aiScore: 77,
-          contactName: 'Susan Taylor',
-          contactTitle: 'Director',
-          owner: 'Mike Johnson',
-          lastActivity: '5 days ago',
-          daysSinceContact: 5,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Referral'
-        }
-      ]
-    },
-    {
-      id: 'negotiation',
-      name: 'Negotiation',
-      color: 'bg-purple-100',
-      deals: [
-        {
-          id: 'deal-17',
-          companyName: 'DataFlow Inc',
-          dealName: 'Enterprise Suite',
-          accountName: 'DataFlow Inc',
-          amount: 95000,
-          closeDate: '2026-02-28',
-          stage: 'negotiation',
-          aiScore: 92,
-          contactName: 'Emma Wilson',
-          contactTitle: 'VP Marketing',
-          owner: 'Alex Rodriguez',
-          lastActivity: '1 day ago',
-          daysSinceContact: 1,
-          isHRMS: true,
-          hrmsDetails: 'Recruited Emma Wilson from DataFlow',
-          priority: 'high',
-          health: 'healthy',
-          source: 'HRMS (Recruitment)',
-          status: 'Contract review'
-        },
-        {
-          id: 'deal-18',
-          companyName: 'Acme Platform',
-          dealName: 'Add-on Module',
-          accountName: 'Acme Platform',
-          amount: 62000,
-          closeDate: '2026-03-25',
-          stage: 'negotiation',
-          aiScore: 88,
-          contactName: 'Mike Chen',
-          contactTitle: 'Director',
-          owner: 'Sarah Chen',
-          lastActivity: '2 days ago',
-          daysSinceContact: 2,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Upsell from existing customer',
-          status: 'Pricing discussion'
-        },
-        {
-          id: 'deal-19',
-          companyName: 'SportsCo',
-          dealName: 'Premium Package',
-          accountName: 'SportsCo International',
-          amount: 118000,
-          closeDate: '2026-03-15',
-          stage: 'negotiation',
-          aiScore: 90,
-          contactName: 'James Wilson',
-          contactTitle: 'CEO',
-          owner: 'Emily Davis',
-          lastActivity: '1 day ago',
-          daysSinceContact: 1,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Partner referral',
-          status: 'Legal review'
-        },
-        {
-          id: 'deal-20',
-          companyName: 'ManuTech',
-          dealName: 'Complete Platform',
-          accountName: 'ManuTech Industries',
-          amount: 150000,
-          closeDate: '2026-04-05',
-          stage: 'negotiation',
-          aiScore: 86,
-          contactName: 'Rachel Green',
-          contactTitle: 'COO',
-          owner: 'Alex Rodriguez',
-          lastActivity: '3 days ago',
-          daysSinceContact: 3,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Lead Gen (ZoomInfo)'
-        }
-      ]
-    },
-    {
-      id: 'closed-won',
-      name: 'Closed-Won',
-      color: 'bg-green-200',
-      deals: [
-        {
-          id: 'deal-21',
-          companyName: 'StartCo',
-          dealName: 'Basic Plan',
-          accountName: 'StartCo Solutions',
-          amount: 28000,
-          closeDate: '2025-12-01',
-          stage: 'closed-won',
-          aiScore: 100,
-          contactName: 'Lisa Wong',
-          contactTitle: 'CEO',
-          owner: 'Mike Johnson',
-          lastActivity: 'Won',
-          daysSinceContact: 0,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'Website',
-          status: 'Won - Nov 28, 2025'
-        },
-        {
-          id: 'deal-22',
-          companyName: 'TechGrow',
-          dealName: 'Growth Package',
-          accountName: 'TechGrow Inc',
-          amount: 45000,
-          closeDate: '2025-11-15',
-          stage: 'closed-won',
-          aiScore: 100,
-          contactName: 'Emma Wilson',
-          contactTitle: 'VP',
-          owner: 'Emily Davis',
-          lastActivity: 'Won',
-          daysSinceContact: 0,
-          isHRMS: false,
-          priority: 'high',
-          health: 'healthy',
-          source: 'HRMS connection',
-          status: 'Won - Nov 10, 2025'
-        }
-      ]
-    },
-    {
-      id: 'closed-lost',
-      name: 'Closed-Lost',
-      color: 'bg-red-100',
-      deals: [
-        {
-          id: 'deal-23',
-          companyName: 'FailedCorp',
-          dealName: 'Enterprise',
-          accountName: 'FailedCorp Ltd',
-          amount: 65000,
-          closeDate: '2025-11-20',
-          stage: 'closed-lost',
-          aiScore: 0,
-          contactName: 'David Kumar',
-          contactTitle: 'CTO',
-          owner: 'Sarah Chen',
-          lastActivity: 'Lost',
-          daysSinceContact: 0,
-          isHRMS: false,
-          priority: 'low',
-          health: 'stalled',
-          source: 'Lead Gen',
-          status: 'Lost - Nov 18, 2025 (Budget constraints)'
-        }
-      ]
-    }
+    { id: 'prospecting', name: 'Prospecting', color: 'bg-blue-100',  deals: [] },
+    { id: 'qualified',   name: 'Qualified',   color: 'bg-green-100', deals: [] },
+    { id: 'proposal',    name: 'Proposal',    color: 'bg-orange-100', deals: [] },
+    { id: 'negotiation', name: 'Negotiation', color: 'bg-purple-100', deals: [] },
+    { id: 'closed-won',  name: 'Closed-Won',  color: 'bg-green-200', deals: [] },
+    { id: 'closed-lost', name: 'Closed-Lost', color: 'bg-red-100',   deals: [] },
   ]);
 
-  // Fetch real deals from the backend on mount and inject any that
-  // don't already exist in the hardcoded sample stage data.
+  // Fetch all deals from the backend and populate stages.
+  // Re-runs whenever the DataContext deal count changes (e.g. after Add Deal).
   useEffect(() => {
-    fetchDeals().then(apiDeals => {
+    fetchDeals().then((apiDeals: any[]) => {
       if (!apiDeals.length) return;
-      setStages(prev => {
-        const existingIds = new Set(prev.flatMap(s => s.deals.map(d => d.id)));
-        const newDeals = apiDeals.filter((d: any) => !existingIds.has(d.id));
-        if (!newDeals.length) return prev;
-
-        return prev.map(stage => {
-          const toAdd: DealCard[] = newDeals
-            .filter((d: any) => d.stage === stage.id)
-            .map((d: any) => ({
-              id: d.id,
-              companyName: d.company_name || d.name,
-              dealName: d.name || d.title || 'Untitled',
-              accountName: d.company_name || d.name,
-              amount: parseFloat(d.value) || 0,
-              closeDate: d.expected_close_date ? d.expected_close_date.split('T')[0] : '',
-              stage: stage.id,
-              aiScore: d.probability || 0,
-              contactName: d.contact_name || '',
-              contactTitle: d.contact_title || '',
-              owner: d.assigned_to || 'current-user',
-              lastActivity: d.updated_at || d.created_at,
-              daysSinceContact: 0,
-              isHRMS: false,
-              priority: (d.priority?.toLowerCase() || 'medium') as 'high' | 'medium' | 'low',
-              health: 'healthy' as const,
-              source: d.source || 'manual',
-            }));
-          return toAdd.length ? { ...stage, deals: [...stage.deals, ...toAdd] } : stage;
-        });
-      });
+      setStages(prev => prev.map(stage => ({
+        ...stage,
+        deals: apiDeals
+          .filter((d: any) => d.stage === stage.id)
+          .map((d: any) => ({
+            id: d.id,
+            companyName: d.company_name || d.name || 'Unknown Company',
+            dealName: d.name || d.title || 'Untitled',
+            accountName: d.company_name || d.name || '',
+            amount: parseFloat(d.value) || 0,
+            // Strip time component so formatDisplayDate renders cleanly
+            closeDate: d.expected_close_date
+              ? d.expected_close_date.split('T')[0]
+              : '',
+            stage: stage.id,
+            aiScore: d.probability || 0,
+            contactName: d.contact_name || '',
+            contactTitle: d.contact_title || '',
+            owner: d.assigned_to || 'Unassigned',
+            // Store raw ISO; formatLastActivity() renders it human-readable on card
+            lastActivity: d.updated_at || d.created_at || '',
+            daysSinceContact: d.days_since_contact ?? 0,
+            isHRMS: Boolean(d.is_hrms),
+            hrmsDetails: d.hrms_details || '',
+            priority: (['high', 'medium', 'low'].includes(d.priority?.toLowerCase())
+              ? d.priority.toLowerCase()
+              : 'medium') as 'high' | 'medium' | 'low',
+            health: (['healthy', 'at-risk', 'stalled'].includes(d.health)
+              ? d.health
+              : 'healthy') as 'healthy' | 'at-risk' | 'stalled',
+            source: d.source || 'manual',
+            status: d.status || '',
+            createdAt: d.created_at || '',
+          })),
+      })));
     });
   }, [contextDeals.length]);
 
@@ -652,30 +182,41 @@ const DealsKanbanPage: React.FC = () => {
     }).length;
 
     const stalledDeals = allDeals.filter(d => d.daysSinceContact >= 5).length;
-    const avgCycle = 45; // kept as a fixed benchmark; no creation-date data in DealCard
+
+    // Compute average sales cycle from real closed-won deals that have a creation date.
+    // Falls back to null (displayed as "N/A") when no qualifying data exists.
+    const wonWithDates = (stages.find(s => s.id === 'closed-won')?.deals || []).filter(
+      d => d.createdAt && d.closeDate
+    );
+    const avgCycle = wonWithDates.length > 0
+      ? Math.round(wonWithDates.reduce((sum, d) => {
+          const created = new Date(d.createdAt!).getTime();
+          const closed  = new Date(d.closeDate + 'T12:00:00').getTime();
+          return sum + Math.max(0, (closed - created) / 86_400_000);
+        }, 0) / wonWithDates.length)
+      : null;
 
     return { totalDeals, totalValue, winRate, closingThisWeek, stalledDeals, avgCycle };
   }, [stages]);
 
   const aiInsights = useMemo(() => {
     const allDeals = stages.flatMap(stage => stage.deals);
-    const needAttention = [
-      { companyName: 'Acme Corp', amount: 50000 },
-      { companyName: 'BigCo Enterprise', amount: 75000 },
-      { companyName: 'StartCo', amount: 28000 }
-    ];
+    const activeDeals = allDeals.filter(d => !['closed-won', 'closed-lost'].includes(d.stage));
+
+    // Deals with no activity for 5+ days, sorted by descending value — real data driven
+    const needAttention = activeDeals
+      .filter(d => d.daysSinceContact >= 5)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+      .map(d => ({ id: d.id, companyName: d.companyName, amount: d.amount }));
 
     const negotiationDeals = stages.find(s => s.id === 'negotiation')?.deals || [];
-    const highProbValue = 280000;
+    // Sum of negotiation-stage deals = realistic "probable close" value this month
+    const highProbValue = negotiationDeals.reduce((sum, d) => sum + d.amount, 0);
 
-    const hrmsDeals = allDeals.filter(d => d.isHRMS && !['closed-won', 'closed-lost'].includes(d.stage));
+    const hrmsDeals = activeDeals.filter(d => d.isHRMS);
 
-    return {
-      needAttention,
-      negotiationDeals,
-      highProbValue,
-      hrmsDeals
-    };
+    return { needAttention, negotiationDeals, highProbValue, hrmsDeals };
   }, [stages]);
 
   const handleDragEnd = (result: DropResult) => {
@@ -712,6 +253,25 @@ const DealsKanbanPage: React.FC = () => {
     console.log(`Activity logged: Stage changed from ${sourceStage.name} to ${destStage.name} for ${movedDeal.companyName}`);
 
     setTimeout(() => setToast(null), 3000);
+  };
+
+  // Convert a raw ISO timestamp or human-readable string to a friendly label.
+  // Backend-injected deals carry ISO strings (e.g. "2026-01-15T10:30:00Z").
+  // Sample/dragged deals already carry strings like "3 days ago" — pass those through.
+  const formatLastActivity = (lastActivity: string): string => {
+    if (!lastActivity) return 'No activity';
+    if (/^\d{4}-\d{2}-\d{2}T/.test(lastActivity)) {
+      const d = new Date(lastActivity);
+      if (!isNaN(d.getTime())) {
+        const daysAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysAgo === 0) return 'Today';
+        if (daysAgo === 1) return '1 day ago';
+        if (daysAgo < 30) return `${daysAgo} days ago`;
+        if (daysAgo < 365) return `${Math.floor(daysAgo / 30)}mo ago`;
+        return formatDisplayDate(d);
+      }
+    }
+    return lastActivity;
   };
 
   const formatCurrency = (amount: number) => {
@@ -946,11 +506,29 @@ const DealsKanbanPage: React.FC = () => {
         setToast({ message: 'Deal marked as Lost', type: 'info' });
         setTimeout(() => setToast(null), 3000);
         break;
-      case 'delete':
-        setToast({ message: 'Deal deleted', type: 'error' });
-        setTimeout(() => setToast(null), 3000);
+      case 'delete': {
+        // Show confirmation modal instead of deleting immediately
+        const dealToDelete = stages.flatMap(s => s.deals).find(d => d.id === dealId);
+        if (dealToDelete) {
+          setDeleteConfirmDeal({ id: dealToDelete.id, name: dealToDelete.dealName });
+        }
         break;
+      }
     }
+  };
+
+  // Remove the deal from all stages and close the confirmation modal
+  const confirmDeleteDeal = () => {
+    if (!deleteConfirmDeal) return;
+    setStages(prev =>
+      prev.map(stage => ({
+        ...stage,
+        deals: stage.deals.filter(d => d.id !== deleteConfirmDeal.id),
+      }))
+    );
+    setToast({ message: `"${deleteConfirmDeal.name}" deleted`, type: 'error' });
+    setTimeout(() => setToast(null), 3000);
+    setDeleteConfirmDeal(null);
   };
 
   const toggleStageCollapse = (stageId: string) => {
@@ -1043,22 +621,79 @@ const DealsKanbanPage: React.FC = () => {
     };
   }, []);
 
-  const filterDealsBySearch = (deals: PipelineStage['deals']) => {
-    if (!debouncedSearch) return deals;
-    const q = debouncedSearch.toLowerCase();
-    return deals.filter(d =>
-      [d.dealName, d.accountName, d.contactName].some(f => f?.toLowerCase().includes(q))
-    );
+  // All active filter + search predicates applied in one pass
+  const filterDeals = (deals: PipelineStage['deals']) => {
+    return deals.filter(d => {
+      // Text search across deal name, account, contact
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase();
+        if (![d.dealName, d.accountName, d.contactName].some(f => f?.toLowerCase().includes(q))) {
+          return false;
+        }
+      }
+      // Owner filter — 'me' matches the logged-in user's name from AuthContext
+      if (selectedOwner === 'me' && user && d.owner !== user.name) return false;
+      if (selectedOwner === 'unassigned' && d.owner && d.owner !== 'Unassigned') return false;
+
+      // Close date filter
+      if (selectedCloseDateFilter !== 'all' && d.closeDate) {
+        const closeMs = new Date(d.closeDate + 'T12:00:00').getTime();
+        const now = Date.now();
+        if (selectedCloseDateFilter === 'week' && closeMs > now + 7 * 86_400_000) return false;
+        if (selectedCloseDateFilter === 'month') {
+          const n = new Date();
+          const endOfMonth = new Date(n.getFullYear(), n.getMonth() + 1, 0, 23, 59, 59).getTime();
+          if (closeMs > endOfMonth) return false;
+        }
+        if (selectedCloseDateFilter === 'quarter') {
+          const n = new Date();
+          const qEnd = Math.floor(n.getMonth() / 3) + 1;
+          const endOfQ = new Date(n.getFullYear(), qEnd * 3, 0, 23, 59, 59).getTime();
+          if (closeMs > endOfQ) return false;
+        }
+      }
+
+      // Value range filter
+      if (selectedValueFilter === '0-25k'  && d.amount > 25_000)  return false;
+      if (selectedValueFilter === '25-50k' && (d.amount < 25_000 || d.amount > 50_000)) return false;
+      if (selectedValueFilter === '50-100k' && (d.amount < 50_000 || d.amount > 100_000)) return false;
+      if (selectedValueFilter === '100k+'  && d.amount < 100_000) return false;
+
+      // Source filter
+      if (selectedSourceFilter === 'hrms'    && !d.isHRMS) return false;
+      if (selectedSourceFilter === 'website' && !d.source?.toLowerCase().includes('website')) return false;
+      if (selectedSourceFilter === 'leadgen' && !d.source?.toLowerCase().includes('lead gen')) return false;
+      if (selectedSourceFilter === 'manual'  && d.isHRMS) return false;
+
+      return true;
+    });
+  };
+
+  // Sort a filtered deal list by the active sort key
+  const sortDeals = (deals: PipelineStage['deals']) => {
+    return [...deals].sort((a, b) => {
+      switch (sortBy) {
+        case 'value':    return b.amount - a.amount;
+        case 'health':   return b.aiScore - a.aiScore;
+        case 'activity': return a.daysSinceContact - b.daysSinceContact;
+        case 'closeDate': {
+          const aMs = a.closeDate ? new Date(a.closeDate + 'T12:00:00').getTime() : Infinity;
+          const bMs = b.closeDate ? new Date(b.closeDate + 'T12:00:00').getTime() : Infinity;
+          return aMs - bMs;
+        }
+        default: return 0;
+      }
+    });
   };
 
   const getVisibleDeals = (stage: PipelineStage) => {
-    const filtered = filterDealsBySearch(stage.deals);
+    const filtered = sortDeals(filterDeals(stage.deals));
     const count = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
     return filtered.slice(0, count);
   };
 
   const hasMoreDeals = (stage: PipelineStage) => {
-    const filtered = filterDealsBySearch(stage.deals);
+    const filtered = filterDeals(stage.deals);
     const count = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
     return count < filtered.length;
   };
@@ -1225,7 +860,10 @@ const DealsKanbanPage: React.FC = () => {
                 <span className="text-sm font-medium text-gray-700">Days Avg Cycle</span>
                 <Clock className="h-5 w-5 text-gray-600" />
               </div>
-              <div className="text-2xl font-bold text-gray-900">{kpis.avgCycle}</div>
+              {/* null = no closed-won deals with dates yet; show N/A rather than a fake number */}
+              <div className="text-2xl font-bold text-gray-900">
+                {kpis.avgCycle !== null ? kpis.avgCycle : <span className="text-base text-gray-400">N/A</span>}
+              </div>
             </button>
           </div>
       </div>
@@ -1523,7 +1161,7 @@ const DealsKanbanPage: React.FC = () => {
           <div className="flex gap-4 min-w-max">
             {displayedStages.map((stage) => {
               const isCollapsed = collapsedStages.includes(stage.id);
-              const filteredDeals = filterDealsBySearch(stage.deals);
+              const filteredDeals = filterDeals(stage.deals);
               // Hide column entirely when search is active and nothing matches
               if (debouncedSearch && filteredDeals.length === 0) return null;
               const stageTotal = filteredDeals.reduce((sum, d) => sum + d.amount, 0);
@@ -1573,12 +1211,13 @@ const DealsKanbanPage: React.FC = () => {
                     </div>
                   </div>
 
-                <Droppable droppableId={stage.id}>
+                {/* isDropDisabled on collapsed stages prevents silent drops into hidden position */}
+                <Droppable droppableId={stage.id} isDropDisabled={isCollapsed}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`${stage.color} rounded-b-lg px-3 py-2 ${isCollapsed ? 'min-h-[50px]' : 'min-h-[500px] max-h-[700px] overflow-y-auto'} space-y-3 ${
+                      className={`${stage.color} rounded-b-lg px-3 py-2 ${isCollapsed ? 'min-h-[50px]' : 'min-h-[500px] max-h-[700px] overflow-y-auto'} space-y-2 ${
                         snapshot.isDraggingOver ? 'ring-2 ring-blue-400' : ''
                       }`}
                       style={{ scrollbarWidth: 'thin' }}
@@ -1586,6 +1225,16 @@ const DealsKanbanPage: React.FC = () => {
                       {!isCollapsed && getVisibleDeals(stage).map((deal, index) => {
                         const isStalled = deal.daysSinceContact >= 5;
                         const isHighPriority = deal.priority === 'high';
+
+                        // Close date urgency for at-a-glance scanning
+                        const closeDaysLeft = deal.closeDate
+                          ? Math.ceil((new Date(deal.closeDate + 'T12:00:00').getTime() - Date.now()) / 86_400_000)
+                          : null;
+                        const closeDateColor =
+                          closeDaysLeft === null ? 'text-gray-500' :
+                          closeDaysLeft < 0    ? 'text-red-600 font-semibold' :
+                          closeDaysLeft <= 7   ? 'text-orange-600 font-semibold' :
+                                                 'text-gray-600';
 
                         return (
                         <Draggable key={deal.id} draggableId={deal.id} index={index}>
@@ -1600,42 +1249,38 @@ const DealsKanbanPage: React.FC = () => {
                                 snapshot.isDragging ? 'shadow-xl scale-105 ring-2' : 'hover:shadow-md hover:-translate-y-0.5'
                               }`}
                               style={{
-                                padding: '16px',
+                                padding: '12px 14px',
                                 border: snapshot.isDragging ? '2px solid #667eea' :
                                         highlightedDeals.includes(deal.id) ? '2px solid #dc3545' :
                                         '1px solid #E0E0E0',
-                                borderLeft: isStalled ? '4px solid #ffc107' : isHighPriority ? '4px solid #dc3545' : undefined,
+                                // Left accent: stalled = amber, high priority = red, default = none
+                                borderLeft: isStalled
+                                  ? '4px solid #ffc107'
+                                  : isHighPriority
+                                  ? '4px solid #dc3545'
+                                  : undefined,
                                 opacity: snapshot.isDragging ? 0.9 : 1
                               }}
                               onMouseEnter={(e) => {
-                                if (!snapshot.isDragging) {
-                                  e.currentTarget.style.borderColor = '#667eea';
-                                }
+                                if (!snapshot.isDragging) e.currentTarget.style.borderColor = '#667eea';
                               }}
                               onMouseLeave={(e) => {
                                 if (!snapshot.isDragging) {
-                                  e.currentTarget.style.borderColor = highlightedDeals.includes(deal.id) ? '#dc3545' : '#E0E0E0';
+                                  e.currentTarget.style.borderColor =
+                                    highlightedDeals.includes(deal.id) ? '#dc3545' : '#E0E0E0';
                                 }
                               }}
                             >
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex-1">
-                                  <h4 className="font-bold text-base mb-1" style={{ color: '#333' }}>
-                                    {deal.dealName}
-                                  </h4>
-                                  <p className="text-sm font-medium" style={{ color: '#333' }}>
-                                    {deal.companyName}
-                                  </p>
-                                </div>
+                              {/* Row 1: Deal name + HRMS badge */}
+                              <div className="flex items-start justify-between mb-1">
+                                <h4 className="font-semibold text-sm leading-snug text-gray-900 flex-1 mr-2 line-clamp-2">
+                                  {deal.dealName}
+                                </h4>
                                 {deal.isHRMS && (
                                   <button
                                     onClick={(e) => handleHRMSBadgeClick(e, deal)}
-                                    className="flex items-center space-x-1 px-2.5 py-1 text-xs rounded-md font-medium transition-all hover:shadow-md"
-                                    style={{
-                                      backgroundColor: '#fff3cd',
-                                      border: '1px solid #ff9800',
-                                      color: '#e65100'
-                                    }}
+                                    className="flex-shrink-0 flex items-center space-x-1 px-2 py-0.5 text-xs rounded font-medium hover:shadow-sm transition-all"
+                                    style={{ backgroundColor: '#fff3cd', border: '1px solid #ff9800', color: '#e65100' }}
                                   >
                                     <Building2 className="h-3 w-3" />
                                     <span>HRMS</span>
@@ -1643,142 +1288,134 @@ const DealsKanbanPage: React.FC = () => {
                                 )}
                               </div>
 
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleCardClick(deal.id);
-                                }}
-                                className="text-lg font-bold mb-2 transition-opacity hover:opacity-80 text-left w-full"
-                                style={{ color: '#667eea' }}
-                              >
-                                {formatCurrency(deal.amount)}
-                              </button>
+                              {/* Row 2: Company name (muted) */}
+                              <p className="text-xs text-gray-500 mb-2 truncate">{deal.companyName}</p>
 
-                              <div className="flex items-center space-x-1 text-sm text-gray-600 mb-3">
-                                <Calendar className="h-3.5 w-3.5" />
-                                <span>{formatDisplayDate(deal.closeDate)}</span>
+                              {/* Row 3: Amount — primary visual anchor on the card */}
+                              <div className="text-base font-bold mb-2" style={{ color: '#4f46e5' }}>
+                                {formatCurrency(deal.amount)}
                               </div>
 
+                              {/* Row 4: Close date with urgency colour */}
+                              <div className={`flex items-center space-x-1 text-xs mb-2 ${closeDateColor}`}>
+                                <Calendar className="h-3 w-3 flex-shrink-0" />
+                                <span>{formatDisplayDate(deal.closeDate)}</span>
+                                {closeDaysLeft !== null && closeDaysLeft < 0 && (
+                                  <span className="ml-1 px-1 py-0.5 bg-red-100 text-red-700 rounded text-xs">Overdue</span>
+                                )}
+                                {closeDaysLeft !== null && closeDaysLeft >= 0 && closeDaysLeft <= 7 && (
+                                  <span className="ml-1 px-1 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">This week</span>
+                                )}
+                              </div>
+
+                              {/* Row 5: AI Health — compact pill + expandable score tooltip */}
                               {!['closed-won', 'closed-lost'].includes(stage.id) && (
-                                <div className="mb-3 relative">
+                                <div className="mb-2 relative">
                                   <button
                                     onClick={(e) => handleScoreClick(e, deal.id)}
-                                    className="w-full"
+                                    className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
                                   >
-                                    <div className="flex items-center justify-between text-xs mb-1">
-                                      <span className="flex items-center space-x-1" style={{ color: '#667eea' }}>
-                                        <Sparkles className="h-3 w-3" />
-                                        <span className="font-medium">AI Health</span>
-                                      </span>
-                                      <span className="font-bold" style={{ color: '#667eea' }}>{deal.aiScore}/100</span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <span className="flex items-center space-x-1 text-xs" style={{ color: '#667eea' }}>
+                                      <Sparkles className="h-3 w-3" />
+                                      <span className="font-medium">AI</span>
+                                    </span>
+                                    {/* Thin progress bar — less dominant than before */}
+                                    <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                                       <div
-                                        className="h-2 rounded-full transition-all duration-300"
+                                        className="h-1.5 rounded-full transition-all duration-300"
                                         style={{
                                           width: `${deal.aiScore}%`,
-                                          backgroundColor: '#667eea'
+                                          backgroundColor: deal.aiScore >= 80 ? '#16a34a' : deal.aiScore >= 60 ? '#667eea' : '#f59e0b'
                                         }}
                                       />
                                     </div>
+                                    <span className="text-xs font-bold" style={{ color: '#667eea' }}>{deal.aiScore}</span>
                                   </button>
 
-                                  {showScoreTooltip === deal.id && (
-                                    <div className="absolute z-50 left-0 top-full mt-2 w-72 bg-white rounded-lg shadow-xl border-2 p-4" style={{ borderColor: '#667eea' }}>
-                                      <div className="mb-3">
-                                        <div className="text-sm font-semibold mb-2 flex items-center space-x-2" style={{ color: '#667eea' }}>
-                                          <Sparkles className="h-4 w-4" />
-                                          <span>AI Health Score: {deal.aiScore}/100</span>
+                                  {showScoreTooltip === deal.id && (() => {
+                                    // Compute score signals from real deal fields
+                                    const activitySignal = deal.daysSinceContact === 0 ? { label: 'Activity today', delta: +20, good: true }
+                                      : deal.daysSinceContact <= 2 ? { label: `Active ${deal.daysSinceContact}d ago`, delta: +15, good: true }
+                                      : deal.daysSinceContact <= 5 ? { label: `${deal.daysSinceContact}d since contact`, delta: +5, good: true }
+                                      : { label: `No activity (${deal.daysSinceContact}d)`, delta: -15, good: false };
+
+                                    const sizeSignal = deal.amount >= 100_000 ? { label: 'High-value deal', delta: +15, good: true }
+                                      : deal.amount >= 50_000 ? { label: 'Mid-value deal', delta: +10, good: true }
+                                      : { label: 'Standard deal size', delta: +5, good: true };
+
+                                    const healthSignal = deal.health === 'healthy'  ? { label: 'Deal health: good', delta: +5, good: true }
+                                      : deal.health === 'at-risk' ? { label: 'Deal health: at risk', delta: -5, good: false }
+                                      : { label: 'Deal stalled', delta: -15, good: false };
+
+                                    const closeDateSignal = closeDaysLeft === null ? null
+                                      : closeDaysLeft < 0  ? { label: 'Close date overdue', delta: -10, good: false }
+                                      : closeDaysLeft <= 7 ? { label: 'Closing this week', delta: +10, good: true }
+                                      : closeDaysLeft <= 30 ? { label: 'Close date this month', delta: +5, good: true }
+                                      : { label: 'Close date far out', delta: -2, good: false };
+
+                                    const signals = [activitySignal, sizeSignal, healthSignal, ...(closeDateSignal ? [closeDateSignal] : [])];
+                                    return (
+                                      <div className="absolute z-50 left-0 top-full mt-2 w-64 bg-white rounded-lg shadow-xl border-2 p-3" style={{ borderColor: '#667eea' }}>
+                                        <div className="text-xs font-semibold mb-2 flex items-center space-x-1" style={{ color: '#667eea' }}>
+                                          <Sparkles className="h-3.5 w-3.5" />
+                                          <span>AI Health: {deal.aiScore}/100</span>
+                                        </div>
+                                        <div className="space-y-1.5 text-xs">
+                                          {signals.map((s, i) => (
+                                            <div key={i} className="flex items-center justify-between">
+                                              <span className={`flex items-center space-x-1 ${s.good ? 'text-green-600' : 'text-yellow-600'}`}>
+                                                {s.good ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                                                <span>{s.label}</span>
+                                              </span>
+                                              <span className={`font-semibold ${s.delta > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {s.delta > 0 ? `+${s.delta}` : s.delta}
+                                              </span>
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
-                                      <div className="space-y-2 text-xs">
-                                        <div className="flex items-center justify-between">
-                                          <span className="flex items-center space-x-1 text-green-600">
-                                            <CheckCircle2 className="h-3 w-3" />
-                                            <span>Contact engagement</span>
-                                          </span>
-                                          <span className="font-medium">+20</span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                          <span className="flex items-center space-x-1 text-green-600">
-                                            <CheckCircle2 className="h-3 w-3" />
-                                            <span>Deal size match</span>
-                                          </span>
-                                          <span className="font-medium">+15</span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                          <span className="flex items-center space-x-1 text-yellow-600">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            <span>Stage duration</span>
-                                          </span>
-                                          <span className="font-medium">-5</span>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                          <span className="flex items-center space-x-1 text-yellow-600">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            <span>No activity (5 days)</span>
-                                          </span>
-                                          <span className="font-medium">-12</span>
-                                        </div>
-                                      </div>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleCardClick(deal.id);
-                                        }}
-                                        className="mt-3 w-full text-xs px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                      >
-                                        View Details
-                                      </button>
-                                    </div>
-                                  )}
+                                    );
+                                  })()}
                                 </div>
                               )}
 
-                              <button
-                                onClick={(e) => handleContactClick(e, deal.id)}
-                                className="flex items-center space-x-2 mb-2 pb-2 border-b border-gray-100 hover:opacity-80 transition-opacity w-full text-left"
-                                style={{ fontSize: '13px', color: '#666' }}
-                              >
-                                <User className="h-3.5 w-3.5" style={{ color: '#999' }} />
-                                <span>{deal.contactName} • {deal.contactTitle}</span>
-                              </button>
-
-                              <div className="mb-3" style={{ fontSize: '12px', color: '#888' }}>
-                                <span className="font-medium">Owner:</span> {deal.owner}
+                              {/* Row 6: Contact + Owner in a single compact row */}
+                              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                                <button
+                                  onClick={(e) => handleContactClick(e, deal.id)}
+                                  className="flex items-center space-x-1 text-xs text-gray-500 hover:text-blue-600 transition-colors truncate max-w-[60%]"
+                                >
+                                  <User className="h-3 w-3 flex-shrink-0" />
+                                  <span className="truncate">{deal.contactName || '—'}</span>
+                                </button>
+                                <button
+                                  onClick={(e) => handleStatusClick(e, deal)}
+                                  className={`flex items-center space-x-1 text-xs font-medium transition-colors ${
+                                    isStalled ? 'text-red-500 hover:text-red-700' :
+                                    deal.health === 'healthy' ? 'text-green-600 hover:text-green-800' :
+                                    deal.health === 'at-risk' ? 'text-yellow-600 hover:text-yellow-800' :
+                                    'text-gray-500'
+                                  }`}
+                                >
+                                  {stage.id === 'closed-won' && <><CheckCircle2 className="h-3 w-3" /><span>Won</span></>}
+                                  {stage.id === 'closed-lost' && <><XCircle className="h-3 w-3" /><span>Lost</span></>}
+                                  {!['closed-won', 'closed-lost'].includes(stage.id) && (
+                                    <>
+                                      {getHealthIcon(deal.health)}
+                                      {isStalled
+                                        ? <span>{deal.daysSinceContact}d stalled</span>
+                                        : <span>{formatLastActivity(deal.lastActivity)}</span>
+                                      }
+                                    </>
+                                  )}
+                                </button>
                               </div>
-
-                              <button
-                                onClick={(e) => handleStatusClick(e, deal)}
-                                className="flex items-center space-x-1 mb-3 hover:underline w-full text-left italic"
-                                style={{
-                                  fontSize: '12px',
-                                  color: deal.daysSinceContact >= 5 ? '#dc3545' :
-                                         deal.health === 'healthy' ? '#28a745' :
-                                         deal.health === 'at-risk' ? '#ffc107' : '#6c757d'
-                                }}
-                              >
-                                {getHealthIcon(deal.health)}
-                                {stage.id === 'closed-won' && <span className="font-medium">Won</span>}
-                                {stage.id === 'closed-lost' && <span className="font-medium">Lost</span>}
-                                {!['closed-won', 'closed-lost'].includes(stage.id) && (
-                                  <>
-                                    {deal.daysSinceContact >= 5 ? (
-                                      <span className="font-medium">Stalled: {deal.daysSinceContact} days</span>
-                                    ) : (
-                                      <span className="font-medium">Active: {deal.lastActivity}</span>
-                                    )}
-                                  </>
-                                )}
-                              </button>
-
-                              <button
-                                onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                                className="w-full flex items-center justify-center space-x-1 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg transition-colors text-sm"
-                              >
-                                <Eye className="h-4 w-4" />
-                                <span>View</span>
-                              </button>
+                              {/* Owner shown below contact row — less prominent */}
+                              {deal.owner && (
+                                <div className="text-xs text-gray-400 mt-1 truncate">
+                                  Owner: {deal.owner}
+                                </div>
+                              )}
                             </div>
                           )}
                         </Draggable>
@@ -1786,9 +1423,17 @@ const DealsKanbanPage: React.FC = () => {
                       })}
                       {provided.placeholder}
 
+                      {/* Empty state when search/filters produce no results */}
+                      {!isCollapsed && filterDeals(stage.deals).length === 0 && !debouncedSearch && (
+                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                          <Target className="h-8 w-8 mb-2 opacity-40" />
+                          <p className="text-xs text-center">No deals in this stage</p>
+                        </div>
+                      )}
+
                       {isCollapsed && (
                         <div className="text-center text-sm text-gray-500 py-4">
-                          Column collapsed ({stage.deals.length} deals hidden)
+                          {stage.deals.length} deal{stage.deals.length !== 1 ? 's' : ''} hidden
                         </div>
                       )}
 
@@ -2097,6 +1742,43 @@ const DealsKanbanPage: React.FC = () => {
           >
             Delete Deal
           </button>
+        </div>
+      )}
+
+      {/* Delete confirmation — shown before any destructive removal */}
+      {deleteConfirmDeal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4">
+            <div className="px-6 py-5 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-900">Delete Deal</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-sm text-gray-600 mb-1">
+                Are you sure you want to delete:
+              </p>
+              <p className="text-sm font-semibold text-gray-900 mb-4">
+                "{deleteConfirmDeal.name}"
+              </p>
+              <div className="flex items-start space-x-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-red-700">This action cannot be undone. All deal data will be permanently removed.</p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end space-x-3">
+              <button
+                onClick={() => setDeleteConfirmDeal(null)}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteDeal}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

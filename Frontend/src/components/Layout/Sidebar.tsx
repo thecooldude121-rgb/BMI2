@@ -4,7 +4,7 @@ import {
   LayoutDashboard, UserPlus, Users, Building, DollarSign,
   Activity, FileText, BarChart3, Target, Calendar, UserCheck,
   Plug, Settings, Trophy, ChevronDown, ChevronRight,
-  Building2, Phone, Video, CheckSquare, Layers, PanelLeftClose,
+  Building2, Phone, Video, CheckSquare, TrendingUp, PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
 
@@ -27,7 +27,11 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
       { name: 'Leads',     href: '/crm/leads',     icon: UserPlus },
       { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
       { name: 'Accounts',  href: '/accounts',      icon: Building },
+      // "Deals" = Kanban pipeline board (the daily working view)
       { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
+      // "Forecast" = pipeline analytics & revenue forecast (was "Pipeline" — renamed to match
+      //   HubSpot/Salesforce convention where Deals = board, Forecast = analytics)
+      { name: 'Forecast',  href: '/crm/pipeline',  icon: TrendingUp },
       {
         name: 'Activities', icon: Activity,
         children: [
@@ -38,7 +42,6 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
       },
       { name: 'Documents', href: '/crm/documents', icon: FileText },
       { name: 'Reports',   href: '/crm/reports',   icon: BarChart3 },
-      { name: 'Pipeline',  href: '/crm/pipeline',  icon: Layers },
     ],
   },
   {
