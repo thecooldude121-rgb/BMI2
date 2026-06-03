@@ -6,6 +6,7 @@ import {
   hasSeniorBuyer,
   StakeholderContact,
 } from '../../../config/contactRoles';
+import { ContactAutocomplete, SearchedContact } from './ContactAutocomplete';
 
 interface AccountMatch {
   name: string;
@@ -109,6 +110,16 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
     setAccountMatches([]);
   };
   const missingBuyer = !hasSeniorBuyer(formData.contactRole, additionalContacts);
+
+  const handleContactSelect = (contact: SearchedContact | null) => {
+    if (contact) {
+      onChange('primaryContactId', contact.id);
+      onChange('primaryContactName', contact.name);
+    } else {
+      // null = new contact typed free-hand; keep the name, clear the linked ID
+      onChange('primaryContactId', '');
+    }
+  };
 
   const addContact = () => {
     onChange('additionalContacts', [
@@ -233,16 +244,17 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
           </div>
 
           <div className="flex items-center space-x-2">
-            <input
-              type="text"
+            <ContactAutocomplete
               value={formData.primaryContactName}
-              onChange={(e) => onChange('primaryContactName', e.target.value)}
+              onChange={(v) => {
+                onChange('primaryContactName', v);
+                // Free-typing clears any previously linked contact ID
+                if (formData.primaryContactId) onChange('primaryContactId', '');
+              }}
+              onContactSelect={handleContactSelect}
+              accountName={formData.accountName}
               placeholder="Search or enter contact name…"
-              className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
-                validationErrors.primaryContactName
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-gray-300 focus:ring-blue-500'
-              }`}
+              hasError={!!validationErrors.primaryContactName}
             />
             <select
               value={formData.contactRole ?? DEFAULT_CONTACT_ROLE.id}
