@@ -3,6 +3,7 @@
 // imported directly into unit tests without any mocking setup.
 
 import { getCurrency, BASE_CURRENCY_CODE, CURRENCY_MAP } from '../config/currencies';
+export { BASE_CURRENCY_CODE } from '../config/currencies';
 
 // ─── Mock FX Rates ────────────────────────────────────────────────────────────
 // Rates are expressed as: 1 USD = N <currency>
