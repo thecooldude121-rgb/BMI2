@@ -5,7 +5,7 @@
 //
 // category is used for future grouping/filtering in win-loss reports.
 
-export type CompetitorCategory = 'crm' | 'erp' | 'marketing' | 'analytics' | 'other';
+export type CompetitorCategory = 'crm' | 'erp' | 'hrms' | 'marketing' | 'analytics' | 'other';
 
 export interface CompetitorOption {
   id: string;
@@ -33,6 +33,12 @@ export const COMPETITORS: CompetitorOption[] = [
   { id: 'sap',                 name: 'SAP',                  category: 'erp'       },
   { id: 'oracle',              name: 'Oracle',               category: 'erp'       },
   { id: 'marketo',             name: 'Marketo',              category: 'marketing' },
+  // HRMS / HCM competitors (relevant to BMI's HRMS module)
+  { id: 'darwinbox',           name: 'Darwinbox',            category: 'hrms'      },
+  { id: 'workday',             name: 'Workday',              category: 'hrms'      },
+  { id: 'bamboohr',            name: 'BambooHR',             category: 'hrms'      },
+  { id: 'sap-successfactors',  name: 'SAP SuccessFactors',   category: 'erp'       },
+  { id: 'freshworks',          name: 'Freshworks',           category: 'crm'       },
   { id: 'none',                name: 'No Competition',       category: 'other'     },
 ];
 

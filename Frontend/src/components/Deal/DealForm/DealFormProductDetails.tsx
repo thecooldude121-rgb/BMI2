@@ -206,10 +206,30 @@ interface DealFormProductDetailsProps {
   onChange: (field: string, value: any) => void;
 }
 
+// ─── Scroll + ring-pulse when AI extraction adds competitors ──────────────────
+function useCompetitorPulse(formData: any) {
+  const prevCount = useRef<number>(0);
+  useEffect(() => {
+    const count = (formData.competitors ?? []).length;
+    if (count > prevCount.current) {
+      const el = document.getElementById('competing-against-field');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        el.style.transition = 'box-shadow 0.25s ease';
+        el.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.45)';
+        setTimeout(() => { el.style.boxShadow = '0 0 0 0 rgba(99,102,241,0)'; }, 1200);
+        setTimeout(() => { el.style.boxShadow = ''; el.style.transition = ''; }, 1500);
+      }
+    }
+    prevCount.current = count;
+  }, [(formData.competitors ?? []).length]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export const DealFormProductDetails: React.FC<DealFormProductDetailsProps> = ({
   formData,
   onChange,
 }) => {
+  useCompetitorPulse(formData);
   const products = ['Basic Plan', 'Growth Plan', 'Enterprise Plan', 'Custom Solution', 'Add-on Module'];
   const contractTerms = ['Monthly', 'Quarterly', 'Annual', 'Multi-year'];
   const paymentTerms = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 60', 'Custom'];
@@ -270,7 +290,7 @@ export const DealFormProductDetails: React.FC<DealFormProductDetailsProps> = ({
         </div>
 
         {/* Competing Against */}
-        <div>
+        <div id="competing-against-field">
           <div className="flex items-center space-x-2 mb-2">
             <Swords className="h-4 w-4 text-gray-500" />
             <label className="block text-sm font-medium text-gray-700">

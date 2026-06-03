@@ -7,6 +7,8 @@
 // `emailParser` — swap that single export to change backends.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { COMPETITORS, Competitor } from '../config/competitors';
+
 export interface Suggestion<T> {
   value: T;
   confidence: 'high' | 'medium' | 'low';
@@ -22,6 +24,7 @@ export interface ParsedEmailExtraction {
   product?: Suggestion<string>;
   nextSteps?: Suggestion<string>;
   closeDate?: Suggestion<string>; // always ISO YYYY-MM-DD
+  competitors?: Suggestion<Competitor[]>;
 }
 
 export type ExtractionField = keyof ParsedEmailExtraction;
@@ -51,6 +54,7 @@ class MockEmailParser implements EmailParser {
     result.closeDate = this.extractCloseDate(t);
     result.product = this.extractProduct(t);
     result.nextSteps = this.extractNextSteps(t);
+    result.competitors = this.extractCompetitors(t);
     result.dealName = this.synthesizeDealName(result);
 
     // Remove undefined keys so callers can iterate cleanly
@@ -322,6 +326,53 @@ class MockEmailParser implements EmailParser {
     }
 
     return undefined;
+  }
+
+  // ── Competitors ───────────────────────────────────────────────────────────
+
+  private extractCompetitors(t: string): Suggestion<Competitor[]> | undefined {
+    // Words/fragments that indicate competitive context around a product name
+    const COMPETITIVE_WORDS = [
+      'compar', 'evaluat', 'consider', 'shortlist', ' vs ', 'versus',
+      'instead', 'switch', 'replac', 'altern', 'currently', 'using',
+      ' use ', 'look at', 'check', 'trial', 'demo', 'competitor',
+      'option', 'against', 'also tried', 'also tested',
+    ];
+
+    const found: Competitor[] = [];
+    let firstEvidence = '';
+
+    for (const option of COMPETITORS) {
+      if (option.id === 'none') continue;
+
+      const escapedName = option.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameRe = new RegExp(`\\b${escapedName}\\b`, 'i');
+
+      const matchIdx = t.search(nameRe);
+      if (matchIdx === -1) continue;
+
+      // Check ±100 chars around the match for competitive language
+      const ctx = t
+        .slice(Math.max(0, matchIdx - 100), matchIdx + option.name.length + 100)
+        .toLowerCase();
+
+      if (COMPETITIVE_WORDS.some(w => ctx.includes(w))) {
+        found.push({ id: option.id, name: option.name, isCustom: false });
+        if (!firstEvidence) {
+          const sentenceRe = new RegExp(`[^.!?\\n]*\\b${escapedName}\\b[^.!?\\n]*`, 'i');
+          const m = t.match(sentenceRe);
+          if (m) firstEvidence = m[0].trim();
+        }
+      }
+    }
+
+    if (found.length === 0) return undefined;
+
+    return {
+      value: found,
+      confidence: 'medium',
+      evidence: firstEvidence || found.map(c => c.name).join(', '),
+    };
   }
 
   // ── Deal Name synthesis ────────────────────────────────────────────────────
