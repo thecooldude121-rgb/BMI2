@@ -27,7 +27,7 @@
  *   - Only 'overdue' and 'stalled' receive a card background tint.
  *     These are the two states that demand immediate action.  All others use
  *     border + chip only — less noise, faster scanning.
- *   - Tints are very subtle (4-6% opacity equivalent via Tailwind bg-*/30)
+ *   - Tints are very subtle (4-6% opacity equivalent via Tailwind bg-{color}/30)
  *     — enough to distinguish a column at a glance without making the board
  *     look like a traffic light.
  *   - The chip uses a colored status dot rather than a fully saturated filled
