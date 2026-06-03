@@ -110,11 +110,52 @@ const DealsKanbanPage: React.FC = () => {
   // Fetch all deals from the backend and populate stages.
   // Re-runs whenever the DataContext deal count changes (e.g. after Add Deal).
   useEffect(() => {
+    // Cancellation flag: if this effect re-fires before the previous fetch
+    // resolves (e.g. rapid context changes), the stale response is discarded
+    // and never written to state — preventing races that can produce duplicates.
+    let cancelled = false;
+
     fetchDeals().then((apiDeals: any[]) => {
-      if (!apiDeals.length) return;
+      if (cancelled) return;
+
+      // ── Defensive logging ──────────────────────────────────────────────────
+      // Root cause: backend JOINs (stakeholders, tags, contacts) inflate rows.
+      // Any record with a missing/non-string id is unusable as a React key and
+      // as a drag-and-drop draggableId, so we log and drop them here.
+      const malformed = apiDeals.filter(
+        (d: any) => !d.id || typeof d.id !== 'string'
+      );
+      if (malformed.length > 0) {
+        console.warn(
+          `[Pipeline] ${malformed.length} deal(s) dropped — missing or non-string id.`,
+          malformed
+        );
+      }
+
+      // ── Deduplication at ingestion ─────────────────────────────────────────
+      // Use a Map keyed by id so last-occurrence wins (most-recently-updated
+      // row from a JOIN-inflated backend response).  This is the primary fix
+      // for duplicate cards: even if the API returns the same deal N times,
+      // only one DealCard enters state.
+      const seen = new Map<string, any>();
+      apiDeals.forEach((d: any) => {
+        if (d.id && typeof d.id === 'string') seen.set(d.id, d);
+      });
+      const dedupedDeals = Array.from(seen.values());
+
+      if (dedupedDeals.length !== apiDeals.length) {
+        console.warn(
+          `[Pipeline] API returned ${apiDeals.length} rows, deduped to ` +
+          `${dedupedDeals.length} (${apiDeals.length - dedupedDeals.length} duplicates removed). ` +
+          `Check backend for JOIN inflation.`
+        );
+      }
+
+      if (!dedupedDeals.length) return;
+
       setStages(prev => prev.map(stage => ({
         ...stage,
-        deals: apiDeals
+        deals: dedupedDeals
           .filter((d: any) => d.stage === stage.id)
           .map((d: any) => ({
             id: d.id,
@@ -148,6 +189,9 @@ const DealsKanbanPage: React.FC = () => {
           })),
       })));
     });
+
+    // Cleanup: mark this fetch as stale when the effect re-runs or unmounts
+    return () => { cancelled = true; };
   }, [contextDeals.length]);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -163,22 +207,31 @@ const DealsKanbanPage: React.FC = () => {
   }, [searchTerm]);
 
   const kpis = useMemo(() => {
-    // Always computed from the FULL unfiltered dataset — never from search/filter subsets
-    const allDeals = stages.flatMap(stage => stage.deals);
+    // Dedup across stages before counting: if a deal somehow appears in two
+    // stages (e.g. after a drag+refetch race), it must not inflate totals.
+    // flatMap then Map-by-id gives one authoritative record per deal id.
+    const allDeals = Array.from(
+      new Map(
+        stages.flatMap(s => s.deals).map(d => [d.id, d])
+      ).values()
+    );
+
     const totalDeals = allDeals.length;
     const totalValue = allDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-    const wonDeals = stages.find(s => s.id === 'closed-won')?.deals.length || 0;
+    // Win rate uses per-stage arrays (already deduped within each stage by ingestion)
+    const wonDeals  = stages.find(s => s.id === 'closed-won')?.deals.length  || 0;
     const lostDeals = stages.find(s => s.id === 'closed-lost')?.deals.length || 0;
     const closedTotal = wonDeals + lostDeals;
     const winRate = closedTotal > 0 ? Math.round((wonDeals / closedTotal) * 100) : 0;
 
-    const now = Date.now();
-    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    // Fix: daysFromNow() always returns number (never null per dateUtils.ts),
+    // so the old `days !== null` guard was dead code. Empty closeDate was
+    // returning 0 (= "today"), inflating the count. Guard with !d.closeDate first.
     const closingThisWeek = allDeals.filter(d => {
       if (!d.closeDate) return false;
       const days = daysFromNow(d.closeDate);
-      return days !== null && days >= 0 && days <= 7;
+      return days >= 0 && days <= 7;
     }).length;
 
     const stalledDeals = allDeals.filter(d => d.daysSinceContact >= 5).length;
@@ -200,7 +253,10 @@ const DealsKanbanPage: React.FC = () => {
   }, [stages]);
 
   const aiInsights = useMemo(() => {
-    const allDeals = stages.flatMap(stage => stage.deals);
+    // Same cross-stage dedup as kpis: one record per id before any analysis
+    const allDeals = Array.from(
+      new Map(stages.flatMap(s => s.deals).map(d => [d.id, d])).values()
+    );
     const activeDeals = allDeals.filter(d => !['closed-won', 'closed-lost'].includes(d.stage));
 
     // Deals with no activity for 5+ days, sorted by descending value — real data driven
@@ -686,15 +742,25 @@ const DealsKanbanPage: React.FC = () => {
     });
   };
 
+  // Deduplicate within a single stage's deal array by id before any
+  // filtering or sorting.  This is the render-layer safety net: even if
+  // a duplicate somehow survives ingestion or is introduced by an
+  // optimistic-UI merge, it never reaches the JSX or drag-and-drop layer.
+  // Duplicate draggableIds in @hello-pangea/dnd cause silent rendering bugs.
+  const dedupStageDeals = (deals: PipelineStage['deals']): PipelineStage['deals'] =>
+    Array.from(new Map(deals.map(d => [d.id, d])).values());
+
   const getVisibleDeals = (stage: PipelineStage) => {
-    const filtered = sortDeals(filterDeals(stage.deals));
-    const count = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
+    const unique   = dedupStageDeals(stage.deals);
+    const filtered = sortDeals(filterDeals(unique));
+    const count    = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
     return filtered.slice(0, count);
   };
 
   const hasMoreDeals = (stage: PipelineStage) => {
-    const filtered = filterDeals(stage.deals);
-    const count = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
+    const unique   = dedupStageDeals(stage.deals);
+    const filtered = filterDeals(unique);
+    const count    = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
     return count < filtered.length;
   };
 
@@ -1161,7 +1227,9 @@ const DealsKanbanPage: React.FC = () => {
           <div className="flex gap-4 min-w-max">
             {displayedStages.map((stage) => {
               const isCollapsed = collapsedStages.includes(stage.id);
-              const filteredDeals = filterDeals(stage.deals);
+              // Dedup before computing the header count and value total so the
+              // column badge never shows "12 deals" when 6 are real duplicates.
+              const filteredDeals = filterDeals(dedupStageDeals(stage.deals));
               // Hide column entirely when search is active and nothing matches
               if (debouncedSearch && filteredDeals.length === 0) return null;
               const stageTotal = filteredDeals.reduce((sum, d) => sum + d.amount, 0);
