@@ -35,33 +35,13 @@ import {
   FileDown,
   Upload,
   Archive,
-  Columns
+  Columns,
+  LayoutList,
+  AlignJustify,
 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
-
-interface DealCard {
-  id: string;
-  companyName: string;
-  dealName: string;
-  accountName: string;
-  amount: number;
-  closeDate: string;
-  stage: string;
-  aiScore: number;
-  contactName: string;
-  contactTitle: string;
-  owner: string;
-  lastActivity: string;
-  daysSinceContact: number;
-  isHRMS: boolean;
-  hrmsDetails?: string;
-  priority: 'high' | 'medium' | 'low';
-  health: 'healthy' | 'at-risk' | 'stalled';
-  source: string;
-  status?: string;
-  createdAt?: string;
-}
+import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
 
 interface PipelineStage {
   id: string;
@@ -98,6 +78,8 @@ const DealsKanbanPage: React.FC = () => {
   const [selectedStageForBreakdown, setSelectedStageForBreakdown] = useState<PipelineStage | null>(null);
   // Delete confirmation — stores the deal to be deleted until user confirms
   const [deleteConfirmDeal, setDeleteConfirmDeal] = useState<{ id: string; name: string } | null>(null);
+  // Card density — 'standard' shows all 4 zones, 'compact' collapses to 3 rows
+  const [cardDensity, setCardDensity] = useState<'standard' | 'compact'>('standard');
   const [visibleDealsCount, setVisibleDealsCount] = useState<Record<string, number>>({});
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
   const DEALS_PER_PAGE = 10;
@@ -517,6 +499,22 @@ const DealsKanbanPage: React.FC = () => {
 
   const handleCardClick = (dealId: string) => {
     navigate(`/crm/deals/${dealId}`);
+  };
+
+  // Quick-action handlers — surfaced on card hover so daily actions are 1-click
+  const handleQuickEdit = (e: React.MouseEvent, dealId: string) => {
+    e.stopPropagation();
+    navigate(`/crm/deals/${dealId}/edit`);
+  };
+  const handleQuickEmail = (e: React.MouseEvent, _dealId: string) => {
+    e.stopPropagation();
+    setToast({ message: 'Opening email composer…', type: 'info' });
+    setTimeout(() => setToast(null), 2500);
+  };
+  const handleQuickActivity = (e: React.MouseEvent, dealId: string) => {
+    e.stopPropagation();
+    const deal = stages.flatMap(s => s.deals).find(d => d.id === dealId);
+    if (deal) { setSelectedActivityDeal(deal); setShowActivityModal(true); }
   };
 
   const handleContextMenu = (e: React.MouseEvent, dealId: string) => {
@@ -1173,6 +1171,35 @@ const DealsKanbanPage: React.FC = () => {
               )}
             </div>
 
+            {/* Card density toggle — standard shows all zones, compact is ~40% shorter */}
+            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setCardDensity('standard')}
+                title="Standard card density"
+                className={`flex items-center space-x-1.5 px-3 py-2 text-sm transition-colors ${
+                  cardDensity === 'standard'
+                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <AlignJustify className="h-4 w-4" />
+                <span className="hidden sm:inline">Standard</span>
+              </button>
+              <div className="w-px h-5 bg-gray-300" />
+              <button
+                onClick={() => setCardDensity('compact')}
+                title="Compact card density"
+                className={`flex items-center space-x-1.5 px-3 py-2 text-sm transition-colors ${
+                  cardDensity === 'compact'
+                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <LayoutList className="h-4 w-4" />
+                <span className="hidden sm:inline">Compact</span>
+              </button>
+            </div>
+
             <button
               onClick={handleExportCSV}
               className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300"
@@ -1292,204 +1319,36 @@ const DealsKanbanPage: React.FC = () => {
                       }`}
                       style={{ scrollbarWidth: 'thin' }}
                     >
-                      {!isCollapsed && getVisibleDeals(stage).map((deal, index) => {
-                        const isStalled = deal.daysSinceContact >= 5;
-                        const isHighPriority = deal.priority === 'high';
-
-                        // Use daysFromNow from dateUtils — timezone-safe, returns null for missing dates
-                        const closeDaysLeft = daysFromNow(deal.closeDate);
-                        const closeDateColor =
-                          closeDaysLeft === null ? 'text-gray-500' :
-                          closeDaysLeft < 0    ? 'text-red-600 font-semibold' :
-                          closeDaysLeft <= 7   ? 'text-orange-600 font-semibold' :
-                                                 'text-gray-600';
-
-                        return (
+                      {!isCollapsed && getVisibleDeals(stage).map((deal, index) => (
                         <Draggable key={deal.id} draggableId={deal.id} index={index}>
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              onClick={() => handleCardClick(deal.id)}
-                              onContextMenu={(e) => handleContextMenu(e, deal.id)}
-                              className={`bg-white rounded-lg shadow-sm transition-all duration-200 cursor-pointer relative ${
-                                snapshot.isDragging ? 'shadow-xl scale-105 ring-2' : 'hover:shadow-md hover:-translate-y-0.5'
-                              }`}
-                              style={{
-                                padding: '12px 14px',
-                                border: snapshot.isDragging ? '2px solid #667eea' :
-                                        highlightedDeals.includes(deal.id) ? '2px solid #dc3545' :
-                                        '1px solid #E0E0E0',
-                                // Left accent: stalled = amber, high priority = red, default = none
-                                borderLeft: isStalled
-                                  ? '4px solid #ffc107'
-                                  : isHighPriority
-                                  ? '4px solid #dc3545'
-                                  : undefined,
-                                opacity: snapshot.isDragging ? 0.9 : 1
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!snapshot.isDragging) e.currentTarget.style.borderColor = '#667eea';
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!snapshot.isDragging) {
-                                  e.currentTarget.style.borderColor =
-                                    highlightedDeals.includes(deal.id) ? '#dc3545' : '#E0E0E0';
-                                }
-                              }}
                             >
-                              {/* Row 1: Deal name + HRMS badge */}
-                              <div className="flex items-start justify-between mb-1">
-                                <h4 className="font-semibold text-sm leading-snug text-gray-900 flex-1 mr-2 line-clamp-2">
-                                  {deal.dealName}
-                                </h4>
-                                {deal.isHRMS && (
-                                  <button
-                                    onClick={(e) => handleHRMSBadgeClick(e, deal)}
-                                    className="flex-shrink-0 flex items-center space-x-1 px-2 py-0.5 text-xs rounded font-medium hover:shadow-sm transition-all"
-                                    style={{ backgroundColor: '#fff3cd', border: '1px solid #ff9800', color: '#e65100' }}
-                                  >
-                                    <Building2 className="h-3 w-3" />
-                                    <span>HRMS</span>
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Row 2: Company name (muted) */}
-                              <p className="text-xs text-gray-500 mb-2 truncate">{deal.companyName}</p>
-
-                              {/* Row 3: Amount — primary visual anchor on the card */}
-                              <div className="text-base font-bold mb-2" style={{ color: '#4f46e5' }}>
-                                {formatCurrency(deal.amount)}
-                              </div>
-
-                              {/* Row 4: Close date with urgency colour */}
-                              <div className={`flex items-center space-x-1 text-xs mb-2 ${closeDateColor}`}>
-                                <Calendar className="h-3 w-3 flex-shrink-0" />
-                                {/* formatCloseDate returns "No close date" for null/empty — never "Invalid Date" */}
-                                <span>{formatCloseDate(deal.closeDate)}</span>
-                                {closeDaysLeft !== null && closeDaysLeft < 0 && (
-                                  <span className="ml-1 px-1 py-0.5 bg-red-100 text-red-700 rounded text-xs">Overdue</span>
-                                )}
-                                {closeDaysLeft !== null && closeDaysLeft >= 0 && closeDaysLeft <= 7 && (
-                                  <span className="ml-1 px-1 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">This week</span>
-                                )}
-                              </div>
-
-                              {/* Row 5: AI Health — compact pill + expandable score tooltip */}
-                              {!['closed-won', 'closed-lost'].includes(stage.id) && (
-                                <div className="mb-2 relative">
-                                  <button
-                                    onClick={(e) => handleScoreClick(e, deal.id)}
-                                    className="flex items-center space-x-2 w-full hover:opacity-80 transition-opacity"
-                                  >
-                                    <span className="flex items-center space-x-1 text-xs" style={{ color: '#667eea' }}>
-                                      <Sparkles className="h-3 w-3" />
-                                      <span className="font-medium">AI</span>
-                                    </span>
-                                    {/* Thin progress bar — less dominant than before */}
-                                    <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                                      <div
-                                        className="h-1.5 rounded-full transition-all duration-300"
-                                        style={{
-                                          width: `${deal.aiScore}%`,
-                                          backgroundColor: deal.aiScore >= 80 ? '#16a34a' : deal.aiScore >= 60 ? '#667eea' : '#f59e0b'
-                                        }}
-                                      />
-                                    </div>
-                                    <span className="text-xs font-bold" style={{ color: '#667eea' }}>{deal.aiScore}</span>
-                                  </button>
-
-                                  {showScoreTooltip === deal.id && (() => {
-                                    // Compute score signals from real deal fields
-                                    const activitySignal = deal.daysSinceContact === 0 ? { label: 'Activity today', delta: +20, good: true }
-                                      : deal.daysSinceContact <= 2 ? { label: `Active ${deal.daysSinceContact}d ago`, delta: +15, good: true }
-                                      : deal.daysSinceContact <= 5 ? { label: `${deal.daysSinceContact}d since contact`, delta: +5, good: true }
-                                      : { label: `No activity (${deal.daysSinceContact}d)`, delta: -15, good: false };
-
-                                    const sizeSignal = deal.amount >= 100_000 ? { label: 'High-value deal', delta: +15, good: true }
-                                      : deal.amount >= 50_000 ? { label: 'Mid-value deal', delta: +10, good: true }
-                                      : { label: 'Standard deal size', delta: +5, good: true };
-
-                                    const healthSignal = deal.health === 'healthy'  ? { label: 'Deal health: good', delta: +5, good: true }
-                                      : deal.health === 'at-risk' ? { label: 'Deal health: at risk', delta: -5, good: false }
-                                      : { label: 'Deal stalled', delta: -15, good: false };
-
-                                    const closeDateSignal = closeDaysLeft === null ? null
-                                      : closeDaysLeft < 0  ? { label: 'Close date overdue', delta: -10, good: false }
-                                      : closeDaysLeft <= 7 ? { label: 'Closing this week', delta: +10, good: true }
-                                      : closeDaysLeft <= 30 ? { label: 'Close date this month', delta: +5, good: true }
-                                      : { label: 'Close date far out', delta: -2, good: false };
-
-                                    const signals = [activitySignal, sizeSignal, healthSignal, ...(closeDateSignal ? [closeDateSignal] : [])];
-                                    return (
-                                      <div className="absolute z-50 left-0 top-full mt-2 w-64 bg-white rounded-lg shadow-xl border-2 p-3" style={{ borderColor: '#667eea' }}>
-                                        <div className="text-xs font-semibold mb-2 flex items-center space-x-1" style={{ color: '#667eea' }}>
-                                          <Sparkles className="h-3.5 w-3.5" />
-                                          <span>AI Health: {deal.aiScore}/100</span>
-                                        </div>
-                                        <div className="space-y-1.5 text-xs">
-                                          {signals.map((s, i) => (
-                                            <div key={i} className="flex items-center justify-between">
-                                              <span className={`flex items-center space-x-1 ${s.good ? 'text-green-600' : 'text-yellow-600'}`}>
-                                                {s.good ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                                                <span>{s.label}</span>
-                                              </span>
-                                              <span className={`font-semibold ${s.delta > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                {s.delta > 0 ? `+${s.delta}` : s.delta}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-
-                              {/* Row 6: Contact + Owner in a single compact row */}
-                              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                                <button
-                                  onClick={(e) => handleContactClick(e, deal.id)}
-                                  className="flex items-center space-x-1 text-xs text-gray-500 hover:text-blue-600 transition-colors truncate max-w-[60%]"
-                                >
-                                  <User className="h-3 w-3 flex-shrink-0" />
-                                  <span className="truncate">{deal.contactName || '—'}</span>
-                                </button>
-                                <button
-                                  onClick={(e) => handleStatusClick(e, deal)}
-                                  className={`flex items-center space-x-1 text-xs font-medium transition-colors ${
-                                    isStalled ? 'text-red-500 hover:text-red-700' :
-                                    deal.health === 'healthy' ? 'text-green-600 hover:text-green-800' :
-                                    deal.health === 'at-risk' ? 'text-yellow-600 hover:text-yellow-800' :
-                                    'text-gray-500'
-                                  }`}
-                                >
-                                  {stage.id === 'closed-won' && <><CheckCircle2 className="h-3 w-3" /><span>Won</span></>}
-                                  {stage.id === 'closed-lost' && <><XCircle className="h-3 w-3" /><span>Lost</span></>}
-                                  {!['closed-won', 'closed-lost'].includes(stage.id) && (
-                                    <>
-                                      {getHealthIcon(deal.health)}
-                                      {isStalled
-                                        ? <span>{deal.daysSinceContact}d stalled</span>
-                                        : <span>{formatRelativeTime(deal.lastActivity, 'No recent activity')}</span>
-                                      }
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                              {/* Owner shown below contact row — less prominent */}
-                              {deal.owner && (
-                                <div className="text-xs text-gray-400 mt-1 truncate">
-                                  Owner: {deal.owner}
-                                </div>
-                              )}
+                              <DealKanbanCard
+                                deal={deal}
+                                stageId={stage.id}
+                                density={cardDensity}
+                                isHighlighted={highlightedDeals.includes(deal.id)}
+                                isDragging={snapshot.isDragging}
+                                showScoreTooltip={showScoreTooltip === deal.id}
+                                onCardClick={handleCardClick}
+                                onContextMenu={handleContextMenu}
+                                onHRMSClick={handleHRMSBadgeClick}
+                                onScoreClick={handleScoreClick}
+                                onContactClick={handleContactClick}
+                                onStatusClick={handleStatusClick}
+                                onQuickEdit={handleQuickEdit}
+                                onQuickEmail={handleQuickEmail}
+                                onQuickActivity={handleQuickActivity}
+                                formatCurrency={formatCurrency}
+                              />
                             </div>
                           )}
                         </Draggable>
-                      );
-                      })}
+                      ))}
                       {provided.placeholder}
 
                       {/* Empty state when search/filters produce no results */}
