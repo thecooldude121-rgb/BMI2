@@ -40,6 +40,8 @@ import {
   AlignJustify,
   RotateCcw,
   X as XIcon,
+  ShieldAlert,
+  ChevronDown,
 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
@@ -52,6 +54,11 @@ import {
   isAnyFilterActive,
   type SavedView,
 } from '../../utils/dealViews';
+import ManagerInspectionBar from '../../components/Deal/ManagerInspectionBar';
+import {
+  computeInspectionSignals,
+  getInspectionBadge,
+} from '../../utils/inspectionSignals';
 
 interface PipelineStage {
   id: string;
@@ -64,6 +71,13 @@ const DealsKanbanPage: React.FC = () => {
   const navigate = useNavigate();
   const { deals: contextDeals } = useData();
   const { user } = useAuth();
+  // Stable counter incremented only when a real data-mutating action occurs
+  // (deal added, deleted, stage-changed). Using contextDeals.length directly
+  // caused refetch races during drag-and-drop because length can momentarily
+  // change during optimistic-UI updates, triggering a stale API response to
+  // overwrite the board state.
+  const [refetchKey, setRefetchKey] = useState(0);
+  const triggerRefetch = () => setRefetchKey(k => k + 1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
@@ -81,7 +95,12 @@ const DealsKanbanPage: React.FC = () => {
   const [showContextMenu, setShowContextMenu] = useState<{ dealId: string; x: number; y: number } | null>(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivityDeal, setSelectedActivityDeal] = useState<DealCard | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
   const [collapsedStages, setCollapsedStages] = useState<string[]>([]);
   const [focusedStage, setFocusedStage] = useState<string | null>(null);
   const [showValueBreakdown, setShowValueBreakdown] = useState(false);
@@ -110,11 +129,9 @@ const DealsKanbanPage: React.FC = () => {
   ]);
 
   // Fetch all deals from the backend and populate stages.
-  // Re-runs whenever the DataContext deal count changes (e.g. after Add Deal).
+  // Re-runs on mount and whenever triggerRefetch() is called (explicit actions).
+  // NOT driven by contextDeals.length to avoid race conditions during drag-and-drop.
   useEffect(() => {
-    // Cancellation flag: if this effect re-fires before the previous fetch
-    // resolves (e.g. rapid context changes), the stale response is discarded
-    // and never written to state — preventing races that can produce duplicates.
     let cancelled = false;
 
     fetchDeals().then((apiDeals: any[]) => {
@@ -153,11 +170,26 @@ const DealsKanbanPage: React.FC = () => {
         );
       }
 
+      // Secondary check: warn about records with identical dealName+stage
+      // (different IDs — these are real DB duplicates, not JOIN inflation).
+      const nameStageKey = (d: any) => `${(d.name || '').toLowerCase().trim()}|${d.stage}`;
+      const nameStageMap = new Map<string, string>();
+      dedupedDeals.forEach(d => {
+        const key = nameStageKey(d);
+        if (nameStageMap.has(key)) {
+          console.warn(`[Pipeline] Possible duplicate records: "${d.name}" in stage "${d.stage}" (IDs: ${nameStageMap.get(key)}, ${d.id}). Consider cleaning the database.`);
+        } else {
+          nameStageMap.set(key, d.id);
+        }
+      });
+
       if (!dedupedDeals.length) return;
 
-      setStages(prev => prev.map(stage => ({
-        ...stage,
-        deals: dedupedDeals
+      setStages(prev => prev.map(stage => {
+        // Build each stage's deal list and apply a final ID-dedup pass so the
+        // board state invariant "every deal appears exactly once per stage" is
+        // guaranteed at storage time, not just at render time.
+        const raw = dedupedDeals
           .filter((d: any) => d.stage === stage.id)
           .map((d: any) => ({
             id: d.id,
@@ -188,15 +220,53 @@ const DealsKanbanPage: React.FC = () => {
               ? d.health
               : 'healthy') as 'healthy' | 'at-risk' | 'stalled',
             source: d.source || 'manual',
-            status: d.status || '',
+            nextStep: d.next_step || '',
+            nextStepDueDate: d.next_step_due_date ? d.next_step_due_date.split('T')[0] : '',
+            nextStepOwner: d.next_step_owner || '',
+            nextStepStatus: (['pending', 'done', 'overdue'].includes(d.next_step_status)
+              ? d.next_step_status : 'pending') as 'pending' | 'done' | 'overdue',
+            stakeholders: (() => {
+              try {
+                const s = typeof d.stakeholders === 'string'
+                  ? JSON.parse(d.stakeholders) : (d.stakeholders ?? []);
+                return Array.isArray(s) ? s : [];
+              } catch { return []; }
+            })(),
+            contactCount: (() => {
+              try {
+                const s = typeof d.stakeholders === 'string'
+                  ? JSON.parse(d.stakeholders) : (d.stakeholders ?? []);
+                return (d.contact_name ? 1 : 0) + (Array.isArray(s) ? s.length : 0);
+              } catch { return d.contact_name ? 1 : 0; }
+            })(),
+            competitorCount: (() => {
+              try {
+                const c = typeof d.competitors === 'string'
+                  ? JSON.parse(d.competitors) : (d.competitors ?? []);
+                return Array.isArray(c)
+                  ? c.filter((x: any) => x && (typeof x === 'string' ? x.trim() : true)).length
+                  : 0;
+              } catch { return 0; }
+            })(),
             createdAt: d.created_at || '',
-          })),
-      })));
+          }));
+        // Hard invariant: deduplicate by id before committing to state.
+        const seen = new Set<string>();
+        const deals = raw.filter(d => {
+          if (seen.has(d.id)) return false;
+          seen.add(d.id);
+          return true;
+        });
+        return { ...stage, deals };
+      }));
     });
 
-    // Cleanup: mark this fetch as stale when the effect re-runs or unmounts
     return () => { cancelled = true; };
-  }, [contextDeals.length]);
+  // refetchKey is incremented by triggerRefetch() on explicit mutations.
+  // contextDeals is intentionally excluded — its length fluctuates during
+  // drag-and-drop optimistic updates and caused stale-fetch races.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchKey]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -210,6 +280,10 @@ const DealsKanbanPage: React.FC = () => {
   const [activeViewId, setActiveViewId] = useState('all');
   const [viewPredicate, setViewPredicate] = useState<((d: DealCard) => boolean) | null>(null);
 
+  // Manager Inspection Mode — toggle with the ShieldAlert button or Esc to exit.
+  const [inspectionMode, setInspectionMode] = useState(false);
+  const [inspectionOwner, setInspectionOwner] = useState('all');
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 200);
     return () => clearTimeout(t);
@@ -218,40 +292,47 @@ const DealsKanbanPage: React.FC = () => {
   const kpis = useMemo(() => {
     // Dedup across stages before counting: if a deal somehow appears in two
     // stages (e.g. after a drag+refetch race), it must not inflate totals.
-    // flatMap then Map-by-id gives one authoritative record per deal id.
     const allDeals = Array.from(
       new Map(
         stages.flatMap(s => s.deals).map(d => [d.id, d])
       ).values()
     );
 
-    const totalDeals = allDeals.length;
-    const totalValue = allDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
+    // Active = not yet closed. Pipeline KPIs must reflect the live pipeline only;
+    // including closed-won/lost was inflating totalDeals, totalValue, and stalledDeals.
+    const activeDeals = allDeals.filter(d => !['closed-won', 'closed-lost'].includes(d.stage));
+
+    const totalDeals = activeDeals.length;
+    const totalValue = activeDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
 
     // Win rate uses per-stage arrays (already deduped within each stage by ingestion)
     const wonDeals  = stages.find(s => s.id === 'closed-won')?.deals.length  || 0;
     const lostDeals = stages.find(s => s.id === 'closed-lost')?.deals.length || 0;
     const closedTotal = wonDeals + lostDeals;
-    const winRate = closedTotal > 0 ? Math.round((wonDeals / closedTotal) * 100) : 0;
+    // Require ≥3 closed deals before showing a rate; below that a single win
+    // produces 100 % which is statistically meaningless and erodes trust.
+    const winRate: number | null = closedTotal >= 3
+      ? Math.round((wonDeals / closedTotal) * 100)
+      : null;
 
-    // Fix: daysFromNow() always returns number (never null per dateUtils.ts),
-    // so the old `days !== null` guard was dead code. Empty closeDate was
-    // returning 0 (= "today"), inflating the count. Guard with !d.closeDate first.
-    const closingThisWeek = allDeals.filter(d => {
+    // "Due / Overdue": active deals whose close date is within 7 days OR already
+    // past due (days < 0). The previous `days >= 0` guard hid overdue deals and
+    // caused the KPI to show 0 while the board displayed cards with red close dates.
+    const closingThisWeek = activeDeals.filter(d => {
       if (!d.closeDate) return false;
       const days = daysFromNow(d.closeDate);
-      return days >= 0 && days <= 7;
+      return days !== null && days <= 7;
     }).length;
 
-    const stalledDeals = allDeals.filter(d => d.daysSinceContact >= 5).length;
+    // Stalled: active deals with no contact for 5+ days. Scoped to activeDeals so
+    // the count always matches aiInsights.needAttention (same predicate, same scope).
+    const stalledDeals = activeDeals.filter(d => d.daysSinceContact >= 5).length;
 
-    // Compute average sales cycle from real closed-won deals that have a creation date.
-    // Falls back to null (displayed as "N/A") when no qualifying data exists.
+    // Average sales cycle from closed-won deals that have both dates.
     const wonWithDates = (stages.find(s => s.id === 'closed-won')?.deals || []).filter(
       d => d.createdAt && d.closeDate
     );
-    // parseDateMs returns Infinity for bad dates — Math.max(0,…) clamps those to 0
-    const avgCycle = wonWithDates.length > 0
+    const rawAvgCycle = wonWithDates.length > 0
       ? Math.round(wonWithDates.reduce((sum, d) => {
           const createdMs = parseDateMs(d.createdAt);
           const closedMs  = parseDateMs(d.closeDate);
@@ -259,6 +340,9 @@ const DealsKanbanPage: React.FC = () => {
           return sum + Math.max(0, isFinite(cycleDays) ? cycleDays : 0);
         }, 0) / wonWithDates.length)
       : null;
+    // 0-day cycles indicate same-day create+close (test data); treat as no data
+    // rather than displaying a misleading "0d".
+    const avgCycle = rawAvgCycle !== null && rawAvgCycle > 0 ? rawAvgCycle : null;
 
     return { totalDeals, totalValue, winRate, closingThisWeek, stalledDeals, avgCycle };
   }, [stages]);
@@ -286,6 +370,15 @@ const DealsKanbanPage: React.FC = () => {
     return { needAttention, negotiationDeals, highProbValue, hrmsDeals };
   }, [stages]);
 
+  const inspectionSignals = useMemo(
+    () => computeInspectionSignals(stages, inspectionOwner === 'all' ? '' : inspectionOwner),
+    [stages, inspectionOwner],
+  );
+
+  // Stages where a next step is required before the deal can sit comfortably.
+  // A soft coaching prompt is shown when a deal lands here without one.
+  const STAGES_REQUIRING_NEXT_STEP: string[] = ['proposal', 'negotiation'];
+
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
@@ -295,31 +388,49 @@ const DealsKanbanPage: React.FC = () => {
       return;
     }
 
-    const newStages = [...stages];
+    // Deep-copy both the outer array AND every inner deals array.
+    // The previous `[...stages]` was a shallow copy — sourceStage.deals and
+    // destStage.deals still pointed at the original state arrays, so the
+    // subsequent splice() calls silently mutated React state in place.
+    // React's concurrent renderer can observe that partially-mutated state
+    // and render a card in both source and destination columns simultaneously.
+    const newStages = stages.map(s => ({ ...s, deals: [...s.deals] }));
+
     const sourceStage = newStages.find(s => s.id === source.droppableId);
-    const destStage = newStages.find(s => s.id === destination.droppableId);
+    const destStage   = newStages.find(s => s.id === destination.droppableId);
 
     if (!sourceStage || !destStage) return;
 
+    // Both splices now operate on the copied deals arrays, never on state.
     const [movedDeal] = sourceStage.deals.splice(source.index, 1);
-    const oldStage = movedDeal.stage;
-    movedDeal.stage = destStage.id;
+    const updatedDeal = {
+      ...movedDeal,
+      stage:   destStage.id,
+      aiScore: Math.max(0, Math.min(100, movedDeal.aiScore + Math.floor(Math.random() * 10) - 3)),
+    };
 
-    const newScore = Math.min(100, movedDeal.aiScore + Math.floor(Math.random() * 10) - 3);
-    movedDeal.aiScore = Math.max(0, newScore);
-
-    destStage.deals.splice(destination.index, 0, movedDeal);
-
+    destStage.deals.splice(destination.index, 0, updatedDeal);
     setStages(newStages);
 
-    setToast({
-      message: `Deal moved to ${destStage.name}`,
-      type: 'success'
-    });
+    const isStageChange  = source.droppableId !== destination.droppableId;
+    const needsNextStep  =
+      isStageChange &&
+      STAGES_REQUIRING_NEXT_STEP.includes(destStage.id) &&
+      !updatedDeal.nextStep?.trim();
 
-    console.log(`Activity logged: Stage changed from ${sourceStage.name} to ${destStage.name} for ${movedDeal.companyName}`);
+    if (needsNextStep) {
+      setToast({
+        message: `"${updatedDeal.dealName}" moved to ${destStage.name} — add a next step to keep it on track`,
+        type: 'info',
+        actionLabel: 'Add now',
+        onAction: () => setSelectedDealId(updatedDeal.id),
+      });
+    } else {
+      setToast({ message: `Deal moved to ${destStage.name}`, type: 'success' });
+    }
 
-    setTimeout(() => setToast(null), 3000);
+    console.log(`Stage changed to ${destStage.name} for ${updatedDeal.companyName}`);
+    setTimeout(() => setToast(null), 5000);
   };
 
   // formatRelativeTime from dateUtils replaces the old local formatLastActivity.
@@ -372,6 +483,14 @@ const DealsKanbanPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && inspectionMode) setInspectionMode(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [inspectionMode]);
+
   const handleExportPipeline = (format: 'csv' | 'pdf') => {
     console.log(`Exporting pipeline as ${format.toUpperCase()}`);
     setShowMoreOptions(false);
@@ -409,13 +528,27 @@ const DealsKanbanPage: React.FC = () => {
       case 'winRate':
         navigate('/analytics', { state: { view: 'winRate' } });
         break;
-      case 'closingWeek':
-        setSelectedCloseDateFilter('week');
+      case 'closingWeek': {
+        // Highlight the same deals counted by the KPI: active + due within 7 days or overdue.
+        const dueDeals = stages.flatMap(s => s.deals).filter(d => {
+          if (['closed-won', 'closed-lost'].includes(d.stage)) return false;
+          if (!d.closeDate) return false;
+          const days = daysFromNow(d.closeDate);
+          return days !== null && days <= 7;
+        });
+        setHighlightedDeals(dueDeals.map(d => d.id));
         break;
-      case 'stalled':
-        const stalledDeals = stages.flatMap(s => s.deals).filter(d => d.health === 'stalled');
-        setHighlightedDeals(stalledDeals.map(d => d.id));
+      }
+      case 'stalled': {
+        // Highlight the same deals counted by the KPI: active + daysSinceContact >= 5.
+        // Previously used d.health === 'stalled' (DB field) which diverged from the
+        // KPI's daysSinceContact predicate and produced a mismatch on click.
+        const stalledList = stages.flatMap(s => s.deals).filter(d =>
+          !['closed-won', 'closed-lost'].includes(d.stage) && d.daysSinceContact >= 5
+        );
+        setHighlightedDeals(stalledList.map(d => d.id));
         break;
+      }
       case 'avgCycle':
         navigate('/analytics', { state: { view: 'cycleTime' } });
         break;
@@ -613,6 +746,8 @@ const DealsKanbanPage: React.FC = () => {
     setToast({ message: `"${deleteConfirmDeal.name}" deleted`, type: 'error' });
     setTimeout(() => setToast(null), 3000);
     setDeleteConfirmDeal(null);
+    // Re-sync with backend after deletion so the board reflects DB truth.
+    triggerRefetch();
   };
 
   const toggleStageCollapse = (stageId: string) => {
@@ -824,31 +959,42 @@ const DealsKanbanPage: React.FC = () => {
       {/* Frozen title bar */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6 px-8 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="p-1.5 bg-blue-100 rounded-lg">
-                <Target className="h-5 w-5 text-blue-600" />
-              </div>
+            <div className="flex items-center gap-3">
+              <Target className="h-4 w-4 text-gray-400 flex-shrink-0" />
               <div>
-                <h1 className="text-lg font-semibold text-gray-900">Deals Pipeline</h1>
-                <p className="text-xs text-gray-500">Manage your sales pipeline and forecast revenue</p>
+                <h1 className="text-[15px] font-semibold text-gray-900 leading-none">Deals</h1>
+                <p className="text-[11px] text-gray-400 mt-0.5">Pipeline · Kanban</p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setInspectionMode(m => !m)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-all duration-150
+                  ${inspectionMode
+                    ? 'bg-slate-900 text-amber-400 border-slate-700'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                  }`}
+                title={inspectionMode ? 'Exit Manager Inspection (Esc)' : 'Enter Manager Inspection Mode'}
+              >
+                <ShieldAlert className="h-3.5 w-3.5" />
+                <span>{inspectionMode ? 'Inspecting' : 'Inspect'}</span>
+              </button>
+
               <button
                 onClick={() => navigate('/crm/deals/add')}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-[13px] font-medium"
               >
-                <Plus className="h-5 w-5" />
+                <Plus className="h-4 w-4" />
                 <span>Add Deal</span>
               </button>
 
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setShowMoreOptions(!showMoreOptions)}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="More Options"
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
+                  title="More options"
                 >
-                  <MoreVertical className="h-5 w-5" />
+                  <MoreVertical className="h-4 w-4" />
                 </button>
 
                 {showMoreOptions && (
@@ -916,180 +1062,211 @@ const DealsKanbanPage: React.FC = () => {
           </div>
       </div>
 
-      <div className="bg-white border-b border-gray-200 px-8 py-4">
-          <div className="grid grid-cols-6 gap-4">
-            <button
-              onClick={() => handleStatClick('total')}
-              className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200 hover:shadow-md transition-shadow text-left"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-blue-700">Total Deals</span>
-                <Target className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="text-2xl font-bold text-blue-900">{kpis.totalDeals}</div>
-            </button>
+      <div className="bg-white border-b border-gray-200 px-8 py-3">
+        <div className="grid grid-cols-6 gap-3">
 
-            <button
-              onClick={() => handleStatClick('value')}
-              className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 hover:shadow-md transition-shadow text-left"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-green-700">Total Value</span>
-                <DollarSign className="h-5 w-5 text-green-600" />
+          {/* Total Deals */}
+          <button onClick={() => handleStatClick('total')}
+            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
+          >
+            <div className="w-0.5 bg-indigo-500 flex-shrink-0" />
+            <div className="flex-1 px-4 py-3">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Active Deals</p>
+              <div className="flex items-end justify-between">
+                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">{kpis.totalDeals}</span>
+                <Target className="h-4 w-4 text-gray-300 group-hover:text-indigo-400 transition-colors" />
               </div>
-              <div className="text-2xl font-bold text-green-900">{formatCurrency(kpis.totalValue)}</div>
-            </button>
+            </div>
+          </button>
 
-            <button
-              onClick={() => handleStatClick('winRate')}
-              className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200 hover:shadow-md transition-shadow text-left"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-purple-700">Avg Win Rate</span>
-                <TrendingUp className="h-5 w-5 text-purple-600" />
+          {/* Total Value */}
+          <button onClick={() => handleStatClick('value')}
+            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
+          >
+            <div className="w-0.5 bg-emerald-500 flex-shrink-0" />
+            <div className="flex-1 px-4 py-3">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Pipeline Value</p>
+              <div className="flex items-end justify-between">
+                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">{formatCurrency(kpis.totalValue)}</span>
+                <DollarSign className="h-4 w-4 text-gray-300 group-hover:text-emerald-400 transition-colors" />
               </div>
-              <div className="text-2xl font-bold text-purple-900">{kpis.winRate}%</div>
-            </button>
+            </div>
+          </button>
 
-            <button
-              onClick={() => handleStatClick('closingWeek')}
-              className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200 hover:shadow-md transition-shadow text-left"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-orange-700">Closing This Week</span>
-                <Calendar className="h-5 w-5 text-orange-600" />
+          {/* Win Rate */}
+          <button onClick={() => handleStatClick('winRate')}
+            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
+          >
+            <div className="w-0.5 bg-violet-500 flex-shrink-0" />
+            <div className="flex-1 px-4 py-3">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Win Rate</p>
+              <div className="flex items-end justify-between">
+                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">
+                  {kpis.winRate !== null
+                    ? `${kpis.winRate}%`
+                    : <span className="text-[16px] text-gray-400">—</span>}
+                </span>
+                <TrendingUp className="h-4 w-4 text-gray-300 group-hover:text-violet-400 transition-colors" />
               </div>
-              <div className="text-2xl font-bold text-orange-900">{kpis.closingThisWeek}</div>
-            </button>
+            </div>
+          </button>
 
-            <button
-              onClick={() => handleStatClick('stalled')}
-              className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200 hover:shadow-md transition-shadow text-left"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-red-700">Stalled Deals</span>
-                <AlertTriangle className="h-5 w-5 text-red-600" />
+          {/* Due / Overdue — counts active deals whose close date is within 7 days or past due */}
+          <button onClick={() => handleStatClick('closingWeek')}
+            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
+          >
+            <div className={`w-0.5 flex-shrink-0 ${kpis.closingThisWeek > 0 ? 'bg-red-500' : 'bg-amber-500'}`} />
+            <div className="flex-1 px-4 py-3">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Due / Overdue</p>
+              <div className="flex items-end justify-between">
+                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">{kpis.closingThisWeek}</span>
+                <Calendar className="h-4 w-4 text-gray-300 group-hover:text-amber-400 transition-colors" />
               </div>
-              <div className="text-2xl font-bold text-red-900">{kpis.stalledDeals}</div>
-            </button>
+            </div>
+          </button>
 
-            <button
-              onClick={() => handleStatClick('avgCycle')}
-              className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow text-left"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Days Avg Cycle</span>
-                <Clock className="h-5 w-5 text-gray-600" />
+          {/* Stalled — only card with accent that signals urgency */}
+          <button onClick={() => handleStatClick('stalled')}
+            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
+          >
+            <div className={`w-0.5 flex-shrink-0 ${kpis.stalledDeals > 0 ? 'bg-red-500' : 'bg-gray-200'}`} />
+            <div className="flex-1 px-4 py-3">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Stalled</p>
+              <div className="flex items-end justify-between">
+                <span className={`text-[22px] font-semibold tabular-nums leading-none ${kpis.stalledDeals > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  {kpis.stalledDeals}
+                </span>
+                <AlertTriangle className={`h-4 w-4 transition-colors ${kpis.stalledDeals > 0 ? 'text-red-400' : 'text-gray-300 group-hover:text-gray-400'}`} />
               </div>
-              {/* null = no closed-won deals with dates yet; show N/A rather than a fake number */}
-              <div className="text-2xl font-bold text-gray-900">
-                {kpis.avgCycle !== null ? kpis.avgCycle : <span className="text-base text-gray-400">N/A</span>}
+            </div>
+          </button>
+
+          {/* Avg Cycle */}
+          <button onClick={() => handleStatClick('avgCycle')}
+            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
+          >
+            <div className="w-0.5 bg-slate-400 flex-shrink-0" />
+            <div className="flex-1 px-4 py-3">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Avg. Cycle</p>
+              <div className="flex items-end justify-between">
+                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">
+                  {kpis.avgCycle !== null
+                    ? <>{kpis.avgCycle}<span className="text-[13px] font-normal text-gray-400 ml-1">d</span></>
+                    : <span className="text-[16px] text-gray-400">—</span>}
+                </span>
+                <Clock className="h-4 w-4 text-gray-300 group-hover:text-slate-400 transition-colors" />
               </div>
-            </button>
-          </div>
+            </div>
+          </button>
+
+        </div>
       </div>
 
-      <div className="px-8 py-6" style={{ background: '#667eea' }}>
-        <div className="flex items-center space-x-2 mb-4">
-          <Sparkles className="h-5 w-5 text-white" />
-          <h2 className="text-lg font-semibold text-white">AI Insights & Recommendations</h2>
+      {inspectionMode ? (
+        <ManagerInspectionBar
+          signals={inspectionSignals}
+          inspectionOwner={inspectionOwner}
+          onOwnerChange={setInspectionOwner}
+          onExit={() => setInspectionMode(false)}
+          onSignalClick={(viewId) => {
+            const view = findView(viewId);
+            if (view) applyView(view);
+          }}
+          formatCurrency={formatCurrency}
+        />
+      ) : (
+      <div className="bg-gray-50 border-b border-gray-200 px-8 py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Pipeline signals</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-300 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-white font-medium mb-1">
-                  3 deals need attention - No activity in 5+ days
+        <div className="grid grid-cols-3 gap-3">
+
+          {/* Needs attention */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-md bg-amber-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-gray-900 mb-0.5">
+                  {aiInsights.needAttention.length > 0
+                    ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} without recent activity`
+                    : 'All deals have recent activity'}
                 </p>
-                <p className="text-white/80 text-sm mb-3">
-                  {aiInsights.needAttention.map(d => `${d.companyName} (${formatCurrency(d.amount)})`).join(', ')}
+                <p className="text-[12px] text-gray-500 mb-3 truncate">
+                  {aiInsights.needAttention.length > 0
+                    ? aiInsights.needAttention.slice(0, 2).map(d => d.companyName).join(', ')
+                      + (aiInsights.needAttention.length > 2 ? ` +${aiInsights.needAttention.length - 2} more` : '')
+                    : 'No action needed'}
                 </p>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={handleViewDeals}
-                    className="text-xs px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded transition-colors"
-                  >
-                    View Deals
+                <div className="flex gap-2">
+                  <button onClick={handleViewDeals}
+                    className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
+                    View deals
                   </button>
-                  <button
-                    onClick={handleCreateTasks}
-                    className="text-xs px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded transition-colors"
-                  >
-                    Create Tasks
+                  <button onClick={handleCreateTasks}
+                    className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
+                    Create tasks
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-            <div className="flex items-start space-x-3">
-              <TrendingUp className="h-5 w-5 text-green-300 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-white font-medium mb-1">
-                  High probability to close {formatCurrency(aiInsights.highProbValue)} this month
+          {/* Forecast signal */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-gray-900 mb-0.5">
+                  {formatCurrency(aiInsights.highProbValue)} likely to close this month
                 </p>
-                <p className="text-white/80 text-sm mb-3">
-                  {aiInsights.negotiationDeals.length} deals in Negotiation stage (avg 85% win rate)
+                <p className="text-[12px] text-gray-500 mb-3">
+                  {aiInsights.negotiationDeals.length} deal{aiInsights.negotiationDeals.length !== 1 ? 's' : ''} in Negotiation — avg 85% win rate
                 </p>
-                <button
-                  onClick={handleViewForecast}
-                  className="text-xs px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded transition-colors"
-                >
-                  View Forecast
+                <button onClick={handleViewForecast}
+                  className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
+                  View forecast
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="bg-gradient-to-r from-orange-500/20 to-orange-600/20 backdrop-blur-sm rounded-lg p-4 border-2 border-orange-400/40 shadow-lg">
-            <div className="flex items-start space-x-3">
-              <div className="bg-orange-500/30 rounded-full p-2">
-                <Building2 className="h-5 w-5 text-orange-100 flex-shrink-0" />
+          {/* HRMS signal */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-md bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Building2 className="h-3.5 w-3.5 text-indigo-500" />
               </div>
-              <div className="flex-1">
-                <p className="text-white font-semibold mb-1">
-                  🏢 {aiInsights.hrmsDeals.length} deal{aiInsights.hrmsDeals.length !== 1 ? 's' : ''} with HRMS connections progressing well
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-gray-900 mb-0.5">
+                  {aiInsights.hrmsDeals.length > 0
+                    ? `${aiInsights.hrmsDeals.length} HRMS-connected deal${aiInsights.hrmsDeals.length !== 1 ? 's' : ''} active`
+                    : 'No HRMS-connected deals'}
                 </p>
-                {/* Dynamic description — lists top 2 HRMS deals by value with avg AI score */}
-                <p className="text-white/90 text-sm mb-3">
+                <p className="text-[12px] text-gray-500 mb-3 truncate">
                   {aiInsights.hrmsDeals.length > 0
                     ? (() => {
-                        const top = aiInsights.hrmsDeals
-                          .sort((a, b) => b.amount - a.amount)
-                          .slice(0, 2);
-                        const avgScore = Math.round(
-                          aiInsights.hrmsDeals.reduce((s, d) => s + d.aiScore, 0) /
-                          aiInsights.hrmsDeals.length
-                        );
-                        return (
-                          <>
-                            {top.map((d, i) => (
-                              <span key={d.id}>
-                                {d.companyName} ({formatCurrency(d.amount)})
-                                {i < top.length - 1 ? ' and ' : ''}
-                              </span>
-                            ))}
-                            {' '}&mdash; {avgScore}% avg score
-                          </>
-                        );
+                        const top = [...aiInsights.hrmsDeals].sort((a, b) => b.amount - a.amount).slice(0, 2);
+                        return top.map(d => d.companyName).join(', ');
                       })()
-                    : 'No active HRMS-connected deals at the moment.'
-                  }
+                    : 'Link HRMS data to surface opportunities'}
                 </p>
-                <button
-                  onClick={handleViewHRMSDeals}
-                  className="text-xs px-3 py-1.5 bg-orange-500/40 hover:bg-orange-500/60 text-white rounded font-medium transition-colors border border-orange-300/30"
-                >
-                  View HRMS Deals
+                <button onClick={handleViewHRMSDeals}
+                  className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
+                  View HRMS deals
                 </button>
               </div>
             </div>
           </div>
+
         </div>
       </div>
+      )}
 
       <div className="bg-white border-b border-gray-200 px-8 py-4">
 
@@ -1122,67 +1299,35 @@ const DealsKanbanPage: React.FC = () => {
           })}
         </div>
 
-        {/* ── Manual filter dropdowns ─────────────────────────────────────
-            Unchanged from before — manual filters combine additively with
-            any active saved view.                                          */}
-        <div className="flex flex-wrap items-center gap-4 mb-3">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Owner:</span>
-            <select
-              value={selectedOwner}
-              onChange={(e) => setSelectedOwner(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="me">Me</option>
-              <option value="team">My Team</option>
-              <option value="unassigned">Unassigned</option>
-            </select>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Close Date:</span>
-            <select
-              value={selectedCloseDateFilter}
-              onChange={(e) => setSelectedCloseDateFilter(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-            </select>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Value:</span>
-            <select
-              value={selectedValueFilter}
-              onChange={(e) => setSelectedValueFilter(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="0-25k">$0-25K</option>
-              <option value="25-50k">$25-50K</option>
-              <option value="50-100k">$50-100K</option>
-              <option value="100k+">$100K+</option>
-            </select>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Source:</span>
-            <select
-              value={selectedSourceFilter}
-              onChange={(e) => setSelectedSourceFilter(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="leadgen">Lead Gen</option>
-              <option value="hrms">HRMS</option>
-              <option value="website">Website</option>
-              <option value="manual">Manual</option>
-            </select>
-          </div>
+        {/* ── Filter dropdowns — styled selects with ChevronDown affordance ── */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          {([
+            { label: 'Owner', value: selectedOwner, onChange: setSelectedOwner,
+              options: [['all','All owners'],['me','Assigned to me'],['team','My team'],['unassigned','Unassigned']] },
+            { label: 'Close date', value: selectedCloseDateFilter, onChange: setSelectedCloseDateFilter,
+              options: [['all','Any close date'],['week','This week'],['month','This month'],['quarter','This quarter']] },
+            { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
+              options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+'],] },
+            { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
+              options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
+          ] as const).map(f => (
+            <div key={f.label} className="relative flex-shrink-0">
+              <select
+                value={f.value}
+                onChange={(e) => f.onChange(e.target.value as any)}
+                className={`appearance-none bg-white border rounded-md pl-3 pr-7 py-1.5 text-[13px] cursor-pointer
+                  focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors
+                  ${f.value !== 'all'
+                    ? 'border-indigo-300 text-indigo-700 bg-indigo-50'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+              >
+                {(f.options as readonly (readonly [string, string])[]).map(([val, lbl]) => (
+                  <option key={val} value={val}>{val === 'all' ? `${f.label}: ${lbl}` : lbl}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+            </div>
+          ))}
         </div>
 
         {/* ── Active filter pills ─────────────────────────────────────────
@@ -1231,138 +1376,105 @@ const DealsKanbanPage: React.FC = () => {
         })()}
 
 
-        <div className="flex items-center justify-between">
-          <div className="flex-1 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <div className="flex items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search deals, accounts, contacts..."
+              placeholder="Search deals, accounts..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-8 pr-3 py-1.5 text-[13px] border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 placeholder:text-gray-400 transition-colors"
             />
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Sort */}
             <div className="relative" ref={sortDropdownRef}>
               <button
                 onClick={() => setShowSortDropdown(!showSortDropdown)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
               >
-                <Filter className="h-4 w-4" />
-                <span>Sort: {getSortLabel()}</span>
+                <Filter className="h-3.5 w-3.5" />
+                <span>{getSortLabel()}</span>
+                <ChevronDown className="h-3 w-3 text-gray-400" />
               </button>
-
               {showSortDropdown && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  <button
-                    onClick={() => handleSort('closeDate')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Close Date (soonest first)
-                  </button>
-                  <button
-                    onClick={() => handleSort('value')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Deal Value (highest first)
-                  </button>
-                  <button
-                    onClick={() => handleSort('health')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    AI Health Score (highest first)
-                  </button>
-                  <button
-                    onClick={() => handleSort('activity')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Last Activity (most recent)
-                  </button>
-                  <button
-                    onClick={() => handleSort('stage')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Stage Progress
-                  </button>
+                <div className="absolute right-0 mt-1.5 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  {([
+                    ['closeDate', 'Close date'],
+                    ['value',     'Deal value'],
+                    ['health',    'AI health score'],
+                    ['activity',  'Last activity'],
+                    ['stage',     'Stage progress'],
+                  ] as const).map(([key, label]) => (
+                    <button key={key} onClick={() => handleSort(key)}
+                      className={`w-full text-left px-3 py-2 text-[13px] transition-colors
+                        ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
+            {/* View */}
             <div className="relative" ref={viewDropdownRef}>
               <button
                 onClick={() => setShowViewDropdown(!showViewDropdown)}
-                className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
               >
-                <BarChart3 className="h-4 w-4" />
-                <span>View: {getViewLabel()}</span>
+                <BarChart3 className="h-3.5 w-3.5" />
+                <span>{getViewLabel()}</span>
+                <ChevronDown className="h-3 w-3 text-gray-400" />
               </button>
-
               {showViewDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  <button
-                    onClick={() => handleViewChange('kanban')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Kanban
-                  </button>
-                  <button
-                    onClick={() => handleViewChange('list')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    List view (table)
-                  </button>
-                  <button
-                    onClick={() => handleViewChange('grid')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Grid view (cards)
-                  </button>
-                  <button
-                    onClick={() => handleViewChange('calendar')}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Calendar view
-                  </button>
+                <div className="absolute right-0 mt-1.5 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  {([
+                    ['kanban',   'Kanban'],
+                    ['list',     'List'],
+                    ['grid',     'Grid'],
+                    ['calendar', 'Calendar'],
+                  ] as const).map(([key, label]) => (
+                    <button key={key} onClick={() => handleViewChange(key)}
+                      className={`w-full text-left px-3 py-2 text-[13px] transition-colors
+                        ${viewMode === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Card density toggle — standard shows all zones, compact is ~40% shorter */}
-            <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+            {/* Density toggle */}
+            <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
               <button
                 onClick={() => setCardDensity('standard')}
-                title="Standard card density"
-                className={`flex items-center space-x-1.5 px-3 py-2 text-sm transition-colors ${
-                  cardDensity === 'standard'
-                    ? 'bg-indigo-50 text-indigo-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
+                title="Standard density"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] transition-colors
+                  ${cardDensity === 'standard' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}`}
               >
-                <AlignJustify className="h-4 w-4" />
-                <span className="hidden sm:inline">Standard</span>
+                <AlignJustify className="h-3.5 w-3.5" />
               </button>
-              <div className="w-px h-5 bg-gray-300" />
+              <div className="w-px h-4 bg-gray-200" />
               <button
                 onClick={() => setCardDensity('compact')}
-                title="Compact card density"
-                className={`flex items-center space-x-1.5 px-3 py-2 text-sm transition-colors ${
-                  cardDensity === 'compact'
-                    ? 'bg-indigo-50 text-indigo-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
+                title="Compact density"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] transition-colors
+                  ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}`}
               >
-                <LayoutList className="h-4 w-4" />
-                <span className="hidden sm:inline">Compact</span>
+                <LayoutList className="h-3.5 w-3.5" />
               </button>
             </div>
 
+            {/* Export — icon-only tertiary */}
             <button
               onClick={handleExportCSV}
-              className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300"
+              title="Export pipeline"
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
             >
-              <Download className="h-4 w-4" />
-              <span>Export</span>
+              <Download className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -1391,20 +1503,20 @@ const DealsKanbanPage: React.FC = () => {
           <p className="text-gray-600">Calendar view coming soon...</p>
         </div>
       ) : (
-        <div className="px-8 py-6 overflow-x-auto" style={{ scrollBehavior: 'smooth' }}>
+        <div className="px-6 py-5 overflow-x-auto" style={{ scrollBehavior: 'smooth' }}>
           {focusedStage && (
-            <div className="mb-4 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-              <div className="flex items-center space-x-2 text-blue-900">
-                <Filter className="h-4 w-4" />
-                <span className="text-sm font-medium">
+            <div className="mb-4 flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2.5">
+              <div className="flex items-center gap-2 text-indigo-800">
+                <Filter className="h-3.5 w-3.5" />
+                <span className="text-[13px] font-medium">
                   Viewing: {stages.find(s => s.id === focusedStage)?.name}
                 </span>
               </div>
               <button
                 onClick={() => setFocusedStage(null)}
-                className="text-sm text-blue-700 hover:text-blue-900 font-medium"
+                className="text-[13px] text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
               >
-                Show All Stages
+                Show all stages
               </button>
             </div>
           )}
@@ -1420,45 +1532,59 @@ const DealsKanbanPage: React.FC = () => {
               if (debouncedSearch && filteredDeals.length === 0) return null;
               const stageTotal = filteredDeals.reduce((sum, d) => sum + d.amount, 0);
 
-              const getStageHeaderColor = () => {
-                switch(stage.id) {
-                  case 'prospecting': return { bg: '#2196F3', text: '#ffffff' };
-                  case 'qualified': return { bg: '#4CAF50', text: '#ffffff' };
-                  case 'proposal': return { bg: '#FF9800', text: '#ffffff' };
-                  case 'negotiation': return { bg: '#9C27B0', text: '#ffffff' };
-                  case 'closed-won': return { bg: '#2E7D32', text: '#ffffff' };
-                  case 'closed-lost': return { bg: '#D32F2F', text: '#ffffff' };
-                  default: return { bg: '#757575', text: '#ffffff' };
-                }
+              const STAGE_ACCENT: Record<string, string> = {
+                'prospecting': '#6366f1',
+                'qualified':   '#0ea5e9',
+                'proposal':    '#f59e0b',
+                'negotiation': '#8b5cf6',
+                'closed-won':  '#10b981',
+                'closed-lost': '#f43f5e',
               };
-
-              const headerColors = getStageHeaderColor();
+              const accentColor = STAGE_ACCENT[stage.id] ?? '#94a3b8';
 
               return (
                 <div key={stage.id} style={{ width: '280px' }} className="flex-shrink-0">
-                  <div className="rounded-t-lg px-4 py-3" style={{ backgroundColor: headerColors.bg }}>
-                    <div className="flex items-center justify-between mb-1">
+                  {/* Column header — white with colored accent dot */}
+                  <div className="bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
                       <button
                         onClick={() => toggleStageCollapse(stage.id)}
-                        className="font-bold hover:opacity-80 transition-opacity text-left uppercase text-sm tracking-wide"
-                        style={{ color: headerColors.text }}
+                        className="flex items-center gap-2 group"
+                        title={`${isCollapsed ? 'Expand' : 'Collapse'} ${stage.name}`}
                       >
-                        {stage.name}
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: accentColor }}
+                        />
+                        <span className="text-[11px] font-semibold text-gray-700 uppercase tracking-wider group-hover:text-gray-900 transition-colors">
+                          {stage.name}
+                        </span>
                       </button>
+                      {!['closed-won', 'closed-lost'].includes(stage.id) && (
+                        <button
+                          onClick={() => handleAddDealToStage(stage.id)}
+                          className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          title={`Add deal to ${stage.name}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between text-sm" style={{ color: headerColors.text, opacity: 0.9 }}>
+                    <div className="flex items-center justify-between">
                       <button
                         onClick={(e) => handleStageCountClick(e, stage.id)}
-                        className="hover:opacity-80 transition-opacity font-medium"
+                        className="text-[13px] font-semibold text-gray-900 hover:text-indigo-600 transition-colors tabular-nums"
                       >
-                        {filteredDeals.length} deal{filteredDeals.length !== 1 ? 's' : ''}
-                        {debouncedSearch && filteredDeals.length !== stage.deals.length && (
-                          <span style={{ opacity: 0.75 }}> / {stage.deals.length}</span>
-                        )}
+                        {filteredDeals.length}
+                        <span className="text-[12px] font-normal text-gray-400 ml-1">
+                          deal{filteredDeals.length !== 1 ? 's' : ''}
+                          {debouncedSearch && filteredDeals.length !== stage.deals.length &&
+                            ` / ${stage.deals.length}`}
+                        </span>
                       </button>
                       <button
                         onClick={(e) => handleStageValueClick(e, stage)}
-                        className="font-medium hover:opacity-80 transition-opacity"
+                        className="text-[12px] font-medium text-gray-500 hover:text-gray-700 transition-colors tabular-nums"
                       >
                         {formatCurrency(stageTotal)}
                       </button>
@@ -1471,9 +1597,9 @@ const DealsKanbanPage: React.FC = () => {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`${stage.color} rounded-b-lg px-3 py-2 ${isCollapsed ? 'min-h-[50px]' : 'min-h-[500px] max-h-[700px] overflow-y-auto'} space-y-2 ${
-                        snapshot.isDraggingOver ? 'ring-2 ring-blue-400' : ''
-                      }`}
+                      className={`rounded-b-lg border border-t-0 border-gray-200 px-3 py-2.5 transition-colors
+                        ${isCollapsed ? 'min-h-[40px]' : 'min-h-[500px] overflow-y-auto'}
+                        space-y-2 ${snapshot.isDraggingOver ? 'bg-indigo-50/70' : 'bg-gray-50'}`}
                       style={{ scrollbarWidth: 'thin' }}
                     >
                       {!isCollapsed && getVisibleDeals(stage).map((deal, index) => (
@@ -1491,6 +1617,8 @@ const DealsKanbanPage: React.FC = () => {
                                 isHighlighted={highlightedDeals.includes(deal.id)}
                                 isDragging={snapshot.isDragging}
                                 showScoreTooltip={showScoreTooltip === deal.id}
+                                inspectionMode={inspectionMode}
+                                inspectionBadge={inspectionMode ? getInspectionBadge(deal) : null}
                                 onCardClick={handleCardClick}
                                 onContextMenu={handleContextMenu}
                                 onHRMSClick={handleHRMSBadgeClick}
@@ -1508,51 +1636,56 @@ const DealsKanbanPage: React.FC = () => {
                       ))}
                       {provided.placeholder}
 
-                      {/* Empty state when search/filters produce no results */}
+                      {/* Empty state */}
                       {!isCollapsed && filterDeals(stage.deals).length === 0 && !debouncedSearch && (
-                        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                          <Target className="h-8 w-8 mb-2 opacity-40" />
-                          <p className="text-xs text-center">No deals in this stage</p>
+                        <div className="flex flex-col items-center justify-center py-10 px-3">
+                          <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center mb-3">
+                            <Target className="h-4 w-4 text-gray-300" />
+                          </div>
+                          <p className="text-[12px] font-medium text-gray-500 text-center mb-0.5">No deals here</p>
+                          <p className="text-[11px] text-gray-400 text-center">Drag a card in or use + above</p>
                         </div>
                       )}
 
+                      {/* Collapsed state */}
                       {isCollapsed && (
-                        <div className="text-center text-sm text-gray-500 py-4">
-                          {stage.deals.length} deal{stage.deals.length !== 1 ? 's' : ''} hidden
+                        <div className="flex items-center justify-center py-3">
+                          <span className="text-[12px] text-gray-400 tabular-nums">
+                            {stage.deals.length} deal{stage.deals.length !== 1 ? 's' : ''} hidden
+                          </span>
                         </div>
                       )}
 
+                      {/* Load more */}
                       {!isCollapsed && hasMoreDeals(stage) && (
                         <>
                           {loadingMore[stage.id] ? (
-                            <div className="flex items-center justify-center py-4">
-                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                              <span className="ml-2 text-sm text-gray-600">Loading more deals...</span>
+                            <div className="flex items-center justify-center gap-2 py-3">
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-200 border-t-indigo-500" />
+                              <span className="text-[12px] text-gray-500">Loading…</span>
                             </div>
                           ) : (
                             <button
                               onClick={() => loadMoreDeals(stage.id)}
-                              className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 hover:border-blue-400 transition-colors text-sm font-medium flex items-center justify-center space-x-2"
+                              className="w-full py-2 bg-white border border-gray-200 rounded-md text-[12px] text-gray-500 hover:text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors font-medium"
                             >
-                              <span>Load More Deals</span>
-                              <span className="text-xs text-gray-500">
+                              Load more
+                              <span className="text-gray-400 ml-1">
                                 ({stage.deals.length - (visibleDealsCount[stage.id] || DEALS_PER_PAGE)} remaining)
                               </span>
                             </button>
                           )}
-                          <div
-                            ref={(el) => setupInfiniteScroll(el, stage.id)}
-                            className="h-4"
-                          />
+                          <div ref={(el) => setupInfiniteScroll(el, stage.id)} className="h-2" />
                         </>
                       )}
 
+                      {/* Add deal — dashed CTA at column bottom */}
                       {!isCollapsed && !['closed-won', 'closed-lost'].includes(stage.id) && (
                         <button
                           onClick={() => handleAddDealToStage(stage.id)}
-                          className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors text-sm font-medium"
+                          className="w-full py-2 border border-dashed border-gray-300 rounded-md text-[12px] text-gray-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/40 transition-colors font-medium"
                         >
-                          + Add Deal
+                          + Add deal
                         </button>
                       )}
                     </div>
@@ -1975,14 +2108,24 @@ const DealsKanbanPage: React.FC = () => {
       )}
 
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <div className={`rounded-lg shadow-lg px-4 py-3 flex items-center space-x-2 ${
-            toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+        <div className="fixed bottom-4 right-4 z-50 max-w-sm">
+          <div className={`rounded-lg shadow-lg px-4 py-3 flex items-center space-x-3 ${
+            toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-indigo-700'
           } text-white`}>
-            {toast.type === 'success' && <CheckCircle2 className="h-5 w-5" />}
-            {toast.type === 'error' && <XCircle className="h-5 w-5" />}
-            {toast.type === 'info' && <AlertTriangle className="h-5 w-5" />}
-            <span className="font-medium">{toast.message}</span>
+            <div className="flex items-center space-x-2 flex-1 min-w-0">
+              {toast.type === 'success' && <CheckCircle2 className="h-4 w-4 flex-shrink-0" />}
+              {toast.type === 'error'   && <XCircle      className="h-4 w-4 flex-shrink-0" />}
+              {toast.type === 'info'    && <ShieldAlert  className="h-4 w-4 flex-shrink-0 text-amber-300" />}
+              <span className="text-sm font-medium leading-snug">{toast.message}</span>
+            </div>
+            {toast.actionLabel && toast.onAction && (
+              <button
+                onClick={() => { toast.onAction!(); setToast(null); }}
+                className="flex-shrink-0 text-xs font-semibold px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded transition-colors whitespace-nowrap"
+              >
+                {toast.actionLabel}
+              </button>
+            )}
           </div>
         </div>
       )}
