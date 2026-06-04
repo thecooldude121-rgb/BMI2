@@ -225,7 +225,7 @@ const CRMDashboard: React.FC = () => {
         navigate('/crm/deals');
         break;
       case 'Pipeline':
-        navigate('/crm/pipeline');
+        navigate('/crm/deals');
         break;
       case 'Target':
         navigate('/analytics');
@@ -772,11 +772,11 @@ const CRMDashboard: React.FC = () => {
                   📊 Pipeline by Stage
                 </h2>
                 <button
-                  onClick={() => navigate('/crm/pipeline')}
+                  onClick={() => navigate('/crm/deals')}
                   className="text-sm font-medium hover:underline"
                   style={{ color: '#667eea' }}
                 >
-                  View Analysis →
+                  View Deals →
                 </button>
               </div>
               <div className="space-y-4 mb-6">
@@ -818,10 +818,10 @@ const CRMDashboard: React.FC = () => {
               </div>
 
               <button
-                onClick={() => navigate('/crm/pipeline')}
+                onClick={() => navigate('/crm/deals')}
                 className="w-full py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                View Full Pipeline
+                View Deals Board
               </button>
             </div>
 

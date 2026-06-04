@@ -16,7 +16,6 @@ const getPageLabel = (pathname: string): string => {
   if (pathname.startsWith('/crm/meetings'))      return 'Meetings';
   if (pathname.startsWith('/crm/calls'))         return 'Calls';
   if (pathname.startsWith('/crm/reports'))       return 'Reports';
-  if (pathname.startsWith('/crm/pipeline'))      return 'Pipeline';
   if (pathname.startsWith('/crm'))               return 'CRM';
   if (pathname.startsWith('/accounts'))          return 'Accounts';
   if (pathname.startsWith('/hrms'))              return 'HRMS';

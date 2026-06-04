@@ -4,7 +4,7 @@ import {
   Bell, Search, Settings, Menu, Plus, Mail, Building2,
   Users, UserPlus, DollarSign, Phone, Activity, LayoutDashboard,
   UserCheck, Target, BarChart3, Calendar, ChevronDown, X, MoreHorizontal,
-  Building, Trophy, LogOut, Plug, FileText, TrendingUp
+  Building, Trophy, LogOut, Plug, FileText
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -44,9 +44,6 @@ const Header: React.FC = () => {
     { name: 'Reports', href: '/crm/reports', icon: BarChart3 },
     { name: 'Analytics', href: '/analytics', icon: Target },
     { name: 'Tasks', href: '/crm/tasks', icon: Phone },
-    // "Forecast" replaces "Pipeline" label — /crm/pipeline is the analytics page,
-    // not the Kanban board. Kanban lives under "Deals".
-    { name: 'Forecast', href: '/crm/pipeline', icon: TrendingUp },
     { name: 'Gamification', href: '/crm/gamification', icon: Trophy },
   ];
 

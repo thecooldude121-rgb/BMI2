@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, DollarSign, Target, BarChart3, Calendar,
   Settings, UserCheck, Building2, Phone, Mail, Activity, CheckSquare,
-  TrendingUp, Zap, Award, Plug, Trophy
+  Zap, Award, Plug, Trophy
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -27,7 +27,6 @@ const Sidebar: React.FC = () => {
         { name: 'Accounts', href: '/accounts', icon: Building2 },
         { name: 'Contacts', href: '/crm/contacts', icon: Users },
         { name: 'Deals', href: '/crm/deals', icon: DollarSign },
-        { name: 'Pipeline', href: '/crm/pipeline', icon: TrendingUp },
         { name: 'Activities', href: '/crm/activities', icon: Activity },
         { name: 'Tasks', href: '/crm/tasks', icon: CheckSquare },
         { name: 'Settings', href: '/settings', icon: Settings }

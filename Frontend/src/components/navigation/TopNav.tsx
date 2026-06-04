@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, Settings, ChevronDown, Plus, Mail, Building2, MoreVertical, Target, DollarSign, Users, TrendingUp, Bot, Calendar } from 'lucide-react';
+import { Search, Bell, Settings, ChevronDown, Plus, Mail, Building2, MoreVertical, Target, DollarSign, Users, Bot, Calendar } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -187,16 +187,6 @@ const TopNav: React.FC = () => {
               >
                 <DollarSign className="mr-3 h-4 w-4 text-gray-400" />
                 Deals
-              </button>
-              <button
-                onClick={() => {
-                  navigate('/crm/pipeline');
-                  setShowCRMMenu(false);
-                }}
-                className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-              >
-                <TrendingUp className="mr-3 h-4 w-4 text-gray-400" />
-                Pipeline
               </button>
               <div className="border-t border-gray-200 my-2"></div>
               <button

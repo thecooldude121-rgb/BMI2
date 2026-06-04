@@ -7,10 +7,7 @@ import ContactsPage from './ContactsPage';
 import ContactDetailView from './ContactDetailView';
 import AddEditContactPage from './AddEditContactPage';
 import CompaniesPage from './CompaniesPage';
-import UnifiedDealsPage from './UnifiedDealsPage';
-import DealsPage from './DealsPage';
 import DealsKanbanPage from './DealsKanbanPage';
-import PipelinePage from './PipelinePage';
 import ActivitiesPage from './ActivitiesPage';
 import TasksPage from './TasksPage';
 import AddLeadPage from './AddLeadPage';
@@ -70,13 +67,12 @@ const CRMModule = () => {
           <Route path="/accounts/:accountId/merge" element={<AccountMergePage />} />
           <Route path="/accounts/import-export" element={<AccountImportExport />} />
           <Route path="/deals" element={<DealsKanbanPage />} />
-          <Route path="/deals-list" element={<DealsPage />} />
-          <Route path="/deals-unified" element={<UnifiedDealsPage />} />
           <Route path="/deals/add" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/create" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/:id/edit" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/:id" element={<ComprehensiveDealDetailPage />} />
-          <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/forecast" element={<Navigate to="/crm/deals" replace />} />
+          <Route path="/pipeline" element={<Navigate to="/crm/deals" replace />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/activities" element={<ActivitiesPage />} />
           <Route path="/activities/all" element={<ComprehensiveActivityFeed />} />
