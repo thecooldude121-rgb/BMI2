@@ -16,35 +16,69 @@ const parseDate = (input: string | Date | null | undefined): Date | null => {
   const str = String(input).trim();
   if (!str) return null;
 
+  let d: Date;
+
   // Full ISO string already carries timezone info — parse as-is
   if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
-    const d = new Date(str);
-    return isNaN(d.getTime()) ? null : d;
+    d = new Date(str);
   }
-
   // Plain YYYY-MM-DD — anchor at local noon to avoid midnight UTC edge case
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    const d = new Date(str + 'T12:00:00');
-    return isNaN(d.getTime()) ? null : d;
+  else if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    d = new Date(str + 'T12:00:00');
   }
-
   // DD/MM/YYYY (Indian format from manual entry)
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+  else if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
     const [dd, mm, yyyy] = str.split('/');
-    const d = new Date(`${yyyy}-${mm}-${dd}T12:00:00`);
-    return isNaN(d.getTime()) ? null : d;
+    d = new Date(`${yyyy}-${mm}-${dd}T12:00:00`);
+  }
+  // Fallback for any other parseable format
+  else {
+    d = new Date(str);
   }
 
-  // Fallback for any other parseable format
-  const d = new Date(str);
-  return isNaN(d.getTime()) ? null : d;
+  if (isNaN(d.getTime())) return null;
+
+  // Reject nonsense years — DB corruption or 6-digit typos (e.g. "262026")
+  // pass V8's parser but are never valid CRM dates.
+  const y = d.getFullYear();
+  if (y < 1900 || y > 2200) return null;
+
+  return d;
+};
+
+// Month abbreviations are hardcoded so output is identical across all
+// browser/OS/locale combinations. toLocaleDateString('en-IN') produces 'Sept'
+// on some runtimes and 'Sep' on others — this eliminates that variance.
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as const;
+
+/**
+ * Returns "16 Jul 2026" — browser-independent, never "Invalid Date".
+ * Exported so other components can call it instead of toLocaleDateString().
+ */
+export const formatDateShort = (d: Date): string => {
+  const day  = String(d.getDate()).padStart(2, '0');
+  const mon  = MONTHS[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${mon} ${year}`;
+};
+
+/**
+ * Returns "16 Jul 2026, 14:30" — browser-independent short datetime.
+ * Use instead of toLocaleString() to get consistent output everywhere.
+ */
+export const formatDateTimeShort = (input: string | Date | null | undefined): string => {
+  const d = parseDate(input);
+  if (!d) return '—';
+  const date = formatDateShort(d);
+  const h    = String(d.getHours()).padStart(2, '0');
+  const m    = String(d.getMinutes()).padStart(2, '0');
+  return `${date}, ${h}:${m}`;
 };
 
 /** Returns "16 Jul 2026" or "Not set" for null / invalid input. */
 export const formatDisplayDate = (input: string | Date | null | undefined): string => {
   const d = parseDate(input);
-  if (!d) return 'Not set';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d ? formatDateShort(d) : 'Not set';
 };
 
 /**
@@ -117,9 +151,9 @@ export const formatRelativeTime = (
   const diffMs = nowMs - d.getTime();
   const days   = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  // Future or exactly now
+  // Future or exactly now — show the absolute date
   if (diffMs < 0) {
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return formatDateShort(d);
   }
 
   if (days === 0) return 'Today';
@@ -130,7 +164,7 @@ export const formatRelativeTime = (
     return months === 1 ? '1 month ago' : `${months} months ago`;
   }
   // Older than a year — show the absolute date
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatDateShort(d);
 };
 
 /**
@@ -140,8 +174,7 @@ export const formatRelativeTime = (
  */
 export const formatCloseDate = (input: string | Date | null | undefined): string => {
   const d = parseDate(input);
-  if (!d) return 'No close date';
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  return d ? formatDateShort(d) : 'No close date';
 };
 
 /**

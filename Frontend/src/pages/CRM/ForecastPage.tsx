@@ -34,7 +34,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { fetchDeals } from '../../utils/dealsApi';
-import { daysFromNow, formatCloseDate } from '../../utils/dateUtils';
+import { daysFromNow, formatCloseDate, parseDateMs } from '../../utils/dateUtils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -244,12 +244,13 @@ const ForecastPage: React.FC = () => {
         // but NOT in closed view (closed-won deals should have a close date)
         if (!d.closeDate) return d.category !== 'closed';
 
-        const cd = new Date(d.closeDate + 'T12:00:00');
-        if (isNaN(cd.getTime())) return d.category !== 'closed';
+        const closeMs = parseDateMs(d.closeDate);
+        // parseDateMs returns Infinity for missing/invalid/out-of-range dates
+        if (!isFinite(closeMs)) return d.category !== 'closed';
 
         // For closed deals: must have closed in the selected quarter
         // For active deals: expected close date must fall in the quarter
-        return cd >= quarter.start && cd <= quarter.end;
+        return closeMs >= quarter.start.getTime() && closeMs <= quarter.end.getTime();
       });
   }, [rawDeals, quarter]);
 

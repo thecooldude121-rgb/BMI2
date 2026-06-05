@@ -379,22 +379,17 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
 
       {/* ── ZONE 3: State chip + secondary context ───────────────────────── */}
       {/*
-        Left:  status chip — only rendered when chipLabel is non-empty.
-               Empty for normal/on-track deals so the row stays clean.
-        Right: context label — pushed right by ml-auto.
-               Rules for what shows on the right:
-               • Inspection mode with a badge → show the badge
-               • Overdue / stalled            → nothing (chip already encodes
-                                                the duration; showing "8 days ago"
-                                                alongside "Overdue · 4d" creates
-                                                double-time-reference confusion)
-               • Closed deal                  → close date (e.g. "15 Jan 2026")
-               • All other active states       → relative activity time
-      */}
-      <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-gray-100">
+        Layout: justify-between so the left chip and right label are always
+        at opposite ends with reliable spacing — no ml-auto/truncate collapse.
 
-        {/* Left — chip when a signal exists; activity text when on-track.
-            Always populated so the row never reads as an empty gap. */}
+        Left:  status chip (always a button for interaction) when signal exists,
+               or plain activity text for on-track deals.
+        Right: inspection badge > close date (closed) > activity time (active)
+               Overdue/stalled suppress the right element — chip encodes timing.
+      */}
+      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-100">
+
+        {/* Left — chip or fallback activity label */}
         {state.chipLabel ? (
           <button
             onClick={(e) => { e.stopPropagation(); onStatusClick(e, deal); }}
@@ -405,37 +400,40 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
             <span>{state.chipLabel}</span>
           </button>
         ) : (
-          <span className="text-[11px] text-gray-500 truncate">
+          <span className="text-[11px] text-gray-500 whitespace-nowrap">
             {isClosed
               ? formatCloseDate(deal.closeDate)
               : formatRelativeTime(deal.lastActivity, 'No activity')}
           </span>
         )}
 
-        {/* Right — inspection badge takes priority; activity time shown only
-            when a chip anchors the left (prevents duplicate time references). */}
+        {/* Right — strictly typed secondary label; never truncated into chip */}
         {inspectionMode && inspectionBadge ? (
           <span
-            className={`text-[11px] px-2 py-0.5 rounded font-medium ml-auto flex-shrink-0 ${inspectionBadge.style}`}
+            className={`text-[11px] px-2 py-0.5 rounded font-medium flex-shrink-0 ${inspectionBadge.style}`}
             title={inspectionBadge.title}
           >
             {inspectionBadge.label}
           </span>
+        ) : isClosed && state.chipLabel ? (
+          <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">
+            {formatCloseDate(deal.closeDate)}
+          </span>
         ) : state.chipLabel && state.primary !== 'overdue' && state.primary !== 'stalled' ? (
-          <span className="text-[11px] text-gray-500 truncate ml-auto">
-            {isClosed
-              ? formatCloseDate(deal.closeDate)
-              : formatRelativeTime(deal.lastActivity, 'No activity')}
+          <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">
+            {formatRelativeTime(deal.lastActivity, 'No activity')}
           </span>
         ) : null}
 
       </div>
 
       {/* ── Next step line ───────────────────────────────────────────────── */}
-      {/* Shown when a step exists and we're NOT in inspection mode (the badge
-          already surfaces there).  Single truncated line with an urgency badge
-          when the step due date is overdue or due today.                     */}
-      {!inspectionMode && deal.nextStep?.trim() && (
+      {/* Hidden for closed deals — next steps are irrelevant post-close.
+          Also suppresses placeholder strings like "N/A" stored in the DB.
+          Shown for active deals when a real next step exists.               */}
+      {!isClosed && !inspectionMode && !!deal.nextStep?.trim() &&
+        deal.nextStep.trim().toUpperCase() !== 'N/A' &&
+        deal.nextStep.trim() !== '—' && (
         <div className="flex items-center space-x-1 mb-2">
           <ArrowRight className="h-3 w-3 text-indigo-400 flex-shrink-0" />
           <span className="text-[11px] text-gray-600 line-clamp-1 leading-snug flex-1 min-w-0">
