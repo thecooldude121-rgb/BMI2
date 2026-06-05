@@ -5,7 +5,23 @@ import { AuthRequest } from '../middleware/auth';
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { stage, assigned_to, search, limit = 50, offset = 0 } = req.query;
-    let query = `SELECT d.*, l.email AS lead_email FROM deals d LEFT JOIN leads l ON d.lead_id = l.id WHERE 1=1`;
+    // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
+    // produce duplicate rows for the same deal.  Duplicate cards on the board
+    // are caused by genuine duplicate rows in the deals table (different ids,
+    // same name/company/stage) — typically from double-submitting the form.
+    // The frontend's Pass 3 content-dedup filters these before rendering.
+    // If a one-to-many JOIN is ever added here, wrap the query in a subquery
+    // with DISTINCT ON (d.id) + ORDER BY d.id to avoid row inflation.
+    //
+    // days_since_contact: integer days since the deal was last updated.
+    // Drives all stalled/activity signals on the frontend. Floors at 0.
+    let query = `
+      SELECT d.*,
+             l.email AS lead_email,
+             GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
+      FROM deals d
+      LEFT JOIN leads l ON d.lead_id = l.id
+      WHERE 1=1`;
     const params: any[] = [];
     let i = 1;
     if (stage)       { query += ` AND d.stage = $${i++}`;             params.push(stage); }
@@ -21,7 +37,10 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
 export const getDealById = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const result = await pool.query(
-      `SELECT d.*, l.name AS lead_name, l.email AS lead_email
+      `SELECT d.*,
+              l.name AS lead_name,
+              l.email AS lead_email,
+              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
        FROM deals d LEFT JOIN leads l ON d.lead_id = l.id WHERE d.id = $1`,
       [req.params.id]
     );
@@ -37,10 +56,11 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       pipeline_id, pipeline_name, deal_type,
       stage, probability, expected_close_date,
       close_date_is_past, close_date_override_reason, forecast_category,
-      assigned_to, description, next_step, notes, company_name,
+      assigned_to, description, next_step, next_step_due_date, next_step_owner,
+      next_step_status, notes, company_name,
       contact_name, contact_email, contact_title, stakeholders, competitors,
       source, priority, tags, product, contract_term, payment_terms,
-      attachment_metadata
+      attachment_metadata, win_prob_override_reason, win_prob_ai
     } = req.body;
 
     // Auto-generate ID in D001 format
@@ -54,12 +74,13 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           pipeline_id, pipeline_name, deal_type,
           stage, probability, expected_close_date,
           close_date_is_past, close_date_override_reason, forecast_category,
-          assigned_to, description, next_step, notes, company_name,
+          assigned_to, description, next_step, next_step_due_date, next_step_owner,
+          next_step_status, notes, company_name,
           contact_name, contact_email, contact_title, stakeholders, competitors,
           source, priority, tags, product, contract_term, payment_terms,
-          attachment_metadata)
+          attachment_metadata, win_prob_override_reason, win_prob_ai)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
        RETURNING *`,
       [
         id, name, title, lead_id, value,
@@ -69,12 +90,16 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         stage || 'prospecting', probability || 0, expected_close_date,
         close_date_is_past ?? false, close_date_override_reason ?? null,
         forecast_category ?? null,
-        assigned_to, description, next_step, notes, company_name,
+        assigned_to, description, next_step ?? null,
+        next_step_due_date ?? null, next_step_owner ?? null,
+        next_step_status ?? 'pending', notes, company_name,
         contact_name, contact_email, contact_title,
         JSON.stringify(stakeholders ?? []),
         JSON.stringify(competitors ?? []),
         source, priority || 'Medium', tags, product, contract_term, payment_terms,
-        JSON.stringify(attachment_metadata ?? [])
+        JSON.stringify(attachment_metadata ?? []),
+        win_prob_override_reason ?? null,
+        win_prob_ai ?? null,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -83,7 +108,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;

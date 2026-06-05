@@ -137,10 +137,9 @@ const DealsKanbanPage: React.FC = () => {
     fetchDeals().then((apiDeals: any[]) => {
       if (cancelled) return;
 
-      // ── Defensive logging ──────────────────────────────────────────────────
-      // Root cause: backend JOINs (stakeholders, tags, contacts) inflate rows.
-      // Any record with a missing/non-string id is unusable as a React key and
-      // as a drag-and-drop draggableId, so we log and drop them here.
+      // ── Pass 1: drop malformed records ────────────────────────────────────
+      // Any record without a string id is unusable as a React key and as a
+      // @hello-pangea/dnd draggableId — log and discard immediately.
       const malformed = apiDeals.filter(
         (d: any) => !d.id || typeof d.id !== 'string'
       );
@@ -151,36 +150,54 @@ const DealsKanbanPage: React.FC = () => {
         );
       }
 
-      // ── Deduplication at ingestion ─────────────────────────────────────────
-      // Use a Map keyed by id so last-occurrence wins (most-recently-updated
-      // row from a JOIN-inflated backend response).  This is the primary fix
-      // for duplicate cards: even if the API returns the same deal N times,
-      // only one DealCard enters state.
-      const seen = new Map<string, any>();
+      // ── Pass 2: deduplicate by id ──────────────────────────────────────────
+      // Guards against same-id rows that could appear if a future query adds a
+      // one-to-many JOIN (e.g. tags, activities).  First-occurrence wins so the
+      // array order (created_at DESC from the API) is preserved.
+      const seenById = new Map<string, any>();
       apiDeals.forEach((d: any) => {
-        if (d.id && typeof d.id === 'string') seen.set(d.id, d);
+        if (d.id && typeof d.id === 'string' && !seenById.has(d.id)) {
+          seenById.set(d.id, d);
+        }
       });
-      const dedupedDeals = Array.from(seen.values());
+      const idDedupedDeals = Array.from(seenById.values());
 
-      if (dedupedDeals.length !== apiDeals.length) {
+      if (idDedupedDeals.length !== apiDeals.length) {
         console.warn(
-          `[Pipeline] API returned ${apiDeals.length} rows, deduped to ` +
-          `${dedupedDeals.length} (${apiDeals.length - dedupedDeals.length} duplicates removed). ` +
-          `Check backend for JOIN inflation.`
+          `[Pipeline] API returned ${apiDeals.length} rows, id-deduped to ` +
+          `${idDedupedDeals.length} (${apiDeals.length - idDedupedDeals.length} same-id rows removed).`
         );
       }
 
-      // Secondary check: warn about records with identical dealName+stage
-      // (different IDs — these are real DB duplicates, not JOIN inflation).
-      const nameStageKey = (d: any) => `${(d.name || '').toLowerCase().trim()}|${d.stage}`;
-      const nameStageMap = new Map<string, string>();
-      dedupedDeals.forEach(d => {
-        const key = nameStageKey(d);
-        if (nameStageMap.has(key)) {
-          console.warn(`[Pipeline] Possible duplicate records: "${d.name}" in stage "${d.stage}" (IDs: ${nameStageMap.get(key)}, ${d.id}). Consider cleaning the database.`);
-        } else {
-          nameStageMap.set(key, d.id);
+      // ── Pass 3: deduplicate by content identity ────────────────────────────
+      // The backend LEFT JOIN on leads is one-to-one and cannot inflate rows,
+      // so same-id duplicates are rare.  The more common problem is genuine DB
+      // duplicates: two rows with different IDs but the same (name, company,
+      // stage) created by double-submitting the form or repeated test inserts.
+      // These survive Pass 2 and render as duplicate cards on the board.
+      //
+      // Key: name + company_name + stage (company scopes the key so two deals
+      // with identical names at different companies are not wrongly merged).
+      // First-occurrence wins — API is sorted created_at DESC so the first
+      // record seen is the most recently created one (the canonical version).
+      // Discarded IDs are logged so the DB can be cleaned up.
+      const contentKey = (d: any) =>
+        `${(d.name || '').toLowerCase().trim()}|` +
+        `${(d.company_name || '').toLowerCase().trim()}|` +
+        `${d.stage}`;
+      const seenByContent = new Map<string, string>(); // key → kept id
+      const dedupedDeals = idDedupedDeals.filter(d => {
+        const key = contentKey(d);
+        if (seenByContent.has(key)) {
+          console.warn(
+            `[Pipeline] DB duplicate: "${d.name}" / "${d.company_name || '—'}" in "${d.stage}" ` +
+            `— keeping id ${seenByContent.get(key)}, discarding id ${d.id}. ` +
+            `Run: DELETE FROM deals WHERE id = '${d.id}';`
+          );
+          return false;
         }
+        seenByContent.set(key, d.id);
+        return true;
       });
 
       if (!dedupedDeals.length) return;
