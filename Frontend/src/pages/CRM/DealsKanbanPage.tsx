@@ -1105,130 +1105,6 @@ const DealsKanbanPage: React.FC = () => {
             );
           })()}
 
-          <div className="w-px h-5 bg-gray-200 mx-3 flex-shrink-0" />
-
-          {/* ── Filter + Sort ──────────────────────────────────────────── */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {(() => {
-              const pills = getActiveFilterPills(
-                activeViewId, selectedOwner, selectedCloseDateFilter,
-                selectedValueFilter, selectedSourceFilter, searchTerm,
-              );
-              const activeCount = pills.length;
-              return (
-                <div className="flex items-center">
-                  <button
-                    onClick={() => setShowFilterPanel(f => !f)}
-                    className={`flex items-center gap-1.5 py-1.5 text-[13px] font-medium transition-all
-                      ${activeCount > 0 ? 'pl-2.5 pr-2' : 'px-2.5'}
-                      ${showFilterPanel || activeCount > 0
-                        ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-l-md'
-                        : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 rounded-md'}`}
-                  >
-                    <Filter className="h-3.5 w-3.5" />
-                    <span>Filter</span>
-                    {activeCount > 0 && (
-                      <span className="min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold leading-none">
-                        {activeCount}
-                      </span>
-                    )}
-                  </button>
-                  {activeCount > 0 && (
-                    <button
-                      onClick={resetFilters}
-                      title="Clear all filters"
-                      className="flex items-center px-1.5 py-1.5 border border-l-0 border-indigo-200 bg-indigo-50 text-indigo-400 hover:text-indigo-700 hover:bg-indigo-100 rounded-r-md transition-colors"
-                    >
-                      <XIcon className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
-
-            <div className="relative" ref={sortDropdownRef}>
-              <button
-                onClick={() => setShowSortDropdown(!showSortDropdown)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium rounded-md border transition-colors
-                  ${sortBy !== 'closeDate'
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                    : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
-              >
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                <span>Sort</span>
-              </button>
-              {showSortDropdown && (
-                <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
-                  {([
-                    ['closeDate', 'Close date'],
-                    ['value',     'Deal value'],
-                    ['health',    'AI health score'],
-                    ['activity',  'Last activity'],
-                    ['stage',     'Stage progress'],
-                  ] as const).map(([key, label]) => (
-                    <button key={key} onClick={() => handleSort(key)}
-                      className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors
-                        ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
-                      {sortBy === key
-                        ? <Check className="h-3.5 w-3.5 flex-shrink-0" />
-                        : <span className="w-3.5 flex-shrink-0" />}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="w-px h-4 bg-gray-200 mx-2.5 flex-shrink-0" />
-
-          {/* ── View mode icons ────────────────────────────────────────── */}
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            {([
-              ['list',     AlignJustify, 'List view'],
-              ['kanban',   Columns,      'Kanban board'],
-              ['grid',     LayoutList,   'Grid view'],
-              ['calendar', Calendar,     'Calendar view'],
-            ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => (
-              <button
-                key={key}
-                onClick={() => handleViewChange(key as 'kanban' | 'list' | 'grid' | 'calendar')}
-                title={label}
-                className={`p-1.5 rounded-md transition-colors
-                  ${viewMode === key
-                    ? 'bg-indigo-50 text-indigo-600'
-                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-              >
-                <Icon className="h-[15px] w-[15px]" />
-              </button>
-            ))}
-          </div>
-
-          <div className="w-px h-4 bg-gray-200 mx-2 flex-shrink-0" />
-
-          {/* ── Density / export / refresh ─────────────────────────────── */}
-          <div className="flex items-center gap-0.5 flex-shrink-0">
-            <button
-              onClick={() => setCardDensity(d => d === 'standard' ? 'compact' : 'standard')}
-              title={cardDensity === 'standard' ? 'Switch to compact density' : 'Switch to standard density'}
-              className={`p-1.5 rounded-md transition-colors
-                ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-            >
-              {cardDensity === 'compact' ? <AlignJustify className="h-[15px] w-[15px]" /> : <LayoutList className="h-[15px] w-[15px]" />}
-            </button>
-            <button onClick={handleExportCSV} title="Export pipeline"
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors">
-              <Download className="h-[15px] w-[15px]" />
-            </button>
-            <button
-              onClick={() => { resetFilters(); triggerRefetch(); }}
-              title="Reset filters and refresh"
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-            >
-              <RotateCcw className="h-[15px] w-[15px]" />
-            </button>
-          </div>
-
           {/* ── Right actions — always visible, pushed to far edge ─────── */}
           <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-gray-200">
             <button
@@ -1294,7 +1170,125 @@ const DealsKanbanPage: React.FC = () => {
 
         </div>
 
-        {/* Filter panel — expands below the bar, does not scroll with content */}
+        {/* ── Controls row — Filter · Sort · view icons · density · export · refresh */}
+        <div className="flex items-center gap-1.5 px-6 py-2 border-t border-gray-100">
+
+          {(() => {
+            const pills = getActiveFilterPills(
+              activeViewId, selectedOwner, selectedCloseDateFilter,
+              selectedValueFilter, selectedSourceFilter, searchTerm,
+            );
+            const activeCount = pills.length;
+            return (
+              <div className="flex items-center">
+                <button
+                  onClick={() => setShowFilterPanel(f => !f)}
+                  className={`flex items-center gap-1.5 py-1.5 text-[13px] font-medium transition-all
+                    ${activeCount > 0 ? 'pl-2.5 pr-2' : 'px-2.5'}
+                    ${showFilterPanel || activeCount > 0
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-l-md'
+                      : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 rounded-md'}`}
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  <span>Filter</span>
+                  {activeCount > 0 && (
+                    <span className="min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold leading-none">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
+                {activeCount > 0 && (
+                  <button
+                    onClick={resetFilters}
+                    title="Clear all filters"
+                    className="flex items-center px-1.5 py-1.5 border border-l-0 border-indigo-200 bg-indigo-50 text-indigo-400 hover:text-indigo-700 hover:bg-indigo-100 rounded-r-md transition-colors"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
+          <div className="relative" ref={sortDropdownRef}>
+            <button
+              onClick={() => setShowSortDropdown(!showSortDropdown)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium rounded-md border transition-colors
+                ${sortBy !== 'closeDate'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              <span>Sort</span>
+            </button>
+            {showSortDropdown && (
+              <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
+                {([
+                  ['closeDate', 'Close date'],
+                  ['value',     'Deal value'],
+                  ['health',    'AI health score'],
+                  ['activity',  'Last activity'],
+                  ['stage',     'Stage progress'],
+                ] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => handleSort(key)}
+                    className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors
+                      ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
+                    {sortBy === key
+                      ? <Check className="h-3.5 w-3.5 flex-shrink-0" />
+                      : <span className="w-3.5 flex-shrink-0" />}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-4 bg-gray-200 mx-1 flex-shrink-0" />
+
+          {([
+            ['list',     AlignJustify, 'List view'],
+            ['kanban',   Columns,      'Kanban board'],
+            ['grid',     LayoutList,   'Grid view'],
+            ['calendar', Calendar,     'Calendar view'],
+          ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => (
+            <button
+              key={key}
+              onClick={() => handleViewChange(key as 'kanban' | 'list' | 'grid' | 'calendar')}
+              title={label}
+              className={`p-1.5 rounded-md transition-colors
+                ${viewMode === key ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+            >
+              <Icon className="h-[15px] w-[15px]" />
+            </button>
+          ))}
+
+          <div className="w-px h-4 bg-gray-200 mx-1 flex-shrink-0" />
+
+          <button
+            onClick={() => setCardDensity(d => d === 'standard' ? 'compact' : 'standard')}
+            title={cardDensity === 'standard' ? 'Switch to compact density' : 'Switch to standard density'}
+            className={`p-1.5 rounded-md transition-colors
+              ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+          >
+            {cardDensity === 'compact' ? <AlignJustify className="h-[15px] w-[15px]" /> : <LayoutList className="h-[15px] w-[15px]" />}
+          </button>
+
+          <button onClick={handleExportCSV} title="Export pipeline"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors">
+            <Download className="h-[15px] w-[15px]" />
+          </button>
+
+          <button
+            onClick={() => { resetFilters(); triggerRefetch(); }}
+            title="Reset filters and refresh"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+          >
+            <RotateCcw className="h-[15px] w-[15px]" />
+          </button>
+
+        </div>
+
+        {/* Filter panel — expands below the controls row */}
         {showFilterPanel && (
           <div className="flex items-center gap-2 flex-wrap px-6 py-3 border-t border-gray-100 bg-gray-50/60">
             {([
