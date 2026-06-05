@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, AlertCircle, CheckCircle2, Search, Mail, Phone, Video } from 'lucide-react';
 
 interface MoreOptionsDropdownProps {
@@ -345,20 +345,42 @@ interface AddContactModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddContact: (contactId: string, role: string) => void;
+  preSelectedRole?: string;
 }
 
-export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClose, onAddContact }) => {
+export const AddContactModal: React.FC<AddContactModalProps> = ({
+  isOpen,
+  onClose,
+  onAddContact,
+  preSelectedRole,
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRole, setSelectedRole] = useState('Decision Maker');
+  const [selectedRole, setSelectedRole] = useState(preSelectedRole || 'Decision Maker');
+
+  // Sync selected role whenever the modal opens or the pre-selection changes
+  useEffect(() => {
+    if (isOpen) setSelectedRole(preSelectedRole || 'Decision Maker');
+  }, [isOpen, preSelectedRole]);
 
   if (!isOpen) return null;
 
-  const roles = ['Champion', 'Decision Maker', 'Influencer', 'User'];
+  const roles = [
+    'Champion',
+    'Decision Maker',
+    'Economic Buyer',
+    'Technical Evaluator',
+    'Executive Sponsor',
+    'Influencer',
+    'User',
+  ];
+
+  const isLocked = Boolean(preSelectedRole);
+  const title = isLocked ? `Add ${preSelectedRole}` : 'Add Contact to Deal';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-96 shadow-xl">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Contact to Deal</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
 
         <div className="space-y-4 mb-6">
           <div>
@@ -380,15 +402,24 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Contact Role:</label>
-            <select
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              {roles.map((role) => (
-                <option key={role} value={role}>{role}</option>
-              ))}
-            </select>
+            {isLocked ? (
+              <div className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-800 font-medium flex items-center justify-between">
+                <span>{selectedRole}</span>
+                <span className="text-[11px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                  Fixed
+                </span>
+              </div>
+            ) : (
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {roles.map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 

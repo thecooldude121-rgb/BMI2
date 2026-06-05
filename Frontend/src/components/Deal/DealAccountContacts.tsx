@@ -1,12 +1,12 @@
 import React from 'react';
-import { Building2, TrendingUp, MapPin, Globe, Sparkles, AlertTriangle, Users, Mail, Phone, Eye, Award, Briefcase, Plus } from 'lucide-react';
+import { Building2, TrendingUp, MapPin, Globe, Sparkles, AlertTriangle, Users, Mail, Phone, Eye, Award, Briefcase, Trophy, DollarSign, Settings, Star, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface Contact {
   id: string;
   name: string;
   title: string;
-  role: 'Champion' | 'Decision Maker' | 'Influencer' | 'User';
+  role: 'Champion' | 'Decision Maker' | 'Economic Buyer' | 'Technical Evaluator' | 'Executive Sponsor' | 'Influencer' | 'User';
   email?: string;
   phone?: string;
   lastContact?: string;
@@ -14,6 +14,20 @@ interface Contact {
   engagement?: string;
   status?: 'active' | 'pending';
 }
+
+const isPlaceholder = (name: string): boolean =>
+  !name || /\bTBD\b|\bUnknown\b/i.test(name.trim());
+
+const getRoleActionIcon = (role: string): React.ElementType => {
+  switch (role) {
+    case 'Decision Maker':    return Briefcase;
+    case 'Champion':          return Trophy;
+    case 'Economic Buyer':    return DollarSign;
+    case 'Technical Evaluator': return Settings;
+    case 'Executive Sponsor': return Star;
+    default:                  return Plus;
+  }
+};
 
 interface DealAccountContactsProps {
   account: {
@@ -40,7 +54,7 @@ interface DealAccountContactsProps {
   onAddToHRMS?: () => void;
   onFindCEO?: () => void;
   onRequestIntro?: () => void;
-  onAddContact?: () => void;
+  onAddContact?: (role?: string) => void;
 }
 
 export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
@@ -235,107 +249,131 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
 
       {/* Deal Contacts */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Deal Contacts ({contacts.length}):</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">
+          Deal Contacts ({contacts.filter(c => !isPlaceholder(c.name)).length}):
+        </h3>
         <div className="space-y-4">
-          {contacts.map((contact) => (
-            <div
-              key={contact.id}
-              className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-start space-x-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
-                    {contact.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+          {contacts.map((contact) => {
+            if (isPlaceholder(contact.name)) {
+              const ActionIcon = getRoleActionIcon(contact.role);
+              return (
+                <button
+                  key={contact.id}
+                  type="button"
+                  onClick={() => onAddContact?.(contact.role)}
+                  className="w-full flex items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all group text-left"
+                >
+                  <div className="w-10 h-10 rounded-lg border-2 border-dashed border-gray-300 group-hover:border-blue-400 flex items-center justify-center flex-shrink-0 transition-colors">
+                    <ActionIcon className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="font-bold text-gray-900">{contact.name}</div>
-                    <div className="text-sm text-gray-600">{contact.title}</div>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className="text-lg">{getRoleIcon(contact.role)}</span>
-                      <span className={`px-2 py-0.5 ${getRoleBadgeColor(contact.role)} text-xs font-bold rounded`}>
-                        {contact.role}
-                      </span>
+                    <div className="font-medium text-sm">+ Add {contact.role}</div>
+                    <div className="text-xs mt-0.5">Click to assign a contact to this role</div>
+                  </div>
+                </button>
+              );
+            }
+
+            return (
+              <div
+                key={contact.id}
+                className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-start space-x-3">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
+                      {contact.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    </div>
+                    <div>
+                      <div className="font-bold text-gray-900">{contact.name}</div>
+                      <div className="text-sm text-gray-600">{contact.title}</div>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-lg">{getRoleIcon(contact.role)}</span>
+                        <span className={`px-2 py-0.5 ${getRoleBadgeColor(contact.role)} text-xs font-bold rounded`}>
+                          {contact.role}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {contact.status === 'active' ? (
-                <>
-                  {contact.email && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
-                      <Mail className="h-4 w-4 text-gray-500" />
-                      <span>{contact.email}</span>
+                {contact.status === 'active' ? (
+                  <>
+                    {contact.email && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
+                        <Mail className="h-4 w-4 text-gray-500" />
+                        <span>{contact.email}</span>
+                      </div>
+                    )}
+                    {contact.phone && (
+                      <div className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
+                        <Phone className="h-4 w-4 text-gray-500" />
+                        <span>{contact.phone}</span>
+                      </div>
+                    )}
+                    {contact.lastContact && (
+                      <div className="text-sm text-gray-600 mb-2">
+                        Last Contact: <span className="font-medium">{contact.lastContact} ({contact.daysAgo} days ago)</span>
+                      </div>
+                    )}
+                    {contact.engagement && (
+                      <div className="text-sm text-gray-600 mb-3">
+                        Engagement: <span className="font-medium text-green-600">{contact.engagement}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-2">
+                      <button className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                        <Mail className="h-4 w-4 inline mr-1" />
+                        Email
+                      </button>
+                      <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                        <Phone className="h-4 w-4 inline mr-1" />
+                        Call
+                      </button>
+                      <button
+                        onClick={() => navigate(`/crm/contacts/${contact.id}`)}
+                        className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
+                      >
+                        <Eye className="h-4 w-4 inline mr-1" />
+                        View Contact
+                      </button>
                     </div>
-                  )}
-                  {contact.phone && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-700 mb-2">
-                      <Phone className="h-4 w-4 text-gray-500" />
-                      <span>{contact.phone}</span>
-                    </div>
-                  )}
-                  {contact.lastContact && (
-                    <div className="text-sm text-gray-600 mb-2">
-                      Last Contact: <span className="font-medium">{contact.lastContact} ({contact.daysAgo} days ago)</span>
-                    </div>
-                  )}
-                  {contact.engagement && (
+                  </>
+                ) : (
+                  <>
                     <div className="text-sm text-gray-600 mb-3">
-                      Engagement: <span className="font-medium text-green-600">{contact.engagement}</span>
+                      Status: <span className="font-medium text-yellow-600">Not yet engaged</span>
                     </div>
-                  )}
-                  <div className="flex items-center space-x-2">
-                    <button className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-                      <Mail className="h-4 w-4 inline mr-1" />
-                      Email
-                    </button>
-                    <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-                      <Phone className="h-4 w-4 inline mr-1" />
-                      Call
-                    </button>
-                    <button
-                      onClick={() => navigate(`/crm/contacts/${contact.id}`)}
-                      className="px-3 py-1.5 bg-gray-600 text-white rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
-                    >
-                      <Eye className="h-4 w-4 inline mr-1" />
-                      View Contact
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-sm text-gray-600 mb-3">
-                    Status: <span className="font-medium text-yellow-600">Not yet engaged</span>
-                  </div>
-                  <div className="bg-purple-50 rounded-lg p-2 border border-purple-200 mb-3">
-                    <div className="flex items-center space-x-2 text-sm text-purple-900">
-                      <Sparkles className="h-4 w-4" />
-                      <span className="font-semibold">Recommendation:</span>
-                      <span>Get introduction</span>
+                    <div className="bg-purple-50 rounded-lg p-2 border border-purple-200 mb-3">
+                      <div className="flex items-center space-x-2 text-sm text-purple-900">
+                        <Sparkles className="h-4 w-4" />
+                        <span className="font-semibold">Recommendation:</span>
+                        <span>Get introduction</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={onFindCEO}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                    >
-                      Find {contact.role === 'Decision Maker' ? 'CEO' : 'Contact'}
-                    </button>
-                    <button
-                      onClick={onRequestIntro}
-                      className="px-3 py-1.5 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
-                    >
-                      Request Intro
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={onFindCEO}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                      >
+                        Find {contact.role === 'Decision Maker' ? 'CEO' : 'Contact'}
+                      </button>
+                      <button
+                        onClick={onRequestIntro}
+                        className="px-3 py-1.5 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+                      >
+                        Request Intro
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <button
-          onClick={onAddContact}
+          onClick={() => onAddContact?.()}
           className="mt-4 w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
         >
           <Plus className="h-5 w-5" />

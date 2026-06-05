@@ -40,6 +40,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showEmailComposer, setShowEmailComposer] = useState(false);
   const [showCallLog, setShowCallLog] = useState(false);
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
+  const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
   const [loading, setLoading] = useState(true);
@@ -247,11 +248,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   };
 
   const stageHistory = [
-    { name: 'Prospecting', days: 5, startDate: 'Nov 15', endDate: 'Nov 20', status: 'completed' as const },
-    { name: 'Qualified', days: 12, startDate: 'Nov 20', endDate: 'Dec 2', status: 'completed' as const },
-    { name: 'Proposal', days: 8, startDate: 'Dec 2', endDate: 'Present', status: 'current' as const },
-    { name: 'Negotiation', days: 0, startDate: '', endDate: 'Estimated: 10-15 days', status: 'pending' as const },
-    { name: 'Closed-Won', days: 0, startDate: '', endDate: 'Target: March 15, 2026', status: 'pending' as const }
+    { name: 'Prospecting', days: 5,  startDate: 'Nov 15', endDate: 'Nov 20', status: 'completed' as const, benchmark: 7 },
+    { name: 'Qualified',   days: 12, startDate: 'Nov 20', endDate: 'Dec 2',  status: 'completed' as const, benchmark: 10 },
+    { name: 'Proposal',    days: 8,  startDate: 'Dec 2',  endDate: '',        status: 'current'   as const, benchmark: 12 },
+    { name: 'Negotiation', days: 0,  startDate: '',        endDate: '',        status: 'pending'   as const, benchmark: 12, benchmarkMin: 10, benchmarkMax: 15 },
+    { name: 'Closed-Won',  days: 0,  startDate: '',        endDate: '',        status: 'pending'   as const, benchmark: 5,  benchmarkMin: 3,  benchmarkMax: 7  },
   ];
 
   const accountData = {
@@ -718,7 +719,10 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
               onAddToHRMS={handleAddToHRMS}
               onFindCEO={() => setShowFindCEO(true)}
               onRequestIntro={handleRequestIntro}
-              onAddContact={() => setShowAddContact(true)}
+              onAddContact={(role) => {
+                setPreSelectedContactRole(role || '');
+                setShowAddContact(true);
+              }}
             />
             <DealActivityTimeline
               activities={activities}
@@ -769,8 +773,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
       <AddContactModal
         isOpen={showAddContact}
-        onClose={() => setShowAddContact(false)}
+        onClose={() => { setShowAddContact(false); setPreSelectedContactRole(''); }}
         onAddContact={handleAddContact}
+        preSelectedRole={preSelectedContactRole || undefined}
       />
 
       <EmailComposerModal

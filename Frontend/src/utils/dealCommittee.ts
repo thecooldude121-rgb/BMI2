@@ -97,12 +97,17 @@ export interface CommitteeCoverage {
  * Compute buying-committee coverage from a stakeholder list.
  * Safe to call with an empty or undefined array.
  */
+const isMeaningfulName = (name: string): boolean =>
+  Boolean(name) && !/\bTBD\b|\bUnknown\b/i.test(name.trim());
+
 export function computeCommitteeCoverage(
   stakeholders: StakeholderContact[] | undefined | null,
 ): CommitteeCoverage {
   const all: StakeholderContact[] = stakeholders ?? [];
 
-  const coveredRoleIds = new Set(all.map(s => s.role));
+  // Only count contacts with real names toward coverage — TBD/Unknown/empty are gaps
+  const meaningful = all.filter(s => isMeaningfulName(s.name));
+  const coveredRoleIds = new Set(meaningful.map(s => s.role));
 
   const byRole = (roleId: string) => all.filter(s => s.role === roleId);
 

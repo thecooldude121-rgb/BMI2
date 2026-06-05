@@ -973,210 +973,178 @@ const DealsKanbanPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Frozen title bar */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6 px-8 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-500 flex-shrink-0" />
-              <h1 className="text-[16px] font-semibold text-gray-900 leading-none">Pipeline Signals</h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setInspectionMode(m => !m)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-all duration-150
-                  ${inspectionMode
-                    ? 'bg-slate-900 text-amber-400 border-slate-700'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
-                  }`}
-                title={inspectionMode ? 'Exit Manager Inspection (Esc)' : 'Enter Manager Inspection Mode'}
-              >
-                <ShieldAlert className="h-3.5 w-3.5" />
-                <span>{inspectionMode ? 'Inspecting' : 'Inspect'}</span>
-              </button>
+      {/* ── Merged title + KPI bar ───────────────────────────────────────────
+          Title on the left, 6 inline KPI stats in the middle, action buttons
+          on the right — all in one sticky row.  Each stat is a click target
+          that filters the board, preserving all existing handleStatClick logic.
+      */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6 px-8 py-4">
+        <div className="flex items-center gap-3 min-w-0">
 
-              <button
-                onClick={() => navigate('/crm/deals/add')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-[13px] font-medium"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add Deal</span>
-              </button>
+          {/* AI insight signals — 3 inline clickable items */}
+          <div className="flex items-center gap-0.5 flex-1 min-w-0">
 
-              <div className="relative" ref={dropdownRef}>
-                <button
-                  onClick={() => setShowMoreOptions(!showMoreOptions)}
-                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
-                  title="More options"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-
-                {showMoreOptions && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                    <button
-                      onClick={() => handleExportPipeline('csv')}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <FileDown className="h-4 w-4 text-gray-500" />
-                      <div className="text-left">
-                        <div className="font-medium">Export Pipeline</div>
-                        <div className="text-xs text-gray-500">CSV or PDF format</div>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleImportDeals}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <Upload className="h-4 w-4 text-gray-500" />
-                      <div className="text-left">
-                        <div className="font-medium">Import Deals</div>
-                        <div className="text-xs text-gray-500">Upload CSV file</div>
-                      </div>
-                    </button>
-
-                    <div className="border-t border-gray-100 my-1"></div>
-
-                    <button
-                      onClick={handlePipelineSettings}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <Settings className="h-4 w-4 text-gray-500" />
-                      <div className="text-left">
-                        <div className="font-medium">Pipeline Settings</div>
-                        <div className="text-xs text-gray-500">Configure stages</div>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleViewArchived}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <Archive className="h-4 w-4 text-gray-500" />
-                      <div className="text-left">
-                        <div className="font-medium">View Archived Deals</div>
-                        <div className="text-xs text-gray-500">Access archive</div>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={handleCustomizeColumns}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      <Columns className="h-4 w-4 text-gray-500" />
-                      <div className="text-left">
-                        <div className="font-medium">Customize Columns</div>
-                        <div className="text-xs text-gray-500">Adjust view layout</div>
-                      </div>
-                    </button>
-                  </div>
-                )}
+            {/* Needs attention — deals with no contact for 5+ days */}
+            <button
+              onClick={handleViewDeals}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-amber-50 transition-colors group flex-shrink-0"
+              title={aiInsights.needAttention.length > 0
+                ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} without recent activity`
+                : 'All deals have recent activity'}
+            >
+              <AlertTriangle className={`h-4 w-4 flex-shrink-0 transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-500' : 'text-gray-300 group-hover:text-amber-400'}`} />
+              <div className="flex flex-col items-start">
+                <span className={`text-[15px] font-semibold tabular-nums leading-none transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                  {aiInsights.needAttention.length > 0 ? aiInsights.needAttention.length : 'All clear'}
+                </span>
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider leading-none mt-1">
+                  Needs Attention
+                </span>
               </div>
+            </button>
+
+            <div className="w-px h-8 bg-gray-100 flex-shrink-0" />
+
+            {/* Forecast — negotiation-stage deals likely to close this month */}
+            <button
+              onClick={handleViewForecast}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-emerald-50 transition-colors group flex-shrink-0"
+              title={`${formatCurrency(aiInsights.highProbValue)} in Negotiation — ${aiInsights.negotiationDeals.length} deal${aiInsights.negotiationDeals.length !== 1 ? 's' : ''}`}
+            >
+              <TrendingUp className="h-4 w-4 text-emerald-500 flex-shrink-0 group-hover:text-emerald-600 transition-colors" />
+              <div className="flex flex-col items-start">
+                <span className="text-[15px] font-semibold text-gray-900 tabular-nums leading-none group-hover:text-emerald-600 transition-colors">
+                  {formatCurrency(aiInsights.highProbValue)}
+                </span>
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider leading-none mt-1">
+                  Likely This Month
+                </span>
+              </div>
+            </button>
+
+            <div className="w-px h-8 bg-gray-100 flex-shrink-0" />
+
+            {/* HRMS signal — deals linked to HRMS data */}
+            <button
+              onClick={handleViewHRMSDeals}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-indigo-50 transition-colors group flex-shrink-0"
+              title={aiInsights.hrmsDeals.length > 0
+                ? `${aiInsights.hrmsDeals.length} HRMS-connected deal${aiInsights.hrmsDeals.length !== 1 ? 's' : ''}`
+                : 'No HRMS-connected deals'}
+            >
+              <Building2 className="h-4 w-4 text-indigo-400 flex-shrink-0 group-hover:text-indigo-600 transition-colors" />
+              <div className="flex flex-col items-start">
+                <span className={`text-[15px] font-semibold tabular-nums leading-none transition-colors ${aiInsights.hrmsDeals.length > 0 ? 'text-gray-900 group-hover:text-indigo-600' : 'text-gray-400'}`}>
+                  {aiInsights.hrmsDeals.length > 0 ? aiInsights.hrmsDeals.length : 'None'}
+                </span>
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider leading-none mt-1">
+                  HRMS Deals
+                </span>
+              </div>
+            </button>
+
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setInspectionMode(m => !m)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-all duration-150
+                ${inspectionMode
+                  ? 'bg-slate-900 text-amber-400 border-slate-700'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                }`}
+              title={inspectionMode ? 'Exit Manager Inspection (Esc)' : 'Enter Manager Inspection Mode'}
+            >
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span>{inspectionMode ? 'Inspecting' : 'Inspect'}</span>
+            </button>
+
+            <button
+              onClick={() => navigate('/crm/deals/add')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-[13px] font-medium"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Deal</span>
+            </button>
+
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowMoreOptions(!showMoreOptions)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
+                title="More options"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+
+              {showMoreOptions && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <button
+                    onClick={() => handleExportPipeline('csv')}
+                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <FileDown className="h-4 w-4 text-gray-500" />
+                    <div className="text-left">
+                      <div className="font-medium">Export Pipeline</div>
+                      <div className="text-xs text-gray-500">CSV or PDF format</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleImportDeals}
+                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Upload className="h-4 w-4 text-gray-500" />
+                    <div className="text-left">
+                      <div className="font-medium">Import Deals</div>
+                      <div className="text-xs text-gray-500">Upload CSV file</div>
+                    </div>
+                  </button>
+
+                  <div className="border-t border-gray-100 my-1" />
+
+                  <button
+                    onClick={handlePipelineSettings}
+                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Settings className="h-4 w-4 text-gray-500" />
+                    <div className="text-left">
+                      <div className="font-medium">Pipeline Settings</div>
+                      <div className="text-xs text-gray-500">Configure stages</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleViewArchived}
+                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Archive className="h-4 w-4 text-gray-500" />
+                    <div className="text-left">
+                      <div className="font-medium">View Archived Deals</div>
+                      <div className="text-xs text-gray-500">Access archive</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleCustomizeColumns}
+                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Columns className="h-4 w-4 text-gray-500" />
+                    <div className="text-left">
+                      <div className="font-medium">Customize Columns</div>
+                      <div className="text-xs text-gray-500">Adjust view layout</div>
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-      </div>
-
-      <div className="bg-white border-b border-gray-200 px-8 py-3">
-        <div className="grid grid-cols-6 gap-3">
-
-          {/* Total Deals */}
-          <button onClick={() => handleStatClick('total')}
-            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
-          >
-            <div className="w-0.5 bg-indigo-500 flex-shrink-0" />
-            <div className="flex-1 px-4 py-3">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Active Deals</p>
-              <div className="flex items-end justify-between">
-                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">{kpis.totalDeals}</span>
-                <Target className="h-4 w-4 text-gray-300 group-hover:text-indigo-400 transition-colors" />
-              </div>
-            </div>
-          </button>
-
-          {/* Total Value */}
-          <button onClick={() => handleStatClick('value')}
-            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
-          >
-            <div className="w-0.5 bg-emerald-500 flex-shrink-0" />
-            <div className="flex-1 px-4 py-3">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Pipeline Value</p>
-              <div className="flex items-end justify-between">
-                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">{formatCurrency(kpis.totalValue)}</span>
-                <DollarSign className="h-4 w-4 text-gray-300 group-hover:text-emerald-400 transition-colors" />
-              </div>
-            </div>
-          </button>
-
-          {/* Win Rate */}
-          <button onClick={() => handleStatClick('winRate')}
-            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
-          >
-            <div className="w-0.5 bg-violet-500 flex-shrink-0" />
-            <div className="flex-1 px-4 py-3">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Win Rate</p>
-              <div className="flex items-end justify-between">
-                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">
-                  {kpis.winRate !== null
-                    ? `${kpis.winRate}%`
-                    : <span className="text-[16px] text-gray-400">—</span>}
-                </span>
-                <TrendingUp className="h-4 w-4 text-gray-300 group-hover:text-violet-400 transition-colors" />
-              </div>
-            </div>
-          </button>
-
-          {/* Due / Overdue — counts active deals whose close date is within 7 days or past due */}
-          <button onClick={() => handleStatClick('closingWeek')}
-            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
-          >
-            <div className={`w-0.5 flex-shrink-0 ${kpis.closingThisWeek > 0 ? 'bg-red-500' : 'bg-amber-500'}`} />
-            <div className="flex-1 px-4 py-3">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Due / Overdue</p>
-              <div className="flex items-end justify-between">
-                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">{kpis.closingThisWeek}</span>
-                <Calendar className="h-4 w-4 text-gray-300 group-hover:text-amber-400 transition-colors" />
-              </div>
-            </div>
-          </button>
-
-          {/* Stalled — only card with accent that signals urgency */}
-          <button onClick={() => handleStatClick('stalled')}
-            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
-          >
-            <div className={`w-0.5 flex-shrink-0 ${kpis.stalledDeals > 0 ? 'bg-red-500' : 'bg-gray-200'}`} />
-            <div className="flex-1 px-4 py-3">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Stalled</p>
-              <div className="flex items-end justify-between">
-                <span className={`text-[22px] font-semibold tabular-nums leading-none ${kpis.stalledDeals > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                  {kpis.stalledDeals}
-                </span>
-                <AlertTriangle className={`h-4 w-4 transition-colors ${kpis.stalledDeals > 0 ? 'text-red-400' : 'text-gray-300 group-hover:text-gray-400'}`} />
-              </div>
-            </div>
-          </button>
-
-          {/* Avg Cycle */}
-          <button onClick={() => handleStatClick('avgCycle')}
-            className="flex bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all text-left overflow-hidden group"
-          >
-            <div className="w-0.5 bg-slate-400 flex-shrink-0" />
-            <div className="flex-1 px-4 py-3">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Avg. Cycle</p>
-              <div className="flex items-end justify-between">
-                <span className="text-[22px] font-semibold text-gray-900 tabular-nums">
-                  {kpis.avgCycle !== null
-                    ? <>{kpis.avgCycle}<span className="text-[13px] font-normal text-gray-400 ml-1">d</span></>
-                    : <span className="text-[16px] text-gray-400">—</span>}
-                </span>
-                <Clock className="h-4 w-4 text-gray-300 group-hover:text-slate-400 transition-colors" />
-              </div>
-            </div>
-          </button>
 
         </div>
       </div>
 
-      {inspectionMode ? (
+      {/* Inspection bar — rendered below the title bar only when active */}
+      {inspectionMode && (
         <ManagerInspectionBar
           signals={inspectionSignals}
           inspectionOwner={inspectionOwner}
@@ -1188,93 +1156,6 @@ const DealsKanbanPage: React.FC = () => {
           }}
           formatCurrency={formatCurrency}
         />
-      ) : (
-      <div className="bg-gray-50 border-b border-gray-200 px-8 py-4">
-        <div className="grid grid-cols-3 gap-3">
-
-          {/* Needs attention */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-md bg-amber-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-gray-900 mb-0.5">
-                  {aiInsights.needAttention.length > 0
-                    ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} without recent activity`
-                    : 'All deals have recent activity'}
-                </p>
-                <p className="text-[12px] text-gray-500 mb-3 truncate">
-                  {aiInsights.needAttention.length > 0
-                    ? aiInsights.needAttention.slice(0, 2).map(d => d.companyName).join(', ')
-                      + (aiInsights.needAttention.length > 2 ? ` +${aiInsights.needAttention.length - 2} more` : '')
-                    : 'No action needed'}
-                </p>
-                <div className="flex gap-2">
-                  <button onClick={handleViewDeals}
-                    className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
-                    View deals
-                  </button>
-                  <button onClick={handleCreateTasks}
-                    className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
-                    Create tasks
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Forecast signal */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-md bg-emerald-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-gray-900 mb-0.5">
-                  {formatCurrency(aiInsights.highProbValue)} likely to close this month
-                </p>
-                <p className="text-[12px] text-gray-500 mb-3">
-                  {aiInsights.negotiationDeals.length} deal{aiInsights.negotiationDeals.length !== 1 ? 's' : ''} in Negotiation — avg 85% win rate
-                </p>
-                <button onClick={handleViewForecast}
-                  className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
-                  View forecast
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* HRMS signal */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-md bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Building2 className="h-3.5 w-3.5 text-indigo-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-gray-900 mb-0.5">
-                  {aiInsights.hrmsDeals.length > 0
-                    ? `${aiInsights.hrmsDeals.length} HRMS-connected deal${aiInsights.hrmsDeals.length !== 1 ? 's' : ''} active`
-                    : 'No HRMS-connected deals'}
-                </p>
-                <p className="text-[12px] text-gray-500 mb-3 truncate">
-                  {aiInsights.hrmsDeals.length > 0
-                    ? (() => {
-                        const top = [...aiInsights.hrmsDeals].sort((a, b) => b.amount - a.amount).slice(0, 2);
-                        return top.map(d => d.companyName).join(', ');
-                      })()
-                    : 'Link HRMS data to surface opportunities'}
-                </p>
-                <button onClick={handleViewHRMSDeals}
-                  className="text-[12px] px-2.5 py-1 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-md border border-gray-200 transition-colors font-medium">
-                  View HRMS deals
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
       )}
 
       <div className="bg-white border-b border-gray-200 px-8 py-4">
