@@ -44,15 +44,20 @@ import {
   X, ExternalLink, Edit2, Check, XCircle as CancelIcon,
   Building2, User, Calendar, Clock, Tag,
   ChevronRight, AlertTriangle, Sparkles,
-  RefreshCw, FileText, CheckCircle2,
+  RefreshCw, FileText, CheckCircle2, Users, ShieldAlert,
+  TrendingUp, TrendingDown,
 } from 'lucide-react';
-import { getDeal, updateDeal } from '../../utils/dealsApi';
+import { getDeal, updateDeal, getUsers } from '../../utils/dealsApi';
+import type { DealOwnerInfo, DealValueHistoryEntry } from '../../types/dealManagement';
 import {
   formatCloseDate,
   formatRelativeTime,
   daysFromNow,
 } from '../../utils/dateUtils';
 import { resolveDealState, STATE_TOKENS } from '../../utils/dealState';
+import { explainDealHealth } from '../../utils/dealHealthDrivers';
+import { computeCommitteeCoverage, REQUIRED_ROLE_IDS } from '../../utils/dealCommittee';
+import { getContactRole, roleChipClasses, type StakeholderContact } from '../../config/contactRoles';
 import type { DealCard } from './DealKanbanCard';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -68,11 +73,16 @@ interface PanelDeal {
   stageName: string;
   closeDate: string;       // raw ISO — used for the date input value
   owner: string;
+  ownerInfo?: DealOwnerInfo;
+  dealValueHistory?: DealValueHistoryEntry[];
   contactName: string;
   contactTitle: string;
   source: string;
   probability: number;
   nextStep: string;
+  nextStepDueDate: string;
+  nextStepOwner: string;
+  nextStepStatus: 'pending' | 'done' | 'overdue';
   description: string;
   tags: string[];
   updatedAt: string;
@@ -83,6 +93,9 @@ interface PanelDeal {
   daysSinceContact: number;
   lastActivity: string;
   isHRMS: boolean;
+  contactCount: number;
+  competitorCount: number;
+  stakeholders: StakeholderContact[];
 }
 
 export interface DealSlideoutPanelProps {
@@ -174,11 +187,22 @@ function mapApiToPanelDeal(data: any): PanelDeal {
     stageName:     STAGE_LABEL[stage] ?? stage,
     closeDate:     data.expected_close_date ? data.expected_close_date.split('T')[0] : '',
     owner:         data.assigned_to || '',
+    ownerInfo: data.assigned_to ? {
+      id: data.owner_id || undefined,
+      name: data.assigned_to,
+      email: data.owner_email || undefined,
+      lastActiveAt: data.owner_last_active_at || undefined,
+      outOfOffice: data.owner_out_of_office ? Boolean(data.owner_out_of_office) : undefined,
+    } : undefined,
     contactName:   data.contact_name || '',
     contactTitle:  data.contact_title || '',
     source:        data.source || '',
     probability:   Number(data.probability) || 0,
-    nextStep:      data.next_step || '',
+    nextStep:        data.next_step || '',
+    nextStepDueDate: data.next_step_due_date ? data.next_step_due_date.split('T')[0] : '',
+    nextStepOwner:   data.next_step_owner || '',
+    nextStepStatus:  (['pending', 'done', 'overdue'].includes(data.next_step_status)
+      ? data.next_step_status : 'pending') as 'pending' | 'done' | 'overdue',
     description:   data.description || '',
     tags,
     updatedAt:     data.updated_at || '',
@@ -190,6 +214,30 @@ function mapApiToPanelDeal(data: any): PanelDeal {
     daysSinceContact: Number(data.days_since_contact) || 0,
     lastActivity:  data.updated_at || data.created_at || '',
     isHRMS:        Boolean(data.is_hrms),
+    stakeholders: (() => {
+      try {
+        const s = typeof data.stakeholders === 'string'
+          ? JSON.parse(data.stakeholders) : (data.stakeholders ?? []);
+        return Array.isArray(s) ? s as StakeholderContact[] : [];
+      } catch { return []; }
+    })(),
+    contactCount: (() => {
+      try {
+        const s = typeof data.stakeholders === 'string'
+          ? JSON.parse(data.stakeholders) : (data.stakeholders ?? []);
+        return (data.contact_name ? 1 : 0) + (Array.isArray(s) ? s.length : 0);
+      } catch { return data.contact_name ? 1 : 0; }
+    })(),
+    competitorCount: (() => {
+      try {
+        const c = typeof data.competitors === 'string'
+          ? JSON.parse(data.competitors) : (data.competitors ?? []);
+        return Array.isArray(c)
+          ? c.filter((x: any) => x && (typeof x === 'string' ? x.trim() : true)).length
+          : 0;
+      } catch { return 0; }
+    })(),
+    dealValueHistory: Array.isArray(data.value_history) ? data.value_history : [],
   };
 }
 
@@ -199,11 +247,14 @@ function mapApiToPanelDeal(data: any): PanelDeal {
  */
 function toDealCardPatch(field: string, value: string): Partial<DealCard> {
   switch (field) {
-    case 'stage':     return { stage: value };
-    case 'closeDate': return { closeDate: value };
-    case 'nextStep':  return { status: value };
-    case 'owner':     return { owner: value };
-    default:          return {};
+    case 'stage':           return { stage: value };
+    case 'closeDate':       return { closeDate: value };
+    case 'nextStep':        return { nextStep: value };
+    case 'nextStepDueDate': return { nextStepDueDate: value };
+    case 'nextStepOwner':   return { nextStepOwner: value };
+    case 'nextStepStatus':  return { nextStepStatus: value as 'pending' | 'done' | 'overdue' };
+    case 'owner':           return { owner: value };
+    default:                return {};
   }
 }
 
@@ -404,6 +455,12 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Owner assignment dropdown state
+  const [showOwnerAssignDropdown, setShowOwnerAssignDropdown] = useState(false);
+  const [ownerAssignList, setOwnerAssignList] = useState<any[]>([]);
+  const [isLoadingOwnerAssign, setIsLoadingOwnerAssign] = useState(false);
+  const ownerAssignDropdownRef = useRef<HTMLDivElement>(null);
+
   // isVisible drives the CSS slide/fade animation.
   // It lags slightly behind dealId so the exit animation completes before
   // the parent unmounts the component.
@@ -467,6 +524,49 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     return () => controller.abort();
   }, [dealId]);
 
+  // ── Owner assignment dropdown ─────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!showOwnerAssignDropdown) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (ownerAssignDropdownRef.current && !ownerAssignDropdownRef.current.contains(e.target as Node)) {
+        setShowOwnerAssignDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOwnerAssignDropdown]);
+
+  function openOwnerAssignDropdown() {
+    if (ownerAssignList.length === 0) {
+      setIsLoadingOwnerAssign(true);
+      getUsers()
+        .then(users => setOwnerAssignList(users))
+        .catch(() => {})
+        .finally(() => setIsLoadingOwnerAssign(false));
+    }
+    setShowOwnerAssignDropdown(true);
+  }
+
+  async function assignOwnerFromDropdown(name: string) {
+    if (!deal) return;
+    setShowOwnerAssignDropdown(false);
+    setSaving(true);
+    try {
+      await updateDeal(deal.id, { assigned_to: name });
+      setDeal(prev => prev ? {
+        ...prev,
+        owner: name,
+        ownerInfo: { ...(prev.ownerInfo || { name }), name },
+      } : prev);
+      onDealUpdate(deal.id, { owner: name });
+    } catch {
+      setSaveError('Failed to assign owner');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // ── Close handler — triggers exit animation then calls onClose ───────────
   const handleClose = useCallback(() => {
     setIsVisible(false);
@@ -500,10 +600,13 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
 
     // Map panel field name → API payload key
     const API_KEY: Record<string, string> = {
-      stage:     'stage',
-      closeDate: 'expected_close_date',
-      nextStep:  'next_step',
-      owner:     'assigned_to',
+      stage:           'stage',
+      closeDate:       'expected_close_date',
+      nextStep:        'next_step',
+      nextStepDueDate: 'next_step_due_date',
+      nextStepOwner:   'next_step_owner',
+      nextStepStatus:  'next_step_status',
+      owner:           'assigned_to',
     };
 
     try {
@@ -549,13 +652,24 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     priority:         deal.priority,
     health:           deal.health,
     source:           deal.source,
-    status:           deal.nextStep,
+    nextStep:         deal.nextStep,
+    nextStepDueDate:  deal.nextStepDueDate,
+    nextStepOwner:    deal.nextStepOwner,
+    nextStepStatus:   deal.nextStepStatus,
+    contactCount:     deal.contactCount,
+    competitorCount:  deal.competitorCount,
+    stakeholders:     deal.stakeholders,
   } : null;
 
   const cardState = dealCardShape
     ? resolveDealState(dealCardShape, closeDaysLeft, isClosed)
     : null;
   const stateTokens = cardState ? STATE_TOKENS[cardState.primary] : null;
+  const healthExpl  = dealCardShape && !isClosed
+    ? explainDealHealth(dealCardShape, closeDaysLeft)
+    : null;
+
+  const committee = deal ? computeCommitteeCoverage(deal.stakeholders) : null;
 
   // ── Portal content ────────────────────────────────────────────────────────
   return createPortal(
@@ -671,9 +785,34 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
                   {/* Amount */}
                   <div>
                     <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider mb-0.5">Value</p>
-                    <p className="text-[22px] font-bold text-indigo-600 leading-none">
-                      {deal.amount ? formatCurrency(deal.amount, deal.currency) : '—'}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[22px] font-bold text-indigo-600 leading-none">
+                        {deal.amount ? formatCurrency(deal.amount, deal.currency) : '—'}
+                      </p>
+                      {(() => {
+                        const hist = deal.dealValueHistory;
+                        if (!hist || hist.length === 0) return null;
+                        const original = hist[hist.length - 1].previousValue;
+                        const delta = deal.amount - original;
+                        if (delta === 0) return null;
+                        const pct = Math.round((delta / original) * 100);
+                        const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: deal.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+                        const tip = `Original: ${fmt(original)} · ${pct >= 0 ? '+' : ''}${pct}% · Click to view full history`;
+                        return (
+                          <button
+                            type="button"
+                            title={tip}
+                            onClick={() => onNavigateToFull(deal.id)}
+                            className="flex-shrink-0"
+                          >
+                            {delta > 0
+                              ? <TrendingUp className="h-4 w-4 text-green-500" />
+                              : <TrendingDown className="h-4 w-4 text-red-500" />
+                            }
+                          </button>
+                        );
+                      })()}
+                    </div>
                     {deal.probability > 0 && (
                       <p className="text-[11px] text-gray-500 mt-0.5">{deal.probability}% probability</p>
                     )}
@@ -687,7 +826,9 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
 
                 {/* State chip + close date row */}
                 <div className="flex items-center justify-between">
-                  {cardState && stateTokens && (
+                  {/* Only render the chip when there is an active signal (chipLabel non-empty).
+                      Empty chipLabel = normal/on-track deal — no chip needed. */}
+                  {cardState && stateTokens && cardState.chipLabel && (
                     <span
                       className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${stateTokens.chipBg} ${stateTokens.chipText}`}
                       title={cardState.description}
@@ -766,6 +907,59 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
                   onCancel={cancelEdit}
                 />
 
+                {/* Next step due date */}
+                <EditableField
+                  label="Step due"
+                  value={editingField === 'nextStepDueDate' ? editValue : deal.nextStepDueDate}
+                  displayValue={deal.nextStepDueDate ? formatCloseDate(deal.nextStepDueDate) : ''}
+                  isEditing={editingField === 'nextStepDueDate'}
+                  isSaving={saving && editingField === 'nextStepDueDate'}
+                  editType="date"
+                  emptyText="No due date"
+                  onStartEdit={() => startEdit('nextStepDueDate', deal.nextStepDueDate)}
+                  onChangeValue={setEditValue}
+                  onSave={() => saveField('nextStepDueDate')}
+                  onCancel={cancelEdit}
+                />
+
+                {/* Next step owner */}
+                <EditableField
+                  label="Step owner"
+                  value={editingField === 'nextStepOwner' ? editValue : deal.nextStepOwner}
+                  isEditing={editingField === 'nextStepOwner'}
+                  isSaving={saving && editingField === 'nextStepOwner'}
+                  editType="text"
+                  placeholder="Who owns this step?"
+                  emptyText="Same as deal owner"
+                  onStartEdit={() => startEdit('nextStepOwner', deal.nextStepOwner)}
+                  onChangeValue={setEditValue}
+                  onSave={() => saveField('nextStepOwner')}
+                  onCancel={cancelEdit}
+                />
+
+                {/* Next step status */}
+                <EditableField
+                  label="Step status"
+                  value={editingField === 'nextStepStatus' ? editValue : deal.nextStepStatus}
+                  displayValue={
+                    deal.nextStepStatus === 'done' ? '✅ Done'
+                    : deal.nextStepStatus === 'overdue' ? '⚠️ Overdue'
+                    : '🔵 Pending'
+                  }
+                  isEditing={editingField === 'nextStepStatus'}
+                  isSaving={saving && editingField === 'nextStepStatus'}
+                  editType="select"
+                  selectOptions={[
+                    { value: 'pending', label: '🔵 Pending' },
+                    { value: 'done',    label: '✅ Done'    },
+                    { value: 'overdue', label: '⚠️ Overdue' },
+                  ]}
+                  onStartEdit={() => startEdit('nextStepStatus', deal.nextStepStatus)}
+                  onChangeValue={setEditValue}
+                  onSave={() => saveField('nextStepStatus')}
+                  onCancel={cancelEdit}
+                />
+
                 {/* Owner */}
                 <EditableField
                   label="Owner"
@@ -811,19 +1005,217 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
                 </div>
 
                 {/* Owner avatar */}
-                <div className="flex items-center py-2.5 space-x-3 border-t border-gray-50">
+                <div className="relative flex items-start py-2.5 space-x-3 border-t border-gray-50">
                   <span
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                    style={{ backgroundColor: '#6366f1' }}
-                    aria-label={`Owner: ${deal.owner}`}
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 mt-0.5 ${deal.owner ? '' : 'bg-gray-300'}`}
+                    style={deal.owner ? { backgroundColor: '#6366f1' } : undefined}
+                    aria-label={`Owner: ${deal.owner || 'Unassigned'}`}
                   >
-                    {getInitials(deal.owner)}
+                    {deal.owner ? getInitials(deal.owner) : '?'}
                   </span>
-                  <p className="text-[13px] text-gray-900">
-                    {deal.owner || <span className="text-gray-400 italic">Unassigned</span>}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    {deal.owner ? (
+                      <>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="text-[13px] text-gray-900">{deal.owner}</p>
+                          {deal.ownerInfo?.outOfOffice && (
+                            <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 leading-tight">
+                              OOO
+                            </span>
+                          )}
+                        </div>
+                        {deal.ownerInfo?.lastActiveAt && (() => {
+                          const days = Math.floor((Date.now() - new Date(deal.ownerInfo!.lastActiveAt!).getTime()) / 86_400_000);
+                          const color = days > 7 ? 'text-red-500' : days > 3 ? 'text-amber-500' : 'text-gray-400';
+                          const label = days === 0 ? 'Active today' : days === 1 ? 'Active yesterday' : `Last active ${days}d ago`;
+                          return (
+                            <p className={`text-[11px] ${color} flex items-center gap-0.5 mt-0.5`}>
+                              {days > 7 && <AlertTriangle className="h-3 w-3 flex-shrink-0" />}
+                              {label}
+                            </p>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <div className="relative">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            Unassigned
+                          </span>
+                          <button
+                            type="button"
+                            onClick={openOwnerAssignDropdown}
+                            className="text-[11px] text-blue-600 hover:text-blue-700 font-medium underline underline-offset-1"
+                          >
+                            Assign
+                          </button>
+                        </div>
+                        {showOwnerAssignDropdown && (
+                          <div
+                            ref={ownerAssignDropdownRef}
+                            className="absolute left-0 top-full mt-1 z-50 w-52 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+                          >
+                            {isLoadingOwnerAssign ? (
+                              <div className="px-3 py-3 text-[12px] text-gray-500 text-center">Loading…</div>
+                            ) : ownerAssignList.length === 0 ? (
+                              <div className="px-3 py-3 text-[12px] text-gray-500 text-center">No team members found</div>
+                            ) : (
+                              <ul className="max-h-44 overflow-y-auto py-1">
+                                {ownerAssignList.map((u: any) => (
+                                  <li key={u.id}>
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 text-[12px] text-gray-700 hover:bg-indigo-50 transition-colors"
+                                      onClick={() => assignOwnerFromDropdown(`${u.first_name} ${u.last_name}`)}
+                                    >
+                                      <span className="font-medium">{u.first_name} {u.last_name}</span>
+                                      {u.role && <span className="text-gray-400 ml-1">({u.role})</span>}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </Section>
+
+              {/* ── BUYING COMMITTEE ──────────────────────────────────── */}
+              {committee && (
+                <Section title="Buying Committee">
+                  <div className="py-3 space-y-3">
+
+                    {/* Coverage header — score + label */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Users className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-[12px] text-gray-600">
+                          {committee.all.length === 0
+                            ? 'No stakeholders linked'
+                            : `${committee.all.length} stakeholder${committee.all.length !== 1 ? 's' : ''}`}
+                        </span>
+                      </div>
+                      {committee.all.length > 0 && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full
+                          ${committee.coverageLabel === 'Strong'   ? 'bg-emerald-50 text-emerald-700'
+                          : committee.coverageLabel === 'Moderate' ? 'bg-amber-50 text-amber-700'
+                          :                                          'bg-red-50 text-red-700'}`}
+                        >
+                          {committee.coverageLabel} coverage
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Risk flags — shown above the list so they're seen first */}
+                    {committee.hasBlockerWithoutChampion && (
+                      <div className="flex items-start space-x-2 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                        <ShieldAlert className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-red-700 leading-snug">
+                          Blocker present with no champion — deal at high risk of stalling internally.
+                        </p>
+                      </div>
+                    )}
+                    {committee.isSingleThreaded && committee.all.length > 0 && (
+                      <div className="flex items-start space-x-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-amber-800 leading-snug">
+                          Single contact only — if this person leaves, the deal is at risk.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Stakeholder list */}
+                    {committee.all.length > 0 && (
+                      <div className="space-y-2">
+                        {committee.all.map((s, i) => {
+                          const role   = getContactRole(s.role);
+                          const chipCx = roleChipClasses(role.chipColor);
+                          return (
+                            <div
+                              key={s.id ?? i}
+                              className="flex items-center justify-between py-1.5"
+                            >
+                              <div className="flex items-center space-x-2.5 min-w-0">
+                                {/* Initials avatar */}
+                                <span
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                                  style={{ backgroundColor: '#6366f1' }}
+                                >
+                                  {s.name
+                                    .split(/\s+/)
+                                    .map(w => w[0] ?? '')
+                                    .slice(0, 2)
+                                    .join('')
+                                    .toUpperCase() || '?'}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-[12px] font-medium text-gray-900 truncate">
+                                    {s.name}
+                                    {s.isPrimary && (
+                                      <span className="ml-1.5 text-[9px] text-gray-400 font-normal">Primary</span>
+                                    )}
+                                  </p>
+                                  {s.title && (
+                                    <p className="text-[11px] text-gray-500 truncate">{s.title}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2 flex-shrink-0">
+                                {/* Sentiment dot */}
+                                {s.sentiment && s.sentiment !== 'neutral' && (
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0
+                                      ${s.sentiment === 'positive' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                                    title={`Sentiment: ${s.sentiment}`}
+                                  />
+                                )}
+                                {/* Role chip */}
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${chipCx}`}>
+                                  {role.label}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Missing critical roles advisory */}
+                    {committee.missingRequired.length > 0 && (
+                      <div className="pt-1 border-t border-gray-50">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                          Missing roles
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {committee.missingRequired.map(role => (
+                            <span
+                              key={role.id}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 bg-gray-50 text-gray-500 text-[10px] rounded-full border border-dashed border-gray-200"
+                              title={role.description}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full border border-dashed border-gray-400 flex-shrink-0" />
+                              <span>{role.label}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All-clear */}
+                    {committee.missingRequired.length === 0 && committee.all.length > 0 && !committee.hasBlockerWithoutChampion && (
+                      <div className="flex items-center space-x-1.5 text-[12px] text-emerald-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>All critical roles are covered</span>
+                      </div>
+                    )}
+
+                  </div>
+                </Section>
+              )}
 
               {/* ── ACTIVITY ──────────────────────────────────────────── */}
               <Section title="Activity">
@@ -855,41 +1247,96 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
               </Section>
 
               {/* ── AI HEALTH ─────────────────────────────────────────── */}
-              {!isClosed && deal.aiScore > 0 && (
+              {!isClosed && deal.aiScore > 0 && healthExpl && (
                 <Section title="AI Health">
-                  <div className="py-3">
-                    {/* Score bar */}
-                    <div className="flex items-center space-x-3 mb-3">
+                  <div className="py-3 space-y-3">
+
+                    {/* Score bar + tier label */}
+                    <div className="flex items-center space-x-3">
                       <Sparkles className="h-4 w-4 text-indigo-400 flex-shrink-0" />
                       <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-500"
                           style={{
-                            width: `${deal.aiScore}%`,
+                            width: `${healthExpl.score}%`,
                             backgroundColor:
-                              deal.aiScore >= 80 ? '#10b981' :
-                              deal.aiScore >= 60 ? '#6366f1' : '#f59e0b',
+                              healthExpl.score >= 75 ? '#10b981' :
+                              healthExpl.score >= 50 ? '#6366f1' : '#f59e0b',
                           }}
                         />
                       </div>
                       <span
-                        className="text-[13px] font-bold w-8 text-right"
+                        className="text-[13px] font-bold tabular-nums w-6 text-right"
                         style={{
                           color:
-                            deal.aiScore >= 80 ? '#10b981' :
-                            deal.aiScore >= 60 ? '#6366f1' : '#f59e0b',
+                            healthExpl.score >= 75 ? '#10b981' :
+                            healthExpl.score >= 50 ? '#6366f1' : '#f59e0b',
                         }}
                       >
-                        {deal.aiScore}
+                        {healthExpl.score}
+                      </span>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0
+                        ${healthExpl.tier === 'strong' ? 'bg-emerald-50 text-emerald-700'
+                        : healthExpl.tier === 'fair'   ? 'bg-amber-50 text-amber-700'
+                        :                                'bg-red-50 text-red-700'}`}
+                      >
+                        {healthExpl.tierLabel}
                       </span>
                     </div>
 
-                    {/* Top signals derived from deal data */}
-                    {cardState && (
-                      <p className="text-[12px] text-gray-500 leading-relaxed">
-                        {cardState.description}
-                      </p>
+                    {/* Headline */}
+                    <p className="text-[12px] text-gray-600 leading-relaxed">
+                      {healthExpl.headline}
+                    </p>
+
+                    {/* Risk drivers */}
+                    {healthExpl.risks.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wider mb-1.5">
+                          Risks
+                        </p>
+                        <div className="space-y-2">
+                          {healthExpl.risks.slice(0, 5).map(r => (
+                            <div key={r.id} className="flex items-start justify-between gap-2">
+                              <span className="flex items-start space-x-1.5 min-w-0">
+                                <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5
+                                  ${r.impact === 'high' ? 'text-red-500' : 'text-amber-500'}`}
+                                />
+                                <span className="text-[12px] text-gray-700 leading-snug">
+                                  {r.label}
+                                </span>
+                              </span>
+                              {r.action && (
+                                <span className="text-[11px] text-indigo-500 font-medium whitespace-nowrap flex-shrink-0">
+                                  {r.action} →
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
+
+                    {/* Positive drivers */}
+                    {healthExpl.positives.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1.5">
+                          Strengths
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {healthExpl.positives.slice(0, 5).map(p => (
+                            <span
+                              key={p.id}
+                              className="inline-flex items-center space-x-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] rounded-full border border-emerald-100"
+                            >
+                              <CheckCircle2 className="h-3 w-3 flex-shrink-0" />
+                              <span>{p.label}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 </Section>
               )}

@@ -13,7 +13,19 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+app.use(cors({
+  origin: (origin, cb) => {
+    const allowed = [
+      process.env.CLIENT_URL || 'http://localhost:5173',
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'http://localhost:3001',
+    ];
+    if (!origin || allowed.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+}));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

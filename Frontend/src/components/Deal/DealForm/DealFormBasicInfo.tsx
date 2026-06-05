@@ -26,6 +26,13 @@ interface DealFormBasicInfoProps {
   catalogSuggestion?: PriceResult;
   dealValueUserEdited?: boolean;
   onApplyCatalogPrice?: (amount: number) => void;
+  winProbOverrideEnabled: boolean;
+  winProbOverrideValue: number | '';
+  winProbOverrideReason: string;
+  onEnableOverride: () => void;
+  onDisableOverride: () => void;
+  onOverrideValueChange: (val: number | '') => void;
+  onOverrideReasonChange: (reason: string) => void;
 }
 
 export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
@@ -39,6 +46,13 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
   catalogSuggestion,
   dealValueUserEdited = false,
   onApplyCatalogPrice,
+  winProbOverrideEnabled,
+  winProbOverrideValue,
+  winProbOverrideReason,
+  onEnableOverride,
+  onDisableOverride,
+  onOverrideValueChange,
+  onOverrideReasonChange,
 }) => {
   const hasNameContext = !!(formData.accountName || formData.product);
   // Derive stages from the selected pipeline — never stale
@@ -66,18 +80,18 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <div className="flex items-center space-x-3 mb-6 pb-3 border-b border-gray-100">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 lg:p-6 shadow-sm">
+      <div className="flex items-center space-x-3 mb-4 lg:mb-6 pb-3 border-b border-gray-100">
         <div className="p-2 bg-blue-50 rounded-lg">
           <Info className="h-5 w-5 text-blue-600" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Basic Information</h2>
+          <h2 className="text-sm sm:text-base font-semibold text-gray-900">Basic Information</h2>
           <p className="text-xs text-gray-500">Core details about this deal</p>
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4 lg:space-y-5">
         {/* Deal Name */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -174,28 +188,30 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Deal Value <span className="text-red-500">*</span>
           </label>
-          <div className="flex items-center space-x-2">
-            {/* Dynamic currency symbol — updates when currency changes */}
-            <span className="text-gray-500 font-medium text-sm w-8 text-center flex-shrink-0">
-              {getCurrencySymbol(formData.currency || 'USD')}
-            </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={displayValue}
-              onChange={handleValueChange}
-              placeholder="50,000"
-              className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
-                validationErrors.dealValue
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-gray-300 focus:ring-blue-500'
-              }`}
-            />
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div className="flex items-center space-x-2 flex-1">
+              {/* Dynamic currency symbol — updates when currency changes */}
+              <span className="text-gray-500 font-medium text-sm w-8 text-center flex-shrink-0">
+                {getCurrencySymbol(formData.currency || 'USD')}
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={displayValue}
+                onChange={handleValueChange}
+                placeholder="50,000"
+                className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 text-base sm:text-sm ${
+                  validationErrors.dealValue
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
+              />
+            </div>
             {/* Currency selector built from shared config — add currencies in currencies.ts */}
             <select
               value={formData.currency || 'USD'}
               onChange={(e) => onChange('currency', e.target.value)}
-              className="px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full sm:w-auto px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm"
             >
               {SUPPORTED_CURRENCIES.map((c) => (
                 <option key={c.code} value={c.code}>
@@ -456,7 +472,19 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Stage <span className="text-red-500">*</span>
           </label>
-          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+          {/* Mobile: native select */}
+          <select
+            value={formData.stage}
+            onChange={(e) => onChange('stage', e.target.value)}
+            className="sm:hidden w-full px-3 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {stages.map(s => (
+              <option key={s.id} value={s.id}>{s.name} ({s.probability}%)</option>
+            ))}
+          </select>
+
+          {/* Tablet/Desktop: pill button group */}
+          <div className="hidden sm:flex items-center rounded-lg border border-gray-200 overflow-hidden">
             {stages.map((stage, idx) => {
               const isActive = formData.stage === stage.id;
               return (
@@ -561,29 +589,146 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           </p>
         </div>
 
-        {/* Win Probability — compact row with collapsible breakdown */}
+        {/* Win Probability — with optional rep override */}
         <div>
+          {/* Header */}
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-gray-700 flex items-center space-x-1">
               <Sparkles className="h-4 w-4 text-purple-500" />
               <span>Win Probability</span>
-              <span className="text-xs text-gray-400 font-normal">(AI-calculated)</span>
             </label>
-            <span className="text-lg font-bold text-gray-900">{formData.probability}%</span>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
-            <div
-              className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${formData.probability}%` }}
-            />
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
-            <span className="bg-gray-50 border border-gray-200 rounded px-2 py-0.5">Stage base</span>
-            <span className="bg-gray-50 border border-gray-200 rounded px-2 py-0.5">Contact role</span>
-            {(formData.source === 'hrms' || formData.hrmsConnection) && (
-              <span className="bg-orange-50 border border-orange-200 text-orange-700 rounded px-2 py-0.5">+15% HRMS</span>
+            {!winProbOverrideEnabled ? (
+              <button
+                type="button"
+                onClick={onEnableOverride}
+                className="text-xs text-indigo-500 hover:text-indigo-700 underline underline-offset-2"
+              >
+                ✏️ Override
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onDisableOverride}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                ✕ Use AI Score
+              </button>
             )}
           </div>
+
+          {/* Default state — AI score display */}
+          {!winProbOverrideEnabled && (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-400">(AI-calculated)</span>
+                <span className="text-lg font-bold text-gray-900">{formData.probability}%</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div
+                  className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${formData.probability}%` }}
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
+                <span className="bg-gray-50 border border-gray-200 rounded px-2 py-0.5">Stage base</span>
+                <span className="bg-gray-50 border border-gray-200 rounded px-2 py-0.5">Contact role</span>
+                {(formData.source === 'hrms' || formData.hrmsConnection) && (
+                  <span className="bg-orange-50 border border-orange-200 text-orange-700 rounded px-2 py-0.5">+15% HRMS</span>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Override state */}
+          {winProbOverrideEnabled && (
+            <div className="space-y-3">
+
+              {/* AI score reference row */}
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <span className="shrink-0">AI Score:</span>
+                <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                  <div
+                    className="bg-gray-300 h-1.5 rounded-full"
+                    style={{ width: `${formData.probability}%` }}
+                  />
+                </div>
+                <span className="font-medium shrink-0">{formData.probability}%</span>
+              </div>
+
+              {/* Rep override input */}
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Rep Override:</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={winProbOverrideValue}
+                    onChange={(e) => {
+                      const val = e.target.value === ''
+                        ? ''
+                        : Math.min(100, Math.max(0, Number(e.target.value)));
+                      onOverrideValueChange(val as number | '');
+                    }}
+                    className="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-center text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    placeholder="0"
+                  />
+                  <span className="text-gray-500 font-medium">%</span>
+                </div>
+
+                {/* Live bar + scale */}
+                {winProbOverrideValue !== '' && (
+                  <div className="mt-2">
+                    <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          Number(winProbOverrideValue) >= 70 ? 'bg-green-500' :
+                          Number(winProbOverrideValue) >= 40 ? 'bg-blue-500' :
+                          'bg-amber-500'
+                        }`}
+                        style={{ width: `${winProbOverrideValue}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0%</span>
+                      <span className="font-medium text-gray-600">{winProbOverrideValue}% (Rep)</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Validation warnings */}
+                {winProbOverrideValue === 0 && (
+                  <p className="mt-1.5 text-xs text-amber-600">0% means certain loss — are you sure?</p>
+                )}
+                {winProbOverrideValue === 100 && (
+                  <p className="mt-1.5 text-xs text-amber-600">100% means certain win — please confirm.</p>
+                )}
+                {winProbOverrideValue !== '' && Number(winProbOverrideValue) > 85 && Number(winProbOverrideValue) < 100 && (
+                  <p className="mt-1.5 text-xs text-indigo-500">
+                    High confidence override — consider adding a Decision Maker stakeholder to support this assessment.
+                  </p>
+                )}
+              </div>
+
+              {/* Reason textarea */}
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Reason for override (optional):</label>
+                <textarea
+                  value={winProbOverrideReason}
+                  onChange={(e) => onOverrideReasonChange(e.target.value.slice(0, 200))}
+                  placeholder="e.g. Strong CEO relationship, verbal commitment received, incumbent vendor advantage..."
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 text-gray-700 placeholder-gray-400"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span className="text-amber-500">⚠️ Override visible to managers and team</span>
+                  <span>{winProbOverrideReason.length}/200</span>
+                </div>
+              </div>
+
+            </div>
+          )}
         </div>
       </div>
     </div>

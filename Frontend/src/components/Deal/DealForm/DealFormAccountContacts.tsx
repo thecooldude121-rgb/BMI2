@@ -140,18 +140,18 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <div className="flex items-center space-x-3 mb-6 pb-3 border-b border-gray-100">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 lg:p-6 shadow-sm">
+      <div className="flex items-center space-x-3 mb-4 lg:mb-6 pb-3 border-b border-gray-100">
         <div className="p-2 bg-green-50 rounded-lg">
           <Users className="h-5 w-5 text-green-600" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Account & Contacts</h2>
+          <h2 className="text-sm sm:text-base font-semibold text-gray-900">Account & Contacts</h2>
           <p className="text-xs text-gray-500">Link the company and key stakeholders for this deal</p>
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4 lg:space-y-5">
         {/* ── Account ─────────────────────────────────────────────── */}
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
@@ -243,23 +243,25 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
             <span className="text-xs text-gray-400">Lead stakeholder for this deal</span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <ContactAutocomplete
-              value={formData.primaryContactName}
-              onChange={(v) => {
-                onChange('primaryContactName', v);
-                // Free-typing clears any previously linked contact ID
-                if (formData.primaryContactId) onChange('primaryContactId', '');
-              }}
-              onContactSelect={handleContactSelect}
-              accountName={formData.accountName}
-              placeholder="Search or enter contact name…"
-              hasError={!!validationErrors.primaryContactName}
-            />
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-start">
+            <div className="flex-1">
+              <ContactAutocomplete
+                value={formData.primaryContactName}
+                onChange={(v) => {
+                  onChange('primaryContactName', v);
+                  // Free-typing clears any previously linked contact ID
+                  if (formData.primaryContactId) onChange('primaryContactId', '');
+                }}
+                onContactSelect={handleContactSelect}
+                accountName={formData.accountName}
+                placeholder="Search or enter contact name…"
+                hasError={!!validationErrors.primaryContactName}
+              />
+            </div>
             <select
               value={formData.contactRole ?? DEFAULT_CONTACT_ROLE.id}
               onChange={(e) => onChange('contactRole', e.target.value)}
-              className="px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full sm:w-auto sm:min-w-[150px] px-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm"
             >
               {CONTACT_ROLES.map((r) => (
                 <option key={r.id} value={r.id}>{r.label}</option>
@@ -343,18 +345,18 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
                   value={contact.title ?? ''}
                   onChange={(e) => updateContact(contact.id, 'title', e.target.value)}
                   placeholder="Job title (optional)"
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <select
                   value={contact.role}
                   onChange={(e) => updateContact(contact.id, 'role', e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2.5 border border-gray-300 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {CONTACT_ROLES.map((r) => (
                     <option key={r.id} value={r.id}>{r.label}</option>

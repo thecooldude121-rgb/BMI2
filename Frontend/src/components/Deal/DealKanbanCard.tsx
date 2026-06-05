@@ -258,7 +258,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         </div>
 
         {/* Row C: State chip — only rendered when there is an active signal */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 mt-1">
           {state.chipLabel && (
             <span
               className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0 ${tokens.chipBg} ${tokens.chipText}`}
@@ -343,7 +343,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
           </button>
         )}
       </div>
-      <p className="text-[11px] text-gray-600 mb-2 truncate">{deal.companyName || '—'}</p>
+      <p className="text-[11px] text-gray-500 mb-1.5 truncate">{deal.companyName || '—'}</p>
 
       {/* ── ZONE 2: Value signal ─────────────────────────────────────────── */}
       {/*
@@ -387,7 +387,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         Right: inspection badge > close date (closed) > activity time (active)
                Overdue/stalled suppress the right element — chip encodes timing.
       */}
-      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-gray-100">
+      <div className="flex items-center justify-between mb-1.5">
 
         {/* Left — chip or fallback activity label */}
         {state.chipLabel ? (
@@ -407,7 +407,8 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
           </span>
         )}
 
-        {/* Right — strictly typed secondary label; never truncated into chip */}
+        {/* Right — inspection badge > activity time for active-with-chip states.
+            Closed deals show no right element — close date is already in Zone 2. */}
         {inspectionMode && inspectionBadge ? (
           <span
             className={`text-[11px] px-2 py-0.5 rounded font-medium flex-shrink-0 ${inspectionBadge.style}`}
@@ -415,11 +416,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
           >
             {inspectionBadge.label}
           </span>
-        ) : isClosed && state.chipLabel ? (
-          <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">
-            {formatCloseDate(deal.closeDate)}
-          </span>
-        ) : state.chipLabel && state.primary !== 'overdue' && state.primary !== 'stalled' ? (
+        ) : !isClosed && state.chipLabel && state.primary !== 'overdue' && state.primary !== 'stalled' ? (
           <span className="text-[11px] text-gray-400 flex-shrink-0 whitespace-nowrap">
             {formatRelativeTime(deal.lastActivity, 'No activity')}
           </span>
@@ -434,7 +431,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
       {!isClosed && !inspectionMode && !!deal.nextStep?.trim() &&
         deal.nextStep.trim().toUpperCase() !== 'N/A' &&
         deal.nextStep.trim() !== '—' && (
-        <div className="flex items-center space-x-1 mb-2">
+        <div className="flex items-center space-x-1 mb-1">
           <ArrowRight className="h-3 w-3 text-indigo-400 flex-shrink-0" />
           <span className="text-[11px] text-gray-600 line-clamp-1 leading-snug flex-1 min-w-0">
             {deal.nextStep}
@@ -461,72 +458,68 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         </div>
       )}
 
-      {/* ── ZONE 4: Metadata ─────────────────────────────────────────────── */}
+      {/* ── ZONE 4: Metadata footer ──────────────────────────────────────── */}
       {/*
-        Owner avatar and AI score — the lowest-urgency metadata.
-        Placed last so urgency states in zones 2–3 dominate the initial scan.
+        Single border-t anchors the entire metadata zone — owner, AI score,
+        and committee coverage all read as one footer distinct from deal content.
 
-        Owner: initials avatar (same info as "Owner: Name" in ~20% of space).
-        The avatar background color is fixed indigo — could be role-coded in
-        a future iteration.
-
-        AI score: thin bar (gestalt range) + number (precision).
-        Color-coded to match the deal state where possible.
-        Hidden entirely for closed deals where it's no longer actionable.
+        Owner avatar bumped to 24px so it reads as a person marker, not a token.
+        AI bar slimmed to h-1.5 so it registers as a secondary indicator rather
+        than competing with the amount for visual weight.
+        Coverage bar self-separates via its own border-t border-gray-50.
       */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={(e) => { e.stopPropagation(); onContactClick(e, deal.id); }}
-          className="flex items-center space-x-1.5 text-[11px] text-gray-500 hover:text-indigo-600 transition-colors min-w-0"
-          title={`Owner: ${deal.owner || 'Unassigned'}`}
-        >
-          <span
-            className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
-            style={{ backgroundColor: '#6366f1' }}
-            aria-label={`Owner: ${deal.owner}`}
-          >
-            {getInitials(deal.owner)}
-          </span>
-          <span className="truncate max-w-[108px]">{deal.owner || 'Unassigned'}</span>
-        </button>
-
-        {!isClosed && (
+      <div className="border-t border-gray-100 pt-2 mt-1">
+        <div className="flex items-center justify-between">
           <button
-            onClick={(e) => { e.stopPropagation(); onScoreClick(e, deal.id); }}
-            className="flex items-center space-x-1.5 flex-shrink-0 hover:opacity-70 transition-opacity"
-            title={`AI Health: ${deal.aiScore}/100 — click for breakdown`}
+            onClick={(e) => { e.stopPropagation(); onContactClick(e, deal.id); }}
+            className="flex items-center space-x-2 text-[11px] text-gray-600 hover:text-indigo-600 transition-colors min-w-0"
+            title={`Owner: ${deal.owner || 'Unassigned'}`}
           >
-            <div className="w-14 bg-gray-200 rounded-full h-2 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-300"
-                style={{ width: `${deal.aiScore}%`, backgroundColor: aiBarColor(deal.aiScore) }}
-              />
-            </div>
-            {/* Phase 5 — amber dot when a high-impact risk exists */}
-            <span className="relative flex items-center">
-              <span
-                className="text-[11px] font-semibold tabular-nums"
-                style={{ color: aiBarColor(deal.aiScore) }}
-              >
-                {deal.aiScore}
-              </span>
-              {healthExpl?.hasHighRisk && (
-                <span
-                  className="absolute -top-1 -right-2 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-white"
-                  title="High-impact risk detected"
-                />
-              )}
+            <span
+              className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+              style={{ backgroundColor: '#6366f1' }}
+              aria-label={`Owner: ${deal.owner}`}
+            >
+              {getInitials(deal.owner)}
             </span>
+            <span className="truncate max-w-[100px]">{deal.owner || 'Unassigned'}</span>
           </button>
+
+          {!isClosed && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onScoreClick(e, deal.id); }}
+              className="flex items-center space-x-1.5 flex-shrink-0 hover:opacity-70 transition-opacity"
+              title={`AI Health: ${deal.aiScore}/100 — click for breakdown`}
+            >
+              <div className="w-12 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{ width: `${deal.aiScore}%`, backgroundColor: aiBarColor(deal.aiScore) }}
+                />
+              </div>
+              <span className="relative flex items-center">
+                <span
+                  className="text-[11px] font-semibold tabular-nums"
+                  style={{ color: aiBarColor(deal.aiScore) }}
+                >
+                  {deal.aiScore}
+                </span>
+                {healthExpl?.hasHighRisk && (
+                  <span
+                    className="absolute -top-1 -right-2 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-white"
+                    title="High-impact risk detected"
+                  />
+                )}
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* Committee coverage — self-separates via border-t border-gray-50 */}
+        {!isClosed && (
+          <CommitteeCoverageBar stakeholders={deal.stakeholders} />
         )}
       </div>
-
-      {/* ── Committee coverage bar ────────────────────────────────────────── */}
-      {/* Shown only in standard mode when stakeholders exist.  Hidden for
-          closed deals and in inspection mode (badge already surfaces there). */}
-      {!isClosed && !isCompact && (
-        <CommitteeCoverageBar stakeholders={deal.stakeholders} />
-      )}
 
       {/* ── Health driver popover ─────────────────────────────────────────── */}
       {/* Replaces the old delta-based tooltip.  Shows the explanation model

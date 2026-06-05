@@ -85,12 +85,16 @@ export const getContactRole = (id: string): ContactRole =>
 // isPrimary distinguishes the required lead contact from optional stakeholders.
 
 export interface StakeholderContact {
-  id: string;         // temp key (uuid-like) for list reconciliation
+  id: string;           // temp key (uuid-like) for list reconciliation
   name: string;
   email?: string;
-  title?: string;     // job title e.g. "VP Engineering"
-  role: string;       // ContactRole id
+  title?: string;       // job title e.g. "VP Engineering"
+  role: string;         // ContactRole id
   isPrimary: boolean;
+  /** Relationship health from the seller's perspective. */
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  /** ISO date of last contact with this person. */
+  lastContactedAt?: string;
 }
 
 // ─── Advisory helper ──────────────────────────────────────────────────────────

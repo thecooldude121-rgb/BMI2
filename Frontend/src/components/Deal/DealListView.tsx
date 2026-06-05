@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronUp, ChevronDown, Filter, Download, Settings, Search, Eye, Edit, MoreHorizontal, Star, TrendingUp, Clock, DollarSign } from 'lucide-react';
 import { Deal, DealColumn, DealFilters, DEFAULT_DEAL_COLUMNS } from '../../types/dealManagement';
+import { formatCloseDate } from '../../utils/dateUtils';
 
 interface DealListViewProps {
   deals: Deal[];
@@ -86,9 +87,7 @@ const DealListView: React.FC<DealListViewProps> = ({
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
+  const formatDate = (dateString: string) => formatCloseDate(dateString);
 
   const getStageDisplay = (stageId: string) => {
     const stageNames = {

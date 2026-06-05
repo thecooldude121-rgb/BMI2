@@ -19,6 +19,8 @@ interface NextAction {
 interface AIDealIntelligenceProps {
   dealName?: string;
   winProbability: number;
+  winProbAI?: number;
+  winProbOverrideReason?: string;
   healthScore: number;
   insights: {
     positive: AIInsight[];
@@ -35,6 +37,8 @@ interface AIDealIntelligenceProps {
 export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
   dealName,
   winProbability,
+  winProbAI,
+  winProbOverrideReason,
   healthScore,
   insights,
   nextActions,
@@ -79,19 +83,58 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
 
       {/* Win Probability */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-bold text-gray-900">Win Probability</h3>
-          <span className="text-3xl font-bold text-blue-600">{winProbability}%</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-          <div
-            className={`h-4 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbability)}`}
-            style={{ width: `${winProbability}%` }}
-          ></div>
-        </div>
-        <div className="text-sm font-medium text-gray-700 mb-4">
-          {getWinProbabilityText(winProbability)}
-        </div>
+        {/* Determine if this deal has a rep override */}
+        {winProbOverrideReason ? (
+          <>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-gray-900">Win Probability</h3>
+                <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded">
+                  Rep Override
+                </span>
+              </div>
+              <span className="text-3xl font-bold text-indigo-600">{winProbability}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+              <div
+                className={`h-4 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbability)}`}
+                style={{ width: `${winProbability}%` }}
+              />
+            </div>
+            <div className="text-sm font-medium text-gray-700 mb-1">
+              {getWinProbabilityText(winProbability)}
+            </div>
+            {winProbAI !== undefined && winProbAI !== winProbability && (
+              <div className="text-xs text-gray-400 mb-2">
+                AI suggested: {winProbAI}%
+              </div>
+            )}
+            <div className="text-sm text-gray-500 italic border-l-2 border-indigo-200 pl-3 py-1">
+              "{winProbOverrideReason}"
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-gray-900">Win Probability</h3>
+                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-xs font-medium rounded">
+                  AI-calculated
+                </span>
+              </div>
+              <span className="text-3xl font-bold text-blue-600">{winProbability}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+              <div
+                className={`h-4 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbability)}`}
+                style={{ width: `${winProbability}%` }}
+              />
+            </div>
+            <div className="text-sm font-medium text-gray-700 mb-4">
+              {getWinProbabilityText(winProbability)}
+            </div>
+          </>
+        )}
 
         {/* Based on factors */}
         <div className="bg-gray-50 rounded-lg p-4">

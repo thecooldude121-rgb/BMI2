@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getDeal } from '../../utils/dealsApi';
+import { getDeal, updateDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
@@ -23,11 +23,14 @@ import {
   MeetingSchedulerModal
 } from '../../components/Deal/DealModals';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
+import type { DealValueHistoryEntry } from '../../types/dealManagement';
 
 export const ComprehensiveDealDetailPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
 
   const [showStageChange, setShowStageChange] = useState(false);
   const [showUpdateAmount, setShowUpdateAmount] = useState(false);
@@ -58,6 +61,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     expectedCloseDate: '',
     owner: '',
     ownerId: '',
+    ownerInfo: undefined as any,
     createdDate: '',
     accountName: '',
     accountSize: '',
@@ -69,6 +73,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     aiHealth: 'Unknown',
     daysAway: 0,
     probability: 0,
+    winProbAI: 0,
+    winProbOverrideReason: '',
     daysInStage: 0,
     totalDealAge: 0,
     package: '',
@@ -79,6 +85,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     description: '',
     dealType: '',
     stakeholders: [] as any[],
+    dealValueHistory: [] as DealValueHistoryEntry[],
   });
 
   useEffect(() => {
@@ -125,7 +132,14 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           closeDate: formatDisplayDate(closeDateIso),
           expectedCloseDate: formatDisplayDate(closeDateIso),
           owner: data.assigned_to || '',
-          ownerId: '',
+          ownerId: data.owner_id || '',
+          ownerInfo: {
+            id: data.owner_id || undefined,
+            name: data.assigned_to || '',
+            email: data.owner_email || undefined,
+            lastActiveAt: data.owner_last_active_at || undefined,
+            outOfOffice: data.owner_out_of_office ? Boolean(data.owner_out_of_office) : undefined,
+          },
           createdDate: formatDisplayDate(createdIso.split('T')[0]),
           accountSize: '',
           accountIndustry: '',
@@ -136,6 +150,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           aiHealth: 'Unknown',
           daysAway,
           probability: Number(data.probability) || 0,
+          winProbAI: Number(data.win_prob_ai) || Number(data.probability) || 0,
+          winProbOverrideReason: data.win_prob_override_reason || '',
           daysInStage: 0,
           totalDealAge,
           package: data.product || '',
@@ -146,6 +162,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           description: data.description || '',
           dealType: data.deal_type || '',
           stakeholders: Array.isArray(data.stakeholders) ? data.stakeholders : [],
+          dealValueHistory: Array.isArray(data.value_history) ? data.value_history : [],
         });
       })
       .catch((err) => setFetchError(err.message ?? 'Failed to load deal'))
@@ -174,6 +191,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const aiIntelligenceData = {
     winProbability: deal.probability || 67,
+    winProbAI: deal.winProbAI || deal.probability || 67,
+    winProbOverrideReason: deal.winProbOverrideReason || '',
     healthScore: healthResult.score,
     insights: {
       positive: [
@@ -510,7 +529,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         showToast('Deal cloned successfully', 'success');
         break;
       case 'change-owner':
-        showToast('Change owner dialog would open', 'info');
+        showToast('Use the "Assign Owner" button on the owner card', 'info');
         break;
       case 'change-stage':
         setShowStageChange(true);
@@ -539,12 +558,52 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     }
   };
 
+  const handleAssignOwner = async (ownerName: string) => {
+    setDeal((prev: any) => ({
+      ...prev,
+      owner: ownerName,
+      ownerInfo: { ...(prev.ownerInfo || {}), name: ownerName },
+    }));
+    try {
+      if (id) await updateDeal(id, { assigned_to: ownerName });
+      showToast(`Owner assigned to ${ownerName}`, 'success');
+    } catch {
+      showToast('Failed to save owner assignment', 'error');
+    }
+  };
+
   const handleStageChange = () => {
     showToast('Deal moved to Negotiation stage', 'success');
   };
 
-  const handleUpdateAmount = (newAmount: number, reason: string) => {
-    showToast(`Deal amount updated to $${newAmount.toLocaleString()}`, 'success');
+  const handleUpdateAmount = async (newAmount: number, reason: string) => {
+    if (!id) return;
+    const changedBy = user?.name || 'You';
+    const historyEntry: DealValueHistoryEntry = {
+      previousValue: deal.amount,
+      newValue: newAmount,
+      changedAt: new Date().toISOString(),
+      changedBy,
+      reason: reason || undefined,
+    };
+    const previousAmount = deal.amount;
+    const previousHistory = deal.dealValueHistory || [];
+    setDeal((prev: any) => ({
+      ...prev,
+      amount: newAmount,
+      dealValueHistory: [historyEntry, ...previousHistory],
+    }));
+    try {
+      await updateDeal(id, { value: newAmount, value_change_reason: reason || undefined });
+      showToast(`Deal amount updated to $${newAmount.toLocaleString()}`, 'success');
+    } catch {
+      setDeal((prev: any) => ({
+        ...prev,
+        amount: previousAmount,
+        dealValueHistory: previousHistory,
+      }));
+      showToast('Failed to update deal amount', 'error');
+    }
   };
 
   const handleSendEmail = (to: string, subject: string, body: string) => {
@@ -633,6 +692,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onMeeting={() => setShowMeetingScheduler(true)}
         onMoveStage={() => setShowStageChange(true)}
         onUpdateAmount={() => setShowUpdateAmount(true)}
+        onAssignOwner={handleAssignOwner}
       />
 
       {/* Main Content */}
@@ -642,6 +702,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           <div className="lg:col-span-2 space-y-6">
             <AIDealIntelligence
               {...aiIntelligenceData}
+              winProbAI={aiIntelligenceData.winProbAI}
+              winProbOverrideReason={aiIntelligenceData.winProbOverrideReason}
               onSendEmail={handleSendEmail}
               onScheduleCall={() => setShowCallLog(true)}
               onScheduleMeeting={() => setShowMeetingScheduler(true)}

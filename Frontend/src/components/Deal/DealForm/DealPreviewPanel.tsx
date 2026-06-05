@@ -12,9 +12,15 @@ import { Swords } from 'lucide-react';
 
 interface DealPreviewPanelProps {
   formData: any;
+  winProbOverrideEnabled: boolean;
+  winProbOverrideValue: number | '';
 }
 
-export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) => {
+export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
+  formData,
+  winProbOverrideEnabled,
+  winProbOverrideValue,
+}) => {
   const getInitials = (name: string) => {
     if (!name) return 'NA';
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -116,33 +122,42 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({ formData }) 
           <div>
             {(() => {
               const sp = getStageProbability(formData.pipelineId || DEFAULT_PIPELINE.id, formData.stage);
-              const prob = formData.probability ?? sp;
-              const isAI = prob > sp;
+              const aiProb = formData.probability ?? sp;
+              const isOverride = winProbOverrideEnabled && winProbOverrideValue !== '';
+              const displayProb = isOverride ? Number(winProbOverrideValue) : aiProb;
+              const isAI = !isOverride && aiProb > sp;
               return (
                 <>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-1.5">
-                      {isAI ? (
+                      {isOverride ? (
+                        <span className="text-sm font-medium text-indigo-600">Rep Override</span>
+                      ) : isAI ? (
                         <span className="text-sm font-medium text-gray-700">AI Score</span>
                       ) : (
                         <span className="text-sm font-medium text-gray-700">Stage Baseline</span>
                       )}
-                      <div className="relative group">
-                        <Info className="h-3 w-3 text-gray-400 cursor-help" />
-                        <div className="absolute left-0 bottom-5 w-56 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 leading-relaxed">
-                          AI score uses deal context and stakeholder signals; stage baseline is historical default.
-                        </div>
-                      </div>
                     </div>
-                    <span className="text-sm font-bold text-blue-600">{prob}%</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-sm font-bold ${isOverride ? 'text-indigo-600' : 'text-blue-600'}`}>
+                        {displayProb}%
+                      </span>
+                      {isOverride && (
+                        <span className="text-xs text-gray-400 line-through">AI: {aiProb}%</span>
+                      )}
+                    </div>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${prob}%` }}
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        isOverride
+                          ? (displayProb >= 70 ? 'bg-green-500' : displayProb >= 40 ? 'bg-indigo-500' : 'bg-amber-500')
+                          : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${displayProb}%` }}
                     />
                   </div>
-                  {isAI && (
+                  {isAI && !isOverride && (
                     <div className="mt-1 text-xs text-gray-400 text-right">Stage: {sp}%</div>
                   )}
                 </>

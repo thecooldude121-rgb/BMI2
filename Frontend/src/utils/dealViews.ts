@@ -123,7 +123,7 @@ export const SAVED_VIEWS: SavedView[] = [
     emoji:       '⚠️',
     filterPreset: { sortBy: 'closeDate' },
     predicate: (deal) => {
-      const hasNextStep = Boolean(deal.status?.trim());
+      const hasNextStep = Boolean(deal.nextStep?.trim());
       return !hasNextStep && deal.daysSinceContact >= NO_NEXT_STEP_STALE_DAYS;
     },
   },

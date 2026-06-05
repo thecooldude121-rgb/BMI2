@@ -112,7 +112,50 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
+
+    // Auto-append to value_history when value changes
+    let newValueHistory: any[] | null = null;
+    if (req.body.value !== undefined) {
+      const current = await pool.query(
+        'SELECT value, value_history FROM deals WHERE id = $1',
+        [req.params.id]
+      );
+      if (current.rows[0]) {
+        const currentValue = Number(current.rows[0].value);
+        const newValue = Number(req.body.value);
+        if (currentValue !== newValue) {
+          let changedBy = req.user?.email || 'Unknown';
+          if (req.user?.id) {
+            const userRow = await pool.query(
+              'SELECT first_name, last_name FROM users WHERE id = $1',
+              [req.user.id]
+            );
+            if (userRow.rows[0]) {
+              changedBy = `${userRow.rows[0].first_name} ${userRow.rows[0].last_name}`;
+            }
+          }
+          const existing = Array.isArray(current.rows[0].value_history)
+            ? current.rows[0].value_history
+            : [];
+          newValueHistory = [
+            {
+              previousValue: currentValue,
+              newValue: newValue,
+              changedAt: new Date().toISOString(),
+              changedBy,
+              reason: req.body.value_change_reason ?? undefined,
+            },
+            ...existing,
+          ];
+        }
+      }
+    }
+
     fields.forEach(f => { if (req.body[f] !== undefined) { updates.push(`${f} = $${i++}`); params.push(req.body[f]); } });
+    if (newValueHistory !== null) {
+      updates.push(`value_history = $${i++}`);
+      params.push(JSON.stringify(newValueHistory));
+    }
     if (!updates.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     updates.push(`updated_at = NOW()`);
     params.push(req.params.id);

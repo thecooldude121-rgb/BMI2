@@ -8,9 +8,17 @@ import { getContactRole } from '../../../config/contactRoles';
 
 interface AIInsightsPanelProps {
   formData: any;
+  winProbOverrideEnabled: boolean;
+  winProbOverrideValue: number | '';
+  winProbOverrideReason: string;
 }
 
-export const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ formData }) => {
+export const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({
+  formData,
+  winProbOverrideEnabled,
+  winProbOverrideValue,
+  winProbOverrideReason,
+}) => {
   const currency = formData.currency || BASE_CURRENCY_CODE;
   const rawAmount = parseFloat((formData.dealValue || '0').toString().replace(/,/g, ''));
   // Normalise to USD for threshold comparisons so sweet-spot logic works across all currencies
@@ -66,40 +74,73 @@ export const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({ formData }) =>
       <p className="text-sm text-gray-600 mb-4">Based on form data so far:</p>
 
       <div className="space-y-4">
-        {/* Primary probability — single authoritative number */}
+        {/* Win Probability — shows override or AI depending on rep state */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-semibold text-gray-700">Win Probability</span>
-              {probSource === 'ai' ? (
-                <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
-                  AI Score
-                </span>
-              ) : (
-                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-xs font-medium rounded">
-                  Stage Baseline
-                </span>
-              )}
-              <div className="relative group">
-                <Info className="h-3.5 w-3.5 text-gray-400 cursor-help" />
-                <div className="absolute left-0 bottom-5 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 leading-relaxed">
-                  AI score uses deal context and stakeholder signals; stage baseline is historical default.
+          {winProbOverrideEnabled && winProbOverrideValue !== '' ? (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-semibold text-gray-700">Win Probability</span>
+                  <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded">
+                    Rep Override
+                  </span>
                 </div>
+                <span className="text-2xl font-bold text-indigo-600">{winProbOverrideValue}%</span>
               </div>
-            </div>
-            <span className="text-2xl font-bold text-blue-600">{primaryProbability}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
-            <div
-              className="bg-blue-500 h-3 rounded-full transition-all duration-300"
-              style={{ width: `${primaryProbability}%` }}
-            />
-          </div>
-          {/* Stage baseline shown as supporting context only when AI score is active */}
-          {probSource === 'ai' && (
-            <div className="mt-1 text-xs text-gray-400 text-right">
-              Stage baseline: {stageProbability}%
-            </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-300 ${
+                    Number(winProbOverrideValue) >= 70 ? 'bg-green-500' :
+                    Number(winProbOverrideValue) >= 40 ? 'bg-blue-500' :
+                    'bg-amber-500'
+                  }`}
+                  style={{ width: `${winProbOverrideValue}%` }}
+                />
+              </div>
+              <div className="mt-1 text-xs text-gray-400 text-right">
+                AI suggested: {primaryProbability}%
+              </div>
+              {winProbOverrideReason && (
+                <div className="mt-2 text-xs text-gray-500 italic">
+                  "{winProbOverrideReason}"
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-semibold text-gray-700">Win Probability</span>
+                  {probSource === 'ai' ? (
+                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded">
+                      AI Score
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-xs font-medium rounded">
+                      Stage Baseline
+                    </span>
+                  )}
+                  <div className="relative group">
+                    <Info className="h-3.5 w-3.5 text-gray-400 cursor-help" />
+                    <div className="absolute left-0 bottom-5 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 leading-relaxed">
+                      AI score uses deal context and stakeholder signals; stage baseline is historical default.
+                    </div>
+                  </div>
+                </div>
+                <span className="text-2xl font-bold text-blue-600">{primaryProbability}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className="bg-blue-500 h-3 rounded-full transition-all duration-300"
+                  style={{ width: `${primaryProbability}%` }}
+                />
+              </div>
+              {probSource === 'ai' && (
+                <div className="mt-1 text-xs text-gray-400 text-right">
+                  Stage baseline: {stageProbability}%
+                </div>
+              )}
+            </>
           )}
         </div>
 

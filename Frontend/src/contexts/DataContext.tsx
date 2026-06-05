@@ -221,15 +221,23 @@ interface DataProviderProps {
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   const sampleData = generateSampleData();
-  
-  // Add sample deals to existing deals
+
+  // sampleDeals are in-memory only — they do NOT appear on the Kanban board,
+  // which fetches exclusively from the real API.  They exist here for legacy
+  // components that consume contextDeals directly.
+  //
+  // IMPORTANT: IDs are now deterministic (index-based) so that React's
+  // useState initializer always produces the same set.  The previous
+  // `Date.now() + Math.random()` IDs produced new values on every
+  // DataProvider function call, meaning contextDeals.length could differ
+  // between renders and trigger stale refetch races in child pages.
   const initialDeals = [
     ...sampleData.deals,
-    ...sampleDeals.map(deal => ({
-      id: `sample-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date().toISOString(),
-      ...deal
-    }))
+    ...sampleDeals.map((deal, idx) => ({
+      id: `sample-${idx}`,
+      createdAt: new Date(0).toISOString(), // epoch — clearly not a real timestamp
+      ...deal,
+    })),
   ];
   
   const [leads, setLeads] = useState<Lead[]>(sampleData.leads);

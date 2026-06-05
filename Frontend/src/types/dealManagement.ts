@@ -1,4 +1,21 @@
 // Comprehensive Deal Management Types
+
+export interface DealOwnerInfo {
+  id?: string;
+  name: string;
+  email?: string;
+  lastActiveAt?: string;
+  outOfOffice?: boolean;
+}
+
+export interface DealValueHistoryEntry {
+  previousValue: number;
+  newValue: number;
+  changedAt: string;
+  changedBy: string;
+  reason?: string;
+}
+
 export interface DealType {
   id: string;
   name: string;
@@ -60,6 +77,8 @@ export interface Deal {
   
   // Ownership & Classification
   ownerId: string;
+  ownerInfo?: DealOwnerInfo;
+  dealValueHistory?: DealValueHistoryEntry[];
   dealType: string;
   country: string;
   

@@ -119,6 +119,8 @@ const createTables = async (): Promise<void> => {
         currency VARCHAR(10) DEFAULT 'USD',
         closing_date DATE,
         probability INTEGER DEFAULT 0,
+        win_prob_ai INTEGER DEFAULT 0,
+        win_prob_override_reason TEXT,
         status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active','won','lost','archived')),
         deal_type VARCHAR(50) DEFAULT 'new-business',
         description TEXT,
@@ -128,6 +130,21 @@ const createTables = async (): Promise<void> => {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
+
+    // Add win_prob columns to existing deals tables (idempotent)
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS win_prob_ai INTEGER DEFAULT 0`);
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS win_prob_override_reason TEXT`);
+
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS value_history JSONB DEFAULT '[]'`);
+
+    // Migration 001: structured next-step fields
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step_due_date DATE`);
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step_owner TEXT`);
+    await client.query(`
+      ALTER TABLE deals
+        ADD COLUMN IF NOT EXISTS next_step_status TEXT DEFAULT 'pending'
+          CHECK (next_step_status IN ('pending','done','overdue'))
     `);
 
     await client.query(`

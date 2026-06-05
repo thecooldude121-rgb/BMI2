@@ -1,22 +1,53 @@
-import React, { useState } from 'react';
-import { 
-  X, Edit, Trash2, Mail, Phone, Video, Calendar, FileText, 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  X, Edit, Trash2, Mail, Phone, Video, Calendar, FileText,
   DollarSign, User, Building, MapPin, Clock, Tag, Paperclip,
-  CheckCircle, AlertCircle, Plus, MoreHorizontal, Star, TrendingUp,
-  Globe, Briefcase, Target, Activity, Send, Save, ChevronRight
+  CheckCircle, AlertCircle, Plus, MoreHorizontal, Star, TrendingUp, TrendingDown,
+  Globe, Briefcase, Target, Activity, Send, Save, ChevronRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { Deal } from '../../types/dealManagement';
+import { getUsers } from '../../utils/dealsApi';
+import { formatCloseDate, formatDateTimeShort } from '../../utils/dateUtils';
 
 interface DealDetailViewProps {
   deal: Deal;
   onClose: () => void;
+  onAssignOwner?: (ownerName: string) => void;
 }
 
-const DealDetailView: React.FC<DealDetailViewProps> = ({ deal, onClose }) => {
+const DealDetailView: React.FC<DealDetailViewProps> = ({ deal, onClose, onAssignOwner }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'emails' | 'history' | 'custom'>('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [customFields, setCustomFields] = useState(deal.customFields || {});
   const [newCustomField, setNewCustomField] = useState({ name: '', value: '', type: 'text' });
+  const [showOwnerDropdown, setShowOwnerDropdown] = useState(false);
+  const [ownersList, setOwnersList] = useState<any[]>([]);
+  const [isLoadingOwners, setIsLoadingOwners] = useState(false);
+  const ownerDropdownRef = useRef<HTMLDivElement>(null);
+  const [showHistoryPopover, setShowHistoryPopover] = useState(false);
+
+  useEffect(() => {
+    if (!showOwnerDropdown) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(e.target as Node)) {
+        setShowOwnerDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOwnerDropdown]);
+
+  function openOwnerDropdown() {
+    if (ownersList.length === 0) {
+      setIsLoadingOwners(true);
+      getUsers()
+        .then(users => setOwnersList(users))
+        .catch(() => {})
+        .finally(() => setIsLoadingOwners(false));
+    }
+    setShowOwnerDropdown(true);
+  }
 
   const tabs = [
     { id: 'overview', name: 'Overview', icon: Briefcase, count: null },
@@ -35,13 +66,10 @@ const DealDetailView: React.FC<DealDetailViewProps> = ({ deal, onClose }) => {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
+  // Delegates to the shared dateUtils formatters so all date text in the app
+  // is consistent and browser-independent (no raw toLocaleDateString calls).
+  const formatDate     = (s: string) => formatCloseDate(s);
+  const formatDateTime = (s: string) => formatDateTimeShort(s);
 
   const getStageColor = (stageId: string) => {
     const stageColors = {
@@ -328,12 +356,89 @@ const DealDetailView: React.FC<DealDetailViewProps> = ({ deal, onClose }) => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-gray-600">Deal Owner</p>
-                      <div className="flex items-center space-x-3 p-3 bg-white rounded-lg border border-gray-200">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                          <User className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <p className="font-semibold text-gray-900">{deal.ownerId}</p>
-                      </div>
+                      {(() => {
+                        const ownerName = deal.ownerInfo?.name || deal.ownerId || '';
+                        const isUnassigned = !ownerName;
+                        const isOOO = deal.ownerInfo?.outOfOffice === true;
+                        const lastActiveAt = deal.ownerInfo?.lastActiveAt;
+                        const lastActiveDays = lastActiveAt
+                          ? Math.floor((Date.now() - new Date(lastActiveAt).getTime()) / 86_400_000)
+                          : null;
+                        const lastActiveColor = lastActiveDays !== null
+                          ? (lastActiveDays > 7 ? 'text-red-600' : lastActiveDays > 3 ? 'text-amber-600' : 'text-gray-500')
+                          : '';
+                        const lastActiveText = lastActiveDays !== null
+                          ? (lastActiveDays === 0 ? 'Active today' : lastActiveDays === 1 ? 'Active yesterday' : `Last active ${lastActiveDays}d ago`)
+                          : '';
+                        return (
+                          <div className={`relative flex items-start space-x-3 p-3 rounded-lg border ${isUnassigned ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isUnassigned ? 'bg-red-100' : 'bg-blue-100'}`}>
+                              <User className={`h-4 w-4 ${isUnassigned ? 'text-red-500' : 'text-blue-600'}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {isUnassigned ? (
+                                  <span className="inline-flex items-center gap-1 font-semibold text-red-600">
+                                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                                    Unassigned
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-gray-900">{ownerName}</span>
+                                )}
+                                {isOOO && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">OOO</span>
+                                )}
+                              </div>
+                              {!isUnassigned && lastActiveDays !== null && (
+                                <div className={`flex items-center gap-1 text-xs mt-0.5 ${lastActiveColor}`}>
+                                  {lastActiveDays > 7 && <AlertTriangle className="h-3 w-3 flex-shrink-0" />}
+                                  <span>{lastActiveText}</span>
+                                </div>
+                              )}
+                              {isUnassigned && onAssignOwner && (
+                                <button
+                                  type="button"
+                                  onClick={openOwnerDropdown}
+                                  className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-700 underline underline-offset-1"
+                                >
+                                  + Assign Owner
+                                </button>
+                              )}
+                            </div>
+                            {showOwnerDropdown && (
+                              <div
+                                ref={ownerDropdownRef}
+                                className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+                              >
+                                {isLoadingOwners ? (
+                                  <div className="px-3 py-3 text-sm text-gray-500 text-center">Loading…</div>
+                                ) : ownersList.length === 0 ? (
+                                  <div className="px-3 py-3 text-sm text-gray-500 text-center">No team members found</div>
+                                ) : (
+                                  <ul className="max-h-44 overflow-y-auto py-1">
+                                    {ownersList.map((u: any) => (
+                                      <li key={u.id}>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                                          onClick={() => {
+                                            const name = `${u.first_name} ${u.last_name}`;
+                                            setShowOwnerDropdown(false);
+                                            onAssignOwner?.(name);
+                                          }}
+                                        >
+                                          <span className="font-medium">{u.first_name} {u.last_name}</span>
+                                          {u.role && <span className="text-gray-400 text-xs ml-1.5">({u.role})</span>}
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-gray-600">Deal Type</p>
@@ -373,11 +478,64 @@ const DealDetailView: React.FC<DealDetailViewProps> = ({ deal, onClose }) => {
                     </div>
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-gray-600">Deal Amount</p>
-                      <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                        <p className="text-3xl font-bold text-green-700">
-                          {formatCurrency(deal.amount, deal.currency)}
-                        </p>
-                        <p className="text-sm text-green-600 mt-1">Primary Amount</p>
+                      <div className="relative p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="text-3xl font-bold text-green-700">
+                              {formatCurrency(deal.amount, deal.currency)}
+                            </p>
+                            <p className="text-sm text-green-600 mt-1">Primary Amount</p>
+                          </div>
+                          {(() => {
+                            const hist = deal.dealValueHistory;
+                            if (!hist || hist.length === 0) return null;
+                            const original = hist[hist.length - 1].previousValue;
+                            const delta = deal.amount - original;
+                            if (delta === 0) return null;
+                            const pct = Math.round((delta / original) * 100);
+                            const fmt = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: deal.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+                            const tip = `Original: ${fmt(original)} · Current: ${fmt(deal.amount)} · ${pct >= 0 ? '+' : ''}${pct}% from original`;
+                            return (
+                              <div title={tip} className="cursor-help">
+                                {delta > 0
+                                  ? <TrendingUp className="h-5 w-5 text-green-500" />
+                                  : <TrendingDown className="h-5 w-5 text-red-500" />
+                                }
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        {deal.dealValueHistory && deal.dealValueHistory.length > 0 && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowHistoryPopover(v => !v)}
+                              className="text-xs text-green-700 hover:text-green-900 font-medium underline underline-offset-1"
+                            >
+                              {showHistoryPopover ? 'Hide history' : 'View history'}
+                            </button>
+                            {showHistoryPopover && (
+                              <div className="mt-2 space-y-1.5 max-h-40 overflow-y-auto">
+                                {deal.dealValueHistory.slice(0, 3).map((entry, idx) => (
+                                  <div key={idx} className="text-xs text-gray-700 py-1 border-b border-green-100 last:border-0">
+                                    <span className="font-medium">
+                                      {new Date(entry.changedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    </span>
+                                    {': '}
+                                    <span className="line-through text-red-500">{new Intl.NumberFormat('en-US', { style: 'currency', currency: deal.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(entry.previousValue)}</span>
+                                    {' → '}
+                                    <span className="text-green-600 font-medium">{new Intl.NumberFormat('en-US', { style: 'currency', currency: deal.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(entry.newValue)}</span>
+                                    {' · '}{entry.changedBy}
+                                    {entry.reason && ` · ${entry.reason}`}
+                                  </div>
+                                ))}
+                                {deal.dealValueHistory.length > 3 && (
+                                  <p className="text-xs text-gray-400">+{deal.dealValueHistory.length - 3} more changes on full page</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="space-y-2">

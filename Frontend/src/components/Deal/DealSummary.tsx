@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, DollarSign, User, Building, Calendar, Target, Zap, Save, Clock, CheckCircle } from 'lucide-react';
+import { formatCloseDate } from '../../utils/dateUtils';
 import { DealFormData } from '../../types/deal';
 
 interface DealSummaryProps {
@@ -153,7 +154,7 @@ const DealSummary: React.FC<DealSummaryProps> = ({ formData, onClose, isDraftSav
               <div>
                 <p className="text-xs text-gray-600">Expected Close</p>
                 <p className="font-medium text-gray-900">
-                  {new Date(formData.closingDate).toLocaleDateString()}
+                  {formatCloseDate(formData.closingDate)}
                 </p>
               </div>
             </div>

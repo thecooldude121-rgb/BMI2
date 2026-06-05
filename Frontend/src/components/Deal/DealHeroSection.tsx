@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { Edit, MoreVertical, Building2, User, Target, Calendar, Sparkles, Mail, Phone, CalendarDays, FileText, TrendingUp, DollarSign } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Edit, MoreVertical, Building2, User, Target, Calendar, Sparkles, Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown, ChevronDown, ChevronUp, DollarSign, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MoreOptionsDropdown } from './DealModals';
 import { daysFromNowLabel, closeDateUrgencyClass } from '../../utils/dateUtils';
 import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
+import { getUsers } from '../../utils/dealsApi';
+import type { DealOwnerInfo, DealValueHistoryEntry } from '../../types/dealManagement';
 
 interface DealHeroSectionProps {
   deal: {
@@ -18,6 +20,8 @@ interface DealHeroSectionProps {
     closeDate: string;
     owner: string;
     ownerId?: string;
+    ownerInfo?: DealOwnerInfo;
+    dealValueHistory?: DealValueHistoryEntry[];
     createdDate: string;
     accountName: string;
     accountSize: string;
@@ -38,6 +42,7 @@ interface DealHeroSectionProps {
   onMeeting?: () => void;
   onMoveStage?: () => void;
   onUpdateAmount?: () => void;
+  onAssignOwner?: (ownerName: string) => void;
 }
 
 export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
@@ -48,10 +53,74 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onCall,
   onMeeting,
   onMoveStage,
-  onUpdateAmount
+  onUpdateAmount,
+  onAssignOwner,
 }) => {
   const navigate = useNavigate();
   const [showMoreActions, setShowMoreActions] = useState(false);
+  const [showOwnerDropdown, setShowOwnerDropdown] = useState(false);
+  const [showValueHistory, setShowValueHistory] = useState(false);
+  const [ownersList, setOwnersList] = useState<any[]>([]);
+  const [isLoadingOwners, setIsLoadingOwners] = useState(false);
+  const ownerDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showOwnerDropdown) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(e.target as Node)) {
+        setShowOwnerDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOwnerDropdown]);
+
+  const ownerName = deal.owner || deal.ownerInfo?.name || '';
+  const isUnassigned = !ownerName;
+  const isOOO = deal.ownerInfo?.outOfOffice === true;
+  const lastActiveAt = deal.ownerInfo?.lastActiveAt;
+  const lastActiveDays = lastActiveAt
+    ? Math.floor((Date.now() - new Date(lastActiveAt).getTime()) / 86_400_000)
+    : null;
+  const lastActiveColor = lastActiveDays !== null
+    ? (lastActiveDays > 7 ? 'text-red-600' : lastActiveDays > 3 ? 'text-amber-600' : 'text-gray-500')
+    : '';
+  const lastActiveText = lastActiveDays !== null
+    ? (lastActiveDays === 0 ? 'Active today'
+      : lastActiveDays === 1 ? 'Active yesterday'
+      : `Last active ${lastActiveDays}d ago`)
+    : '';
+
+  const dealValueHistory = deal.dealValueHistory;
+  const hasValueHistory = (dealValueHistory?.length ?? 0) > 0;
+  const originalValue = hasValueHistory
+    ? dealValueHistory![dealValueHistory!.length - 1].previousValue
+    : deal.amount;
+  const valueDelta = deal.amount - originalValue;
+  const valuePctChange = originalValue !== 0
+    ? Math.round((valueDelta / originalValue) * 100)
+    : 0;
+  const valueDeltaTooltip = hasValueHistory
+    ? `Original: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: deal.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(originalValue)} · Current: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: deal.currency || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(deal.amount)} · ${valuePctChange >= 0 ? '+' : ''}${valuePctChange}% from original`
+    : '';
+
+  function formatValueCurrency(amount: number) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency', currency: deal.currency || 'USD',
+      minimumFractionDigits: 0, maximumFractionDigits: 0,
+    }).format(amount);
+  }
+
+  function openOwnerDropdown() {
+    if (ownersList.length === 0) {
+      setIsLoadingOwners(true);
+      getUsers()
+        .then(users => setOwnersList(users))
+        .catch(() => {})
+        .finally(() => setIsLoadingOwners(false));
+    }
+    setShowOwnerDropdown(true);
+  }
 
   const getHealthColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
@@ -127,7 +196,17 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         {/* Key Metrics Grid */}
         <div className="grid grid-cols-4 gap-6 mb-6">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
-            <div className="text-sm font-medium text-blue-700 mb-1">Value</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-sm font-medium text-blue-700">Value</div>
+              {valueDelta !== 0 && (
+                <div title={valueDeltaTooltip} className="cursor-help">
+                  {valueDelta > 0
+                    ? <TrendingUp className="h-4 w-4 text-green-500" />
+                    : <TrendingDown className="h-4 w-4 text-red-500" />
+                  }
+                </div>
+              )}
+            </div>
             <div className="text-3xl font-bold text-blue-900">
               {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
             </div>
@@ -139,6 +218,14 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   )} USD
               </div>
             )}
+            <button
+              type="button"
+              onClick={() => setShowValueHistory(v => !v)}
+              className="mt-2 flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+            >
+              {showValueHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              Value History
+            </button>
           </div>
           <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border border-orange-200">
             <div className="text-sm font-medium text-orange-700 mb-1">Stage</div>
@@ -153,15 +240,126 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             <div className="text-lg font-bold">{deal.closeDate}</div>
             <div className="text-xs mt-1 opacity-80">{daysFromNowLabel(deal.closeDate)}</div>
           </div>
-          <div
-            className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200 hover:from-purple-100 hover:to-purple-200 transition-all cursor-pointer"
-            onClick={() => deal.ownerId && navigate(`/team/${deal.ownerId}`)}
-            title="View team member profile"
-          >
-            <div className="text-sm font-medium text-purple-700 mb-1">Owner</div>
-            <div className="text-lg font-bold text-purple-900 hover:underline">{deal.owner}</div>
+          {/* Owner tile */}
+          <div className="relative bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-medium text-purple-700">Owner</div>
+              {isOOO && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 leading-tight">
+                  OOO
+                </span>
+              )}
+            </div>
+
+            {isUnassigned ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                  <span className="text-base font-semibold text-red-600">Unassigned</span>
+                </div>
+                {onAssignOwner && (
+                  <button
+                    type="button"
+                    onClick={openOwnerDropdown}
+                    className="text-xs font-medium text-purple-700 hover:text-purple-900 underline underline-offset-2 transition-colors"
+                  >
+                    + Assign Owner
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => deal.ownerId && navigate(`/team/${deal.ownerId}`)}
+                  className="text-lg font-bold text-purple-900 hover:underline text-left leading-tight"
+                >
+                  {ownerName}
+                </button>
+                {lastActiveDays !== null && (
+                  <div className={`flex items-center gap-1 text-xs mt-1.5 ${lastActiveColor}`}>
+                    {lastActiveDays > 7 && <AlertTriangle className="h-3 w-3 flex-shrink-0" />}
+                    <span>{lastActiveText}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Owner assignment dropdown */}
+            {showOwnerDropdown && (
+              <div
+                ref={ownerDropdownRef}
+                className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+              >
+                {isLoadingOwners ? (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">Loading team members…</div>
+                ) : ownersList.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-gray-500 text-center">No team members found</div>
+                ) : (
+                  <ul className="max-h-52 overflow-y-auto py-1">
+                    {ownersList.map((u: any) => (
+                      <li key={u.id}>
+                        <button
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
+                          onClick={() => {
+                            const name = `${u.first_name} ${u.last_name}`;
+                            setShowOwnerDropdown(false);
+                            onAssignOwner?.(name);
+                          }}
+                        >
+                          <span className="font-medium">{u.first_name} {u.last_name}</span>
+                          {u.role && (
+                            <span className="text-gray-400 text-xs ml-1.5">({u.role})</span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Value History accordion */}
+        {showValueHistory && (
+          <div className="mb-3 bg-white border border-blue-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
+              <span className="text-sm font-semibold text-blue-900">Value Change History</span>
+              <button
+                type="button"
+                onClick={() => setShowValueHistory(false)}
+                className="text-blue-400 hover:text-blue-600 text-xs"
+              >
+                Close
+              </button>
+            </div>
+            <div className="px-4 py-3 space-y-2 max-h-64 overflow-y-auto">
+              {!hasValueHistory ? (
+                <p className="text-sm text-gray-500 py-2">No changes — original value</p>
+              ) : (
+                dealValueHistory!.map((entry, idx) => (
+                  <div key={idx} className="flex items-start gap-2 py-2 border-b border-gray-50 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-gray-900 font-medium">
+                        {new Date(entry.changedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                      <span className="text-sm text-gray-700 mx-1">:</span>
+                      <span className="text-sm text-red-600 line-through">{formatValueCurrency(entry.previousValue)}</span>
+                      <span className="text-sm text-gray-500 mx-1">→</span>
+                      <span className="text-sm text-green-600 font-medium">{formatValueCurrency(entry.newValue)}</span>
+                      <span className="text-sm text-gray-500 ml-2">· Changed by {entry.changedBy}</span>
+                      {entry.reason && (
+                        <span className="text-sm text-gray-500 ml-2">· Reason: {entry.reason}</span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Account & Contact Info */}
         <div className="grid grid-cols-3 gap-6 mb-6">

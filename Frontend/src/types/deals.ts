@@ -1,4 +1,7 @@
 // Enterprise Deals Module Types
+import { DealOwnerInfo, DealValueHistoryEntry } from './dealManagement';
+export type { DealOwnerInfo, DealValueHistoryEntry };
+
 export interface Deal {
   id: string;
   dealNumber: string;
@@ -8,6 +11,8 @@ export interface Deal {
   accountId?: string;
   contactId?: string;
   ownerId: string;
+  ownerInfo?: DealOwnerInfo;
+  dealValueHistory?: DealValueHistoryEntry[];
   pipelineId: string;
   stageId: string;
   

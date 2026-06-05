@@ -574,7 +574,9 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                     </div>
                   )}
                   <div className="text-xs text-gray-500 ml-6">
-                    {deal.daysSinceContact >= 5 ? 'no contact' : deal.lastActivity}
+                    {deal.daysSinceContact >= 5
+                      ? `${deal.daysSinceContact}d no contact`
+                      : formatRelativeTime(deal.lastActivity, 'No recent activity')}
                   </div>
                 </div>
 
@@ -916,7 +918,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 <div className="space-y-2">
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Last Sync:</span>
-                    <span className="text-sm font-medium text-gray-900">{showHRMSModal.lastActivity}</span>
+                    <span className="text-sm font-medium text-gray-900">{formatRelativeTime(showHRMSModal.lastActivity, '—')}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Data Quality:</span>

@@ -235,18 +235,18 @@ export const DealFormProductDetails: React.FC<DealFormProductDetailsProps> = ({
   const paymentTerms = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 60', 'Custom'];
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-      <div className="flex items-center space-x-3 mb-6 pb-3 border-b border-gray-100">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 lg:p-6 shadow-sm">
+      <div className="flex items-center space-x-3 mb-4 lg:mb-6 pb-3 border-b border-gray-100">
         <div className="p-2 bg-amber-50 rounded-lg">
           <Package className="h-5 w-5 text-amber-600" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Product & Contract</h2>
+          <h2 className="text-sm sm:text-base font-semibold text-gray-900">Product & Contract</h2>
           <p className="text-xs text-gray-500">What you're selling, on what terms, and who you're up against</p>
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4 lg:space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Product/Package:</label>
           <select

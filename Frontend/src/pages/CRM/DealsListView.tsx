@@ -727,7 +727,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                                   ) : (
                                     <span className="flex items-center space-x-1 text-green-600">
                                       <CheckCircle2 className="h-4 w-4" />
-                                      <span>Active: {deal.lastActivity}</span>
+                                      <span>{formatRelativeTime(deal.lastActivity, 'No recent activity')}</span>
                                     </span>
                                   )}
                                   <span className="text-gray-500">| {deal.source}</span>
@@ -1091,7 +1091,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 <div className="space-y-2">
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Last Sync:</span>
-                    <span className="text-sm font-medium text-gray-900">{showHRMSModal.lastActivity}</span>
+                    <span className="text-sm font-medium text-gray-900">{formatRelativeTime(showHRMSModal.lastActivity, '—')}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
                     <span className="text-sm text-gray-600">Data Quality:</span>

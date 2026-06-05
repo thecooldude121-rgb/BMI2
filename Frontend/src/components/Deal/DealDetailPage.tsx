@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import { formatDisplayDate } from '../../utils/dateUtils';
+import {
   ArrowLeft, Edit, Mail, Plus, MoreHorizontal, ChevronDown, ChevronUp,
   User, Building, Calendar, DollarSign, Target, Phone, Video, FileText,
   Paperclip, Clock, Activity, MessageSquare, Star, Globe, Briefcase,
@@ -399,11 +400,11 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
                       </div>
                       <div>
                         <p className="text-sm text-gray-600 mb-1">Created Date</p>
-                        <p className="font-medium text-gray-900">{new Date(deal.createdAt).toLocaleDateString()}</p>
+                        <p className="font-medium text-gray-900">{formatDisplayDate(deal.createdAt)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600 mb-1">Last Updated</p>
-                        <p className="font-medium text-gray-900">{new Date(deal.createdAt).toLocaleDateString()}</p>
+                        <p className="font-medium text-gray-900">{formatDisplayDate(deal.createdAt)}</p>
                       </div>
                     </div>
                   </div>

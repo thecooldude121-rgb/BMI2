@@ -28,7 +28,12 @@ import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../
 import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
 import { getSuggestedDealValue, valueMatchesSuggestion, PriceResult } from '../../utils/productPricingEngine';
-import { DealFormAttachments, AttachmentItem } from '../../components/Deal/DealForm/DealFormAttachments';
+import { DealFormAttachments } from '../../components/Deal/DealForm/DealFormAttachments';
+import { AttachedFile } from '../../config/attachments';
+import { MobileHealthScoreBar } from '../../components/Deal/DealForm/MobileHealthScoreBar';
+import { MobileDealPreview } from '../../components/Deal/DealForm/MobileDealPreview';
+import { MobileAIRecommendations } from '../../components/Deal/DealForm/MobileAIRecommendations';
+import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -97,8 +102,14 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const [forecastCategoryUserSet, setForecastCategoryUserSet] = useState(false);
   // true = user manually typed a deal value → catalog suggestions won't overwrite
   const [dealValueUserEdited, setDealValueUserEdited] = useState(false);
-  // File attachments — kept outside formData because File objects are not JSON-serializable
-  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  // Win probability override — rep can manually set their own percentage
+  const [winProbOverrideEnabled, setWinProbOverrideEnabled] = useState(false);
+  const [winProbOverrideValue, setWinProbOverrideValue] = useState<number | ''>('');
+  const [winProbOverrideReason, setWinProbOverrideReason] = useState('');
+  // Valid attachments fed back from DealFormAttachments via onValidFilesChange
+  const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  // Incrementing this key remounts DealFormAttachments, resetting all its internal state
+  const [attachmentResetKey, setAttachmentResetKey] = useState(0);
 
   // Fetch all deals once on mount — used for both duplicate deal check and account warning
   useEffect(() => {
@@ -123,19 +134,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           }
           setFormData(savedForm);
           setHasDraftRestored(true);
-          // Restore uploaded attachment metadata (File objects can't be serialised,
-          // so we restore as display-only items with no file reference)
-          if (Array.isArray(attachmentMeta) && attachmentMeta.length > 0) {
-            setAttachments(attachmentMeta.map((m: any) => ({
-              id: m.id,
-              file: null as any,
-              name: m.name,
-              size: m.size,
-              type: m.type,
-              status: 'uploaded' as const,
-              uploadedUrl: m.uploadedUrl,
-            })));
-          }
+          // File objects are not serialisable — attachments are not restored from draft.
+          // The user will need to re-select files after restoring a draft.
+          void attachmentMeta;
           showToast('info', 'Draft restored from previous session');
         } catch {
           localStorage.removeItem('deal-form-draft');
@@ -149,9 +150,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     if (!isEditMode && hasUnsavedChanges) {
       setAutoSaveStatus('saving');
       const timer = setTimeout(() => {
-        const attachmentMeta = attachments
-          .filter(a => a.status === 'uploaded' && a.uploadedUrl)
-          .map(a => ({ id: a.id, name: a.name, size: a.size, type: a.type, uploadedUrl: a.uploadedUrl }));
+        const attachmentMeta = attachments.map(f => ({
+          id: f.id, name: f.name, size: f.size, extension: f.extension,
+          addedAt: f.addedAt.toISOString(),
+        }));
         localStorage.setItem('deal-form-draft', JSON.stringify({ formData, attachmentMeta }));
         setAutoSaveStatus('saved');
       }, 30000);
@@ -475,6 +477,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       description: '', nextSteps: '', closeDateOverrideReason: '', sourceJourney: null,
     });
     setAttachments([]);
+    setAttachmentResetKey(k => k + 1);
     setShowSmartSearch(true);
     setSelectedAccount(null);
     setSelectedContact(null);
@@ -696,6 +699,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     return missing.length === 0;
   };
 
+  const effectiveWinProbability = winProbOverrideEnabled && winProbOverrideValue !== ''
+    ? Number(winProbOverrideValue)
+    : formData.probability;
+
   const buildPayload = () => {
     const rawValue = parseAmountInput(formData.dealValue?.toString() || '0') || 0;
     const currency = formData.currency || BASE_CURRENCY_CODE;
@@ -709,7 +716,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       pipeline_name: formData.pipelineName,
       deal_type: formData.dealType,
       stage: formData.stage,
-      probability: formData.probability,
+      probability: effectiveWinProbability,
+      win_prob_ai: formData.probability,
+      win_prob_override_reason: winProbOverrideEnabled && winProbOverrideReason.trim()
+        ? winProbOverrideReason.trim()
+        : undefined,
       expected_close_date: formData.closeDate || undefined,
       close_date_is_past: isCloseDatePast(formData.closeDate),
       close_date_override_reason: formData.closeDateOverrideReason?.trim() || undefined,
@@ -733,10 +744,14 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       ],
       forecast_category: formData.forecastCategory || undefined,
       competitors: (formData.competitors ?? []) as Competitor[],
-      // Only include uploaded files — pending/failed are intentionally excluded
-      attachment_metadata: attachments
-        .filter(a => a.status === 'uploaded' && a.uploadedUrl)
-        .map(a => ({ name: a.name, size: a.size, type: a.type, url: a.uploadedUrl! })),
+      // Only valid files are included — error files are never saved
+      attachment_metadata: attachments.map(f => ({
+        id: f.id,
+        name: f.name,
+        size: f.size,
+        extension: f.extension,
+        addedAt: f.addedAt.toISOString(),
+      })),
       source: formData.source || undefined,
       priority: formData.priority || undefined,
       tags: formData.tags.length > 0 ? formData.tags : undefined,
@@ -798,7 +813,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           leadId: '',
           value: rawValue,
           stage: formData.stage as any,
-          probability: formData.probability,
+          probability: effectiveWinProbability,
           expectedCloseDate: formData.closeDate || '',
           assignedTo: formData.owner || 'current-user',
           description: formData.description || undefined,
@@ -864,6 +879,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     setForecastCategoryUserSet(false);
     setDealValueUserEdited(false);
     setAttachments([]);
+    setAttachmentResetKey(k => k + 1);
   };
 
   const handlePostSaveAction = (action: PostSaveAction) => {
@@ -925,12 +941,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     : { hasData: false, reason: 'No product selected' };
 
   return (
-    <div className="min-h-screen bg-gray-50 -mt-6">
-      {/* sticky top-14 = sticks at 56px (TopBar h-14) from viewport; -mt-6 on parent cancels p-6 padding so header lands flush under TopBar immediately */}
-      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-1.5 shadow-sm">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 -mt-4 lg:-mt-6">
+      {/* sticky top-14 = sticks at 56px (TopBar h-14) from viewport; negative margins cancel outer p-4/p-6 so header spans edge-to-edge */}
+      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-4 lg:-mx-6 px-4 lg:px-8 py-2 lg:py-1.5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center space-x-3">
-            <h1 className="text-base font-semibold text-gray-900">
+            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
               {isEditMode ? `Edit Deal: ${formData.dealName}` : 'Add New Deal'}
             </h1>
             {hasDraftRestored && !isEditMode && (
@@ -950,24 +966,24 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               </span>
             )}
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleCancel}
-              className="px-4 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+              className="flex-1 sm:flex-none px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors min-h-[44px] sm:min-h-0"
             >
               Cancel
             </button>
             <button
               onClick={() => handleSave(true)}
               disabled={isSaving}
-              className="px-4 py-1.5 text-xs bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50"
+              className="flex-1 sm:flex-none px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors disabled:opacity-50 min-h-[44px] sm:min-h-0"
             >
               Save as Draft
             </button>
             <button
               onClick={() => handleSave(false)}
               disabled={isSaving || !validation.isValid}
-              className="px-4 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
+              className="flex-1 sm:flex-none px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 min-h-[44px] sm:min-h-0"
             >
               {isSaving ? 'Saving...' : 'Save Deal'}
             </button>
@@ -976,15 +992,18 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="-mx-6 px-2 pt-3 pb-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column (65% width) */}
-          <div className="lg:col-span-2 space-y-6">
+      <div className="-mx-4 lg:-mx-6 px-2 pt-3 pb-24 lg:pb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 lg:gap-6">
+          {/* Left Column */}
+          <div className="space-y-4 lg:space-y-6">
             {/* Email-to-Deal Assist */}
             <EmailToDealPanel
               formData={formData}
               onApplyField={handleFieldChange}
             />
+
+            {/* Inline health score — mobile/tablet only */}
+            <MobileHealthScoreBar formData={formData} />
 
             {/* Smart Deal Creation */}
             {showSmartSearch && (
@@ -1075,6 +1094,27 @@ export const ComprehensiveDealFormPage: React.FC = () => {
                 // and the catalog auto-apply effect cannot override this value again.
                 handleFieldChange('dealValue', String(amount));
               }}
+              winProbOverrideEnabled={winProbOverrideEnabled}
+              winProbOverrideValue={winProbOverrideValue}
+              winProbOverrideReason={winProbOverrideReason}
+              onEnableOverride={() => {
+                setWinProbOverrideEnabled(true);
+                setWinProbOverrideValue(formData.probability);
+              }}
+              onDisableOverride={() => {
+                setWinProbOverrideEnabled(false);
+                setWinProbOverrideValue('');
+                setWinProbOverrideReason('');
+              }}
+              onOverrideValueChange={setWinProbOverrideValue}
+              onOverrideReasonChange={setWinProbOverrideReason}
+            />
+
+            {/* Inline deal preview — mobile/tablet only */}
+            <MobileDealPreview
+              formData={formData}
+              winProbOverrideEnabled={winProbOverrideEnabled}
+              winProbOverrideValue={winProbOverrideValue}
             />
 
             <DealFormAccountContacts
@@ -1093,6 +1133,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               validationErrors={validationErrors}
             />
 
+            {/* Inline AI recommendations — mobile/tablet only */}
+            <MobileAIRecommendations
+              formData={formData}
+              onApplyRecommendation={handleFieldChange}
+            />
+
             <DealFormProductDetails
               formData={formData}
               onChange={handleFieldChange}
@@ -1104,16 +1150,25 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             />
 
             <DealFormAttachments
-              attachments={attachments}
-              onChange={setAttachments}
+              key={attachmentResetKey}
+              onValidFilesChange={setAttachments}
             />
           </div>
 
-          {/* Right Column (35% width) */}
-          <div className="lg:col-span-1 space-y-6">
+          {/* Right Column — desktop sidebar only */}
+          <div className="hidden lg:block space-y-6">
             <DealHealthScorePanel formData={formData} />
-            <DealPreviewPanel formData={formData} />
-            <AIInsightsPanel formData={formData} />
+            <DealPreviewPanel
+              formData={formData}
+              winProbOverrideEnabled={winProbOverrideEnabled}
+              winProbOverrideValue={winProbOverrideValue}
+            />
+            <AIInsightsPanel
+              formData={formData}
+              winProbOverrideEnabled={winProbOverrideEnabled}
+              winProbOverrideValue={winProbOverrideValue}
+              winProbOverrideReason={winProbOverrideReason}
+            />
             <AIRecommendationsPanel
               formData={formData}
               onApplyRecommendation={(field, value) => handleFieldChange(field, value)}
@@ -1129,6 +1184,46 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Floating save bar — mobile/tablet only */}
+      {(() => {
+        const healthResult = calculateDealHealthScore(formData);
+        const scoreColor =
+          healthResult.tier === 'green'  ? 'bg-emerald-500' :
+          healthResult.tier === 'yellow' ? 'bg-amber-500'   :
+                                           'bg-red-500';
+        return (
+          <div
+            className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-white border-t border-gray-200 shadow-lg flex items-center justify-between px-4"
+            style={{ paddingTop: '12px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${scoreColor}`}>
+                {healthResult.score}
+              </div>
+              <span className="text-xs text-gray-500">/ 100</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
+                disabled={isSaving}
+                className="h-11 px-4 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave(false)}
+                disabled={isSaving || !validation.isValid}
+                className="h-11 px-5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Saving…' : 'Save Deal'}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Post-save action modal */}
       <PostSaveModal

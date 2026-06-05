@@ -221,7 +221,7 @@ export function resolveDealState(
     return {
       primary:     'overdue',
       isHighValue,
-      chipLabel:   `Overdue · ${daysOver}d`,
+      chipLabel:   `Overdue ${daysOver}d`,
       description: `Close date was ${daysOver} day${daysOver !== 1 ? 's' : ''} ago — follow up immediately`,
     };
   }
@@ -234,7 +234,7 @@ export function resolveDealState(
     return {
       primary:     'stalled',
       isHighValue,
-      chipLabel:   `Stalled · ${deal.daysSinceContact}d`,
+      chipLabel:   `Stalled ${deal.daysSinceContact}d`,
       description: `No contact for ${deal.daysSinceContact} days — deal may be going cold`,
     };
   }
@@ -262,7 +262,7 @@ export function resolveDealState(
   // ── Rule 4: Missing Next Step ────────────────────────────────────────────
   // The deal has no next step/status defined AND the rep hasn't been in touch
   // for 3+ days.  Not dangerous yet, but deal is drifting without direction.
-  const hasNextStep = Boolean(deal.status?.trim());
+  const hasNextStep = Boolean(deal.nextStep?.trim());
   if (!hasNextStep && deal.daysSinceContact >= MISSING_STEP_DAYS) {
     return {
       primary:     'missing-next-step',
@@ -285,10 +285,13 @@ export function resolveDealState(
   }
 
   // ── Rule 6: Normal ───────────────────────────────────────────────────────
+  // No active signal — chip is hidden; only the activity timestamp shows on the
+  // right side of Zone 3.  description is used only in aria-label / title,
+  // never rendered as inline text on the card.
   return {
     primary:     'normal',
     isHighValue,
-    chipLabel:   'Healthy',
-    description: `Deal is on track`,
+    chipLabel:   '',
+    description: 'Active deal — no issues flagged',
   };
 }
