@@ -32,6 +32,7 @@ import {
   XCircle,
   BarChart3,
   MoreVertical,
+  MoreHorizontal,
   FileDown,
   Upload,
   Archive,
@@ -42,6 +43,8 @@ import {
   X as XIcon,
   ShieldAlert,
   ChevronDown,
+  ArrowUpDown,
+  Check,
 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
@@ -81,10 +84,13 @@ const DealsKanbanPage: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
+  const viewsOverflowRef = useRef<HTMLDivElement>(null);
 
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showViewsOverflow, setShowViewsOverflow] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [highlightedDeals, setHighlightedDeals] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'closeDate' | 'value' | 'health' | 'activity' | 'stage'>('closeDate');
@@ -493,6 +499,9 @@ const DealsKanbanPage: React.FC = () => {
       }
       if (viewDropdownRef.current && !viewDropdownRef.current.contains(event.target as Node)) {
         setShowViewDropdown(false);
+      }
+      if (viewsOverflowRef.current && !viewsOverflowRef.current.contains(event.target as Node)) {
+        setShowViewsOverflow(false);
       }
     };
 
@@ -1158,216 +1167,234 @@ const DealsKanbanPage: React.FC = () => {
         />
       )}
 
-      <div className="bg-white border-b border-gray-200 px-8 py-4">
+      <div className="bg-white border-b border-gray-200 px-8">
 
-        {/* ── Saved views chip bar ────────────────────────────────────────
-            Horizontal scrollable row of view pills.  Clicking a chip applies
-            that view's preset filters + custom predicate in one action.
-            The "All Deals" chip acts as a reset.  No overflow on desktop —
-            scrollable on narrow screens.                                    */}
-        <div className="flex items-center space-x-2 mb-4 overflow-x-auto pb-1 scrollbar-thin">
-          {SAVED_VIEWS.map(view => {
-            const isActive = activeViewId === view.id;
-            return (
-              <button
-                key={view.id}
-                onClick={() => applyView(view)}
-                title={view.description}
-                className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium
-                  transition-all duration-150 whitespace-nowrap border
-                  ${isActive
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
-                  }`}
-                aria-pressed={isActive}
-                aria-label={`${view.label}: ${view.description}`}
-              >
-                <span className="text-[12px]">{view.emoji}</span>
-                <span>{view.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* ── Row 1: Tab switcher ──────────────────────────────────────────
+            "My Deals" and "All Deals" are the two primary tabs.
+            All other saved views live in the ··· overflow dropdown.        */}
+        <div className="flex items-center gap-0.5 pt-3 pb-2">
+          <button
+            onClick={() => applyView(findView('my-deals'))}
+            title="Show deals assigned to you"
+            className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap
+              ${activeViewId === 'my-deals'
+                ? 'bg-gray-900 text-white'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+          >
+            My Deals
+          </button>
 
-        {/* ── Filter dropdowns — styled selects with ChevronDown affordance ── */}
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          {([
-            { label: 'Owner', value: selectedOwner, onChange: setSelectedOwner,
-              options: [['all','All owners'],['me','Assigned to me'],['team','My team'],['unassigned','Unassigned']] },
-            { label: 'Close date', value: selectedCloseDateFilter, onChange: setSelectedCloseDateFilter,
-              options: [['all','Any close date'],['week','This week'],['month','This month'],['quarter','This quarter']] },
-            { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
-              options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+'],] },
-            { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
-              options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
-          ] as const).map(f => (
-            <div key={f.label} className="relative flex-shrink-0">
-              <select
-                value={f.value}
-                onChange={(e) => f.onChange(e.target.value as any)}
-                className={`appearance-none bg-white border rounded-md pl-3 pr-7 py-1.5 text-[13px] cursor-pointer
-                  focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors
-                  ${f.value !== 'all'
-                    ? 'border-indigo-300 text-indigo-700 bg-indigo-50'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-              >
-                {(f.options as readonly (readonly [string, string])[]).map(([val, lbl]) => (
-                  <option key={val} value={val}>{val === 'all' ? `${f.label}: ${lbl}` : lbl}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-            </div>
-          ))}
-        </div>
+          <button
+            onClick={() => applyView(findView('all'))}
+            title="Show all deals in the pipeline"
+            className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap
+              ${activeViewId === 'all'
+                ? 'bg-gray-900 text-white'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+          >
+            All Deals
+          </button>
 
-        {/* ── Active filter pills ─────────────────────────────────────────
-            One dismissible pill per active filter.  Each pill has an ×
-            to individually clear that filter without resetting everything.
-            The "Reset all" button clears every filter including the view.
-            Hidden entirely when no filters are active.                    */}
-        {(() => {
-          const pills = getActiveFilterPills(
-            activeViewId,
-            selectedOwner,
-            selectedCloseDateFilter,
-            selectedValueFilter,
-            selectedSourceFilter,
-            searchTerm,
-          );
-          if (pills.length === 0) return null;
-          return (
-            <div className="flex items-center flex-wrap gap-2 mb-3">
-              <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Active:</span>
-              {pills.map(pill => (
-                <span
-                  key={pill.key}
-                  className="inline-flex items-center space-x-1 pl-2.5 pr-1.5 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[12px] font-medium rounded-full"
-                >
-                  <span>{pill.label}</span>
-                  <button
-                    onClick={() => clearFilterPill(pill.key)}
-                    className="ml-0.5 p-0.5 rounded-full hover:bg-indigo-200 transition-colors"
-                    aria-label={`Remove ${pill.label} filter`}
-                  >
-                    <XIcon className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-              <button
-                onClick={resetFilters}
-                className="inline-flex items-center space-x-1 px-2.5 py-1 text-[12px] text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full border border-gray-200 hover:border-red-200 transition-colors"
-                title="Clear all filters"
-              >
-                <RotateCcw className="h-3 w-3" />
-                <span>Reset all</span>
-              </button>
-            </div>
-          );
-        })()}
-
-
-        <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search deals, accounts..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-[13px] border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 placeholder:text-gray-400 transition-colors"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto">
-            {/* Sort */}
-            <div className="relative" ref={sortDropdownRef}>
-              <button
-                onClick={() => setShowSortDropdown(!showSortDropdown)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
-              >
-                <Filter className="h-3.5 w-3.5" />
-                <span>{getSortLabel()}</span>
-                <ChevronDown className="h-3 w-3 text-gray-400" />
-              </button>
-              {showSortDropdown && (
-                <div className="absolute right-0 mt-1.5 w-52 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  {([
-                    ['closeDate', 'Close date'],
-                    ['value',     'Deal value'],
-                    ['health',    'AI health score'],
-                    ['activity',  'Last activity'],
-                    ['stage',     'Stage progress'],
-                  ] as const).map(([key, label]) => (
-                    <button key={key} onClick={() => handleSort(key)}
-                      className={`w-full text-left px-3 py-2 text-[13px] transition-colors
-                        ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* View */}
-            <div className="relative" ref={viewDropdownRef}>
-              <button
-                onClick={() => setShowViewDropdown(!showViewDropdown)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-                <span>{getViewLabel()}</span>
-                <ChevronDown className="h-3 w-3 text-gray-400" />
-              </button>
-              {showViewDropdown && (
-                <div className="absolute right-0 mt-1.5 w-44 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  {([
-                    ['kanban',   'Kanban'],
-                    ['list',     'List'],
-                    ['grid',     'Grid'],
-                    ['calendar', 'Calendar'],
-                  ] as const).map(([key, label]) => (
-                    <button key={key} onClick={() => handleViewChange(key)}
-                      className={`w-full text-left px-3 py-2 text-[13px] transition-colors
-                        ${viewMode === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Density toggle */}
-            <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
-              <button
-                onClick={() => setCardDensity('standard')}
-                title="Standard density"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] transition-colors
-                  ${cardDensity === 'standard' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}`}
-              >
-                <AlignJustify className="h-3.5 w-3.5" />
-              </button>
-              <div className="w-px h-4 bg-gray-200" />
-              <button
-                onClick={() => setCardDensity('compact')}
-                title="Compact density"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] transition-colors
-                  ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-500 hover:bg-gray-50'}`}
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            {/* Export — icon-only tertiary */}
+          {/* ··· overflow — all other saved views */}
+          <div className="relative" ref={viewsOverflowRef}>
             <button
-              onClick={handleExportCSV}
-              title="Export pipeline"
-              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
+              onClick={() => setShowViewsOverflow(v => !v)}
+              title="More views"
+              className={`px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150
+                ${!['all', 'my-deals'].includes(activeViewId)
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
             >
-              <Download className="h-3.5 w-3.5" />
+              <MoreHorizontal className="h-4 w-4" />
             </button>
+            {showViewsOverflow && (
+              <div className="absolute left-0 mt-1.5 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                {SAVED_VIEWS.filter(v => v.id !== 'all' && v.id !== 'my-deals').map(view => (
+                  <button
+                    key={view.id}
+                    onClick={() => { applyView(view); setShowViewsOverflow(false); }}
+                    title={view.description}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors
+                      ${activeViewId === view.id
+                        ? 'text-indigo-600 bg-indigo-50 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    <span className="text-[12px]">{view.emoji}</span>
+                    <span>{view.label}</span>
+                    {activeViewId === view.id && <Check className="h-3.5 w-3.5 ml-auto" />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+
+        <div className="border-t border-gray-100" />
+
+        {/* ── Row 2: Controls bar ──────────────────────────────────────────
+            Filter (with active-count badge + × to clear) | Sort | separator |
+            view-mode icons | density toggle | export | refresh               */}
+        <div className="flex items-center gap-1 py-2">
+
+          {/* Filter button — splits into label half + × half when active */}
+          {(() => {
+            const pills = getActiveFilterPills(
+              activeViewId, selectedOwner, selectedCloseDateFilter,
+              selectedValueFilter, selectedSourceFilter, searchTerm,
+            );
+            const activeCount = pills.length;
+            return (
+              <div className="flex items-center mr-1">
+                <button
+                  onClick={() => setShowFilterPanel(f => !f)}
+                  className={`flex items-center gap-1.5 pl-3 py-1.5 text-[13px] font-medium transition-all
+                    ${activeCount > 0 ? 'pr-2' : 'pr-3'}
+                    ${showFilterPanel || activeCount > 0
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-l-md'
+                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800 rounded-md'}`}
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  <span>Filter</span>
+                  {activeCount > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold leading-none">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
+                {activeCount > 0 && (
+                  <button
+                    onClick={resetFilters}
+                    title="Clear all filters"
+                    className="flex items-center px-1.5 py-1.5 border border-l-0 border-indigo-200 bg-indigo-50 text-indigo-400 hover:text-indigo-700 hover:bg-indigo-100 rounded-r-md transition-colors"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Sort button */}
+          <div className="relative" ref={sortDropdownRef}>
+            <button
+              onClick={() => setShowSortDropdown(!showSortDropdown)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-md border transition-colors
+                ${sortBy !== 'closeDate'
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800'}`}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              <span>Sort</span>
+            </button>
+            {showSortDropdown && (
+              <div className="absolute left-0 mt-1.5 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                {([
+                  ['closeDate', 'Close date'],
+                  ['value',     'Deal value'],
+                  ['health',    'AI health score'],
+                  ['activity',  'Last activity'],
+                  ['stage',     'Stage progress'],
+                ] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => handleSort(key)}
+                    className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors
+                      ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
+                    {sortBy === key
+                      ? <Check className="h-3.5 w-3.5 flex-shrink-0" />
+                      : <span className="w-3.5 flex-shrink-0" />}
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
+
+          {/* View mode icon buttons */}
+          {([
+            ['list',     AlignJustify, 'List view'],
+            ['kanban',   Columns,      'Kanban board'],
+            ['grid',     LayoutList,   'Grid view'],
+            ['calendar', Calendar,     'Calendar view'],
+          ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => (
+            <button
+              key={key}
+              onClick={() => handleViewChange(key as 'kanban' | 'list' | 'grid' | 'calendar')}
+              title={label}
+              className={`p-1.5 rounded-md transition-colors
+                ${viewMode === key ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+
+          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
+
+          {/* Density — single toggle button */}
+          <button
+            onClick={() => setCardDensity(d => d === 'standard' ? 'compact' : 'standard')}
+            title={cardDensity === 'standard' ? 'Switch to compact density' : 'Switch to standard density'}
+            className={`p-1.5 rounded-md transition-colors
+              ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+          >
+            {cardDensity === 'compact' ? <AlignJustify className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
+          </button>
+
+          {/* Export */}
+          <button
+            onClick={handleExportCSV}
+            title="Export pipeline"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+
+          {/* Refresh / reset */}
+          <button
+            onClick={() => { resetFilters(); triggerRefetch(); }}
+            title="Reset filters and refresh"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+
+        </div>
+
+        {/* ── Filter panel — slides in below controls when Filter is toggled ── */}
+        {showFilterPanel && (
+          <div className="pb-3 border-t border-gray-100 pt-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              {([
+                { label: 'Owner', value: selectedOwner, onChange: setSelectedOwner,
+                  options: [['all','All owners'],['me','Assigned to me'],['team','My team'],['unassigned','Unassigned']] },
+                { label: 'Close date', value: selectedCloseDateFilter, onChange: setSelectedCloseDateFilter,
+                  options: [['all','Any close date'],['week','This week'],['month','This month'],['quarter','This quarter']] },
+                { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
+                  options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+']] },
+                { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
+                  options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
+              ] as const).map(f => (
+                <div key={f.label} className="relative flex-shrink-0">
+                  <select
+                    value={f.value}
+                    onChange={(e) => f.onChange(e.target.value as any)}
+                    className={`appearance-none bg-white border rounded-md pl-3 pr-7 py-1.5 text-[13px] cursor-pointer
+                      focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors
+                      ${f.value !== 'all'
+                        ? 'border-indigo-300 text-indigo-700 bg-indigo-50'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                  >
+                    {(f.options as readonly (readonly [string, string])[]).map(([val, lbl]) => (
+                      <option key={val} value={val}>{val === 'all' ? `${f.label}: ${lbl}` : lbl}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {viewMode === 'list' ? (
