@@ -982,87 +982,261 @@ const DealsKanbanPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ── Merged title + KPI bar ───────────────────────────────────────────
-          Title on the left, 6 inline KPI stats in the middle, action buttons
-          on the right — all in one sticky row.  Each stat is a click target
-          that filters the board, preserving all existing handleStatClick logic.
+      {/* ── Unified command bar ─────────────────────────────────────────────────
+          Single sticky strip: view tabs | AI signals | filter+sort+views | actions
+          Left-to-right priority: context → intelligence → tools → creation
       */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6 px-8 py-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6">
+        <div className="flex items-center h-[52px] px-6 gap-0 overflow-x-auto scrollbar-none">
 
-          {/* AI insight signals — 3 inline clickable items */}
-          <div className="flex items-center gap-0.5 flex-1 min-w-0">
-
-            {/* Needs attention — deals with no contact for 5+ days */}
+          {/* ── View tabs ──────────────────────────────────────────────── */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             <button
-              onClick={handleViewDeals}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-amber-50 transition-colors group flex-shrink-0"
-              title={aiInsights.needAttention.length > 0
-                ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} without recent activity`
-                : 'All deals have recent activity'}
+              onClick={() => applyView(findView('my-deals'))}
+              title="Deals assigned to you"
+              className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap
+                ${activeViewId === 'my-deals'
+                  ? 'bg-gray-900 text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
             >
-              <AlertTriangle className={`h-4 w-4 flex-shrink-0 transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-500' : 'text-gray-300 group-hover:text-amber-400'}`} />
-              <div className="flex flex-col items-start">
-                <span className={`text-[15px] font-semibold tabular-nums leading-none transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                  {aiInsights.needAttention.length > 0 ? aiInsights.needAttention.length : 'All clear'}
-                </span>
-                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider leading-none mt-1">
-                  Needs Attention
-                </span>
-              </div>
+              My Deals
             </button>
-
-            <div className="w-px h-8 bg-gray-100 flex-shrink-0" />
-
-            {/* Forecast — negotiation-stage deals likely to close this month */}
             <button
-              onClick={handleViewForecast}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-emerald-50 transition-colors group flex-shrink-0"
-              title={`${formatCurrency(aiInsights.highProbValue)} in Negotiation — ${aiInsights.negotiationDeals.length} deal${aiInsights.negotiationDeals.length !== 1 ? 's' : ''}`}
+              onClick={() => applyView(findView('all'))}
+              title="All deals in the pipeline"
+              className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap
+                ${activeViewId === 'all'
+                  ? 'bg-gray-900 text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
             >
-              <TrendingUp className="h-4 w-4 text-emerald-500 flex-shrink-0 group-hover:text-emerald-600 transition-colors" />
-              <div className="flex flex-col items-start">
-                <span className="text-[15px] font-semibold text-gray-900 tabular-nums leading-none group-hover:text-emerald-600 transition-colors">
-                  {formatCurrency(aiInsights.highProbValue)}
-                </span>
-                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider leading-none mt-1">
-                  Likely This Month
-                </span>
-              </div>
+              All Deals
             </button>
-
-            <div className="w-px h-8 bg-gray-100 flex-shrink-0" />
-
-            {/* HRMS signal — deals linked to HRMS data */}
-            <button
-              onClick={handleViewHRMSDeals}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-indigo-50 transition-colors group flex-shrink-0"
-              title={aiInsights.hrmsDeals.length > 0
-                ? `${aiInsights.hrmsDeals.length} HRMS-connected deal${aiInsights.hrmsDeals.length !== 1 ? 's' : ''}`
-                : 'No HRMS-connected deals'}
-            >
-              <Building2 className="h-4 w-4 text-indigo-400 flex-shrink-0 group-hover:text-indigo-600 transition-colors" />
-              <div className="flex flex-col items-start">
-                <span className={`text-[15px] font-semibold tabular-nums leading-none transition-colors ${aiInsights.hrmsDeals.length > 0 ? 'text-gray-900 group-hover:text-indigo-600' : 'text-gray-400'}`}>
-                  {aiInsights.hrmsDeals.length > 0 ? aiInsights.hrmsDeals.length : 'None'}
-                </span>
-                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider leading-none mt-1">
-                  HRMS Deals
-                </span>
-              </div>
-            </button>
-
+            <div className="relative" ref={viewsOverflowRef}>
+              <button
+                onClick={() => setShowViewsOverflow(v => !v)}
+                title="More saved views"
+                className={`px-2 py-1.5 rounded-md transition-all duration-150
+                  ${!['all', 'my-deals'].includes(activeViewId)
+                    ? 'bg-gray-900 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {showViewsOverflow && (
+                <div className="absolute left-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
+                  {SAVED_VIEWS.filter(v => v.id !== 'all' && v.id !== 'my-deals').map(view => (
+                    <button
+                      key={view.id}
+                      onClick={() => { applyView(view); setShowViewsOverflow(false); }}
+                      title={view.description}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors
+                        ${activeViewId === view.id
+                          ? 'text-indigo-600 bg-indigo-50 font-medium'
+                          : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      <span>{view.emoji}</span>
+                      <span className="flex-1 text-left">{view.label}</span>
+                      {activeViewId === view.id && <Check className="h-3.5 w-3.5 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-px h-5 bg-gray-200 mx-3 flex-shrink-0" />
+
+          {/* ── AI signal chips — compact single-line ──────────────────── */}
+          {(() => {
+            const fmtK = (v: number) =>
+              v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+              : v >= 1_000   ? `$${Math.round(v / 1_000)}K`
+              : v === 0      ? '—'
+              : `$${v}`;
+            return (
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                {/* Needs Attention */}
+                <button
+                  onClick={handleViewDeals}
+                  title={aiInsights.needAttention.length > 0
+                    ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} with no recent activity`
+                    : 'All deals have recent activity'}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 transition-colors group flex-shrink-0"
+                >
+                  <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-500' : 'text-gray-300 group-hover:text-amber-400'}`} />
+                  <span className={`text-[13px] font-semibold tabular-nums transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                    {aiInsights.needAttention.length > 0 ? aiInsights.needAttention.length : '0'}
+                  </span>
+                  <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Attention</span>
+                </button>
+
+                <div className="w-px h-4 bg-gray-100 flex-shrink-0 mx-0.5" />
+
+                {/* Forecast */}
+                <button
+                  onClick={handleViewForecast}
+                  title={`${formatCurrency(aiInsights.highProbValue)} across ${aiInsights.negotiationDeals.length} deal${aiInsights.negotiationDeals.length !== 1 ? 's' : ''} in Negotiation`}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors group flex-shrink-0"
+                >
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 group-hover:text-emerald-600 transition-colors" />
+                  <span className="text-[13px] font-semibold text-gray-800 tabular-nums group-hover:text-emerald-600 transition-colors">
+                    {fmtK(aiInsights.highProbValue)}
+                  </span>
+                  <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Forecast</span>
+                </button>
+
+                <div className="w-px h-4 bg-gray-100 flex-shrink-0 mx-0.5" />
+
+                {/* HRMS */}
+                <button
+                  onClick={handleViewHRMSDeals}
+                  title={aiInsights.hrmsDeals.length > 0
+                    ? `${aiInsights.hrmsDeals.length} HRMS-connected deal${aiInsights.hrmsDeals.length !== 1 ? 's' : ''}`
+                    : 'No HRMS-connected deals'}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors group flex-shrink-0"
+                >
+                  <Building2 className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${aiInsights.hrmsDeals.length > 0 ? 'text-indigo-500' : 'text-gray-300 group-hover:text-indigo-400'}`} />
+                  <span className={`text-[13px] font-semibold tabular-nums transition-colors ${aiInsights.hrmsDeals.length > 0 ? 'text-gray-800 group-hover:text-indigo-600' : 'text-gray-400'}`}>
+                    {aiInsights.hrmsDeals.length > 0 ? aiInsights.hrmsDeals.length : '—'}
+                  </span>
+                  <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">HRMS</span>
+                </button>
+              </div>
+            );
+          })()}
+
+          <div className="w-px h-5 bg-gray-200 mx-3 flex-shrink-0" />
+
+          {/* ── Filter + Sort ──────────────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {(() => {
+              const pills = getActiveFilterPills(
+                activeViewId, selectedOwner, selectedCloseDateFilter,
+                selectedValueFilter, selectedSourceFilter, searchTerm,
+              );
+              const activeCount = pills.length;
+              return (
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setShowFilterPanel(f => !f)}
+                    className={`flex items-center gap-1.5 py-1.5 text-[13px] font-medium transition-all
+                      ${activeCount > 0 ? 'pl-2.5 pr-2' : 'px-2.5'}
+                      ${showFilterPanel || activeCount > 0
+                        ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-l-md'
+                        : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 rounded-md'}`}
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    <span>Filter</span>
+                    {activeCount > 0 && (
+                      <span className="min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold leading-none">
+                        {activeCount}
+                      </span>
+                    )}
+                  </button>
+                  {activeCount > 0 && (
+                    <button
+                      onClick={resetFilters}
+                      title="Clear all filters"
+                      className="flex items-center px-1.5 py-1.5 border border-l-0 border-indigo-200 bg-indigo-50 text-indigo-400 hover:text-indigo-700 hover:bg-indigo-100 rounded-r-md transition-colors"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="relative" ref={sortDropdownRef}>
+              <button
+                onClick={() => setShowSortDropdown(!showSortDropdown)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 text-[13px] font-medium rounded-md border transition-colors
+                  ${sortBy !== 'closeDate'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                    : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span>Sort</span>
+              </button>
+              {showSortDropdown && (
+                <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
+                  {([
+                    ['closeDate', 'Close date'],
+                    ['value',     'Deal value'],
+                    ['health',    'AI health score'],
+                    ['activity',  'Last activity'],
+                    ['stage',     'Stage progress'],
+                  ] as const).map(([key, label]) => (
+                    <button key={key} onClick={() => handleSort(key)}
+                      className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors
+                        ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
+                      {sortBy === key
+                        ? <Check className="h-3.5 w-3.5 flex-shrink-0" />
+                        : <span className="w-3.5 flex-shrink-0" />}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="w-px h-4 bg-gray-200 mx-2.5 flex-shrink-0" />
+
+          {/* ── View mode icons ────────────────────────────────────────── */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {([
+              ['list',     AlignJustify, 'List view'],
+              ['kanban',   Columns,      'Kanban board'],
+              ['grid',     LayoutList,   'Grid view'],
+              ['calendar', Calendar,     'Calendar view'],
+            ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => (
+              <button
+                key={key}
+                onClick={() => handleViewChange(key as 'kanban' | 'list' | 'grid' | 'calendar')}
+                title={label}
+                className={`p-1.5 rounded-md transition-colors
+                  ${viewMode === key
+                    ? 'bg-indigo-50 text-indigo-600'
+                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+              >
+                <Icon className="h-[15px] w-[15px]" />
+              </button>
+            ))}
+          </div>
+
+          <div className="w-px h-4 bg-gray-200 mx-2 flex-shrink-0" />
+
+          {/* ── Density / export / refresh ─────────────────────────────── */}
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <button
+              onClick={() => setCardDensity(d => d === 'standard' ? 'compact' : 'standard')}
+              title={cardDensity === 'standard' ? 'Switch to compact density' : 'Switch to standard density'}
+              className={`p-1.5 rounded-md transition-colors
+                ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+            >
+              {cardDensity === 'compact' ? <AlignJustify className="h-[15px] w-[15px]" /> : <LayoutList className="h-[15px] w-[15px]" />}
+            </button>
+            <button onClick={handleExportCSV} title="Export pipeline"
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors">
+              <Download className="h-[15px] w-[15px]" />
+            </button>
+            <button
+              onClick={() => { resetFilters(); triggerRefetch(); }}
+              title="Reset filters and refresh"
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+            >
+              <RotateCcw className="h-[15px] w-[15px]" />
+            </button>
+          </div>
+
+          {/* ── Right actions — always visible, pushed to far edge ─────── */}
+          <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-gray-200">
             <button
               onClick={() => setInspectionMode(m => !m)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-all duration-150
                 ${inspectionMode
                   ? 'bg-slate-900 text-amber-400 border-slate-700'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
-                }`}
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'}`}
               title={inspectionMode ? 'Exit Manager Inspection (Esc)' : 'Enter Manager Inspection Mode'}
             >
               <ShieldAlert className="h-3.5 w-3.5" />
@@ -1071,7 +1245,7 @@ const DealsKanbanPage: React.FC = () => {
 
             <button
               onClick={() => navigate('/crm/deals/add')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-[13px] font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-[13px] font-medium shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Add Deal</span>
@@ -1080,69 +1254,38 @@ const DealsKanbanPage: React.FC = () => {
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowMoreOptions(!showMoreOptions)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md border border-gray-200 transition-colors"
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
                 title="More options"
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
-
               {showMoreOptions && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                  <button
-                    onClick={() => handleExportPipeline('csv')}
-                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <FileDown className="h-4 w-4 text-gray-500" />
-                    <div className="text-left">
-                      <div className="font-medium">Export Pipeline</div>
-                      <div className="text-xs text-gray-500">CSV or PDF format</div>
-                    </div>
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
+                  <button onClick={() => handleExportPipeline('csv')}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
+                    <FileDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div className="text-left"><div className="font-medium">Export Pipeline</div><div className="text-[11px] text-gray-400">CSV or PDF format</div></div>
                   </button>
-
-                  <button
-                    onClick={handleImportDeals}
-                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Upload className="h-4 w-4 text-gray-500" />
-                    <div className="text-left">
-                      <div className="font-medium">Import Deals</div>
-                      <div className="text-xs text-gray-500">Upload CSV file</div>
-                    </div>
+                  <button onClick={handleImportDeals}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
+                    <Upload className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div className="text-left"><div className="font-medium">Import Deals</div><div className="text-[11px] text-gray-400">Upload CSV file</div></div>
                   </button>
-
                   <div className="border-t border-gray-100 my-1" />
-
-                  <button
-                    onClick={handlePipelineSettings}
-                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Settings className="h-4 w-4 text-gray-500" />
-                    <div className="text-left">
-                      <div className="font-medium">Pipeline Settings</div>
-                      <div className="text-xs text-gray-500">Configure stages</div>
-                    </div>
+                  <button onClick={handlePipelineSettings}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
+                    <Settings className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div className="text-left"><div className="font-medium">Pipeline Settings</div><div className="text-[11px] text-gray-400">Configure stages</div></div>
                   </button>
-
-                  <button
-                    onClick={handleViewArchived}
-                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Archive className="h-4 w-4 text-gray-500" />
-                    <div className="text-left">
-                      <div className="font-medium">View Archived Deals</div>
-                      <div className="text-xs text-gray-500">Access archive</div>
-                    </div>
+                  <button onClick={handleViewArchived}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
+                    <Archive className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div className="text-left"><div className="font-medium">Archived Deals</div><div className="text-[11px] text-gray-400">Access archive</div></div>
                   </button>
-
-                  <button
-                    onClick={handleCustomizeColumns}
-                    className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    <Columns className="h-4 w-4 text-gray-500" />
-                    <div className="text-left">
-                      <div className="font-medium">Customize Columns</div>
-                      <div className="text-xs text-gray-500">Adjust view layout</div>
-                    </div>
+                  <button onClick={handleCustomizeColumns}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
+                    <Columns className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div className="text-left"><div className="font-medium">Customize Columns</div><div className="text-[11px] text-gray-400">Adjust view layout</div></div>
                   </button>
                 </div>
               )}
@@ -1150,9 +1293,42 @@ const DealsKanbanPage: React.FC = () => {
           </div>
 
         </div>
+
+        {/* Filter panel — expands below the bar, does not scroll with content */}
+        {showFilterPanel && (
+          <div className="flex items-center gap-2 flex-wrap px-6 py-3 border-t border-gray-100 bg-gray-50/60">
+            {([
+              { label: 'Owner', value: selectedOwner, onChange: setSelectedOwner,
+                options: [['all','All owners'],['me','Assigned to me'],['team','My team'],['unassigned','Unassigned']] },
+              { label: 'Close date', value: selectedCloseDateFilter, onChange: setSelectedCloseDateFilter,
+                options: [['all','Any close date'],['week','This week'],['month','This month'],['quarter','This quarter']] },
+              { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
+                options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+']] },
+              { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
+                options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
+            ] as const).map(f => (
+              <div key={f.label} className="relative flex-shrink-0">
+                <select
+                  value={f.value}
+                  onChange={(e) => f.onChange(e.target.value as any)}
+                  className={`appearance-none bg-white border rounded-md pl-3 pr-7 py-1.5 text-[13px] cursor-pointer
+                    focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors
+                    ${f.value !== 'all'
+                      ? 'border-indigo-300 text-indigo-700 bg-indigo-50'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                >
+                  {(f.options as readonly (readonly [string, string])[]).map(([val, lbl]) => (
+                    <option key={val} value={val}>{val === 'all' ? `${f.label}: ${lbl}` : lbl}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Inspection bar — rendered below the title bar only when active */}
+      {/* Inspection bar — sits just below the command bar when active */}
       {inspectionMode && (
         <ManagerInspectionBar
           signals={inspectionSignals}
@@ -1166,236 +1342,6 @@ const DealsKanbanPage: React.FC = () => {
           formatCurrency={formatCurrency}
         />
       )}
-
-      <div className="bg-white border-b border-gray-200 px-8">
-
-        {/* ── Row 1: Tab switcher ──────────────────────────────────────────
-            "My Deals" and "All Deals" are the two primary tabs.
-            All other saved views live in the ··· overflow dropdown.        */}
-        <div className="flex items-center gap-0.5 pt-3 pb-2">
-          <button
-            onClick={() => applyView(findView('my-deals'))}
-            title="Show deals assigned to you"
-            className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap
-              ${activeViewId === 'my-deals'
-                ? 'bg-gray-900 text-white'
-                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
-          >
-            My Deals
-          </button>
-
-          <button
-            onClick={() => applyView(findView('all'))}
-            title="Show all deals in the pipeline"
-            className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap
-              ${activeViewId === 'all'
-                ? 'bg-gray-900 text-white'
-                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
-          >
-            All Deals
-          </button>
-
-          {/* ··· overflow — all other saved views */}
-          <div className="relative" ref={viewsOverflowRef}>
-            <button
-              onClick={() => setShowViewsOverflow(v => !v)}
-              title="More views"
-              className={`px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150
-                ${!['all', 'my-deals'].includes(activeViewId)
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            {showViewsOverflow && (
-              <div className="absolute left-0 mt-1.5 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                {SAVED_VIEWS.filter(v => v.id !== 'all' && v.id !== 'my-deals').map(view => (
-                  <button
-                    key={view.id}
-                    onClick={() => { applyView(view); setShowViewsOverflow(false); }}
-                    title={view.description}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors
-                      ${activeViewId === view.id
-                        ? 'text-indigo-600 bg-indigo-50 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    <span className="text-[12px]">{view.emoji}</span>
-                    <span>{view.label}</span>
-                    {activeViewId === view.id && <Check className="h-3.5 w-3.5 ml-auto" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="border-t border-gray-100" />
-
-        {/* ── Row 2: Controls bar ──────────────────────────────────────────
-            Filter (with active-count badge + × to clear) | Sort | separator |
-            view-mode icons | density toggle | export | refresh               */}
-        <div className="flex items-center gap-1 py-2">
-
-          {/* Filter button — splits into label half + × half when active */}
-          {(() => {
-            const pills = getActiveFilterPills(
-              activeViewId, selectedOwner, selectedCloseDateFilter,
-              selectedValueFilter, selectedSourceFilter, searchTerm,
-            );
-            const activeCount = pills.length;
-            return (
-              <div className="flex items-center mr-1">
-                <button
-                  onClick={() => setShowFilterPanel(f => !f)}
-                  className={`flex items-center gap-1.5 pl-3 py-1.5 text-[13px] font-medium transition-all
-                    ${activeCount > 0 ? 'pr-2' : 'pr-3'}
-                    ${showFilterPanel || activeCount > 0
-                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-l-md'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800 rounded-md'}`}
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  <span>Filter</span>
-                  {activeCount > 0 && (
-                    <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-indigo-600 text-white text-[10px] font-bold leading-none">
-                      {activeCount}
-                    </span>
-                  )}
-                </button>
-                {activeCount > 0 && (
-                  <button
-                    onClick={resetFilters}
-                    title="Clear all filters"
-                    className="flex items-center px-1.5 py-1.5 border border-l-0 border-indigo-200 bg-indigo-50 text-indigo-400 hover:text-indigo-700 hover:bg-indigo-100 rounded-r-md transition-colors"
-                  >
-                    <XIcon className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Sort button */}
-          <div className="relative" ref={sortDropdownRef}>
-            <button
-              onClick={() => setShowSortDropdown(!showSortDropdown)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-md border transition-colors
-                ${sortBy !== 'closeDate'
-                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-800'}`}
-            >
-              <ArrowUpDown className="h-3.5 w-3.5" />
-              <span>Sort</span>
-            </button>
-            {showSortDropdown && (
-              <div className="absolute left-0 mt-1.5 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-                {([
-                  ['closeDate', 'Close date'],
-                  ['value',     'Deal value'],
-                  ['health',    'AI health score'],
-                  ['activity',  'Last activity'],
-                  ['stage',     'Stage progress'],
-                ] as const).map(([key, label]) => (
-                  <button key={key} onClick={() => handleSort(key)}
-                    className={`w-full flex items-center gap-2 text-left px-3 py-2 text-[13px] transition-colors
-                      ${sortBy === key ? 'text-indigo-600 bg-indigo-50 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}>
-                    {sortBy === key
-                      ? <Check className="h-3.5 w-3.5 flex-shrink-0" />
-                      : <span className="w-3.5 flex-shrink-0" />}
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
-
-          {/* View mode icon buttons */}
-          {([
-            ['list',     AlignJustify, 'List view'],
-            ['kanban',   Columns,      'Kanban board'],
-            ['grid',     LayoutList,   'Grid view'],
-            ['calendar', Calendar,     'Calendar view'],
-          ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => (
-            <button
-              key={key}
-              onClick={() => handleViewChange(key as 'kanban' | 'list' | 'grid' | 'calendar')}
-              title={label}
-              className={`p-1.5 rounded-md transition-colors
-                ${viewMode === key ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
-
-          <div className="w-px h-5 bg-gray-200 mx-1 flex-shrink-0" />
-
-          {/* Density — single toggle button */}
-          <button
-            onClick={() => setCardDensity(d => d === 'standard' ? 'compact' : 'standard')}
-            title={cardDensity === 'standard' ? 'Switch to compact density' : 'Switch to standard density'}
-            className={`p-1.5 rounded-md transition-colors
-              ${cardDensity === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-          >
-            {cardDensity === 'compact' ? <AlignJustify className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
-          </button>
-
-          {/* Export */}
-          <button
-            onClick={handleExportCSV}
-            title="Export pipeline"
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-          >
-            <Download className="h-4 w-4" />
-          </button>
-
-          {/* Refresh / reset */}
-          <button
-            onClick={() => { resetFilters(); triggerRefetch(); }}
-            title="Reset filters and refresh"
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </button>
-
-        </div>
-
-        {/* ── Filter panel — slides in below controls when Filter is toggled ── */}
-        {showFilterPanel && (
-          <div className="pb-3 border-t border-gray-100 pt-2.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              {([
-                { label: 'Owner', value: selectedOwner, onChange: setSelectedOwner,
-                  options: [['all','All owners'],['me','Assigned to me'],['team','My team'],['unassigned','Unassigned']] },
-                { label: 'Close date', value: selectedCloseDateFilter, onChange: setSelectedCloseDateFilter,
-                  options: [['all','Any close date'],['week','This week'],['month','This month'],['quarter','This quarter']] },
-                { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
-                  options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+']] },
-                { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
-                  options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
-              ] as const).map(f => (
-                <div key={f.label} className="relative flex-shrink-0">
-                  <select
-                    value={f.value}
-                    onChange={(e) => f.onChange(e.target.value as any)}
-                    className={`appearance-none bg-white border rounded-md pl-3 pr-7 py-1.5 text-[13px] cursor-pointer
-                      focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors
-                      ${f.value !== 'all'
-                        ? 'border-indigo-300 text-indigo-700 bg-indigo-50'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
-                  >
-                    {(f.options as readonly (readonly [string, string])[]).map(([val, lbl]) => (
-                      <option key={val} value={val}>{val === 'all' ? `${f.label}: ${lbl}` : lbl}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-      </div>
 
       {viewMode === 'list' ? (
         <DealsListView
