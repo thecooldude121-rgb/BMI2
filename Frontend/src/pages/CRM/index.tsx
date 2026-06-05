@@ -6,6 +6,7 @@ export { default as LeadsPage } from './LeadsPage';
 export { default as ContactsPage } from './ContactsPage';
 export { default as CompaniesPage } from './CompaniesPage';
 export { default as UnifiedDealsPage } from './UnifiedDealsPage';
+export { default as ForecastPage } from './ForecastPage';
 export { default as ActivitiesPage } from './ActivitiesPage';
 export { default as TasksPage } from './TasksPage';
 export { default as AICopilotPage } from './AICopilotPage';

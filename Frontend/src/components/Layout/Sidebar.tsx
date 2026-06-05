@@ -28,6 +28,7 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
       { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
       { name: 'Accounts',  href: '/accounts',      icon: Building },
       { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
+      { name: 'Forecast',  href: '/crm/forecast',  icon: BarChart3 },
       {
         name: 'Activities', icon: Activity,
         children: [

@@ -8,6 +8,7 @@ import ContactDetailView from './ContactDetailView';
 import AddEditContactPage from './AddEditContactPage';
 import CompaniesPage from './CompaniesPage';
 import DealsKanbanPage from './DealsKanbanPage';
+import ForecastPage from './ForecastPage';
 import ActivitiesPage from './ActivitiesPage';
 import TasksPage from './TasksPage';
 import AddLeadPage from './AddLeadPage';
@@ -71,8 +72,8 @@ const CRMModule = () => {
           <Route path="/deals/create" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/:id/edit" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/:id" element={<ComprehensiveDealDetailPage />} />
-          <Route path="/forecast" element={<Navigate to="/crm/deals" replace />} />
-          <Route path="/pipeline" element={<Navigate to="/crm/deals" replace />} />
+          <Route path="/forecast" element={<ForecastPage />} />
+          <Route path="/pipeline" element={<Navigate to="/crm/forecast" replace />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/activities" element={<ActivitiesPage />} />
           <Route path="/activities/all" element={<ComprehensiveActivityFeed />} />

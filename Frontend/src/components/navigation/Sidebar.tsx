@@ -27,6 +27,7 @@ const Sidebar: React.FC = () => {
         { name: 'Accounts', href: '/accounts', icon: Building2 },
         { name: 'Contacts', href: '/crm/contacts', icon: Users },
         { name: 'Deals', href: '/crm/deals', icon: DollarSign },
+        { name: 'Forecast', href: '/crm/forecast', icon: BarChart3 },
         { name: 'Activities', href: '/crm/activities', icon: Activity },
         { name: 'Tasks', href: '/crm/tasks', icon: CheckSquare },
         { name: 'Settings', href: '/settings', icon: Settings }
