@@ -1166,7 +1166,7 @@ const DealsKanbanPage: React.FC = () => {
             <div className="flex-1 px-4 py-3">
               <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-2">Avg. Cycle</p>
               <div className="flex items-end justify-between">
-                <span className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none">
+                <span className="text-[22px] font-semibold text-gray-900 tabular-nums">
                   {kpis.avgCycle !== null
                     ? <>{kpis.avgCycle}<span className="text-[13px] font-normal text-gray-400 ml-1">d</span></>
                     : <span className="text-[16px] text-gray-400">—</span>}
@@ -1594,9 +1594,7 @@ const DealsKanbanPage: React.FC = () => {
                       >
                         {filteredDeals.length}
                         <span className="text-[12px] font-normal text-gray-400 ml-1">
-                          deal{filteredDeals.length !== 1 ? 's' : ''}
-                          {debouncedSearch && filteredDeals.length !== stage.deals.length &&
-                            ` / ${stage.deals.length}`}
+                          {`deal${filteredDeals.length !== 1 ? 's' : ''}${debouncedSearch && filteredDeals.length !== stage.deals.length ? ` / ${stage.deals.length}` : ''}`}
                         </span>
                       </button>
                       <button

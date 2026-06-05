@@ -8,16 +8,22 @@ export interface DealNameContext {
   closeDate?: string; // ISO date string e.g. "2026-03-15", or empty
 }
 
+// Hardcoded so output is identical across all browser/OS/locale combinations.
+// toLocaleDateString('en-US', ...) produces 'Sept' on some runtimes (macOS Safari,
+// certain Linux ICU builds) and varies in year formatting — this eliminates that.
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as const;
+
 /**
  * Formats a date (ISO string or Date) as "Mon YYYY" e.g. "Jan 2026".
  * Falls back to the current month/year if the input is missing or invalid.
+ * Uses a hardcoded month table — never toLocaleDateString — so output is
+ * identical across all runtimes.
  */
 export const formatMonthYear = (isoDate?: string): string => {
   const date = isoDate ? new Date(isoDate) : new Date();
   // new Date('') produces Invalid Date — guard against it
-  const valid = !isNaN(date.getTime());
-  const target = valid ? date : new Date();
-  return target.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  const target = !isNaN(date.getTime()) ? date : new Date();
+  return `${MONTH_ABBR[target.getMonth()]} ${target.getFullYear()}`;
 };
 
 /**
