@@ -107,9 +107,16 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
     }
   };
 
-  const filteredActivities = filterType === 'all'
-    ? activities
-    : activities.filter(a => a.type === filterType);
+  const filteredActivities = useMemo(() => {
+    const list = filterType === 'all'
+      ? activities
+      : activities.filter(a => a.type === filterType);
+    return [...list].sort((a, b) => {
+      const da = a.isoDate ?? '';
+      const db = b.isoDate ?? '';
+      return db.localeCompare(da); // YYYY-MM-DD sorts correctly lexicographically
+    });
+  }, [activities, filterType]);
 
   const handleViewEmail = (activity: Activity) => {
     setSelectedActivity(activity);
@@ -407,7 +414,7 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
                               <div className="text-sm text-gray-700">
                                 <span className="font-medium">{item.task}</span> ({item.owner}) - {' '}
                                 <span className={item.status === 'completed' ? 'text-green-600' : 'text-yellow-600'}>
-                                  {item.status === 'completed' ? 'Completed' : `Due: ${item.dueDate}`}
+                                  {item.status === 'completed' ? 'Completed' : `Due: ${item.dueDate || 'TBD'}`}
                                 </span>
                               </div>
                             </div>

@@ -286,9 +286,8 @@ const DealsKanbanPage: React.FC = () => {
         });
         return { ...stage, deals };
       }));
-    });
-
-    }).catch(() => {
+    })
+    .catch(() => {
       if (!cancelled) setFetchError(true);
     });
 
