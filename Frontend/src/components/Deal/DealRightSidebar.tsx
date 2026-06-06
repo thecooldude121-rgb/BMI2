@@ -163,60 +163,6 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Deal Score & Insights */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center space-x-2 mb-6">
-          <Target className="h-6 w-6 text-blue-600" />
-          <h2 className="text-lg font-bold text-gray-900">Deal Score & Insights</h2>
-        </div>
-
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold text-gray-700">Overall Score:</span>
-            <span className={`text-3xl font-bold ${getScoreColor(dealScore.overall)}`}>
-              {dealScore.overall}/100
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-            <div
-              className={`h-3 rounded-full transition-all duration-300 ${getScoreBarColor(dealScore.overall)}`}
-              style={{ width: `${dealScore.overall}%` }}
-            ></div>
-          </div>
-          <div className="text-sm font-medium text-gray-700">
-            {dealScore.overall >= 80 ? 'Excellent' : dealScore.overall >= 60 ? 'Good' : dealScore.overall >= 40 ? 'Fair' : 'Poor'}
-          </div>
-        </div>
-
-        <div className="mb-6 pb-6 border-b border-gray-200">
-          <div className="text-sm font-semibold text-gray-700 mb-3">Score Breakdown:</div>
-          <div className="space-y-3">
-            {dealScore.breakdown.map((item, idx) => (
-              <div key={idx}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-900">{item.category}:</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-bold text-gray-900">{item.score}/100</span>
-                    <span className="text-xs">{getStars(item.stars)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-          <div className="text-sm font-semibold text-purple-900 mb-2">🤖 Why This Score?</div>
-          <div className="space-y-1">
-            {dealScore.factors.map((factor, idx) => (
-              <div key={idx} className="text-sm text-purple-800">
-                • {factor.text} ({factor.impact > 0 ? '+' : ''}{factor.impact})
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Predictive Insights */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-center space-x-2 mb-6">
@@ -226,19 +172,6 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
 
         <div className="space-y-4">
           <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">Win Probability:</div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-3xl font-bold text-blue-600">{predictive.winProbability}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-blue-500 h-3 rounded-full transition-all duration-300"
-                style={{ width: `${predictive.winProbability}%` }}
-              ></div>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-gray-200">
             <div className="text-sm font-semibold text-gray-700 mb-2">Expected Close Date:</div>
             <div
               onClick={() => setShowCloseDateModal(true)}

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, TrendingUp, AlertTriangle, CheckCircle2, Mail, Phone, CalendarDays, FileText, Target, Bot } from 'lucide-react';
+import { Sparkles, AlertTriangle, CheckCircle2, Target, Bot, ChevronDown } from 'lucide-react';
 
 interface AIInsight {
   type: 'positive' | 'warning';
@@ -17,12 +17,20 @@ interface NextAction {
   competitor?: string;
 }
 
+interface ScoreBreakdownItem {
+  category: string;
+  score: number;
+  stars: number;
+}
+
 interface AIDealIntelligenceProps {
   dealName?: string;
   winProbability: number;
   winProbAI?: number;
+  winProbConfidence?: number;
   winProbOverrideReason?: string;
   healthScore: number;
+  scoreBreakdown?: ScoreBreakdownItem[];
   insights: {
     positive: AIInsight[];
     warnings: AIInsight[];
@@ -40,8 +48,10 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
   dealName,
   winProbability,
   winProbAI,
+  winProbConfidence,
   winProbOverrideReason,
   healthScore,
+  scoreBreakdown = [],
   insights,
   nextActions,
   historicalData,
@@ -52,6 +62,8 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
   onViewBattleCard,
 }) => {
   const navigate = useNavigate();
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
+
   const getWinProbabilityColor = (prob: number) => {
     if (prob >= 75) return 'bg-green-500';
     if (prob >= 50) return 'bg-blue-500';
@@ -65,6 +77,15 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
     if (prob >= 25) return 'Moderate Chance';
     return 'At Risk';
   };
+
+  const getScoreBarColor = (score: number) => {
+    if (score >= 80) return 'bg-green-500';
+    if (score >= 60) return 'bg-blue-500';
+    if (score >= 40) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const getStars = (count: number) => '⭐'.repeat(count) + '☆'.repeat(5 - count);
 
   const getPriorityBadge = (priority: string) => {
     if (priority === 'high') {
@@ -80,7 +101,7 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
       <div className="flex items-center space-x-2 mb-6">
         <Sparkles className="h-6 w-6 text-purple-600" />
-        <h2 className="text-xl font-bold text-gray-900">AI Deal Intelligence</h2>
+        <h2 className="text-xl font-bold text-gray-900">AI Deal Analysis</h2>
         <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded">UNIQUE DIFFERENTIATOR</span>
       </div>
 
@@ -119,22 +140,24 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
         ) : (
           <>
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-bold text-gray-900">Win Probability</h3>
-                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 text-xs font-medium rounded">
-                  AI-calculated
-                </span>
+                {winProbConfidence !== undefined && (
+                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded">
+                    {winProbConfidence}% confidence
+                  </span>
+                )}
               </div>
-              <span className="text-3xl font-bold text-blue-600">{winProbability}%</span>
+              <span className="text-3xl font-bold text-blue-600">{winProbAI ?? winProbability}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
               <div
-                className={`h-4 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbability)}`}
-                style={{ width: `${winProbability}%` }}
+                className={`h-4 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbAI ?? winProbability)}`}
+                style={{ width: `${winProbAI ?? winProbability}%` }}
               />
             </div>
             <div className="text-sm font-medium text-gray-700 mb-4">
-              {getWinProbabilityText(winProbability)}
+              {getWinProbabilityText(winProbAI ?? winProbability)}
             </div>
           </>
         )}
@@ -226,6 +249,41 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Score Breakdown accordion */}
+        {scoreBreakdown.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={() => setShowScoreBreakdown(v => !v)}
+              className="flex items-center justify-between w-full text-sm font-semibold text-gray-700 hover:text-gray-900 transition-colors"
+            >
+              <span>Score Breakdown</span>
+              <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showScoreBreakdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showScoreBreakdown && (
+              <div className="mt-3 space-y-3">
+                {scoreBreakdown.map((item, idx) => (
+                  <div key={idx}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-gray-700">{item.category}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gray-900">{item.score}</span>
+                        <span className="text-xs">{getStars(item.stars)}</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full ${getScoreBarColor(item.score)}`}
+                        style={{ width: `${item.score}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Next Best Actions */}

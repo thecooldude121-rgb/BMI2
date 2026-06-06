@@ -118,6 +118,21 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
     });
   }, [activities, filterType]);
 
+  // Group sorted activities by calendar date — one separator per unique date
+  const groupedActivities = useMemo(() => {
+    const groups = new Map<string, { label: string; items: Activity[] }>();
+    for (const activity of filteredActivities) {
+      const key = activity.isoDate ?? activity.date;
+      if (!groups.has(key)) {
+        groups.set(key, { label: activity.date, items: [] });
+      }
+      groups.get(key)!.items.push(activity);
+    }
+    // Map preserves insertion order; filteredActivities is already descending,
+    // so groups are naturally in newest-first order.
+    return Array.from(groups.values());
+  }, [filteredActivities]);
+
   const handleViewEmail = (activity: Activity) => {
     setSelectedActivity(activity);
     setShowEmailDetail(true);
@@ -309,17 +324,24 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
         )}
       </div>
 
-      {/* Activity List */}
+      {/* Activity List — grouped by calendar date */}
       <div className="space-y-8">
-        {filteredActivities.map((activity) => (
-          <div key={activity.id}>
+        {groupedActivities.map((group) => (
+          <div key={group.label}>
+            {/* Single date separator for all activities on this day */}
             <div className="flex items-center space-x-2 mb-4">
               <div className="h-px flex-1 bg-gray-300"></div>
-              <span className="text-sm font-bold text-gray-700">{activity.date}</span>
+              <span className="text-sm font-bold text-gray-700">{group.label}</span>
               <div className="h-px flex-1 bg-gray-300"></div>
             </div>
 
-            <div className="relative pl-8 pb-8 border-l-2 border-gray-200 last:border-l-0 last:pb-0">
+            {group.items.map((activity, itemIdx) => {
+              const isLast = itemIdx === group.items.length - 1;
+              return (
+                <div
+                  key={activity.id}
+                  className={`relative pl-8 border-l-2 border-gray-200 ${isLast ? 'border-l-0 pb-0' : 'pb-8'}`}
+                >
               <div className="absolute left-0 top-0 -translate-x-1/2 bg-white p-1 rounded-full border-2 border-gray-200">
                 {getActivityIcon(activity.type)}
               </div>
@@ -509,7 +531,9 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
                   </div>
                 )}
               </div>
-            </div>
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>

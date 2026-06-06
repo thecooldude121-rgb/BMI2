@@ -30,6 +30,15 @@ import { computeMomentum } from '../../utils/dealMomentum';
 import type { MomentumInput } from '../../utils/dealMomentum';
 import type { RevenueSchedule } from '../../components/Deal/RevenueTimeline';
 
+const TABS = [
+  { id: 'overview',    label: 'Overview' },
+  { id: 'ai-insights', label: 'AI Insights' },
+  { id: 'people',      label: 'People' },
+  { id: 'timeline',    label: 'Timeline' },
+  { id: 'deal-info',   label: 'Deal Info' },
+  { id: 'files-notes', label: 'Files & Notes' },
+] as const;
+
 export const ComprehensiveDealDetailPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -48,9 +57,16 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
   const [expandedBattleCard, setExpandedBattleCard] = useState<string | null>(null);
   const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('overview');
   const isAdmin = true; // hardcoded until role-based access is wired
   const battleCardRef = useRef<HTMLDivElement>(null);
   const revenueTimelineRef = useRef<HTMLDivElement>(null);
+  const overviewRef    = useRef<HTMLDivElement>(null);
+  const aiInsightsRef  = useRef<HTMLDivElement>(null);
+  const peopleRef      = useRef<HTMLDivElement>(null);
+  const timelineRef    = useRef<HTMLDivElement>(null);
+  const dealInfoRef    = useRef<HTMLDivElement>(null);
+  const filesNotesRef  = useRef<HTMLDivElement>(null);
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
   const [loading, setLoading] = useState(true);
@@ -293,11 +309,62 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [deal.stageNumber, deal.totalStages]);
 
+  const handleTabClick = (tabId: string) => {
+    setActiveTab(tabId);
+    if (tabId === 'overview') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    const refMap: Record<string, React.RefObject<HTMLDivElement>> = {
+      'ai-insights': aiInsightsRef,
+      'people':      peopleRef,
+      'timeline':    timelineRef,
+      'deal-info':   dealInfoRef,
+      'files-notes': filesNotesRef,
+    };
+    setTimeout(() => {
+      refMap[tabId]?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  // Scrollspy — update activeTab as the user scrolls
+  useEffect(() => {
+    const sectionRefs: [string, React.RefObject<HTMLDivElement>][] = [
+      ['ai-insights', aiInsightsRef],
+      ['people',      peopleRef],
+      ['timeline',    timelineRef],
+      ['deal-info',   dealInfoRef],
+      ['files-notes', filesNotesRef],
+    ];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const match = sectionRefs.find(([, ref]) => ref.current === entry.target);
+            if (match) setActiveTab(match[0]);
+          }
+        }
+      },
+      { rootMargin: '-10% 0px -85% 0px', threshold: 0 },
+    );
+    sectionRefs.forEach(([, ref]) => {
+      if (ref.current) observer.observe(ref.current);
+    });
+    return () => observer.disconnect();
+  }, []);
+
   const aiIntelligenceData = {
     winProbability: deal.probability || 67,
     winProbAI: deal.winProbAI || deal.probability || 67,
+    winProbConfidence: 78,
     winProbOverrideReason: deal.winProbOverrideReason || '',
     healthScore: healthResult.score,
+    scoreBreakdown: [
+      { category: 'Engagement',  score: 88, stars: 4 },
+      { category: 'Deal Fit',    score: 85, stars: 4 },
+      { category: 'Progression', score: 72, stars: 4 },
+      { category: 'Urgency',     score: 65, stars: 3 },
+    ],
     insights: {
       positive: [
         { type: 'positive' as const, text: 'Deal size matches typical wins ($45-55K)', impact: '+15%' },
@@ -927,60 +994,100 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onViewRevenue={handleViewRevenue}
       />
 
+      {/* Sticky Tab Navigation */}
+      <div className="sticky top-[7rem] z-40 bg-white border-b border-gray-200 -mx-6 px-8">
+        <div className="flex overflow-x-auto scrollbar-none">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabClick(tab.id)}
+              className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Main Content */}
       <div className="max-w-[1920px] mx-auto px-8 py-8">
+        <div ref={overviewRef} aria-hidden="true" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column (65% width) */}
           <div className="lg:col-span-2 space-y-6">
-            <AIDealIntelligence
-              {...aiIntelligenceData}
-              winProbAI={aiIntelligenceData.winProbAI}
-              winProbOverrideReason={aiIntelligenceData.winProbOverrideReason}
-              onSendEmail={handleSendEmail}
-              onScheduleCall={() => setShowCallLog(true)}
-              onScheduleMeeting={() => setShowMeetingScheduler(true)}
-              onFindBestTime={() => setShowBestTime(true)}
-              onViewBattleCard={handleViewBattleCard}
-            />
-            <DealDetailsPanel
-              deal={deal}
-              stageHistory={stageHistory}
-              competitors={accountData.competitors}
-              expandedBattleCard={expandedBattleCard}
-              isAdmin={isAdmin}
-              battleCardRef={battleCardRef}
-              revenueSchedule={activeRevenueSchedule}
-              onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
-              revenueTimelineRef={revenueTimelineRef}
-            />
-            <DealAccountContacts
-              account={accountData}
-              contacts={contacts}
-              hrmsConnection={hrmsConnection}
-              onViewAccount={handleViewAccount}
-              onAddToHRMS={handleAddToHRMS}
-              onFindCEO={() => setShowFindCEO(true)}
-              onRequestIntro={handleRequestIntro}
-              onAddContact={(role) => {
-                setPreSelectedContactRole(role || '');
-                setShowAddContact(true);
-              }}
-              onEmail={handleSendEmail}
-              onCall={() => setShowCallLog(true)}
-            />
-            <BuyingCommitteeMap
-              contacts={contacts}
-              onAddContact={(role) => {
-                setPreSelectedContactRole(role || '');
-                setShowAddContact(true);
-              }}
-            />
-            <DealActivityTimeline
-              activities={activities}
-              daysSinceLastContact={5}
-              contacts={contacts.map(c => ({ id: c.id, name: c.name }))}
-            />
-            <DealNotesFiles notes={notes} files={files} />
+
+            {/* AI Insights */}
+            <div ref={aiInsightsRef}>
+              <AIDealIntelligence
+                {...aiIntelligenceData}
+                winProbAI={aiIntelligenceData.winProbAI}
+                winProbOverrideReason={aiIntelligenceData.winProbOverrideReason}
+                onSendEmail={handleSendEmail}
+                onScheduleCall={() => setShowCallLog(true)}
+                onScheduleMeeting={() => setShowMeetingScheduler(true)}
+                onFindBestTime={() => setShowBestTime(true)}
+                onViewBattleCard={handleViewBattleCard}
+              />
+            </div>
+
+            {/* People */}
+            <div ref={peopleRef} className="space-y-6">
+              <DealAccountContacts
+                account={accountData}
+                contacts={contacts}
+                hrmsConnection={hrmsConnection}
+                onViewAccount={handleViewAccount}
+                onAddToHRMS={handleAddToHRMS}
+                onFindCEO={() => setShowFindCEO(true)}
+                onRequestIntro={handleRequestIntro}
+                onAddContact={(role) => {
+                  setPreSelectedContactRole(role || '');
+                  setShowAddContact(true);
+                }}
+                onEmail={handleSendEmail}
+                onCall={() => setShowCallLog(true)}
+              />
+              <BuyingCommitteeMap
+                contacts={contacts}
+                onAddContact={(role) => {
+                  setPreSelectedContactRole(role || '');
+                  setShowAddContact(true);
+                }}
+              />
+            </div>
+
+            {/* Timeline */}
+            <div ref={timelineRef}>
+              <DealActivityTimeline
+                activities={activities}
+                daysSinceLastContact={5}
+                contacts={contacts.map(c => ({ id: c.id, name: c.name }))}
+              />
+            </div>
+
+            {/* Deal Info */}
+            <div ref={dealInfoRef}>
+              <DealDetailsPanel
+                deal={deal}
+                stageHistory={stageHistory}
+                competitors={accountData.competitors}
+                expandedBattleCard={expandedBattleCard}
+                isAdmin={isAdmin}
+                battleCardRef={battleCardRef}
+                revenueSchedule={activeRevenueSchedule}
+                onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
+                revenueTimelineRef={revenueTimelineRef}
+              />
+            </div>
+
+            {/* Files & Notes */}
+            <div ref={filesNotesRef}>
+              <DealNotesFiles notes={notes} files={files} />
+            </div>
           </div>
 
           {/* Right Sidebar (35% width) */}
