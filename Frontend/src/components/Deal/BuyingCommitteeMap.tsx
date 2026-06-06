@@ -95,9 +95,6 @@ function getCoverageTheme(count: number) {
   };
 }
 
-function abbreviate(role: string) {
-  return role.length > 13 ? role.slice(0, 12) + '…' : role;
-}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -161,7 +158,7 @@ export const BuyingCommitteeMap: React.FC<BuyingCommitteeMapProps> = ({
 
       {/* ── Map View ── */}
       {view === 'map' && (
-        <div className="relative w-full h-[360px] select-none overflow-visible">
+        <div className="relative w-full h-[400px] select-none overflow-visible">
 
           {/* SVG influence lines — z below nodes */}
           <svg
@@ -236,19 +233,31 @@ export const BuyingCommitteeMap: React.FC<BuyingCommitteeMapProps> = ({
                   </button>
                 )}
 
-                {/* Name + role badge */}
-                <div className="mt-1.5 flex flex-col items-center max-w-[80px]">
-                  <div className="text-[11px] font-semibold leading-tight text-center truncate w-full text-gray-900">
-                    {contact
-                      ? contact.name.split(' ')[0]
-                      : <span className="text-red-500">+ Add</span>
-                    }
-                  </div>
-                  <span className={`mt-0.5 px-1.5 py-px text-[9px] font-bold rounded whitespace-nowrap ${
-                    contact ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600'
-                  }`}>
-                    {abbreviate(role)}
-                  </span>
+                {/* Name + role label */}
+                <div className="mt-1.5 flex flex-col items-center" style={{ width: 90, maxWidth: 90 }}>
+                  {contact ? (
+                    <>
+                      <div
+                        className="text-[11px] font-bold text-center text-gray-900 w-full"
+                        style={{ whiteSpace: 'normal', lineHeight: 1.3 }}
+                      >
+                        {contact.name.split(' ')[0]}
+                      </div>
+                      <div
+                        className="text-[10px] text-center text-gray-500 w-full"
+                        style={{ whiteSpace: 'normal', lineHeight: 1.3 }}
+                      >
+                        {role}
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      className="text-[11px] text-center text-gray-600 w-full"
+                      style={{ whiteSpace: 'normal', lineHeight: 1.3 }}
+                    >
+                      {role}
+                    </div>
+                  )}
                 </div>
               </div>
             );
