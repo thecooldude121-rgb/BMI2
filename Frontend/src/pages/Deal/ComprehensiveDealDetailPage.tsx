@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeal, updateDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
@@ -9,6 +9,7 @@ import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
 import { DealDetailsPanel } from '../../components/Deal/DealDetailsPanel';
 import { DealAccountContacts } from '../../components/Deal/DealAccountContacts';
+import { BuyingCommitteeMap } from '../../components/Deal/BuyingCommitteeMap';
 import { DealActivityTimeline } from '../../components/Deal/DealActivityTimeline';
 import { DealNotesFiles } from '../../components/Deal/DealNotesFiles';
 import { DealRightSidebar } from '../../components/Deal/DealRightSidebar';
@@ -27,6 +28,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { DealValueHistoryEntry } from '../../types/dealManagement';
 import { computeMomentum } from '../../utils/dealMomentum';
 import type { MomentumInput } from '../../utils/dealMomentum';
+import type { RevenueSchedule } from '../../components/Deal/RevenueTimeline';
 
 export const ComprehensiveDealDetailPage: React.FC = () => {
   const { id } = useParams();
@@ -44,6 +46,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
+  const [expandedBattleCard, setExpandedBattleCard] = useState<string | null>(null);
+  const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
+  const isAdmin = true; // hardcoded until role-based access is wired
+  const battleCardRef = useRef<HTMLDivElement>(null);
+  const revenueTimelineRef = useRef<HTMLDivElement>(null);
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
   const [loading, setLoading] = useState(true);
@@ -208,6 +215,44 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const momentumResult = useMemo(() => computeMomentum(momentumInput), []);
 
+  // Revenue schedule seed data — branched by deal ID
+  // TODO: replace with API field once revenueSchedule is persisted in the DB
+  const seedRevenueSchedule = useMemo((): RevenueSchedule | null => {
+    if (id === 'D036') {
+      return {
+        type: 'milestone',
+        currency: 'USD',
+        totalValue: 50000,
+        installments: [
+          { label: 'Contract Signing',       amount: 15000, dueDate: '1 Jun 2026',  status: 'paid'     },
+          { label: 'Implementation Kickoff', amount: 20000, dueDate: '30 Jun 2026', status: 'upcoming' },
+          { label: 'Go-Live',                amount: 15000, dueDate: '15 Aug 2026', status: 'upcoming' },
+        ],
+      };
+    }
+    if (id === 'D029') {
+      return {
+        type: 'recurring',
+        currency: 'USD',
+        totalValue: 15000,
+        installments: [
+          { label: 'Month 1', amount: 5000, dueDate: 'Jan 2025', status: 'overdue'  },
+          { label: 'Month 2', amount: 5000, dueDate: 'Feb 2025', status: 'overdue'  },
+          { label: 'Month 3', amount: 5000, dueDate: 'Mar 2025', status: 'upcoming' },
+        ],
+      };
+    }
+    return null;
+  }, [id]);
+
+  const activeRevenueSchedule = savedRevenueSchedule ?? seedRevenueSchedule;
+
+  const handleViewRevenue = () => {
+    setTimeout(() => {
+      revenueTimelineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   // Silently persist computed momentum_score to the DB
   useEffect(() => {
     if (!id) return;
@@ -292,7 +337,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         title: 'Address Salesforce comparison',
         reason: 'Competitor mentioned 3x in conversations',
         suggestion: 'Talking points: Integration, pricing, support',
-        actions: ['View Battle Card', 'Create Task']
+        actions: ['View Battle Card', 'Create Task'],
+        competitor: 'Salesforce'
       },
       {
         priority: 'low' as const,
@@ -326,7 +372,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     growthRate: '45% YoY',
     hiringTrend: '+15 employees (Q3 2024)',
     techStack: ['AWS', 'Salesforce', 'Slack', 'HubSpot'],
-    competitorMentioned: 'Salesforce'
+    competitors: ['Salesforce', 'HubSpot']
   };
 
   const contacts = [
@@ -340,15 +386,27 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       lastContact: 'Dec 2',
       daysAgo: 5,
       engagement: '92% response rate',
-      status: 'active' as const
+      status: 'active' as const,
+      // newest-first: 4h, 6h, 12h, 18h — Warming ↑ (avg(4,6)=5 vs avg(12,18)=15, ratio 0.33 < 0.8)
+      // silence alert fires: daysAgo=5 ≥ 5 AND avg(4,6,12,18)=10h < 48h
+      engagementDots: [4, 6, 12, 18] as (number | null)[],
+      engagementBreakdown: {
+        emailsSent: 8,
+        emailsOpened: 7,
+        emailsReplied: 6,
+        callsMade: 3,
+        callsAnswered: 2,
+        meetingsScheduled: 2,
+        meetingsAttended: 2,
+      },
     },
     {
       id: '2',
       name: 'CEO Name - TBD',
       title: 'CEO',
       role: 'Decision Maker' as const,
-      status: 'pending' as const
-    }
+      status: 'pending' as const,
+    },
   ];
 
   // Toggle between true/false to demonstrate both HRMS connection states
@@ -374,7 +432,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       description: 'Subject: "Acme Corp Proposal - Next Steps"',
       status: '✅ Opened (Dec 2, 4:45 PM)',
       engagement: '3 opens, 6 mins read time',
-      user: 'Alex Rodriguez'
+      user: 'Alex Rodriguez',
+      contactId: '1',
+      isoDate: '2026-06-04',
     },
     {
       id: '2',
@@ -382,7 +442,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       date: 'Dec 2, 2025',
       time: '2:30 PM',
       title: 'Stage Changed: Qualified → Proposal',
-      user: 'Alex Rodriguez'
+      user: 'Alex Rodriguez',
+      contactId: null,
+      isoDate: '2026-06-04',
     },
     {
       id: '3',
@@ -393,6 +455,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       description: 'Duration: 45 minutes\nLocation: Zoom (Recording available)\nAttendees: John Smith (Acme), Alex Rodriguez (Us)',
       hasRecording: true,
       hasTranscript: true,
+      contactId: '1',
+      isoDate: '2026-05-21',
       aiSummary: {
         keyPoints: [
           'Budget confirmed at $50K',
@@ -437,7 +501,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       title: 'Email Sent: Meeting Confirmation',
       description: 'Subject: "Demo scheduled for Nov 28"',
       status: '✅ Opened (Nov 25, 4:20 PM)',
-      user: 'Alex Rodriguez'
+      user: 'Alex Rodriguez',
+      contactId: '1',
+      isoDate: '2026-05-14',
     },
     {
       id: '5',
@@ -446,7 +512,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       time: '10:30 AM',
       title: 'Call: Discovery Call',
       description: 'Duration: 25 minutes\nNotes: "Interested in automation features. Current pain: Manual data entry. Budget: $50K confirmed."',
-      user: 'Alex Rodriguez'
+      user: 'Alex Rodriguez',
+      contactId: '1',
+      isoDate: '2026-04-29',
     },
     {
       id: '6',
@@ -454,7 +522,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       date: 'Nov 20, 2025',
       time: '10:30 AM',
       title: 'Stage Changed: Prospecting → Qualified',
-      user: 'Alex Rodriguez'
+      user: 'Alex Rodriguez',
+      contactId: null,
+      isoDate: '2026-04-22',
     },
     {
       id: '7',
@@ -463,8 +533,47 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       time: '9:00 AM',
       title: 'Deal Created',
       description: 'Created by: Alex Rodriguez\nSource: Converted from Lead (John Smith)\nInitial Value: $50,000\nInitial Stage: Prospecting\nAI Enrichment: +8 data points added',
-      user: 'Alex Rodriguez'
-    }
+      user: 'Alex Rodriguez',
+      contactId: null,
+      isoDate: '2026-04-15',
+    },
+    // Additional activities to make heatmap patterns meaningful
+    {
+      id: '8',
+      type: 'email' as const,
+      date: 'Nov 30, 2025',
+      time: '11:00 AM',
+      title: 'Email Sent: ROI Case Study',
+      to: 'John Smith',
+      description: 'Subject: "SaaS ROI Case Study — 240% avg. return"',
+      status: '✅ Opened (Nov 30, 2:15 PM)',
+      user: 'Alex Rodriguez',
+      contactId: '1',
+      isoDate: '2026-05-28',
+    },
+    {
+      id: '9',
+      type: 'email' as const,
+      date: 'Dec 1, 2025',
+      time: '10:00 AM',
+      title: 'Email Sent: CEO Introduction Request',
+      to: 'John Smith',
+      description: 'Subject: "Introduction to your CEO for final approval discussion"',
+      user: 'Alex Rodriguez',
+      contactId: '2',
+      isoDate: '2026-06-01',
+    },
+    {
+      id: '10',
+      type: 'call' as const,
+      date: 'Nov 22, 2025',
+      time: '2:00 PM',
+      title: 'Call: Post-Demo Follow-up',
+      description: 'Duration: 15 minutes\nNotes: "John confirmed interest. Waiting on CEO calendar."',
+      user: 'Alex Rodriguez',
+      contactId: '1',
+      isoDate: '2026-05-07',
+    },
   ];
 
   const notes = [
@@ -734,6 +843,13 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     showToast(`Contact added as ${role}`, 'success');
   };
 
+  const handleViewBattleCard = (competitor: string) => {
+    setExpandedBattleCard(competitor.toLowerCase());
+    setTimeout(() => {
+      battleCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   const handleViewAccount = () => {
     navigate(`/crm/accounts/${accountData.name.toLowerCase().replace(/\s+/g, '-')}`);
   };
@@ -807,6 +923,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onAssignOwner={handleAssignOwner}
         onShowShortcuts={() => setShowShortcuts(true)}
         momentumResult={momentumResult}
+        revenueSchedule={activeRevenueSchedule}
+        onViewRevenue={handleViewRevenue}
       />
 
       {/* Main Content */}
@@ -822,8 +940,19 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
               onScheduleCall={() => setShowCallLog(true)}
               onScheduleMeeting={() => setShowMeetingScheduler(true)}
               onFindBestTime={() => setShowBestTime(true)}
+              onViewBattleCard={handleViewBattleCard}
             />
-            <DealDetailsPanel deal={deal} stageHistory={stageHistory} />
+            <DealDetailsPanel
+              deal={deal}
+              stageHistory={stageHistory}
+              competitors={accountData.competitors}
+              expandedBattleCard={expandedBattleCard}
+              isAdmin={isAdmin}
+              battleCardRef={battleCardRef}
+              revenueSchedule={activeRevenueSchedule}
+              onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
+              revenueTimelineRef={revenueTimelineRef}
+            />
             <DealAccountContacts
               account={accountData}
               contacts={contacts}
@@ -836,10 +965,20 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                 setPreSelectedContactRole(role || '');
                 setShowAddContact(true);
               }}
+              onEmail={handleSendEmail}
+              onCall={() => setShowCallLog(true)}
+            />
+            <BuyingCommitteeMap
+              contacts={contacts}
+              onAddContact={(role) => {
+                setPreSelectedContactRole(role || '');
+                setShowAddContact(true);
+              }}
             />
             <DealActivityTimeline
               activities={activities}
               daysSinceLastContact={5}
+              contacts={contacts.map(c => ({ id: c.id, name: c.name }))}
             />
             <DealNotesFiles notes={notes} files={files} />
           </div>

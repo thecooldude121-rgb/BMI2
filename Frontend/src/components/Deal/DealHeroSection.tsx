@@ -13,6 +13,7 @@ import { getUsers } from '../../utils/dealsApi';
 import type { DealOwnerInfo, DealValueHistoryEntry } from '../../types/dealManagement';
 import { DealMomentum } from './DealMomentum';
 import type { MomentumResult } from '../../utils/dealMomentum';
+import type { RevenueSchedule } from './RevenueTimeline';
 
 // Stage ordering (1-indexed, matching STAGE_MAP in ComprehensiveDealDetailPage)
 const ORDERED_STAGES: Record<number, string> = {
@@ -84,6 +85,8 @@ interface DealHeroSectionProps {
   onAssignOwner?: (ownerName: string) => void;
   onShowShortcuts?: () => void;
   momentumResult?: MomentumResult;
+  revenueSchedule?: RevenueSchedule | null;
+  onViewRevenue?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -101,6 +104,8 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onAssignOwner,
   onShowShortcuts,
   momentumResult,
+  revenueSchedule,
+  onViewRevenue,
 }) => {
   const navigate = useNavigate();
 
@@ -239,6 +244,31 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     { icon: DollarSign,   label: 'Update Amount',       kbd: 'U', color: 'text-gray-600',    onClick: onUpdateAmount },
   ];
 
+  // ── Revenue status line (shown below value in the Value tile) ────────────────
+
+  const revenueStatusLine = revenueSchedule ? (() => {
+    const hasOverdue = revenueSchedule.installments.some(i => i.status === 'overdue');
+    if (hasOverdue) {
+      return { text: 'Payments overdue', dotClass: 'bg-red-500', colorClass: 'text-red-700' };
+    }
+    if (revenueSchedule.type === 'upfront' && revenueSchedule.installments.length === 1) {
+      return revenueSchedule.installments[0].status === 'paid'
+        ? { text: 'Fully paid', dotClass: 'bg-green-500', colorClass: 'text-green-700' }
+        : { text: 'One-time payment', dotClass: 'bg-gray-400', colorClass: 'text-gray-500' };
+    }
+    const paid = revenueSchedule.installments.filter(i => i.status === 'paid');
+    const upcoming = revenueSchedule.installments.filter(i => i.status === 'upcoming');
+    const paidAmt = paid.reduce((s, i) => s + i.amount, 0);
+    const pct = revenueSchedule.totalValue > 0
+      ? Math.round((paidAmt / revenueSchedule.totalValue) * 100)
+      : 0;
+    return {
+      text: `${pct}% collected · ${upcoming.length} upcoming`,
+      dotClass: 'bg-green-500',
+      colorClass: 'text-green-700',
+    };
+  })() : null;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -302,6 +332,16 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                     BASE_CURRENCY_CODE
                   )} USD
               </div>
+            )}
+            {revenueStatusLine && (
+              <button
+                type="button"
+                onClick={onViewRevenue}
+                className="mt-1 flex items-center gap-1.5 text-left hover:opacity-75 transition-opacity"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${revenueStatusLine.dotClass}`} />
+                <span className={`text-xs ${revenueStatusLine.colorClass}`}>{revenueStatusLine.text}</span>
+              </button>
             )}
             <button
               type="button"

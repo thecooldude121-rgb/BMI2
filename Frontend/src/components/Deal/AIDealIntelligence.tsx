@@ -14,6 +14,7 @@ interface NextAction {
   reason: string;
   suggestion: string;
   actions: string[];
+  competitor?: string;
 }
 
 interface AIDealIntelligenceProps {
@@ -32,6 +33,7 @@ interface AIDealIntelligenceProps {
   onScheduleCall?: () => void;
   onScheduleMeeting?: () => void;
   onFindBestTime?: () => void;
+  onViewBattleCard?: (competitor: string) => void;
 }
 
 export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
@@ -46,7 +48,8 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
   onSendEmail,
   onScheduleCall,
   onScheduleMeeting,
-  onFindBestTime
+  onFindBestTime,
+  onViewBattleCard,
 }) => {
   const navigate = useNavigate();
   const getWinProbabilityColor = (prob: number) => {
@@ -270,6 +273,8 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
                         onSendEmail('john@acme.com', 'ROI Case Study', 'Hi John,\n\nAttached is the ROI case study you requested.\n\n');
                       } else if (actionBtn === 'Draft Email' && onSendEmail) {
                         onSendEmail('john@acme.com', 'Introduction to CEO', 'Hi John,\n\nWould you be able to introduce me to your CEO?\n\n');
+                      } else if (actionBtn === 'View Battle Card' && onViewBattleCard) {
+                        onViewBattleCard(action.competitor ?? 'Salesforce');
                       }
                     };
 

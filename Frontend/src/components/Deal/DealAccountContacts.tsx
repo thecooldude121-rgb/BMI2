@@ -1,6 +1,20 @@
-import React from 'react';
-import { Building2, TrendingUp, MapPin, Globe, Sparkles, AlertTriangle, Users, Mail, Phone, Eye, Award, Briefcase, Trophy, DollarSign, Settings, Star, Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { Building2, TrendingUp, MapPin, Globe, Sparkles, AlertTriangle, Users, Mail, Phone, Eye, Award, Briefcase, Trophy, DollarSign, Settings, Star, Plus, X, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { dotColor, computeEngagementDirection, isSilenceAlert } from '../../utils/contactEngagement';
+import type { DirectionResult } from '../../utils/contactEngagement';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface EngagementBreakdown {
+  emailsSent: number;
+  emailsOpened: number;
+  emailsReplied: number;
+  callsMade: number;
+  callsAnswered: number;
+  meetingsScheduled: number;
+  meetingsAttended: number;
+}
 
 interface Contact {
   id: string;
@@ -13,21 +27,9 @@ interface Contact {
   daysAgo?: number;
   engagement?: string;
   status?: 'active' | 'pending';
+  engagementDots?: (number | null)[];
+  engagementBreakdown?: EngagementBreakdown;
 }
-
-const isPlaceholder = (name: string): boolean =>
-  !name || /\bTBD\b|\bUnknown\b/i.test(name.trim());
-
-const getRoleActionIcon = (role: string): React.ElementType => {
-  switch (role) {
-    case 'Decision Maker':    return Briefcase;
-    case 'Champion':          return Trophy;
-    case 'Economic Buyer':    return DollarSign;
-    case 'Technical Evaluator': return Settings;
-    case 'Executive Sponsor': return Star;
-    default:                  return Plus;
-  }
-};
 
 interface DealAccountContactsProps {
   account: {
@@ -43,7 +45,7 @@ interface DealAccountContactsProps {
     growthRate?: string;
     hiringTrend?: string;
     techStack?: string[];
-    competitorMentioned?: string;
+    competitors?: string[];
   };
   contacts: Contact[];
   hrmsConnection: {
@@ -55,7 +57,91 @@ interface DealAccountContactsProps {
   onFindCEO?: () => void;
   onRequestIntro?: () => void;
   onAddContact?: (role?: string) => void;
+  onEmail?: (to: string, subject: string, body: string) => void;
+  onCall?: () => void;
 }
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const DOT_BG: Record<string, string> = {
+  green: 'bg-green-500',
+  amber: 'bg-amber-400',
+  grey:  'bg-gray-300',
+};
+
+function EngagementSparkline({ dots }: { dots: (number | null)[] }) {
+  // display oldest → newest (left to right); dots are stored newest-first
+  const ordered = [...dots].reverse();
+  return (
+    <div className="flex items-center gap-1">
+      {ordered.map((hours, i) => (
+        <div
+          key={i}
+          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${DOT_BG[dotColor(hours)]}`}
+          title={hours !== null ? `${hours}h response time` : 'No response'}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DirectionBadge({ dir }: { dir: DirectionResult }) {
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded border ${dir.colorClass} ${dir.bgClass} ${dir.borderClass}`}>
+      {dir.label}
+    </span>
+  );
+}
+
+function FunnelRow({ label, value, total, colorClass }: { label: string; value: number; total: number; colorClass: string }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span className="w-20 text-xs text-gray-500 flex-shrink-0">{label}</span>
+      <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+        <div className={`h-2 rounded-full transition-all ${colorClass}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="w-5 text-right text-xs font-semibold text-gray-800 flex-shrink-0">{value}</span>
+      <span className="w-8 text-right text-xs text-gray-400 flex-shrink-0">{pct}%</span>
+    </div>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const isPlaceholder = (name: string): boolean =>
+  !name || /\bTBD\b|\bUnknown\b/i.test(name.trim());
+
+const getRoleActionIcon = (role: string): React.ElementType => {
+  switch (role) {
+    case 'Decision Maker':       return Briefcase;
+    case 'Champion':             return Trophy;
+    case 'Economic Buyer':       return DollarSign;
+    case 'Technical Evaluator':  return Settings;
+    case 'Executive Sponsor':    return Star;
+    default:                     return Plus;
+  }
+};
+
+const getRoleIcon = (role: string) => {
+  switch (role) {
+    case 'Champion':       return '🏆';
+    case 'Decision Maker': return '👔';
+    case 'Influencer':     return '💡';
+    default:               return '👤';
+  }
+};
+
+const getRoleBadgeColor = (role: string) => {
+  switch (role) {
+    case 'Champion':       return 'bg-yellow-100 text-yellow-800';
+    case 'Decision Maker': return 'bg-purple-100 text-purple-800';
+    case 'Influencer':     return 'bg-blue-100 text-blue-800';
+    default:               return 'bg-gray-100 text-gray-800';
+  }
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
   account,
@@ -65,38 +151,17 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
   onAddToHRMS,
   onFindCEO,
   onRequestIntro,
-  onAddContact
+  onAddContact,
+  onEmail,
+  onCall,
 }) => {
   const navigate = useNavigate();
+  const [showBreakdownModal, setShowBreakdownModal] = useState(false);
+  const [breakdownContact, setBreakdownContact] = useState<Contact | null>(null);
 
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'Champion':
-        return '🏆';
-      case 'Decision Maker':
-        return '👔';
-      case 'Influencer':
-        return '💡';
-      case 'User':
-        return '👤';
-      default:
-        return '👤';
-    }
-  };
-
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'Champion':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Decision Maker':
-        return 'bg-purple-100 text-purple-800';
-      case 'Influencer':
-        return 'bg-blue-100 text-blue-800';
-      case 'User':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  const openBreakdown = (contact: Contact) => {
+    setBreakdownContact(contact);
+    setShowBreakdownModal(true);
   };
 
   return (
@@ -182,10 +247,12 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
               <Globe className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-gray-900">
                 Tech stack: <span className="font-medium">{account.techStack.join(', ')}</span>
-                {account.competitorMentioned && (
+                {account.competitors && account.competitors.length > 0 && (
                   <div className="mt-1 flex items-center space-x-1">
                     <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                    <span className="text-yellow-700 font-medium">Currently using {account.competitorMentioned} (competitor!)</span>
+                    <span className="text-yellow-700 font-medium">
+                      Currently using {account.competitors.join(', ')} (competitor{account.competitors.length > 1 ? 's' : ''}!)
+                    </span>
                   </div>
                 )}
               </div>
@@ -194,7 +261,7 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
         </div>
       </div>
 
-      {/* HRMS Connection - Enhanced Integration */}
+      {/* HRMS Connection */}
       <div className="mb-6 pb-6 border-b border-gray-200">
         <div className="flex items-center space-x-2 mb-3">
           <Briefcase className="h-5 w-5 text-orange-600" />
@@ -274,11 +341,16 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
               );
             }
 
+            const dots = contact.engagementDots;
+            const dir = dots && dots.length >= 4 ? computeEngagementDirection(dots) : null;
+            const silenced = isSilenceAlert(contact.daysAgo, dots);
+
             return (
               <div
                 key={contact.id}
                 className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors"
               >
+                {/* Header row */}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-start space-x-3">
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
@@ -316,17 +388,72 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
                         Last Contact: <span className="font-medium">{contact.lastContact} ({contact.daysAgo} days ago)</span>
                       </div>
                     )}
-                    {contact.engagement && (
+
+                    {/* ── Engagement sparkline + direction badge ── */}
+                    {dots && dots.length > 0 && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <EngagementSparkline dots={dots} />
+                        {dir && <DirectionBadge dir={dir} />}
+                        {contact.engagementBreakdown && (
+                          <button
+                            onClick={() => openBreakdown(contact)}
+                            className="ml-auto flex items-center gap-1 text-[10px] font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            <BarChart2 className="h-3 w-3" />
+                            Response Rate
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── Silence alert banner ── */}
+                    {silenced && (
+                      <div className="mb-3 flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-amber-900">Gone quiet — {contact.daysAgo} days silent</p>
+                          <p className="text-xs text-amber-700">Was responding in &lt;{(() => {
+                            const nonNull = (dots ?? []).filter((d): d is number => d !== null);
+                            return nonNull.length ? Math.round(nonNull.reduce((a, b) => a + b, 0) / nonNull.length) : 48;
+                          })()}h avg. Act now.</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => onEmail?.(contact.email || '', 'Following up', '')}
+                            className="px-2 py-1 bg-amber-600 text-white rounded text-[10px] font-bold hover:bg-amber-700 transition-colors"
+                          >
+                            Email
+                          </button>
+                          <button
+                            onClick={() => onCall?.()}
+                            className="px-2 py-1 bg-gray-700 text-white rounded text-[10px] font-bold hover:bg-gray-800 transition-colors"
+                          >
+                            Call
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Legacy engagement text (hidden when sparkline present) */}
+                    {!dots && contact.engagement && (
                       <div className="text-sm text-gray-600 mb-3">
                         Engagement: <span className="font-medium text-green-600">{contact.engagement}</span>
                       </div>
                     )}
-                    <div className="flex items-center space-x-2">
-                      <button className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+
+                    {/* Action buttons */}
+                    <div className="flex items-center space-x-2 mt-2">
+                      <button
+                        onClick={() => onEmail?.(contact.email || '', 'Following up', '')}
+                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                      >
                         <Mail className="h-4 w-4 inline mr-1" />
                         Email
                       </button>
-                      <button className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                      <button
+                        onClick={() => onCall?.()}
+                        className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                      >
                         <Phone className="h-4 w-4 inline mr-1" />
                         Call
                       </button>
@@ -380,6 +507,93 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
           <span>Add Contact to Deal</span>
         </button>
       </div>
+
+      {/* ── Response Rate Modal ───────────────────────────────────────────── */}
+      {showBreakdownModal && breakdownContact?.engagementBreakdown && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowBreakdownModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <div className="text-base font-bold text-gray-900">{breakdownContact.name}</div>
+                <div className="text-xs text-gray-500 mt-0.5">Response Rate Breakdown</div>
+              </div>
+              <button
+                onClick={() => setShowBreakdownModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Emails funnel */}
+            <div className="mb-5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Mail className="h-4 w-4 text-blue-600" />
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Emails</span>
+              </div>
+              <FunnelRow
+                label="Sent"
+                value={breakdownContact.engagementBreakdown.emailsSent}
+                total={breakdownContact.engagementBreakdown.emailsSent}
+                colorClass="bg-blue-400"
+              />
+              <FunnelRow
+                label="Opened"
+                value={breakdownContact.engagementBreakdown.emailsOpened}
+                total={breakdownContact.engagementBreakdown.emailsSent}
+                colorClass="bg-blue-500"
+              />
+              <FunnelRow
+                label="Replied"
+                value={breakdownContact.engagementBreakdown.emailsReplied}
+                total={breakdownContact.engagementBreakdown.emailsSent}
+                colorClass="bg-blue-600"
+              />
+            </div>
+
+            {/* Calls funnel */}
+            <div className="mb-5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Phone className="h-4 w-4 text-green-600" />
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Calls</span>
+              </div>
+              <FunnelRow
+                label="Made"
+                value={breakdownContact.engagementBreakdown.callsMade}
+                total={breakdownContact.engagementBreakdown.callsMade}
+                colorClass="bg-green-400"
+              />
+              <FunnelRow
+                label="Answered"
+                value={breakdownContact.engagementBreakdown.callsAnswered}
+                total={breakdownContact.engagementBreakdown.callsMade}
+                colorClass="bg-green-600"
+              />
+            </div>
+
+            {/* Meetings funnel */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <BarChart2 className="h-4 w-4 text-purple-600" />
+                <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Meetings</span>
+              </div>
+              <FunnelRow
+                label="Scheduled"
+                value={breakdownContact.engagementBreakdown.meetingsScheduled}
+                total={breakdownContact.engagementBreakdown.meetingsScheduled}
+                colorClass="bg-purple-400"
+              />
+              <FunnelRow
+                label="Attended"
+                value={breakdownContact.engagementBreakdown.meetingsAttended}
+                total={breakdownContact.engagementBreakdown.meetingsScheduled}
+                colorClass="bg-purple-600"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

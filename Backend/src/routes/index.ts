@@ -5,6 +5,8 @@ import dealsRoutes from './deals';
 import companiesRoutes from './companies';
 import contactsRoutes from './contacts';
 import usersRoutes from './users';
+import quotasRoutes from './quotas';
+import forecastRoutes from './forecast';
 
 const router = Router();
 
@@ -14,5 +16,7 @@ router.use('/deals', dealsRoutes);
 router.use('/companies', companiesRoutes);
 router.use('/contacts', contactsRoutes);
 router.use('/users', usersRoutes);
+router.use('/quotas', quotasRoutes);
+router.use('/forecast', forecastRoutes);
 
 export default router;

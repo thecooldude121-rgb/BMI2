@@ -1,7 +1,10 @@
-import React from 'react';
-import { DollarSign, Calendar, Package, CreditCard, Clock, Sparkles, Tag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { DollarSign, Calendar, Package, CreditCard, Clock, Sparkles, Tag, Shield, ChevronDown, ChevronRight, Copy, Check, AlertTriangle, Target, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { formatCurrency, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
+import { BATTLE_CARDS } from '../../config/battleCards';
+import { RevenueTimeline } from './RevenueTimeline';
+import type { RevenueSchedule } from './RevenueTimeline';
 
 interface Stage {
   name: string;
@@ -35,6 +38,13 @@ interface DealDetailsPanelProps {
     tags: string[];
   };
   stageHistory: Stage[];
+  competitors?: string[];
+  expandedBattleCard?: string | null;
+  isAdmin?: boolean;
+  battleCardRef?: React.RefObject<HTMLDivElement>;
+  revenueSchedule?: RevenueSchedule | null;
+  onSaveRevenueSchedule?: (schedule: RevenueSchedule) => void;
+  revenueTimelineRef?: React.RefObject<HTMLDivElement>;
 }
 
 function getBarFillPct(stage: Stage): number {
@@ -46,7 +56,17 @@ function getBarFillPct(stage: Stage): number {
   return 0;
 }
 
-export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({ deal, stageHistory }) => {
+export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
+  deal,
+  stageHistory,
+  competitors,
+  expandedBattleCard,
+  isAdmin,
+  battleCardRef,
+  revenueSchedule,
+  onSaveRevenueSchedule,
+  revenueTimelineRef,
+}) => {
   // Deal Progression computed values
   const completedAndCurrent = stageHistory.filter(s => s.status !== 'pending');
   const pipelineAvgThrough = completedAndCurrent.reduce((sum, s) => sum + (s.benchmark ?? 0), 0);
@@ -61,6 +81,23 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({ deal, stageH
       : 'bg-red-50 text-red-800 border-red-100';
 
   const currentStage = stageHistory.find(s => s.status === 'current');
+
+  const [openBattleCard, setOpenBattleCard] = useState<string | null>(null);
+  const [copiedCompetitor, setCopiedCompetitor] = useState<string | null>(null);
+
+  // Sync external trigger (e.g. "View Battle Card" from AI panel)
+  useEffect(() => {
+    if (expandedBattleCard != null) setOpenBattleCard(expandedBattleCard);
+  }, [expandedBattleCard]);
+
+  const handleCopyTalkingPoints = (key: string, points: string[]) => {
+    const text = points.map((p, i) => `${i + 1}. ${p}`).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedCompetitor(key);
+      setTimeout(() => setCopiedCompetitor(null), 2000);
+    });
+  };
+
   let aiInsightText = 'No active stage data available.';
   if (currentStage) {
     const hasBench = currentStage.benchmark != null;
@@ -142,6 +179,15 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({ deal, stageH
             <span className="text-sm font-medium text-gray-900">{deal.totalDealAge} days</span>
           </div>
         </div>
+      </div>
+
+      {/* Revenue Timeline */}
+      <div ref={revenueTimelineRef} className="mb-6 pb-6 border-b border-gray-200">
+        <RevenueTimeline
+          schedule={revenueSchedule}
+          defaultCurrency={deal.currency || 'USD'}
+          onSave={onSaveRevenueSchedule ?? (() => {})}
+        />
       </div>
 
       {/* Deal Progression */}
@@ -319,6 +365,149 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({ deal, stageH
           </button>
         </div>
       </div>
+
+      {/* Competitive Intelligence */}
+      {competitors && competitors.length > 0 && (
+        <div ref={battleCardRef} className="mt-6 pt-6 border-t border-gray-200">
+          <div className="flex items-center space-x-2 mb-4">
+            <Shield className="h-5 w-5 text-gray-500" />
+            <span className="text-sm font-semibold text-gray-700">Competitive Intelligence:</span>
+          </div>
+          <div className="space-y-2">
+            {competitors.map(competitor => {
+              const key = competitor.toLowerCase();
+              const card = BATTLE_CARDS[key];
+              const isOpen = openBattleCard === key;
+
+              return (
+                <div key={competitor} className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Accordion header */}
+                  <button
+                    type="button"
+                    onClick={() => setOpenBattleCard(isOpen ? null : key)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      {isOpen
+                        ? <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        : <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                      }
+                      <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                      <span className="text-sm font-semibold text-gray-900">{competitor}</span>
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded">
+                        Competitor
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                      {isOpen ? 'Hide' : 'View Battle Card'}
+                    </span>
+                  </button>
+
+                  {/* Battle card body */}
+                  {isOpen && (
+                    <div className="border-t border-gray-200 bg-white">
+                      {card ? (
+                        <div className="p-4 space-y-4">
+                          {/* We Win When */}
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                              <span className="text-[11px] font-bold text-green-800 uppercase tracking-wide">We Win When</span>
+                            </div>
+                            <ul className="space-y-1.5 pl-1">
+                              {card.weWinWhen.map((point, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                                  <span className="text-green-500 font-bold flex-shrink-0 mt-0.5 text-xs">✓</span>
+                                  {point}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* They Win When */}
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <XCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+                              <span className="text-[11px] font-bold text-red-700 uppercase tracking-wide">They Win When</span>
+                            </div>
+                            <ul className="space-y-1.5 pl-1">
+                              {card.theyWinWhen.map((point, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                                  <span className="text-red-400 font-bold flex-shrink-0 mt-0.5 text-xs">✕</span>
+                                  {point}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* Killer Question */}
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Target className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                              <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wide">Killer Question to Ask</span>
+                            </div>
+                            <p className="text-sm text-blue-900 italic">"{card.killerQuestion}"</p>
+                          </div>
+
+                          {/* Proof Point */}
+                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <Trophy className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                              <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wide">Proof Point</span>
+                            </div>
+                            <p className="text-sm text-purple-900">
+                              <span className="font-semibold">{card.proofPoint.company}:</span>{' '}
+                              {card.proofPoint.outcome}
+                            </p>
+                          </div>
+
+                          {/* Footer: copy + admin update */}
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyTalkingPoints(key, card.weWinWhen)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              {copiedCompetitor === key ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 text-green-500" />
+                                  <span className="text-green-700">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5" />
+                                  Copy talking points
+                                </>
+                              )}
+                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                className="text-xs text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                              >
+                                Update Battle Card
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4">
+                          <p className="text-sm text-gray-500">No battle card data available for {competitor}.</p>
+                          {isAdmin && (
+                            <button type="button" className="mt-2 text-xs text-blue-600 hover:underline">
+                              + Create Battle Card
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

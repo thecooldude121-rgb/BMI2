@@ -198,6 +198,21 @@ export const isWithinDays = (
 };
 
 /**
+ * Normalises a raw date field from the API before storing it in component state.
+ *
+ * Returns the raw value as-is (or '' for null/undefined).  The key guarantee:
+ * do NOT split on 'T'.  PostgreSQL DATE columns serialise to ISO timestamps
+ * like "2026-06-30T18:30:00.000Z" for UTC+5:30 timezones — splitting produces
+ * "2026-06-29", shifting every date one day early.  parseDateMs and
+ * formatCloseDate already handle full ISO strings correctly.
+ *
+ * @example
+ *   closeDate: normalizeDateField(d.expected_close_date)
+ *   nextStepDueDate: normalizeDateField(d.next_step_due_date)
+ */
+export const normalizeDateField = (raw: string | null | undefined): string => raw ?? '';
+
+/**
  * Returns the date as milliseconds-since-epoch, or Infinity when the input is
  * missing or invalid. Safe to use in Array.sort() comparators — invalid/empty
  * dates sort to the end rather than producing NaN (which breaks V8's sort).

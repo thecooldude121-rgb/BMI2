@@ -86,6 +86,24 @@ export const formatCurrencyCompact = (amount: number, currencyCode: string): str
 };
 
 /**
+ * USD pipeline amount formatter for summary values in kanban columns, forecast
+ * tables, and KPI cards. Uses K/M abbreviation at scale with 0 decimal places.
+ *
+ * Centralised here so the kanban and forecast pages stay in sync and never
+ * diverge on formatting (e.g. "$1.2M" vs "$1.20M").
+ *
+ * @example formatAmountUSD(50000)    → '$50K'
+ * @example formatAmountUSD(1250000)  → '$1.3M'
+ * @example formatAmountUSD(800)      → '$800'
+ */
+export const formatAmountUSD = (amount: number): string => {
+  if (!isFinite(amount) || amount === 0) return '$0';
+  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (amount >= 1_000)     return `$${Math.round(amount / 1_000)}K`;
+  return `$${Math.round(amount)}`;
+};
+
+/**
  * Converts an amount in any supported currency to the system base currency (USD).
  * Used to populate base_amount_usd in the API payload for reporting.
  *

@@ -11,7 +11,9 @@ import {
   daysFromNowLabel,
   isWithinDays,
   parseDateMs,
+  normalizeDateField,
 } from '../../utils/dateUtils';
+import { formatAmountUSD } from '../../utils/currencyUtils';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Plus,
@@ -126,6 +128,8 @@ const DealsKanbanPage: React.FC = () => {
   // Stage skeletons — deals are populated exclusively from the backend fetch below.
   // Never seed hardcoded sample deals here: they cause duplicate cards when the
   // API returns real data and the two datasets share IDs.
+  const [fetchError, setFetchError] = useState(false);
+
   const [stages, setStages] = useState<PipelineStage[]>([
     { id: 'prospecting', name: 'Prospecting', color: 'bg-blue-100',  deals: [] },
     { id: 'qualified',   name: 'Qualified',   color: 'bg-green-100', deals: [] },
@@ -143,6 +147,7 @@ const DealsKanbanPage: React.FC = () => {
 
     fetchDeals().then((apiDeals: any[]) => {
       if (cancelled) return;
+      setFetchError(false);
 
       // ── Pass 1: drop malformed records ────────────────────────────────────
       // Any record without a string id is unusable as a React key and as a
@@ -217,16 +222,13 @@ const DealsKanbanPage: React.FC = () => {
           .filter((d: any) => d.stage === stage.id)
           .map((d: any) => ({
             id: d.id,
-            companyName: d.company_name || d.name || 'Unknown Company',
+            companyName: d.company_name || '',
             dealName: d.name || d.title || 'Untitled',
-            accountName: d.company_name || d.name || '',
+            accountName: d.company_name || '',
             amount: parseFloat(d.value) || 0,
             currency: d.currency || 'USD',
             baseAmountUsd: parseFloat(d.base_amount_usd) || parseFloat(d.value) || 0,
-            // Strip time component so formatDisplayDate renders cleanly
-            closeDate: d.expected_close_date
-              ? d.expected_close_date.split('T')[0]
-              : '',
+            closeDate: normalizeDateField(d.expected_close_date),
             stage: stage.id,
             aiScore: d.probability || 0,
             contactName: d.contact_name || '',
@@ -243,9 +245,10 @@ const DealsKanbanPage: React.FC = () => {
             health: (['healthy', 'at-risk', 'stalled'].includes(d.health)
               ? d.health
               : 'healthy') as 'healthy' | 'at-risk' | 'stalled',
+            hasAccount: !!(d.company_name?.trim()),
             source: d.source || 'manual',
             nextStep: d.next_step || '',
-            nextStepDueDate: d.next_step_due_date ? d.next_step_due_date.split('T')[0] : '',
+            nextStepDueDate: normalizeDateField(d.next_step_due_date),
             nextStepOwner: d.next_step_owner || '',
             nextStepStatus: (['pending', 'done', 'overdue'].includes(d.next_step_status)
               ? d.next_step_status : 'pending') as 'pending' | 'done' | 'overdue',
@@ -285,6 +288,10 @@ const DealsKanbanPage: React.FC = () => {
       }));
     });
 
+    }).catch(() => {
+      if (!cancelled) setFetchError(true);
+    });
+
     return () => { cancelled = true; };
   // refetchKey is incremented by triggerRefetch() on explicit mutations.
   // contextDeals is intentionally excluded — its length fluctuates during
@@ -298,6 +305,7 @@ const DealsKanbanPage: React.FC = () => {
   const [selectedCloseDateFilter, setSelectedCloseDateFilter] = useState('all');
   const [selectedValueFilter, setSelectedValueFilter] = useState('all');
   const [selectedSourceFilter, setSelectedSourceFilter] = useState('all');
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState<'all' | 'missing'>('all');
 
   // Saved-view state — activeViewId tracks which chip is highlighted;
   // viewPredicate is the view's extra filter function (null for dropdown-only views).
@@ -453,24 +461,14 @@ const DealsKanbanPage: React.FC = () => {
       setToast({ message: `Deal moved to ${destStage.name}`, type: 'success' });
     }
 
-    console.log(`Stage changed to ${destStage.name} for ${updatedDeal.companyName}`);
     setTimeout(() => setToast(null), 5000);
   };
 
   // formatRelativeTime from dateUtils replaces the old local formatLastActivity.
   // It handles ISO strings, already-human strings, null, and timezone-safe parsing.
 
-  const formatCurrency = (amount: number) => {
-    if (amount >= 1000000) {
-      return `$${(amount / 1000000).toFixed(1)}M`;
-    }
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  // Alias so existing prop signatures (DealKanbanCard, ManagerInspectionBar) don't change.
+  const formatCurrency = formatAmountUSD;
 
   const getHealthColor = (health: string) => {
     switch (health) {
@@ -593,7 +591,7 @@ const DealsKanbanPage: React.FC = () => {
   };
 
   const handleViewForecast = () => {
-    navigate('/analytics', { state: { view: 'forecast' } });
+    navigate('/crm/forecast');
   };
 
   const handleViewHRMSDeals = () => {
@@ -626,7 +624,6 @@ const DealsKanbanPage: React.FC = () => {
       Score: d.aiScore,
       Health: d.health
     }));
-    console.log('Exporting CSV:', csvData);
   };
 
   const getSortLabel = () => {
@@ -729,7 +726,6 @@ const DealsKanbanPage: React.FC = () => {
   }, []);
 
   const handleContextMenuAction = (action: string, dealId: string) => {
-    console.log(`${action} for deal ${dealId}`);
     closeContextMenu();
 
     switch (action) {
@@ -737,7 +733,19 @@ const DealsKanbanPage: React.FC = () => {
         navigate(`/crm/deals/${dealId}/edit`);
         break;
       case 'email':
-        console.log('Opening email composer');
+        setToast({ message: 'Opening email composer…', type: 'info' });
+        setTimeout(() => setToast(null), 2500);
+        break;
+      case 'stage':
+        setToast({ message: 'Stage change — open the deal to reassign', type: 'info' });
+        setTimeout(() => setToast(null), 2500);
+        break;
+      case 'owner':
+        setToast({ message: 'Owner change — open the deal to reassign', type: 'info' });
+        setTimeout(() => setToast(null), 2500);
+        break;
+      case 'activity':
+        navigate(`/crm/deals/${dealId}`);
         break;
       case 'meeting':
         navigate('/meetings/new', { state: { dealId } });
@@ -822,6 +830,7 @@ const DealsKanbanPage: React.FC = () => {
     setSelectedCloseDateFilter('all');
     setSelectedValueFilter('all');
     setSelectedSourceFilter('all');
+    setSelectedAccountFilter('all');
     setSearchTerm('');
     setSortBy('closeDate');
   };
@@ -834,6 +843,7 @@ const DealsKanbanPage: React.FC = () => {
       case 'closeDate': setSelectedCloseDateFilter('all'); break;
       case 'value':     setSelectedValueFilter('all'); break;
       case 'source':    setSelectedSourceFilter('all'); break;
+      case 'account':   setSelectedAccountFilter('all'); break;
       case 'search':    setSearchTerm(''); break;
     }
   };
@@ -935,6 +945,8 @@ const DealsKanbanPage: React.FC = () => {
       if (selectedSourceFilter === 'website' && !d.source?.toLowerCase().includes('website')) return false;
       if (selectedSourceFilter === 'leadgen' && !d.source?.toLowerCase().includes('lead gen')) return false;
       if (selectedSourceFilter === 'manual'  && d.isHRMS) return false;
+
+      if (selectedAccountFilter === 'missing' && d.hasAccount) return false;
 
       // Apply the active saved view's custom predicate — handles conditions that
       // the dropdown controls cannot express (aiScore, daysSinceContact, etc.)
@@ -1178,7 +1190,7 @@ const DealsKanbanPage: React.FC = () => {
           {(() => {
             const pills = getActiveFilterPills(
               activeViewId, selectedOwner, selectedCloseDateFilter,
-              selectedValueFilter, selectedSourceFilter, searchTerm,
+              selectedValueFilter, selectedSourceFilter, selectedAccountFilter, searchTerm,
             );
             const activeCount = pills.length;
             return (
@@ -1302,6 +1314,8 @@ const DealsKanbanPage: React.FC = () => {
                 options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+']] },
               { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
                 options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
+              { label: 'Account', value: selectedAccountFilter, onChange: (v: any) => setSelectedAccountFilter(v),
+                options: [['all','Any account'],['missing','Missing account']] },
             ] as const).map(f => (
               <div key={f.label} className="relative flex-shrink-0">
                 <select
@@ -1323,6 +1337,21 @@ const DealsKanbanPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Fetch error — shown when backend is unreachable or returns an HTTP error */}
+      {fetchError && (
+        <div className="mx-6 mt-4 flex items-center gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          <span>Could not load deals — the API may be unreachable. Check the backend and</span>
+          <button
+            onClick={() => { setFetchError(false); triggerRefetch(); }}
+            className="font-medium underline hover:no-underline"
+          >
+            retry
+          </button>
+          <span>.</span>
+        </div>
+      )}
 
       {/* Inspection bar — sits just below the command bar when active */}
       {inspectionMode && (
@@ -1528,7 +1557,7 @@ const DealsKanbanPage: React.FC = () => {
                             >
                               Load more
                               <span className="text-gray-400 ml-1">
-                                ({stage.deals.length - (visibleDealsCount[stage.id] || DEALS_PER_PAGE)} remaining)
+                                ({filterDeals(dedupStageDeals(stage.deals)).length - (visibleDealsCount[stage.id] || DEALS_PER_PAGE)} remaining)
                               </span>
                             </button>
                           )}
@@ -1645,31 +1674,24 @@ const DealsKanbanPage: React.FC = () => {
 
             <div className="px-6 py-4 space-y-4">
               <div>
-                <h4 className="font-semibold text-gray-900 mb-2">{selectedHRMSDeal.companyName}</h4>
+                <h4 className="font-semibold text-gray-900 mb-1">{selectedHRMSDeal.companyName || selectedHRMSDeal.dealName}</h4>
+                <p className="text-sm text-gray-500">{formatCurrency(selectedHRMSDeal.amount)}</p>
               </div>
 
-              <div>
-                <div className="text-sm font-medium text-gray-700 mb-1">Recruited Employee:</div>
-                <div className="text-sm text-gray-900">Sarah Lee (CFO)</div>
-                <div className="text-xs text-gray-600 mt-1">Recruitment Date: Nov 14, 2024</div>
-              </div>
+              {selectedHRMSDeal.hrmsDetails ? (
+                <div>
+                  <div className="text-sm font-medium text-gray-700 mb-1">HRMS Details:</div>
+                  <div className="text-sm text-gray-900 whitespace-pre-wrap">{selectedHRMSDeal.hrmsDetails}</div>
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                  <p className="text-sm text-gray-500">No HRMS details recorded for this deal.</p>
+                </div>
+              )}
 
               <div>
-                <div className="text-sm font-medium text-gray-700 mb-2">Advantage:</div>
-                <ul className="space-y-1 text-sm text-gray-600">
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-0.5">•</span>
-                    <span>Warm introduction through recruitment</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-0.5">•</span>
-                    <span>Existing relationship</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="text-green-600 mt-0.5">•</span>
-                    <span>33% higher close rate vs cold leads</span>
-                  </li>
-                </ul>
+                <div className="text-sm font-medium text-gray-700 mb-1">Why it matters:</div>
+                <p className="text-sm text-gray-600">HRMS-connected deals have a warm introduction through an existing recruitment relationship, which typically shortens the sales cycle.</p>
               </div>
             </div>
 
@@ -1749,9 +1771,9 @@ const DealsKanbanPage: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  console.log('Logging activity for deal:', selectedActivityDeal.id);
                   setShowActivityModal(false);
                   setSelectedActivityDeal(null);
+                  navigate(`/crm/deals/${selectedActivityDeal.id}`);
                 }}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >

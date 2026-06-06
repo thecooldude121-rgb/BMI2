@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Clock, Mail, Phone, Video, FileText, TrendingUp, User, Sparkles, CheckCircle2, Calendar, Eye, MessageSquare, Share2, Plus, Filter } from 'lucide-react';
+import { computeWeeklyBuckets } from '../../utils/contactEngagement';
 import { EmailDetailModal, ShareSummaryModal, LogActivityModal } from './DealActivityModals';
 import { MeetingSchedulerModal } from './DealModals';
 import { useToast } from '../../contexts/ToastContext';
@@ -37,15 +38,19 @@ interface Activity {
   from?: string;
   subject?: string;
   body?: string;
+  contactId?: string | null;
+  isoDate?: string;
 }
 
 interface DealActivityTimelineProps {
   activities: Activity[];
   daysSinceLastContact: number;
+  contacts?: { id: string; name: string }[];
 }
 
-export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, daysSinceLastContact }) => {
+export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, daysSinceLastContact, contacts }) => {
   const [filterType, setFilterType] = useState<string>('all');
+  const [heatmapView, setHeatmapView] = useState<'combined' | 'per-contact'>('combined');
   const [showEmailDetail, setShowEmailDetail] = useState(false);
   const [showShareSummary, setShowShareSummary] = useState(false);
   const [showLogActivity, setShowLogActivity] = useState(false);
@@ -53,6 +58,22 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  // ── Heatmap data ─────────────────────────────────────────────────────────
+  const combinedBuckets = useMemo(
+    () => computeWeeklyBuckets(activities.map(a => a.isoDate)),
+    [activities],
+  );
+
+  const perContactBuckets = useMemo(() => {
+    if (!contacts) return [];
+    return contacts.map(contact => ({
+      contact,
+      buckets: computeWeeklyBuckets(
+        activities.filter(a => a.contactId === contact.id).map(a => a.isoDate),
+      ),
+    })).filter(row => row.buckets.some(b => b > 0));
+  }, [activities, contacts]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -157,6 +178,93 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
             Log Activity
           </button>
         </div>
+      </div>
+
+      {/* ── Engagement Heatmap ── */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Engagement Heatmap (8 weeks)</span>
+          <div className="flex items-center gap-0">
+            <button
+              onClick={() => setHeatmapView('combined')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-l-md border transition-colors ${
+                heatmapView === 'combined'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              All Activity
+            </button>
+            <button
+              onClick={() => setHeatmapView('per-contact')}
+              className={`px-2.5 py-1 text-xs font-medium rounded-r-md border-t border-b border-r transition-colors ${
+                heatmapView === 'per-contact'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              By Contact
+            </button>
+          </div>
+        </div>
+
+        {heatmapView === 'combined' ? (
+          /* Combined bar chart — 8 cells, opacity-scaled, oldest on left */
+          <div>
+            <div className="flex items-end gap-1 h-10">
+              {[...combinedBuckets].reverse().map((count, i) => {
+                const maxCount = Math.max(...combinedBuckets, 1);
+                const heightPct = Math.max((count / maxCount) * 100, count > 0 ? 15 : 0);
+                return (
+                  <div
+                    key={i}
+                    className="flex-1 flex flex-col justify-end"
+                    title={`${count} activit${count === 1 ? 'y' : 'ies'} (${7 - i} weeks ago)`}
+                  >
+                    <div
+                      className="rounded-sm bg-blue-500 transition-all"
+                      style={{ height: `${heightPct}%`, opacity: count > 0 ? 0.3 + 0.7 * (count / Math.max(...combinedBuckets, 1)) : 0.08 }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[9px] text-gray-400">8 wks ago</span>
+              <span className="text-[9px] text-gray-400">This week</span>
+            </div>
+          </div>
+        ) : (
+          /* Per-contact rows — each scaled to its own max */
+          <div className="space-y-2">
+            {perContactBuckets.length === 0 ? (
+              <div className="text-xs text-gray-400 text-center py-2">No contact-tagged activities yet</div>
+            ) : perContactBuckets.map(({ contact, buckets }) => {
+              const maxCount = Math.max(...buckets, 1);
+              return (
+                <div key={contact.id} className="flex items-center gap-2">
+                  <span className="w-20 text-xs text-gray-600 truncate flex-shrink-0">{contact.name.split(' ')[0]}</span>
+                  <div className="flex items-end gap-0.5 h-6 flex-1">
+                    {[...buckets].reverse().map((count, i) => (
+                      <div key={i} className="flex-1 flex flex-col justify-end h-6" title={`${count} activit${count === 1 ? 'y' : 'ies'}`}>
+                        <div
+                          className="rounded-sm bg-blue-500 transition-all"
+                          style={{
+                            height: count > 0 ? `${Math.max((count / maxCount) * 100, 20)}%` : '4px',
+                            opacity: count > 0 ? 0.3 + 0.7 * (count / maxCount) : 0.08,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="flex justify-end">
+              <span className="text-[9px] text-gray-400">← 8 wks ago · This week →</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Today Section */}

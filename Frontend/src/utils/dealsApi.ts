@@ -117,15 +117,22 @@ export async function updateDeal(id: string, payload: Partial<DealPayload>): Pro
   return json;
 }
 
-export async function fetchDeals(): Promise<any[]> {
-  try {
-    const res = await fetch(`${API_BASE}/deals`, { headers: getAuthHeaders() });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return json.success ? json.data : [];
-  } catch {
-    return [];
+/**
+ * Fetches all deals from the API.
+ *
+ * Throws on HTTP errors and network failures so callers can surface a visible
+ * error state instead of silently rendering an empty pipeline.
+ * Backend excludes is_test records by default (no include_test param needed).
+ *
+ * @param limit - Max records to return (default 50; use 500+ for roll-up views)
+ */
+export async function fetchDeals(limit = 50): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/deals?limit=${limit}`, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    throw new Error(`Failed to load deals (HTTP ${res.status})`);
   }
+  const json = await res.json();
+  return json.success ? json.data : [];
 }
 
 export async function getDeal(id: string): Promise<{ success: boolean; data: any }> {

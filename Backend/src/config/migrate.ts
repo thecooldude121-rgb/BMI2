@@ -143,6 +143,36 @@ const createTables = async (): Promise<void> => {
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step_due_date DATE`);
     // Migration 002: is_test flag — excludes dev/debug records from production views
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false`);
+
+    // Migration 003: per-rep per-quarter quota targets
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS quotas (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        rep_name      VARCHAR(255) NOT NULL,
+        period_label  VARCHAR(20)  NOT NULL,
+        quota_amount  NUMERIC(15,2) NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(rep_name, period_label)
+      )
+    `);
+
+    // Migration 004: forecast snapshots for slippage and commit accuracy
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS forecast_snapshots (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        period_label  VARCHAR(20)   NOT NULL,
+        snapshot_date DATE          NOT NULL DEFAULT CURRENT_DATE,
+        rep_name      VARCHAR(255)  NOT NULL,
+        pipeline      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        best_case     NUMERIC(15,2) NOT NULL DEFAULT 0,
+        commit        NUMERIC(15,2) NOT NULL DEFAULT 0,
+        closed        NUMERIC(15,2) NOT NULL DEFAULT 0,
+        deal_count    INTEGER       NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ   DEFAULT NOW(),
+        UNIQUE(period_label, rep_name, snapshot_date)
+      )
+    `);
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step_owner TEXT`);
     await client.query(`
       ALTER TABLE deals

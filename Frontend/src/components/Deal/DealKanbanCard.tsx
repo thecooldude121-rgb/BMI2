@@ -83,6 +83,8 @@ export interface DealCard {
   /** Full stakeholder list — drives the committee coverage bar and health drivers. */
   stakeholders?: StakeholderContact[];
   createdAt?: string;
+  /** True when the deal has a real company_name in the database (not a name fallback). */
+  hasAccount?: boolean;
 }
 
 export interface DealKanbanCardProps {
@@ -177,6 +179,11 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
 
   const isClosed      = ['closed-won', 'closed-lost'].includes(stageId);
   const closeDaysLeft = daysFromNow(deal.closeDate);
+
+  // TODO: activate from API once revenueSchedule is a persisted DB field
+  const paymentIndicator = (deal.id === 'D036' || deal.id === 'D029')
+    ? { hasOverdue: deal.id === 'D029' }
+    : null;
 
   // ── Resolve the canonical deal state ──────────────────────────────────────
   const state  = resolveDealState(deal, closeDaysLeft, isClosed);
@@ -387,7 +394,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         Right: inspection badge > close date (closed) > activity time (active)
                Overdue/stalled suppress the right element — chip encodes timing.
       */}
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between gap-3 mb-1.5">
 
         {/* Left — chip or fallback activity label */}
         {state.chipLabel ? (
@@ -431,7 +438,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
       {!isClosed && !inspectionMode && !!deal.nextStep?.trim() &&
         deal.nextStep.trim().toUpperCase() !== 'N/A' &&
         deal.nextStep.trim() !== '—' && (
-        <div className="flex items-center space-x-1 mb-1">
+        <div className="flex items-center space-x-1 mt-1.5 mb-1">
           <ArrowRight className="h-3 w-3 text-indigo-400 flex-shrink-0" />
           <span className="text-[11px] text-gray-600 line-clamp-1 leading-snug flex-1 min-w-0">
             {deal.nextStep}
@@ -455,6 +462,16 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
             );
             return null;
           })()}
+        </div>
+      )}
+
+      {/* ── Payment indicator ────────────────────────────────────────────── */}
+      {paymentIndicator && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${paymentIndicator.hasOverdue ? 'bg-red-500' : 'bg-green-500'}`} />
+          <span className={`text-[11px] ${paymentIndicator.hasOverdue ? 'text-red-600 font-medium' : 'text-green-600'}`}>
+            {paymentIndicator.hasOverdue ? 'Payment overdue' : 'Payments on track'}
+          </span>
         </div>
       )}
 

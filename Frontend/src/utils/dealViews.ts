@@ -220,6 +220,7 @@ export function getActiveFilterPills(
   closeDate: string,
   value: string,
   source: string,
+  account: string,
   search: string,
 ): ActiveFilterPill[] {
   const pills: ActiveFilterPill[] = [];
@@ -234,6 +235,7 @@ export function getActiveFilterPills(
   if (closeDate !== 'all' && CLOSE_DATE_LABELS[closeDate]) pills.push({ key: 'closeDate', label: CLOSE_DATE_LABELS[closeDate] });
   if (value     !== 'all' && VALUE_LABELS[value])           pills.push({ key: 'value',     label: VALUE_LABELS[value] });
   if (source    !== 'all' && SOURCE_LABELS[source])         pills.push({ key: 'source',    label: SOURCE_LABELS[source] });
+  if (account   === 'missing')                              pills.push({ key: 'account',   label: 'Missing account' });
   if (search.trim())                                        pills.push({ key: 'search',    label: `"${search.trim()}"` });
 
   return pills;
