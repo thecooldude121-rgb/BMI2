@@ -1076,6 +1076,7 @@ const ActivityDetailPage: React.FC = () => {
   const [isReplyMode, setIsReplyMode] = useState(false);
   const [showContactNowModal, setShowContactNowModal] = useState(false);
   const [showEscalateModal, setShowEscalateModal] = useState(false);
+  const [escalationContext, setEscalationContext] = useState('');
   const [showCompleteTaskModal, setShowCompleteTaskModal] = useState(false);
   const [editingTaskDescription, setEditingTaskDescription] = useState(false);
   const [taskDescription, setTaskDescription] = useState('');
@@ -3502,7 +3503,7 @@ const ActivityDetailPage: React.FC = () => {
                 <AlertCircle className="w-5 h-5" />
                 Escalate to Manager
               </h3>
-              <button onClick={() => setShowEscalateModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => { setShowEscalateModal(false); setEscalationContext(''); }} className="p-1 hover:bg-gray-100 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -3531,9 +3532,10 @@ const ActivityDetailPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Additional Context</label>
                 <textarea
                   rows={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                  placeholder="Provide additional context for escalation..."
-                  defaultValue="This deal has been stalled for 7 days with no customer response. Multiple follow-up attempts have failed. Competitor may be moving ahead."
+                  value={escalationContext}
+                  onChange={(e) => setEscalationContext(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 placeholder:text-gray-400"
+                  placeholder="Describe why you're escalating — e.g. no response for 7 days, competitor moving ahead, multiple failed follow-up attempts…"
                 />
               </div>
               <div>
@@ -3559,10 +3561,18 @@ const ActivityDetailPage: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowEscalateModal(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
+              <button onClick={() => { setShowEscalateModal(false); setEscalationContext(''); }} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
                 Cancel
               </button>
-              <button onClick={() => { alert('Escalated to manager!'); setShowEscalateModal(false); }} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">
+              <button
+                onClick={() => {
+                  const context = escalationContext.trim() || undefined;
+                  alert('Escalated to manager!' + (context ? `\nContext: ${context}` : ''));
+                  setShowEscalateModal(false);
+                  setEscalationContext('');
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+              >
                 Escalate Now
               </button>
             </div>

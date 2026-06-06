@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { stage, assigned_to, search, limit = 50, offset = 0 } = req.query;
+    const { stage, assigned_to, search, limit = 50, offset = 0, include_test } = req.query;
     // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
     // produce duplicate rows for the same deal.  Duplicate cards on the board
     // are caused by genuine duplicate rows in the deals table (different ids,
@@ -15,6 +15,9 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     //
     // days_since_contact: integer days since the deal was last updated.
     // Drives all stalled/activity signals on the frontend. Floors at 0.
+    //
+    // is_test guard: excludes dev/debug records from all production-facing views
+    // unless the caller explicitly passes include_test=true (dev tooling only).
     let query = `
       SELECT d.*,
              l.email AS lead_email,
@@ -24,6 +27,11 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
       WHERE 1=1`;
     const params: any[] = [];
     let i = 1;
+
+    if (include_test !== 'true') {
+      query += ` AND d.is_test = false`;
+    }
+
     if (stage)       { query += ` AND d.stage = $${i++}`;             params.push(stage); }
     if (assigned_to) { query += ` AND d.assigned_to = $${i++}`;       params.push(assigned_to); }
     if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${search}%`); i++; }
@@ -60,8 +68,15 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       next_step_status, notes, company_name,
       contact_name, contact_email, contact_title, stakeholders, competitors,
       source, priority, tags, product, contract_term, payment_terms,
-      attachment_metadata, win_prob_override_reason, win_prob_ai
+      attachment_metadata, win_prob_override_reason, win_prob_ai,
+      is_test,
     } = req.body;
+
+    const dealName = (name || title || '').trim();
+    if (!dealName) {
+      res.status(400).json({ success: false, message: 'Deal name is required.' });
+      return;
+    }
 
     // Auto-generate ID in D001 format
     const maxResult = await pool.query(`SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM deals WHERE id ~ '^D[0-9]+$'`);
@@ -78,12 +93,12 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           next_step_status, notes, company_name,
           contact_name, contact_email, contact_title, stakeholders, competitors,
           source, priority, tags, product, contract_term, payment_terms,
-          attachment_metadata, win_prob_override_reason, win_prob_ai)
+          attachment_metadata, win_prob_override_reason, win_prob_ai, is_test)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
        RETURNING *`,
       [
-        id, name, title, lead_id, value,
+        id, dealName, title || dealName, lead_id, value,
         currency || 'USD', base_amount_usd ?? value,
         pipeline_id || 'new-business', pipeline_name || 'New Business',
         deal_type || 'new-business',
@@ -100,6 +115,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         JSON.stringify(attachment_metadata ?? []),
         win_prob_override_reason ?? null,
         win_prob_ai ?? null,
+        is_test === true || is_test === 'true' ? true : false,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -108,7 +124,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;

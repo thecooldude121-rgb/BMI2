@@ -137,9 +137,12 @@ const createTables = async (): Promise<void> => {
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS win_prob_override_reason TEXT`);
 
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS value_history JSONB DEFAULT '[]'`);
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS momentum_score VARCHAR(20) DEFAULT NULL`);
 
     // Migration 001: structured next-step fields
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step_due_date DATE`);
+    // Migration 002: is_test flag — excludes dev/debug records from production views
+    await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT false`);
     await client.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS next_step_owner TEXT`);
     await client.query(`
       ALTER TABLE deals

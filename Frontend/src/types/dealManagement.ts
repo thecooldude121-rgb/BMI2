@@ -79,6 +79,7 @@ export interface Deal {
   ownerId: string;
   ownerInfo?: DealOwnerInfo;
   dealValueHistory?: DealValueHistoryEntry[];
+  momentumScore?: 'accelerating' | 'stable' | 'decelerating';
   dealType: string;
   country: string;
   

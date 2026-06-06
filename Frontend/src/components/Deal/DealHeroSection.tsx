@@ -1,11 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Edit, MoreVertical, Building2, User, Target, Calendar, Sparkles, Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown, ChevronDown, ChevronUp, DollarSign, AlertTriangle } from 'lucide-react';
+import {
+  Edit, MoreVertical, Building2, User, Target, Sparkles,
+  Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown,
+  ChevronDown, ChevronUp, DollarSign, AlertTriangle,
+  Copy, GitMerge, Archive, FileDown, Share2, MoreHorizontal, Keyboard, X,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MoreOptionsDropdown } from './DealModals';
 import { daysFromNowLabel, closeDateUrgencyClass } from '../../utils/dateUtils';
 import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 import { getUsers } from '../../utils/dealsApi';
 import type { DealOwnerInfo, DealValueHistoryEntry } from '../../types/dealManagement';
+import { DealMomentum } from './DealMomentum';
+import type { MomentumResult } from '../../utils/dealMomentum';
+
+// Stage ordering (1-indexed, matching STAGE_MAP in ComprehensiveDealDetailPage)
+const ORDERED_STAGES: Record<number, string> = {
+  1: 'Prospecting',
+  2: 'Qualified',
+  3: 'Proposal',
+  4: 'Negotiation',
+  5: 'Closed Won',
+  6: 'Closed Lost',
+};
+
+// Action bar "..." items
+const ACTION_BAR_MORE_ITEMS = [
+  { id: 'clone',      icon: Copy,     label: 'Clone Deal'      },
+  { id: 'merge',      icon: GitMerge, label: 'Merge Deal'      },
+  { id: 'archive',    icon: Archive,  label: 'Archive Deal'    },
+  { id: 'export-pdf', icon: FileDown, label: 'Export PDF'      },
+  { id: 'share',      icon: Share2,   label: 'Share Deal Link' },
+];
+
+// ── Keyboard shortcut badge ───────────────────────────────────────────────────
+
+function KbdBadge({ char }: { char: string }) {
+  return (
+    <kbd className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-black/20 border border-white/25 rounded text-white leading-none tracking-wide">
+      {char}
+    </kbd>
+  );
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface DealHeroSectionProps {
   deal: {
@@ -40,10 +78,15 @@ interface DealHeroSectionProps {
   onEmail?: () => void;
   onCall?: () => void;
   onMeeting?: () => void;
+  onProposal?: () => void;
   onMoveStage?: () => void;
   onUpdateAmount?: () => void;
   onAssignOwner?: (ownerName: string) => void;
+  onShowShortcuts?: () => void;
+  momentumResult?: MomentumResult;
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   deal,
@@ -52,33 +95,65 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onEmail,
   onCall,
   onMeeting,
+  onProposal,
   onMoveStage,
   onUpdateAmount,
   onAssignOwner,
+  onShowShortcuts,
+  momentumResult,
 }) => {
   const navigate = useNavigate();
+
+  // Header more-options
   const [showMoreActions, setShowMoreActions] = useState(false);
-  const [showOwnerDropdown, setShowOwnerDropdown] = useState(false);
-  const [showValueHistory, setShowValueHistory] = useState(false);
-  const [ownersList, setOwnersList] = useState<any[]>([]);
-  const [isLoadingOwners, setIsLoadingOwners] = useState(false);
+
+  // Owner tile
+  const [showOwnerDropdown, setShowOwnerDropdown]   = useState(false);
+  const [showValueHistory, setShowValueHistory]       = useState(false);
+  const [ownersList, setOwnersList]                   = useState<any[]>([]);
+  const [isLoadingOwners, setIsLoadingOwners]         = useState(false);
   const ownerDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Action bar "..." dropdown
+  const [showActionBarMore, setShowActionBarMore] = useState(false);
+  const actionBarMoreRef = useRef<HTMLDivElement>(null);
+
+  // Move-stage tooltip
+  const [showStageTooltip, setShowStageTooltip] = useState(false);
+
+  // Mobile bottom sheet
+  const [showMobileSheet, setShowMobileSheet] = useState(false);
+
+  // ── Click-outside handlers ─────────────────────────────────────────────────
 
   useEffect(() => {
     if (!showOwnerDropdown) return;
-    function handleClickOutside(e: MouseEvent) {
+    const handler = (e: MouseEvent) => {
       if (ownerDropdownRef.current && !ownerDropdownRef.current.contains(e.target as Node)) {
         setShowOwnerDropdown(false);
       }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [showOwnerDropdown]);
 
-  const ownerName = deal.owner || deal.ownerInfo?.name || '';
-  const isUnassigned = !ownerName;
-  const isOOO = deal.ownerInfo?.outOfOffice === true;
-  const lastActiveAt = deal.ownerInfo?.lastActiveAt;
+  useEffect(() => {
+    if (!showActionBarMore) return;
+    const handler = (e: MouseEvent) => {
+      if (actionBarMoreRef.current && !actionBarMoreRef.current.contains(e.target as Node)) {
+        setShowActionBarMore(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showActionBarMore]);
+
+  // ── Owner helpers ──────────────────────────────────────────────────────────
+
+  const ownerName      = deal.owner || deal.ownerInfo?.name || '';
+  const isUnassigned   = !ownerName;
+  const isOOO          = deal.ownerInfo?.outOfOffice === true;
+  const lastActiveAt   = deal.ownerInfo?.lastActiveAt;
   const lastActiveDays = lastActiveAt
     ? Math.floor((Date.now() - new Date(lastActiveAt).getTime()) / 86_400_000)
     : null;
@@ -91,13 +166,26 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
       : `Last active ${lastActiveDays}d ago`)
     : '';
 
+  function openOwnerDropdown() {
+    if (ownersList.length === 0) {
+      setIsLoadingOwners(true);
+      getUsers()
+        .then(users => setOwnersList(users))
+        .catch(() => {})
+        .finally(() => setIsLoadingOwners(false));
+    }
+    setShowOwnerDropdown(true);
+  }
+
+  // ── Value history helpers ──────────────────────────────────────────────────
+
   const dealValueHistory = deal.dealValueHistory;
-  const hasValueHistory = (dealValueHistory?.length ?? 0) > 0;
-  const originalValue = hasValueHistory
+  const hasValueHistory  = (dealValueHistory?.length ?? 0) > 0;
+  const originalValue    = hasValueHistory
     ? dealValueHistory![dealValueHistory!.length - 1].previousValue
     : deal.amount;
-  const valueDelta = deal.amount - originalValue;
-  const valuePctChange = originalValue !== 0
+  const valueDelta       = deal.amount - originalValue;
+  const valuePctChange   = originalValue !== 0
     ? Math.round((valueDelta / originalValue) * 100)
     : 0;
   const valueDeltaTooltip = hasValueHistory
@@ -111,16 +199,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     }).format(amount);
   }
 
-  function openOwnerDropdown() {
-    if (ownersList.length === 0) {
-      setIsLoadingOwners(true);
-      getUsers()
-        .then(users => setOwnersList(users))
-        .catch(() => {})
-        .finally(() => setIsLoadingOwners(false));
-    }
-    setShowOwnerDropdown(true);
-  }
+  // ── AI health helpers ──────────────────────────────────────────────────────
 
   const getHealthColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
@@ -136,21 +215,36 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     return 'bg-red-500';
   };
 
+  // ── Stage helpers ──────────────────────────────────────────────────────────
+
   const getStageEmoji = (stage: string) => {
-    const emojiMap: { [key: string]: string } = {
-      'prospecting': '🔍',
-      'qualified': '✅',
-      'proposal': '🟠',
-      'negotiation': '🤝',
-      'closed-won': '🎉',
-      'closed-lost': '❌'
+    const emojiMap: Record<string, string> = {
+      'prospecting': '🔍', 'qualified': '✅', 'proposal': '🟠',
+      'negotiation': '🤝', 'closed-won': '🎉', 'closed-lost': '❌',
     };
     return emojiMap[stage.toLowerCase()] || '📊';
   };
 
+  const hasNextStage   = deal.stageNumber < deal.totalStages;
+  const nextStageNum   = deal.stageNumber + 1;
+  const nextStageName  = hasNextStage ? ORDERED_STAGES[nextStageNum] ?? `Stage ${nextStageNum}` : null;
+
+  // Mobile action list (used in bottom sheet)
+  const mobileActions = [
+    { icon: Mail,         label: 'Email',              kbd: 'E', color: 'text-blue-600',    onClick: onEmail },
+    { icon: Phone,        label: 'Call',               kbd: 'C', color: 'text-green-600',   onClick: onCall },
+    { icon: CalendarDays, label: 'Meeting',             kbd: 'M', color: 'text-gray-700',    onClick: onMeeting },
+    { icon: FileText,     label: 'Proposal',            kbd: 'P', color: 'text-orange-600',  onClick: onProposal },
+    { icon: TrendingUp,   label: 'Move to Next Stage',  kbd: 'S', color: 'text-emerald-600', onClick: hasNextStage ? onMoveStage : undefined },
+    { icon: DollarSign,   label: 'Update Amount',       kbd: 'U', color: 'text-gray-600',    onClick: onUpdateAmount },
+  ];
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="bg-white border-b border-gray-200 px-8 py-6">
       <div className="max-w-7xl mx-auto">
+
         {/* Header Row */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-start space-x-4">
@@ -160,26 +254,17 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             <div>
               <div className="flex items-center space-x-3 mb-2">
                 <h1 className="text-3xl font-bold text-gray-900">{deal.dealName}</h1>
-                <button
-                  onClick={onEdit}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
+                <button onClick={onEdit} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                   <Edit className="h-5 w-5 text-gray-600" />
                 </button>
                 <div className="relative">
-                  <button
-                    onClick={() => setShowMoreActions(!showMoreActions)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
+                  <button onClick={() => setShowMoreActions(!showMoreActions)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                     <MoreVertical className="h-5 w-5 text-gray-600" />
                   </button>
                   <MoreOptionsDropdown
                     isOpen={showMoreActions}
                     onClose={() => setShowMoreActions(false)}
-                    onAction={(action) => {
-                      onMoreAction(action);
-                      setShowMoreActions(false);
-                    }}
+                    onAction={(action) => { onMoreAction(action); setShowMoreActions(false); }}
                   />
                 </div>
               </div>
@@ -195,6 +280,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
         {/* Key Metrics Grid */}
         <div className="grid grid-cols-4 gap-6 mb-6">
+          {/* Value tile */}
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
             <div className="flex items-center justify-between mb-1">
               <div className="text-sm font-medium text-blue-700">Value</div>
@@ -202,8 +288,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                 <div title={valueDeltaTooltip} className="cursor-help">
                   {valueDelta > 0
                     ? <TrendingUp className="h-4 w-4 text-green-500" />
-                    : <TrendingDown className="h-4 w-4 text-red-500" />
-                  }
+                    : <TrendingDown className="h-4 w-4 text-red-500" />}
                 </div>
               )}
             </div>
@@ -227,6 +312,8 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               Value History
             </button>
           </div>
+
+          {/* Stage tile */}
           <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border border-orange-200">
             <div className="text-sm font-medium text-orange-700 mb-1">Stage</div>
             <div className="flex items-center space-x-2">
@@ -235,22 +322,22 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             </div>
             <div className="text-xs text-orange-700 mt-1">Stage {deal.stageNumber} of {deal.totalStages}</div>
           </div>
+
+          {/* Close date tile */}
           <div className={`rounded-xl p-5 border ${closeDateUrgencyClass(deal.closeDate)}`}>
             <div className="text-sm font-medium mb-1 opacity-70">Close Date</div>
             <div className="text-lg font-bold">{deal.closeDate}</div>
             <div className="text-xs mt-1 opacity-80">{daysFromNowLabel(deal.closeDate)}</div>
           </div>
+
           {/* Owner tile */}
           <div className="relative bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200">
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-medium text-purple-700">Owner</div>
               {isOOO && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 leading-tight">
-                  OOO
-                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 leading-tight">OOO</span>
               )}
             </div>
-
             {isUnassigned ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
@@ -258,11 +345,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   <span className="text-base font-semibold text-red-600">Unassigned</span>
                 </div>
                 {onAssignOwner && (
-                  <button
-                    type="button"
-                    onClick={openOwnerDropdown}
-                    className="text-xs font-medium text-purple-700 hover:text-purple-900 underline underline-offset-2 transition-colors"
-                  >
+                  <button type="button" onClick={openOwnerDropdown} className="text-xs font-medium text-purple-700 hover:text-purple-900 underline underline-offset-2 transition-colors">
                     + Assign Owner
                   </button>
                 )}
@@ -284,13 +367,8 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                 )}
               </div>
             )}
-
-            {/* Owner assignment dropdown */}
             {showOwnerDropdown && (
-              <div
-                ref={ownerDropdownRef}
-                className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
-              >
+              <div ref={ownerDropdownRef} className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
                 {isLoadingOwners ? (
                   <div className="px-3 py-4 text-sm text-gray-500 text-center">Loading team members…</div>
                 ) : ownersList.length === 0 ? (
@@ -302,16 +380,10 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                         <button
                           type="button"
                           className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
-                          onClick={() => {
-                            const name = `${u.first_name} ${u.last_name}`;
-                            setShowOwnerDropdown(false);
-                            onAssignOwner?.(name);
-                          }}
+                          onClick={() => { const name = `${u.first_name} ${u.last_name}`; setShowOwnerDropdown(false); onAssignOwner?.(name); }}
                         >
                           <span className="font-medium">{u.first_name} {u.last_name}</span>
-                          {u.role && (
-                            <span className="text-gray-400 text-xs ml-1.5">({u.role})</span>
-                          )}
+                          {u.role && <span className="text-gray-400 text-xs ml-1.5">({u.role})</span>}
                         </button>
                       </li>
                     ))}
@@ -327,13 +399,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           <div className="mb-3 bg-white border border-blue-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
               <span className="text-sm font-semibold text-blue-900">Value Change History</span>
-              <button
-                type="button"
-                onClick={() => setShowValueHistory(false)}
-                className="text-blue-400 hover:text-blue-600 text-xs"
-              >
-                Close
-              </button>
+              <button type="button" onClick={() => setShowValueHistory(false)} className="text-blue-400 hover:text-blue-600 text-xs">Close</button>
             </div>
             <div className="px-4 py-3 space-y-2 max-h-64 overflow-y-auto">
               {!hasValueHistory ? (
@@ -350,9 +416,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                       <span className="text-sm text-gray-500 mx-1">→</span>
                       <span className="text-sm text-green-600 font-medium">{formatValueCurrency(entry.newValue)}</span>
                       <span className="text-sm text-gray-500 ml-2">· Changed by {entry.changedBy}</span>
-                      {entry.reason && (
-                        <span className="text-sm text-gray-500 ml-2">· Reason: {entry.reason}</span>
-                      )}
+                      {entry.reason && <span className="text-sm text-gray-500 ml-2">· Reason: {entry.reason}</span>}
                     </div>
                   </div>
                 ))
@@ -363,10 +427,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
         {/* Account & Contact Info */}
         <div className="grid grid-cols-3 gap-6 mb-6">
-          <div
-            className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-            onClick={() => navigate(`/accounts/${deal.id}`)}
-          >
+          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/accounts/${deal.id}`)}>
             <Building2 className="h-5 w-5 text-gray-600" />
             <div>
               <div className="text-xs font-medium text-gray-600">Account</div>
@@ -374,10 +435,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               <div className="text-xs text-gray-600">{deal.accountSize}, {deal.accountIndustry}</div>
             </div>
           </div>
-          <div
-            className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-            onClick={() => navigate(`/crm/contacts/${deal.id}`)}
-          >
+          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/crm/contacts/${deal.id}`)}>
             <User className="h-5 w-5 text-gray-600" />
             <div>
               <div className="text-xs font-medium text-gray-600">Contact</div>
@@ -402,63 +460,180 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               <Sparkles className="h-5 w-5 text-purple-600" />
               <span className="text-sm font-semibold text-purple-900">AI Health Score</span>
             </div>
-            <div className={`text-3xl font-bold ${getHealthColor(deal.aiScore)}`}>
-              {deal.aiScore}/100
+            <div className="flex items-center gap-3">
+              {momentumResult && <DealMomentum result={momentumResult} />}
+              <div className={`text-3xl font-bold ${getHealthColor(deal.aiScore)}`}>{deal.aiScore}/100</div>
             </div>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-            <div
-              className={`h-3 rounded-full transition-all duration-300 ${getHealthBarColor(deal.aiScore)}`}
-              style={{ width: `${deal.aiScore}%` }}
-            ></div>
+            <div className={`h-3 rounded-full transition-all duration-300 ${getHealthBarColor(deal.aiScore)}`} style={{ width: `${deal.aiScore}%` }} />
           </div>
-          <div className="text-sm font-medium text-gray-700">
-            {deal.aiHealth}
-          </div>
+          <div className="text-sm font-medium text-gray-700">{deal.aiHealth}</div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="flex items-center space-x-3">
+        {/* ── DESKTOP action bar (hidden on mobile) ── */}
+        <div className="hidden md:flex items-center gap-2.5">
+          {/* Email */}
+          <button onClick={onEmail} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
+            <Mail className="h-4 w-4" />
+            Email
+            <KbdBadge char="E" />
+          </button>
+
+          {/* Call */}
+          <button onClick={onCall} className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm">
+            <Phone className="h-4 w-4" />
+            Call
+            <KbdBadge char="C" />
+          </button>
+
+          {/* Meeting */}
+          <button onClick={onMeeting} className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium text-sm">
+            <CalendarDays className="h-4 w-4" />
+            Meeting
+            <KbdBadge char="M" />
+          </button>
+
+          {/* Proposal */}
+          <button onClick={onProposal} className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm">
+            <FileText className="h-4 w-4" />
+            Proposal
+            <KbdBadge char="P" />
+          </button>
+
+          <div className="flex-1" />
+
+          {/* Move to Next Stage — with tooltip */}
+          <div
+            className="relative"
+            onMouseEnter={() => setShowStageTooltip(true)}
+            onMouseLeave={() => setShowStageTooltip(false)}
+          >
+            <button
+              onClick={hasNextStage ? onMoveStage : undefined}
+              disabled={!hasNextStage}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+            >
+              <TrendingUp className="h-4 w-4" />
+              Move to Next Stage
+              <KbdBadge char="S" />
+            </button>
+            {showStageTooltip && nextStageName && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 shadow-xl pointer-events-none">
+                Move to: <span className="font-semibold">{nextStageName}</span>
+                <span className="text-gray-300"> (Stage {nextStageNum} of {deal.totalStages})</span>
+                {/* Arrow */}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900" />
+              </div>
+            )}
+          </div>
+
+          {/* Update Amount */}
+          <button onClick={onUpdateAmount} className="flex items-center gap-2 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm">
+            <DollarSign className="h-4 w-4" />
+            Update Amount
+            <KbdBadge char="U" />
+          </button>
+
+          {/* "..." action bar menu */}
+          <div className="relative" ref={actionBarMoreRef}>
+            <button
+              onClick={() => setShowActionBarMore(v => !v)}
+              className="p-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              title="More actions"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {showActionBarMore && (
+              <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden py-1">
+                {ACTION_BAR_MORE_ITEMS.map(item => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { onMoreAction(item.id); setShowActionBarMore(false); }}
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      <Icon className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ⌨ Shortcuts hint */}
+          <button
+            onClick={onShowShortcuts}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors px-1"
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+            Shortcuts
+          </button>
+        </div>
+
+        {/* ── MOBILE action row (visible only on mobile) ── */}
+        <div className="flex md:hidden items-center gap-2">
           <button
             onClick={onEmail}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm"
           >
             <Mail className="h-4 w-4" />
-            <span>Email</span>
+            Follow Up
           </button>
           <button
-            onClick={onCall}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+            onClick={() => setShowMobileSheet(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-gray-700 text-white rounded-lg font-medium text-sm"
           >
-            <Phone className="h-4 w-4" />
-            <span>Call</span>
+            <MoreHorizontal className="h-4 w-4" />
+            More Actions
           </button>
-          <button
-            onClick={onMeeting}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
-          >
-            <CalendarDays className="h-4 w-4" />
-            <span>Meeting</span>
-          </button>
-          <button className="flex items-center space-x-2 px-4 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium">
-            <FileText className="h-4 w-4" />
-            <span>Proposal</span>
-          </button>
-          <div className="flex-1"></div>
-          <button
-            onClick={onMoveStage}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
-          >
-            <TrendingUp className="h-4 w-4" />
-            <span>Move to Next Stage</span>
-          </button>
-          <button
-            onClick={onUpdateAmount}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
-          >
-            <DollarSign className="h-4 w-4" />
-            <span>Update Amount</span>
-          </button>
+        </div>
+
+      </div>
+
+      {/* ── MOBILE bottom sheet ──────────────────────────────────────────────── */}
+      <div className={`fixed inset-0 z-50 md:hidden ${showMobileSheet ? '' : 'pointer-events-none'}`}>
+        {/* Backdrop */}
+        <div
+          className={`absolute inset-0 bg-black transition-opacity duration-300 ${showMobileSheet ? 'opacity-40' : 'opacity-0'}`}
+          onClick={() => setShowMobileSheet(false)}
+        />
+        {/* Sheet */}
+        <div className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 ${showMobileSheet ? 'translate-y-0' : 'translate-y-full'}`}>
+          {/* Drag handle */}
+          <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mt-3 mb-1" />
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <span className="text-base font-semibold text-gray-900">Actions</span>
+            <button onClick={() => setShowMobileSheet(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {/* Actions */}
+          <div className="px-3 py-2 pb-8">
+            {mobileActions.map((action) => {
+              const Icon = action.icon;
+              const disabled = action.onClick === undefined;
+              return (
+                <button
+                  key={action.label}
+                  disabled={disabled}
+                  onClick={() => { action.onClick?.(); setShowMobileSheet(false); }}
+                  className="w-full flex items-center gap-3.5 px-3 py-3.5 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <div className={`w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0 ${action.color}`}>
+                    <Icon className="h-4.5 w-4.5" />
+                  </div>
+                  <span className="text-sm font-medium text-gray-800 flex-1 text-left">{action.label}</span>
+                  <kbd className="text-[10px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200">
+                    {action.kbd}
+                  </kbd>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

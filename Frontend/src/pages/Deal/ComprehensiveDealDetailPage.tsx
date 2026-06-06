@@ -4,7 +4,7 @@ import { getDeal, updateDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, X, Keyboard } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
 import { DealDetailsPanel } from '../../components/Deal/DealDetailsPanel';
@@ -25,6 +25,8 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import type { DealValueHistoryEntry } from '../../types/dealManagement';
+import { computeMomentum } from '../../utils/dealMomentum';
+import type { MomentumInput } from '../../utils/dealMomentum';
 
 export const ComprehensiveDealDetailPage: React.FC = () => {
   const { id } = useParams();
@@ -40,6 +42,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showEmailComposer, setShowEmailComposer] = useState(false);
   const [showCallLog, setShowCallLog] = useState(false);
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
@@ -189,6 +192,61 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   }), [deal]);
 
   const healthResult = useMemo(() => calculateDealHealthScore(healthFormData), [healthFormData]);
+
+  // Demo Accelerating — replace these values to show Decelerating:
+  // responseTimesHours:[12,24,48], daysSinceLastTwoWay:6, newStakeholdersLast14Days:0,
+  // stageDaysVsBenchmark:5, stageBenchmark:12, activitiesLast7Days:1, activitiesPrior7Days:4
+  const momentumInput: MomentumInput = {
+    responseTimesHours:       [48, 24, 12],
+    daysSinceLastTwoWay:      2,
+    newStakeholdersLast14Days: 1,
+    stageDaysVsBenchmark:     -3,
+    stageBenchmark:           12,
+    activitiesLast7Days:      4,
+    activitiesPrior7Days:     2,
+  };
+
+  const momentumResult = useMemo(() => computeMomentum(momentumInput), []);
+
+  // Silently persist computed momentum_score to the DB
+  useEffect(() => {
+    if (!id) return;
+    updateDeal(id, { momentum_score: momentumResult.level }).catch(() => {});
+  }, [id, momentumResult.level]);
+
+  // Global keyboard shortcuts — fires when focus is NOT in an input/textarea/select
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      switch (e.key.toLowerCase()) {
+        case 'e':
+          handleSendEmail('john@acme.com', 'Following up on proposal', '');
+          break;
+        case 'c':
+          setShowCallLog(true);
+          break;
+        case 'm':
+          setShowMeetingScheduler(true);
+          break;
+        case 'p':
+          showToast('Proposal creator coming soon', 'info');
+          break;
+        case 's':
+          if (deal.stageNumber < deal.totalStages) setShowStageChange(true);
+          break;
+        case 'u':
+          setShowUpdateAmount(true);
+          break;
+        case '?':
+          setShowShortcuts(true);
+          break;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [deal.stageNumber, deal.totalStages]);
 
   const aiIntelligenceData = {
     winProbability: deal.probability || 67,
@@ -414,20 +472,69 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       id: '1',
       date: 'Dec 2, 2025',
       author: 'Alex Rodriguez',
-      content: 'John seems interested but needs CEO approval. Need to position against Salesforce better. Focus on integration + pricing advantage.'
+      tags: ['Competitor', 'Stakeholder'],
+      content: 'John seems interested but needs CEO approval.\n- Need to position against **Salesforce** more aggressively — this is their incumbent\n- Focus on **integration capabilities** first, then pricing\n- *Budget confirmed at $50K* — no flexibility issue\n@Alex to prep competitive battle card by EOW',
     },
     {
       id: '2',
       date: 'Nov 28, 2025',
       author: 'Alex Rodriguez',
-      content: 'Demo went well. John is champion but CEO is final decision maker. Must get intro to CEO.'
-    }
+      tags: ['Stakeholder', 'Follow-up'],
+      content: 'Demo went *very well*. **John Smith** is our champion but CEO is the final DM.\n- Must get intro to CEO ASAP — deal cannot progress without it\n- Q1 2026 implementation deadline is firm on their side\n@Alex to send intro request email to John by end of this week',
+    },
   ];
 
   const files = [
-    { id: '1', name: 'Proposal_Acme_v2.pdf', size: '2.3 MB', date: 'Dec 2', type: 'pdf' as const },
-    { id: '2', name: 'ROI_Case_Study_SaaS.pdf', size: '1.8 MB', date: 'Nov 28', type: 'pdf' as const },
-    { id: '3', name: 'Integration_Guide.pdf', size: '950 KB', date: 'Dec 2', type: 'pdf' as const }
+    {
+      id: 'f1',
+      name: 'Proposal_Acme_v2.pdf',
+      size: '2.3 MB',
+      date: 'Dec 2',
+      uploadedBy: 'Alex Rodriguez',
+      version: 2,
+      isLatest: true,
+      isSuperseded: false,
+      baseId: 'proposal-acme',
+      isSharedWithBuyer: true,
+      buyerOpenedAt: 'Dec 5, 2025',
+      shareLink: 'https://bmi.app/share/abc123',
+    },
+    {
+      id: 'f1-v1',
+      name: 'Proposal_Acme_v1.pdf',
+      size: '2.1 MB',
+      date: 'Nov 28',
+      uploadedBy: 'Alex Rodriguez',
+      version: 1,
+      isLatest: false,
+      isSuperseded: true,
+      baseId: 'proposal-acme',
+      isSharedWithBuyer: false,
+    },
+    {
+      id: 'f2',
+      name: 'ROI_Case_Study_SaaS.pdf',
+      size: '1.8 MB',
+      date: 'Nov 28',
+      uploadedBy: 'Alex Rodriguez',
+      version: 1,
+      isLatest: true,
+      isSuperseded: false,
+      baseId: 'roi-case-study',
+      isSharedWithBuyer: false,
+    },
+    {
+      id: 'f3',
+      name: 'Integration_Guide.pdf',
+      size: '950 KB',
+      date: 'Dec 2',
+      uploadedBy: 'Sarah Lee',
+      version: 1,
+      isLatest: true,
+      isSuperseded: false,
+      baseId: 'integration-guide',
+      isSharedWithBuyer: false,
+    },
   ];
 
   const sidebarData = {
@@ -528,6 +635,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     switch (action) {
       case 'clone':
         showToast('Deal cloned successfully', 'success');
+        break;
+      case 'merge':
+        showToast('Merge Deal feature coming soon', 'info');
         break;
       case 'change-owner':
         showToast('Use the "Assign Owner" button on the owner card', 'info');
@@ -691,9 +801,12 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onEmail={() => handleSendEmail('john@acme.com', 'Following up on proposal', '')}
         onCall={() => setShowCallLog(true)}
         onMeeting={() => setShowMeetingScheduler(true)}
+        onProposal={() => showToast('Proposal creator coming soon', 'info')}
         onMoveStage={() => setShowStageChange(true)}
         onUpdateAmount={() => setShowUpdateAmount(true)}
         onAssignOwner={handleAssignOwner}
+        onShowShortcuts={() => setShowShortcuts(true)}
+        momentumResult={momentumResult}
       />
 
       {/* Main Content */}
@@ -798,6 +911,72 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         attendees={['John Smith', 'Alex Rodriguez']}
         onSchedule={handleScheduleMeeting}
       />
+
+      {/* ── Keyboard Shortcuts Modal ── */}
+      {showShortcuts && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowShortcuts(false); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowShortcuts(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Keyboard className="h-5 w-5 text-gray-600" />
+                <h2 className="text-base font-semibold text-gray-900">Keyboard Shortcuts</h2>
+              </div>
+              <button
+                onClick={() => setShowShortcuts(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Content */}
+            <div className="px-6 py-5">
+              <p className="text-xs text-gray-500 mb-5">
+                Press these keys anywhere on the deal page — except when typing in a field.
+              </p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Action</th>
+                    <th className="text-right pb-2 font-medium text-gray-500 text-xs uppercase tracking-wide">Key</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {[
+                    { action: 'Email',                   key: 'E',  desc: 'Open email composer'         },
+                    { action: 'Call',                    key: 'C',  desc: 'Log a call'                  },
+                    { action: 'Meeting',                 key: 'M',  desc: 'Schedule a meeting'           },
+                    { action: 'Proposal',                key: 'P',  desc: 'Create a proposal'            },
+                    { action: 'Move to Next Stage',      key: 'S',  desc: 'Advance pipeline stage'       },
+                    { action: 'Update Amount',           key: 'U',  desc: 'Edit deal value'              },
+                    { action: 'Open Shortcuts',          key: '?',  desc: 'Show this panel'              },
+                  ].map(({ action, key, desc }) => (
+                    <tr key={key} className="group">
+                      <td className="py-2.5 pr-4">
+                        <div className="font-medium text-gray-800">{action}</div>
+                        <div className="text-xs text-gray-400">{desc}</div>
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <kbd className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 text-sm font-bold bg-gray-100 text-gray-700 border border-gray-300 rounded-lg shadow-[0_1px_0_0_rgba(0,0,0,0.15)] font-mono">
+                          {key}
+                        </kbd>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Footer */}
+            <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-xs text-gray-400 text-center">
+              Shortcuts are disabled when typing in any input field
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

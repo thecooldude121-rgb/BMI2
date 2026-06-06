@@ -6,6 +6,7 @@ import BreadcrumbNav from '../navigation/BreadcrumbNav';
 
 // Routes that own their own frozen header — suppress breadcrumb and top padding
 const SELF_HEADER_PATTERNS = [
+  /^\/crm\/deals$/,
   /^\/crm\/deals\/(add|create)$/,
   /^\/crm\/deals\/[^/]+\/edit$/,
 ];

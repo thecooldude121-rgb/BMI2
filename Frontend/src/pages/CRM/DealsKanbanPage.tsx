@@ -92,6 +92,7 @@ const DealsKanbanPage: React.FC = () => {
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showViewsOverflow, setShowViewsOverflow] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
   const [highlightedDeals, setHighlightedDeals] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'closeDate' | 'value' | 'health' | 'activity' | 'stage'>('closeDate');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'grid' | 'calendar'>('kanban');
@@ -982,11 +983,8 @@ const DealsKanbanPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ── Unified command bar ─────────────────────────────────────────────────
-          Single sticky strip: view tabs | AI signals | filter+sort+views | actions
-          Left-to-right priority: context → intelligence → tools → creation
-      */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6">
+      {/* ── Row 1: sticky at top-0 — tabs · AI signals · actions ───────────────── */}
+      <div className="sticky top-14 z-20 bg-white border-b border-gray-100 -mx-6 -mt-4 lg:-mt-6">
         <div className="flex items-center h-[52px] px-6 gap-0 overflow-x-auto scrollbar-none">
 
           {/* ── View tabs ──────────────────────────────────────────────── */}
@@ -1170,8 +1168,12 @@ const DealsKanbanPage: React.FC = () => {
 
         </div>
 
-        {/* ── Controls row — Filter · Sort · view icons · density · export · refresh */}
-        <div className="flex items-center gap-1.5 px-6 py-2 border-t border-gray-100">
+      </div>
+
+      {/* ── Row 2: sticky at top-[52px] — Filter · Sort · view icons ─────────────
+          Sticks immediately below Row 1 when scrolling.                         */}
+      <div className="sticky top-[108px] z-10 bg-white border-b border-gray-200 -mx-6">
+        <div className="flex items-center gap-1.5 px-6 py-2">
 
           {(() => {
             const pills = getActiveFilterPills(
@@ -1288,7 +1290,7 @@ const DealsKanbanPage: React.FC = () => {
 
         </div>
 
-        {/* Filter panel — expands below the controls row */}
+        {/* Filter panel — expands inside Row 2's sticky wrapper */}
         {showFilterPanel && (
           <div className="flex items-center gap-2 flex-wrap px-6 py-3 border-t border-gray-100 bg-gray-50/60">
             {([
@@ -1577,8 +1579,10 @@ const DealsKanbanPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  defaultValue="Follow up call"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  placeholder="e.g. Follow up call"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400"
                 />
               </div>
 
@@ -1608,15 +1612,17 @@ const DealsKanbanPage: React.FC = () => {
 
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
               <button
-                onClick={() => setShowTaskModal(false)}
+                onClick={() => { setShowTaskModal(false); setTaskTitle(''); }}
                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => {
-                  console.log('Creating tasks for deals:', aiInsights.needAttention.map(d => d.id));
+                  const title = taskTitle.trim() || undefined;
+                  console.log('Creating tasks for deals:', aiInsights.needAttention.map(d => d.id), { title });
                   setShowTaskModal(false);
+                  setTaskTitle('');
                 }}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >

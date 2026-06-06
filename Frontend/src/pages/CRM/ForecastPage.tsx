@@ -115,6 +115,26 @@ const fmt = (n: number): string => {
   return `$${n.toFixed(0)}`;
 };
 
+/** Zero becomes "—" so rep table cells don't look cluttered with $0 entries. */
+const fmtCell = (n: number): string => n === 0 ? '—' : fmt(n);
+
+/** Human-readable stage label. Falls back to title-casing the raw value. */
+const formatStageName = (stage: string): string => {
+  const labels: Record<string, string> = {
+    prospecting:            'Prospecting',
+    qualified:              'Qualified',
+    proposal:               'Proposal',
+    negotiation:            'Negotiation',
+    'closed-won':           'Closed Won',
+    'closed-lost':          'Closed Lost',
+    'renewal-quoted':       'Renewal Quoted',
+    'renewal-negotiation':  'Renewal Negotiation',
+    'partner-evaluation':   'Partner Evaluation',
+  };
+  if (!stage) return '';
+  return labels[stage] ?? stage.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
 // ── Category config ───────────────────────────────────────────────────────────
 
 const CATEGORY_CONFIG: Record<ForecastCategory, {
@@ -176,11 +196,18 @@ const DealRow: React.FC<{ deal: ForecastDeal }> = ({ deal }) => {
     daysLeft <= 7    ? 'text-amber-600 font-medium' :
     'text-gray-500';
 
+  const secondaryText  = deal.company || (deal.stage ? formatStageName(deal.stage) : '');
+  const secondaryMuted = !deal.company; // stage fallback is dimmer than a real company name
+
   return (
     <div className="flex items-start justify-between py-2 px-3 hover:bg-gray-50 rounded-md transition-colors group">
       <div className="min-w-0 flex-1 mr-2">
         <p className="text-[12px] font-medium text-gray-900 truncate leading-snug">{deal.name}</p>
-        <p className="text-[11px] text-gray-400 truncate">{deal.company || '—'}</p>
+        {secondaryText ? (
+          <p className={`text-[11px] truncate ${secondaryMuted ? 'text-gray-300 italic' : 'text-gray-400'}`}>
+            {secondaryText}
+          </p>
+        ) : null}
       </div>
       <div className="flex-shrink-0 text-right">
         <p className="text-[12px] font-semibold text-gray-900 tabular-nums">{fmt(deal.value)}</p>
@@ -227,10 +254,19 @@ const ForecastPage: React.FC = () => {
           ? d.expected_close_date.split('T')[0]
           : '';
 
+        const rawName   = (d.name || d.title || '').trim();
+        const coName    = (d.company_name || '').trim();
+        const stageLabel = formatStageName(d.stage || '');
+        const resolvedName = rawName
+          || (coName && stageLabel ? `${coName} · ${stageLabel}`
+              : coName              ? coName
+              : stageLabel          ? `${stageLabel} Deal`
+              :                       'Unnamed Deal');
+
         return {
           id:        d.id,
-          name:      d.name || d.title || 'Untitled',
-          company:   d.company_name || '',
+          name:      resolvedName,
+          company:   coName,
           owner:     d.assigned_to || 'Unassigned',
           value:     parseFloat(d.value) || 0,
           stage:     d.stage || '',
@@ -285,7 +321,12 @@ const ForecastPage: React.FC = () => {
       map.set(d.owner, existing);
     });
     return Array.from(map.values())
-      .sort((a, b) => (b.commit + b.closed) - (a.commit + a.closed));
+      .sort((a, b) => {
+        // Unassigned always sinks to the bottom
+        if (a.name === 'Unassigned') return 1;
+        if (b.name === 'Unassigned') return -1;
+        return (b.commit + b.closed) - (a.commit + a.closed);
+      });
   }, [forecastDeals]);
 
   const maxRepTotal = useMemo(
@@ -429,8 +470,13 @@ const ForecastPage: React.FC = () => {
                   {/* Deal list */}
                   <div className="flex-1 overflow-y-auto divide-y divide-gray-50" style={{ maxHeight: '320px' }}>
                     {deals.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-8 px-4">
-                        <p className="text-[12px] text-gray-400 text-center">No deals in this category for {quarter.label}</p>
+                      <div className="flex flex-col items-center justify-center py-8 px-4 gap-2">
+                        <div className={`w-8 h-8 rounded-full ${cfg.bgClass} flex items-center justify-center ${cfg.textClass} opacity-60`}>
+                          {cfg.icon}
+                        </div>
+                        <p className="text-[12px] text-gray-400 text-center leading-snug">
+                          No {cfg.label.toLowerCase()} deals<br />closing in {quarter.label}
+                        </p>
                       </div>
                     ) : (
                       <div className="p-1">
@@ -476,35 +522,43 @@ const ForecastPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {repRows.map((rep, i) => {
+                    const isUnassigned = rep.name === 'Unassigned';
                     const rowTotal = rep.pipeline + rep.bestCase + rep.commit + rep.closed;
                     const barWidth = Math.round((rowTotal / maxRepTotal) * 100);
+                    const initials  = isUnassigned
+                      ? '–'
+                      : rep.name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
                     return (
                       <tr key={rep.name} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span
                               className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
-                              style={{ backgroundColor: '#6366f1' }}
+                              style={{ backgroundColor: isUnassigned ? '#9ca3af' : '#6366f1' }}
                             >
-                              {rep.name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?'}
+                              {initials}
                             </span>
                             <div>
-                              <p className="text-[13px] font-medium text-gray-900 leading-none">{rep.name}</p>
+                              <p className={`text-[13px] font-medium leading-none ${isUnassigned ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+                                {rep.name}
+                              </p>
                               <p className="text-[10px] text-gray-400 mt-0.5">{rep.dealCount} deal{rep.dealCount !== 1 ? 's' : ''}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className="text-[13px] font-medium text-gray-700">{fmt(rep.pipeline)}</span>
+                          <span className="text-[13px] font-medium text-gray-700">{fmtCell(rep.pipeline)}</span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className="text-[13px] font-medium text-gray-700">{fmt(rep.bestCase)}</span>
+                          <span className="text-[13px] font-medium text-gray-700">{fmtCell(rep.bestCase)}</span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className="text-[13px] font-semibold text-emerald-700">{fmt(rep.commit)}</span>
+                          <span className={`text-[13px] font-semibold ${rep.commit > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
+                            {fmtCell(rep.commit)}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className="text-[13px] font-medium text-gray-700">{fmt(rep.closed)}</span>
+                          <span className="text-[13px] font-medium text-gray-700">{fmtCell(rep.closed)}</span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2 justify-end">
@@ -553,20 +607,35 @@ const ForecastPage: React.FC = () => {
           </div>
         </div>
 
-        {/* ── Coming soon — features requiring historical data ──────────────── */}
-        <div className="rounded-lg border border-dashed border-gray-200 bg-white px-5 py-4">
-          <div className="flex items-start gap-3">
-            <Info className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-[13px] font-medium text-gray-700 mb-1">
-                Slippage tracking and commit history are not yet available
-              </p>
-              <p className="text-[12px] text-gray-500 leading-relaxed">
-                These features require period-level forecast snapshots — a point-in-time
-                record of what each rep committed at the start of the quarter.
-                Once snapshots are established, this section will show slipped deals,
-                commit accuracy, and week-over-week coverage trend.
-              </p>
+        {/* ── Planned features — requires historical snapshots ─────────────── */}
+        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50/60">
+            <Clock className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-[12px] font-semibold text-gray-600 uppercase tracking-wider">Planned Features</span>
+            <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">
+              Coming soon
+            </span>
+          </div>
+          <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[13px] font-medium text-gray-700 mb-0.5">Slippage Tracking</p>
+                <p className="text-[12px] text-gray-400 leading-relaxed">
+                  Shows deals that slipped out of the quarter versus the opening commit.
+                  Requires period-level snapshots captured at quarter start.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <BarChart3 className="h-4 w-4 text-indigo-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[13px] font-medium text-gray-700 mb-0.5">Commit Accuracy</p>
+                <p className="text-[12px] text-gray-400 leading-relaxed">
+                  Week-over-week coverage trend and rep commit vs actual closed.
+                  Unlocks once snapshot history accumulates over two or more periods.
+                </p>
+              </div>
             </div>
           </div>
         </div>

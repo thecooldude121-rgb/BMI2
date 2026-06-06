@@ -92,6 +92,7 @@ export interface DealPayload {
   contract_term?: string;
   payment_terms?: string;
   value_change_reason?: string;
+  momentum_score?: string;
 }
 
 export async function createDeal(payload: DealPayload): Promise<{ success: boolean; data: any }> {
