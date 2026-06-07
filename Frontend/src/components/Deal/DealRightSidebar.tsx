@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Target, TrendingUp, Calendar, AlertTriangle, TrendingDown, Eye, BarChart3, Database, CheckCircle2, Mail, Phone, Video, RefreshCw } from 'lucide-react';
+import { TrendingUp, Calendar, Eye, BarChart3, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { PredictedCloseDateModal, SimilarityBreakdownModal, DataVerificationModal } from './DealActivityModals';
-import { useToast } from '../../contexts/ToastContext';
+import { PredictedCloseDateModal, SimilarityBreakdownModal } from './DealActivityModals';
 
 interface ScoreBreakdown {
   category: string;
@@ -71,12 +70,6 @@ interface DealRightSidebarProps {
     weightedValue: number;
     quotaContribution: number;
   };
-  dataSources: {
-    createdFrom: string[];
-    enrichedFrom: string[];
-    lastEnriched: string;
-    accuracy: number;
-  };
 }
 
 export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
@@ -85,33 +78,11 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
   similarDeals,
   similarInsights,
   metrics,
-  dataSources
 }) => {
   const navigate = useNavigate();
-  const { showToast } = useToast();
   const [showCloseDateModal, setShowCloseDateModal] = useState(false);
   const [showSimilarityModal, setShowSimilarityModal] = useState(false);
-  const [showVerifyDataModal, setShowVerifyDataModal] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<SimilarDeal | null>(null);
-  const [isEnriching, setIsEnriching] = useState(false);
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getScoreBarColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
-
-  const getStars = (count: number) => {
-    return '⭐'.repeat(count) + '☆'.repeat(5 - count);
-  };
 
   const getRiskColor = (level: string) => {
     switch (level) {
@@ -137,23 +108,6 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
       default:
         return '⚪';
     }
-  };
-
-  const handleReEnrich = () => {
-    setIsEnriching(true);
-    showToast('info', 'Refreshing deal data from all sources...');
-    setTimeout(() => {
-      setIsEnriching(false);
-      showToast('success', 'Deal data refreshed successfully!');
-    }, 2000);
-  };
-
-  const handleVerifyData = () => {
-    setShowVerifyDataModal(true);
-  };
-
-  const handleVerifyComplete = () => {
-    showToast('success', 'Data verified and updated!');
   };
 
   const handleSimilarityClick = (deal: SimilarDeal) => {
@@ -377,99 +331,32 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Forecast Impact:</div>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">This Quarter:</span>
-                <span className="font-medium text-gray-900">${(metrics.quarterlyForecast / 1000).toFixed(0)}K</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Weighted Value:</span>
-                <span className="font-medium text-gray-900">${(metrics.weightedValue / 1000).toFixed(1)}K ({Math.round((metrics.weightedValue / metrics.quarterlyForecast) * 100)}% probability)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Contribution to Quota:</span>
-                <span className="font-medium text-gray-900">{metrics.quotaContribution}%</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Data Sources */}
+      {/* Forecast Impact */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <Database className="h-6 w-6 text-gray-600" />
-            <h2 className="text-lg font-bold text-gray-900">Data Sources</h2>
-          </div>
-          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">ATTRIBUTION</span>
+        <div className="flex items-center space-x-2 mb-4">
+          <BarChart3 className="h-6 w-6 text-green-600" />
+          <h2 className="text-lg font-bold text-gray-900">Forecast Impact</h2>
         </div>
-
-        <div className="space-y-4">
-          {/* Source Journey Highlight */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 border-2 border-blue-200 mb-3">
-            <div className="flex items-center space-x-2 mb-2">
-              <Target className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-bold text-blue-900">🎯 Source Journey</span>
-            </div>
-            <div className="text-sm text-blue-800 font-medium">
-              Lead Gen (Apollo.io) → Lead → Deal
-            </div>
-            <div className="text-xs text-blue-700 mt-1">
-              Full attribution tracking from discovery to close
-            </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">This Quarter</span>
+            <span className="text-lg font-bold text-gray-900">
+              ${(metrics.quarterlyForecast / 1000).toFixed(0)}K
+            </span>
           </div>
-
-          <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">Deal created from:</div>
-            <div className="space-y-1">
-              {dataSources.createdFrom.map((source, idx) => (
-                <div key={idx} className="flex items-center space-x-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="text-gray-900">{source}</span>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Weighted Value</span>
+            <span className="text-sm font-medium text-gray-900">
+              ${(metrics.weightedValue / 1000).toFixed(1)}K
+              ({Math.round((metrics.weightedValue / metrics.quarterlyForecast) * 100)}% probability)
+            </span>
           </div>
-
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Enriched from:</div>
-            <div className="space-y-1">
-              {dataSources.enrichedFrom.map((source, idx) => (
-                <div key={idx} className="flex items-center space-x-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-blue-500" />
-                  <span className="text-gray-900">{source}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm text-gray-600 mb-1">
-              Last enriched: <span className="font-medium text-gray-900">{dataSources.lastEnriched}</span>
-            </div>
-            <div className="text-sm text-gray-600 mb-3">
-              Accuracy: <span className="font-medium text-green-600">{dataSources.accuracy}%</span>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={handleReEnrich}
-                disabled={isEnriching}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-              >
-                <RefreshCw className={`h-4 w-4 ${isEnriching ? 'animate-spin' : ''}`} />
-                <span>{isEnriching ? 'Enriching...' : 'Re-enrich Now'}</span>
-              </button>
-              <button
-                onClick={handleVerifyData}
-                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
-              >
-                Verify Data
-              </button>
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Contribution to Quota</span>
+            <span className="text-sm font-bold text-blue-600">{metrics.quotaContribution}%</span>
           </div>
         </div>
       </div>
@@ -507,19 +394,6 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
         />
       )}
 
-      <DataVerificationModal
-        isOpen={showVerifyDataModal}
-        onClose={() => setShowVerifyDataModal(false)}
-        onVerify={handleVerifyComplete}
-        fieldsToVerify={[
-          { field: 'Company Name', currentValue: 'Acme Corp', needsVerification: false },
-          { field: 'Deal Amount', currentValue: '$50,000', needsVerification: false },
-          { field: 'Close Date', currentValue: 'March 15, 2026', needsVerification: true },
-          { field: 'Contact Email', currentValue: 'john@acme.com', needsVerification: false },
-          { field: 'Company Size', currentValue: '75 employees', needsVerification: true },
-          { field: 'Industry', currentValue: 'SaaS', needsVerification: false }
-        ]}
-      />
     </div>
   );
 };

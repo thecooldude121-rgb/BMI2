@@ -48,6 +48,28 @@ interface DealActivityTimelineProps {
   contacts?: { id: string; name: string }[];
 }
 
+// ── Heatmap helpers ───────────────────────────────────────────────────────────
+
+/** Returns "May 30–Jun 5" style label for a given bucket index (0 = current week). */
+function getWeekLabel(bucketIdx: number): string {
+  const now = new Date();
+  const endMs   = now.getTime() - bucketIdx * 7 * 86_400_000;
+  const startMs = endMs - 6 * 86_400_000;
+  const fmt = (ms: number) =>
+    new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${fmt(startMs)}–${fmt(endMs)}`;
+}
+
+/** Maps an activity count to a heat-intensity colour. */
+function heatmapSquareColor(count: number): string {
+  if (count === 0) return '#F3F4F6';
+  if (count === 1) return '#BFDBFE';
+  if (count === 2) return '#60A5FA';
+  return '#2563EB';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, daysSinceLastContact, contacts }) => {
   const [filterType, setFilterType] = useState<string>('all');
   const [heatmapView, setHeatmapView] = useState<'combined' | 'per-contact'>('combined');
@@ -65,15 +87,23 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
     [activities],
   );
 
-  const perContactBuckets = useMemo(() => {
-    if (!contacts) return [];
-    return contacts.map(contact => ({
-      contact,
-      buckets: computeWeeklyBuckets(
-        activities.filter(a => a.contactId === contact.id).map(a => a.isoDate),
-      ),
-    })).filter(row => row.buckets.some(b => b > 0));
+  // Buckets for the primary contact (first in the contacts list)
+  const primaryContactBuckets = useMemo(() => {
+    const primary = contacts?.[0];
+    if (!primary) return new Array(8).fill(0) as number[];
+    return computeWeeklyBuckets(
+      activities.filter(a => a.contactId === primary.id).map(a => a.isoDate),
+    );
   }, [activities, contacts]);
+
+  // Derived heatmap values — recomputed when toggle switches
+  const { activeBuckets, heatmapTotal, heatmapPeakIdx, heatmapPeakCount } = useMemo(() => {
+    const buckets = heatmapView === 'combined' ? combinedBuckets : primaryContactBuckets;
+    const total      = buckets.reduce((s, n) => s + n, 0);
+    const peakCount  = Math.max(...buckets, 0);
+    const peakIdx    = peakCount > 0 ? buckets.indexOf(peakCount) : 0;
+    return { activeBuckets: buckets, heatmapTotal: total, heatmapPeakIdx: peakIdx, heatmapPeakCount: peakCount };
+  }, [heatmapView, combinedBuckets, primaryContactBuckets]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -230,62 +260,54 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
           </div>
         </div>
 
-        {heatmapView === 'combined' ? (
-          /* Combined bar chart — 8 cells, opacity-scaled, oldest on left */
-          <div>
-            <div className="flex items-end gap-1 h-10">
-              {[...combinedBuckets].reverse().map((count, i) => {
-                const maxCount = Math.max(...combinedBuckets, 1);
-                const heightPct = Math.max((count / maxCount) * 100, count > 0 ? 15 : 0);
+        {heatmapTotal === 0 ? (
+          /* Empty state */
+          <div className="flex flex-col items-center justify-center py-5 text-center gap-3">
+            <p className="text-sm text-gray-500 max-w-xs">
+              No activity recorded yet. Log your first activity to start tracking engagement.
+            </p>
+            <button
+              onClick={() => setShowLogActivity(true)}
+              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors flex items-center gap-1"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Log Activity
+            </button>
+          </div>
+        ) : (
+          /* Coloured squares — oldest left, newest right */
+          <>
+            <div className="flex items-center gap-1 mb-1.5">
+              {[...activeBuckets].reverse().map((count, displayIdx) => {
+                const bucketIdx = 7 - displayIdx;
                 return (
                   <div
-                    key={i}
-                    className="flex-1 flex flex-col justify-end"
-                    title={`${count} activit${count === 1 ? 'y' : 'ies'} (${7 - i} weeks ago)`}
-                  >
-                    <div
-                      className="rounded-sm bg-blue-500 transition-all"
-                      style={{ height: `${heightPct}%`, opacity: count > 0 ? 0.3 + 0.7 * (count / Math.max(...combinedBuckets, 1)) : 0.08 }}
-                    />
-                  </div>
+                    key={displayIdx}
+                    title={`Week of ${getWeekLabel(bucketIdx)}: ${count} activit${count === 1 ? 'y' : 'ies'}`}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 4,
+                      backgroundColor: heatmapSquareColor(count),
+                      flexShrink: 0,
+                      cursor: 'default',
+                    }}
+                  />
                 );
               })}
             </div>
-            <div className="flex justify-between mt-1">
+            <div className="flex justify-between mb-2">
               <span className="text-[9px] text-gray-400">8 wks ago</span>
               <span className="text-[9px] text-gray-400">This week</span>
             </div>
-          </div>
-        ) : (
-          /* Per-contact rows — each scaled to its own max */
-          <div className="space-y-2">
-            {perContactBuckets.length === 0 ? (
-              <div className="text-xs text-gray-400 text-center py-2">No contact-tagged activities yet</div>
-            ) : perContactBuckets.map(({ contact, buckets }) => {
-              const maxCount = Math.max(...buckets, 1);
-              return (
-                <div key={contact.id} className="flex items-center gap-2">
-                  <span className="w-20 text-xs text-gray-600 truncate flex-shrink-0">{contact.name.split(' ')[0]}</span>
-                  <div className="flex items-end gap-0.5 h-6 flex-1">
-                    {[...buckets].reverse().map((count, i) => (
-                      <div key={i} className="flex-1 flex flex-col justify-end h-6" title={`${count} activit${count === 1 ? 'y' : 'ies'}`}>
-                        <div
-                          className="rounded-sm bg-blue-500 transition-all"
-                          style={{
-                            height: count > 0 ? `${Math.max((count / maxCount) * 100, 20)}%` : '4px',
-                            opacity: count > 0 ? 0.3 + 0.7 * (count / maxCount) : 0.08,
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-            <div className="flex justify-end">
-              <span className="text-[9px] text-gray-400">← 8 wks ago · This week →</span>
-            </div>
-          </div>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              Peak week: {getWeekLabel(heatmapPeakIdx)} ({heatmapPeakCount}{' '}
+              {heatmapPeakCount === 1 ? 'activity' : 'activities'})
+              {' · '}
+              Total last 8 weeks: {heatmapTotal}{' '}
+              {heatmapTotal === 1 ? 'activity' : 'activities'}
+            </p>
+          </>
         )}
       </div>
 

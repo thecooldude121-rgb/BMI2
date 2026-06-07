@@ -12,6 +12,7 @@ import { DealAccountContacts } from '../../components/Deal/DealAccountContacts';
 import { BuyingCommitteeMap } from '../../components/Deal/BuyingCommitteeMap';
 import { DealActivityTimeline } from '../../components/Deal/DealActivityTimeline';
 import { DealNotesFiles } from '../../components/Deal/DealNotesFiles';
+import { DealDataAttribution } from '../../components/Deal/DealDataAttribution';
 import { DealRightSidebar } from '../../components/Deal/DealRightSidebar';
 import {
   StageChangeModal,
@@ -1040,6 +1041,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                 account={accountData}
                 contacts={contacts}
                 hrmsConnection={hrmsConnection}
+                dataQuality={{ accuracy: sidebarData.dataSources.accuracy, lastEnriched: sidebarData.dataSources.lastEnriched }}
                 onViewAccount={handleViewAccount}
                 onAddToHRMS={handleAddToHRMS}
                 onFindCEO={() => setShowFindCEO(true)}
@@ -1088,6 +1090,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <div ref={filesNotesRef}>
               <DealNotesFiles notes={notes} files={files} />
             </div>
+
+            {/* Data Attribution — collapsible, persists in localStorage */}
+            <DealDataAttribution dataSources={sidebarData.dataSources} />
           </div>
 
           {/* Right Sidebar (35% width) */}

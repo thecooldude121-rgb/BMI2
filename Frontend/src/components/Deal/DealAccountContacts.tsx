@@ -59,6 +59,7 @@ interface DealAccountContactsProps {
   onAddContact?: (role?: string) => void;
   onEmail?: (to: string, subject: string, body: string) => void;
   onCall?: () => void;
+  dataQuality?: { accuracy: number; lastEnriched: string };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
   onAddContact,
   onEmail,
   onCall,
+  dataQuality,
 }) => {
   const navigate = useNavigate();
   const [showBreakdownModal, setShowBreakdownModal] = useState(false);
@@ -181,7 +183,15 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
 
       {/* Account Information */}
       <div className="mb-6 pb-6 border-b border-gray-200">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">{account.name}</h3>
+        <div className="flex items-center gap-2 mb-4">
+          <h3 className="text-lg font-bold text-gray-900">{account.name}</h3>
+          {dataQuality && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-medium rounded-full border border-green-200 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+              {dataQuality.accuracy}% accurate · enriched {dataQuality.lastEnriched}
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <span className="text-sm text-gray-600">Industry:</span>
