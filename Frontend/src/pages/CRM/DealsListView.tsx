@@ -1,11 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { formatDisplayDate, formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
+import React, { useState, useEffect, useRef } from 'react';
+import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, Filter, Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
-  Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal, Plus,
-  CheckCircle2, AlertTriangle, TrendingUp, Clock, Target, Zap, X, Check, Edit, Copy, Trash2
+  Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
+  Building2, User, Sparkles, Mail, Phone, Eye, MoreHorizontal,
+  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical
 } from 'lucide-react';
+import { formatAmountUSD } from '../../utils/currencyUtils';
+import { explainDealHealth } from '../../utils/dealHealthDrivers';
+import type { DealCard } from '../../components/Deal/DealKanbanCard';
+import { getStageStyle } from '../../config/stageColors';
 
 interface Deal {
   id: string;
@@ -27,6 +31,9 @@ interface Deal {
   source: string;
   status?: string;
   hrmsDetails?: string;
+  nextStep?: string;
+  nextStepDueDate?: string;
+  createdAt?: string;
 }
 
 interface PipelineStage {
@@ -42,15 +49,51 @@ interface DealsListViewProps {
   onStageChange?: (dealId: string, newStage: string) => void;
 }
 
+// ── Column definitions ────────────────────────────────────────────────────────
+
+type ColumnKey =
+  | 'dealName' | 'account' | 'owner' | 'contact'
+  | 'value' | 'stage' | 'closeDate' | 'lastActivity'
+  | 'nextStep' | 'dealAge' | 'probability' | 'source'
+  | 'health' | 'actions';
+
+const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
+  { key: 'dealName',     label: 'Deal Name'       },
+  { key: 'account',      label: 'Account'         },
+  { key: 'owner',        label: 'Owner'           },
+  { key: 'contact',      label: 'Primary Contact' },
+  { key: 'value',        label: 'Value'           },
+  { key: 'stage',        label: 'Stage'           },
+  { key: 'closeDate',    label: 'Close Date'      },
+  { key: 'lastActivity', label: 'Last Activity'   },
+  { key: 'nextStep',     label: 'Next Step'       },
+  { key: 'dealAge',      label: 'Deal Age'        },
+  { key: 'probability',  label: 'Probability'     },
+  { key: 'source',       label: 'Source'          },
+  { key: 'health',       label: 'Health'          },
+  { key: 'actions',      label: 'Actions'         },
+];
+
+const DEFAULT_ORDER: ColumnKey[] = [
+  'dealName', 'account', 'owner', 'contact',
+  'value', 'stage', 'closeDate', 'lastActivity',
+  'nextStep', 'dealAge', 'probability', 'source',
+  'health', 'actions',
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onStageChange }) => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [selectedCloseDate, setSelectedCloseDate] = useState<string>('all');
   const [selectedValue, setSelectedValue] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'deal' | 'value' | 'stage' | 'closeDate' | 'health'>('closeDate');
+  const [sortBy, setSortBy] = useState<
+    'deal' | 'account' | 'value' | 'stage' | 'closeDate' | 'health'
+    | 'owner' | 'contact' | 'probability' | 'dealAge' | 'source'
+  >('closeDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
@@ -66,15 +109,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const [showEmailModal, setShowEmailModal] = useState<Deal | null>(null);
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
   const [showHRMSModal, setShowHRMSModal] = useState<Deal | null>(null);
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => new Set(DEFAULT_ORDER));
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([...DEFAULT_ORDER]);
+  const dragKey = useRef<ColumnKey | null>(null);
 
   const allDeals: Deal[] = stages.flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })));
 
   const filteredDeals = allDeals.filter(deal => {
-    const matchesSearch = searchTerm === '' ||
-      deal.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.dealName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.contactName.toLowerCase().includes(searchTerm.toLowerCase());
-
     const matchesStage = selectedStage === 'all' || deal.stage === selectedStage;
     const matchesOwner = selectedOwner === 'all' || deal.owner === selectedOwner;
 
@@ -84,29 +126,33 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
       (selectedCloseDate === 'quarter' && isWithinDays(deal.closeDate, 90));
 
     const matchesValue = selectedValue === 'all' ||
-      (selectedValue === '0-25k' && deal.amount < 25000) ||
-      (selectedValue === '25-50k' && deal.amount >= 25000 && deal.amount < 50000) ||
-      (selectedValue === '50-100k' && deal.amount >= 50000 && deal.amount < 100000) ||
-      (selectedValue === '100k+' && deal.amount >= 100000);
+      (selectedValue === '0-25k'   && deal.amount < 25000) ||
+      (selectedValue === '25-50k'  && deal.amount >= 25000  && deal.amount < 50000) ||
+      (selectedValue === '50-100k' && deal.amount >= 50000  && deal.amount < 100000) ||
+      (selectedValue === '100k+'   && deal.amount >= 100000);
 
     const matchesSource = selectedSource === 'all' || deal.source.includes(selectedSource);
 
-    return matchesSearch && matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
+    return matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
   });
 
   const sortedDeals = [...filteredDeals].sort((a, b) => {
     let comparison = 0;
-    switch(sortBy) {
+    switch (sortBy) {
       case 'deal':
-        comparison = a.companyName.localeCompare(b.companyName);
+        comparison = a.dealName.localeCompare(b.dealName);
+        break;
+      case 'account':
+        comparison = (a.companyName || '').localeCompare(b.companyName || '');
         break;
       case 'value':
         comparison = a.amount - b.amount;
         break;
-      case 'stage':
+      case 'stage': {
         const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
         comparison = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
         break;
+      }
       case 'closeDate':
         // parseDateMs returns Infinity for empty/invalid dates — sorts them to end, never NaN
         comparison = parseDateMs(a.closeDate) - parseDateMs(b.closeDate);
@@ -114,37 +160,31 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
       case 'health':
         comparison = a.aiScore - b.aiScore;
         break;
+      case 'owner':
+        comparison = (a.owner || '').localeCompare(b.owner || '');
+        break;
+      case 'contact':
+        comparison = (a.contactName || '').localeCompare(b.contactName || '');
+        break;
+      case 'probability':
+        // TODO: rename aiScore → probability
+        comparison = a.aiScore - b.aiScore;
+        break;
+      case 'dealAge': {
+        const msA = a.createdAt ? Date.now() - new Date(a.createdAt).getTime() : 0;
+        const msB = b.createdAt ? Date.now() - new Date(b.createdAt).getTime() : 0;
+        comparison = msA - msB;
+        break;
+      }
+      case 'source':
+        comparison = (a.source || '').localeCompare(b.source || '');
+        break;
     }
     return sortOrder === 'asc' ? comparison : -comparison;
   });
 
-  // Replaced three duplicated isWithinWeek/Month/Quarter with isWithinDays from dateUtils.
-  // The old versions used bare new Date() with no null guard — invalid dates silently
-  // returned false rather than being excluded. isWithinDays handles all edge cases.
+  const formatDate = formatCloseDate;
 
-  const formatCurrency = (amount: number) => {
-    if (amount >= 1000000) {
-      return `$${(amount / 1000000).toFixed(1)}M`;
-    } else if (amount >= 1000) {
-      return `$${(amount / 1000).toFixed(0)}K`;
-    }
-    return `$${amount}`;
-  };
-
-  const formatDate = formatCloseDate; // formatCloseDate returns "No close date" for missing values
-  const getDaysAway = daysFromNow;
-
-  const getStageColor = (stageId: string) => {
-    switch(stageId) {
-      case 'prospecting': return { bg: '#2196F3', text: '#ffffff' };
-      case 'qualified': return { bg: '#4CAF50', text: '#ffffff' };
-      case 'proposal': return { bg: '#FF9800', text: '#ffffff' };
-      case 'negotiation': return { bg: '#9C27B0', text: '#ffffff' };
-      case 'closed-won': return { bg: '#2E7D32', text: '#ffffff' };
-      case 'closed-lost': return { bg: '#D32F2F', text: '#ffffff' };
-      default: return { bg: '#757575', text: '#ffffff' };
-    }
-  };
 
   const getStageName = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);
@@ -153,27 +193,50 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
 
   const getStageProgress = (stageId: string) => {
     const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-    const currentIndex = stageOrder.indexOf(stageId);
-    return `${currentIndex + 1} of ${stageOrder.length}`;
+    return `${stageOrder.indexOf(stageId) + 1} of ${stageOrder.length}`;
   };
 
-  const getHealthText = (health: string) => {
-    switch(health) {
-      case 'excellent': return 'Excellent';
-      case 'healthy': return 'Good';
-      case 'at-risk': return 'Very Good';
-      case 'critical': return 'Fair';
-      default: return health;
-    }
+
+  const getInitials = (name: string): string => {
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   };
 
-  const getHealthStars = (aiScore: number) => {
-    if (aiScore >= 90) return '⭐⭐⭐⭐⭐';
-    if (aiScore >= 80) return '⭐⭐⭐⭐';
-    if (aiScore >= 70) return '⭐⭐⭐';
-    if (aiScore >= 60) return '⭐⭐';
-    return '⭐';
+  const getDealAgeDays = (createdAt?: string): number => {
+    if (!createdAt) return 0;
+    return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
   };
+
+  // Coerce Deal → DealCard shape so explainDealHealth can run on list-view rows.
+  // Fields unavailable here (stakeholders, competitorCount) are omitted → those
+  // specific drivers are skipped by explainDealHealth's null/undefined checks.
+  const toDealCardLite = (deal: Deal): DealCard => ({
+    id: deal.id,
+    companyName: deal.companyName ?? '',
+    dealName: deal.dealName ?? '',
+    accountName: deal.accountName ?? '',
+    amount: deal.amount,
+    closeDate: deal.closeDate,
+    stage: deal.stage,
+    aiScore: deal.aiScore,
+    contactName: deal.contactName ?? '',
+    contactTitle: deal.contactTitle ?? '',
+    owner: deal.owner ?? '',
+    lastActivity: deal.lastActivity ?? '',
+    daysSinceContact: deal.daysSinceContact ?? 0,
+    isHRMS: deal.isHRMS ?? false,
+    priority: deal.priority ?? 'low',
+    health: (['healthy', 'at-risk', 'stalled'] as const).includes(deal.health as never)
+      ? (deal.health as 'healthy' | 'at-risk' | 'stalled')
+      : deal.health === 'excellent' ? 'healthy'
+      : deal.health === 'critical'  ? 'stalled'
+      : 'healthy',
+    source: deal.source ?? '',
+    nextStep: deal.nextStep,
+    nextStepDueDate: deal.nextStepDueDate,
+  });
 
   const toggleRowExpansion = (dealId: string) => {
     setExpandedRows(prev =>
@@ -211,16 +274,26 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   };
 
   const handleStageChange = (dealId: string, newStage: string) => {
-    if (onStageChange) {
-      onStageChange(dealId, newStage);
-    }
+    if (onStageChange) onStageChange(dealId, newStage);
     setShowStageModal(null);
   };
 
   const handleBulkDelete = () => {
-    console.log('Deleting deals:', selectedDeals);
     setSelectedDeals([]);
     setShowDeleteModal(false);
+  };
+
+  const toggleColumn = (key: ColumnKey) => {
+    setVisibleColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) { next.delete(key); } else { next.add(key); }
+      return next;
+    });
+  };
+
+  const resetColumns = () => {
+    setColumnOrder([...DEFAULT_ORDER]);
+    setVisibleColumns(new Set(DEFAULT_ORDER));
   };
 
   useEffect(() => {
@@ -231,6 +304,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     const handleClickOutside = () => {
       setContextMenuDeal(null);
       setShowActionDropdown(null);
+      setShowColumnSettings(false);
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -242,14 +316,472 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const stalledDeals = sortedDeals.filter(d => d.daysSinceContact >= 5).length;
   const avgDaysCycle = 45;
 
+  const orderedVisible = columnOrder.filter(k => visibleColumns.has(k));
+  // +1 for the always-visible checkbox column
+  const visibleColCount = 1 + orderedVisible.length;
+
   const SortIcon = ({ column }: { column: typeof sortBy }) => {
     if (sortBy !== column) return null;
     return sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
   };
 
+  const renderHeader = (key: ColumnKey): React.ReactNode => {
+    const thBase = 'text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider';
+    const thSort = thBase + ' cursor-pointer hover:bg-gray-100';
+    switch (key) {
+      case 'dealName':
+        return <th key="dealName" className={thSort} onClick={() => handleSort('deal')}><div className="flex items-center space-x-1"><span>Deal Name</span><SortIcon column="deal" /></div></th>;
+      case 'account':
+        return <th key="account" className={thSort} onClick={() => handleSort('account')}><div className="flex items-center space-x-1"><span>Account</span><SortIcon column="account" /></div></th>;
+      case 'owner':
+        return <th key="owner" className={thSort} onClick={() => handleSort('owner')}><div className="flex items-center space-x-1"><span>Owner</span><SortIcon column="owner" /></div></th>;
+      case 'contact':
+        return <th key="contact" className={thSort} onClick={() => handleSort('contact')}><div className="flex items-center space-x-1"><span>Primary Contact</span><SortIcon column="contact" /></div></th>;
+      case 'value':
+        return <th key="value" className={thSort} onClick={() => handleSort('value')}><div className="flex items-center space-x-1"><span>Value</span><SortIcon column="value" /></div></th>;
+      case 'stage':
+        return <th key="stage" className={thSort} onClick={() => handleSort('stage')}><div className="flex items-center space-x-1"><span>Stage</span><SortIcon column="stage" /></div></th>;
+      case 'closeDate':
+        return <th key="closeDate" className={thSort} onClick={() => handleSort('closeDate')}><div className="flex items-center space-x-1"><span>Close Date</span><SortIcon column="closeDate" /></div></th>;
+      case 'lastActivity':
+        return <th key="lastActivity" className={thBase}>Last Activity</th>;
+      case 'nextStep':
+        return <th key="nextStep" className={thBase}>Next Step</th>;
+      case 'dealAge':
+        return <th key="dealAge" className={thSort} onClick={() => handleSort('dealAge')}><div className="flex items-center space-x-1"><span>Deal Age</span><SortIcon column="dealAge" /></div></th>;
+      case 'probability':
+        return <th key="probability" className={thSort} onClick={() => handleSort('probability')}><div className="flex items-center space-x-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
+      case 'source':
+        return <th key="source" className={thSort} onClick={() => handleSort('source')}><div className="flex items-center space-x-1"><span>Source</span><SortIcon column="source" /></div></th>;
+      case 'health':
+        return <th key="health" className={thSort} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><span>Health</span><SortIcon column="health" /></div></th>;
+      case 'actions':
+        return <th key="actions" className={thBase}>Actions</th>;
+      default:
+        return null;
+    }
+  };
+
+  const renderCell = (key: ColumnKey, deal: Deal, isExpanded: boolean): React.ReactNode => {
+    const stageColor = getStageStyle(deal.stage);
+
+    switch (key) {
+      case 'dealName':
+        return (
+          <td key="dealName" className="px-4 py-3 max-w-[260px]">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span
+                    className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 leading-snug"
+                    onClick={() => navigate(`/crm/deals/${deal.id}`)}
+                  >
+                    {deal.dealName}
+                  </span>
+                  {deal.isHRMS && (
+                    <span
+                      className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded cursor-pointer hover:opacity-80"
+                      style={{ backgroundColor: '#fff3cd', border: '1px solid #f59e0b', color: '#92400e' }}
+                      onClick={(e) => { e.stopPropagation(); setShowHRMSModal(deal); }}
+                      title="HRMS-connected deal"
+                    >
+                      HRMS
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => toggleRowExpansion(deal.id)}
+                className="flex-shrink-0 p-0.5 hover:bg-gray-100 rounded mt-0.5"
+                title={isExpanded ? 'Collapse' : 'Expand row'}
+              >
+                {isExpanded
+                  ? <ChevronUp className="h-4 w-4 text-gray-400" />
+                  : <ChevronDown className="h-4 w-4 text-gray-400" />}
+              </button>
+            </div>
+          </td>
+        );
+
+      case 'account':
+        return (
+          <td key="account" className="px-4 py-3 max-w-[200px]">
+            {deal.companyName ? (
+              <div className="flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                <span className="text-sm text-gray-900 truncate">{deal.companyName}</span>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </td>
+        );
+
+      case 'owner': {
+        const firstName = deal.owner ? deal.owner.split(' ')[0] : '';
+        return (
+          <td key="owner" className="px-4 py-3">
+            {deal.owner ? (
+              <div className="flex items-center gap-1.5">
+                <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] font-semibold text-indigo-700">{getInitials(deal.owner)}</span>
+                </div>
+                <span className="text-sm text-gray-700">{firstName}</span>
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </td>
+        );
+      }
+
+      case 'contact':
+        return (
+          <td key="contact" className="px-4 py-3">
+            {deal.contactName ? (
+              <div>
+                <div className="text-sm text-gray-900">{deal.contactName}</div>
+                {deal.contactTitle && (
+                  <div className="text-[11px] text-gray-400 truncate max-w-[160px]">{deal.contactTitle}</div>
+                )}
+              </div>
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </td>
+        );
+
+      case 'value':
+        return (
+          <td key="value" className="px-4 py-3">
+            <div
+              className="text-lg font-bold cursor-pointer hover:underline"
+              style={{ color: '#667eea' }}
+              onClick={() => navigate(`/crm/deals/${deal.id}`)}
+            >
+              {formatAmountUSD(deal.amount)}
+            </div>
+          </td>
+        );
+
+      case 'stage':
+        return (
+          <td key="stage" className="px-4 py-3">
+            <div className="relative">
+              <div
+                className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium cursor-pointer hover:opacity-80"
+                style={{ backgroundColor: stageColor.bg, color: stageColor.text }}
+                onClick={(e) => { e.stopPropagation(); setShowStageModal(deal.id); }}
+                onMouseEnter={() => setHoveredStage(deal.id)}
+                onMouseLeave={() => setHoveredStage(null)}
+              >
+                {getStageName(deal.stage)}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Stage {getStageProgress(deal.stage)}
+              </div>
+              {hoveredStage === deal.id && (
+                <div className="absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+                  <div className="text-sm font-semibold text-gray-900 mb-3">Deal Progress:</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span className="text-gray-700">Prospecting (5 days)</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span className="text-gray-700">Qualified (8 days)</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span className="text-gray-700">Proposal (12 days)</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm font-medium">
+                      <div className="h-4 w-4 flex items-center justify-center">➡️</div>
+                      <span className="text-gray-900">{getStageName(deal.stage)} (15 days) [NOW]</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-400">
+                      <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                      <span>Closed-Won</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-400">
+                      <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                      <span>Closed-Lost</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
+                    <div>Total: 40 days in pipeline</div>
+                    <div>Avg cycle: {avgDaysCycle} days</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </td>
+        );
+
+      case 'closeDate':
+        return (
+          <td key="closeDate" className="px-4 py-3">
+            <div className="text-sm text-gray-900">{formatDate(deal.closeDate)}</div>
+            <div className="text-xs text-gray-500">{daysFromNowLabel(deal.closeDate)}</div>
+          </td>
+        );
+
+      case 'lastActivity':
+        return (
+          <td key="lastActivity" className="px-4 py-3">
+            {deal.lastActivity ? (
+              <span className="text-sm text-gray-400">{formatRelativeTime(deal.lastActivity, '')}</span>
+            ) : (
+              <span className="text-sm text-gray-300">No activity</span>
+            )}
+          </td>
+        );
+
+      case 'nextStep': {
+        const daysUntilDue = deal.nextStepDueDate ? daysFromNow(deal.nextStepDueDate) : null;
+        const urgencyBadge = daysUntilDue !== null
+          ? daysUntilDue < 0
+            ? <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded flex-shrink-0">Late</span>
+            : daysUntilDue === 0
+              ? <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold bg-orange-100 text-orange-700 rounded flex-shrink-0">Today</span>
+              : daysUntilDue <= 2
+                ? <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded flex-shrink-0">{daysUntilDue}d</span>
+                : null
+          : null;
+        return (
+          <td key="nextStep" className="px-4 py-3 max-w-[200px]">
+            {deal.nextStep ? (
+              <div className="flex items-center">
+                <span className="text-sm text-gray-700 truncate">{deal.nextStep}</span>
+                {urgencyBadge}
+              </div>
+            ) : (
+              <span className="text-sm text-gray-300">—</span>
+            )}
+          </td>
+        );
+      }
+
+      case 'dealAge': {
+        const ageDays = getDealAgeDays(deal.createdAt);
+        const ageLabel = ageDays < 1 ? '<1d' : `${ageDays}d`;
+        const ageCls = ageDays < 14
+          ? 'bg-gray-100 text-gray-600'
+          : ageDays < 30
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-red-100 text-red-700';
+        return (
+          <td key="dealAge" className="px-4 py-3">
+            <span
+              title="Days since deal was created (stage tracking not yet available)"
+              className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${ageCls}`}
+            >
+              {ageLabel}
+            </span>
+          </td>
+        );
+      }
+
+      case 'probability': {
+        // TODO: rename aiScore → probability
+        const prob = deal.aiScore;
+        const probCls = prob >= 70
+          ? 'bg-green-100 text-green-700'
+          : prob >= 40
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-red-100 text-red-700';
+        return (
+          <td key="probability" className="px-4 py-3">
+            <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${probCls}`}>
+              {prob}%
+            </span>
+          </td>
+        );
+      }
+
+      case 'source':
+        return (
+          <td key="source" className="px-4 py-3">
+            {deal.source ? (
+              <span className="bg-gray-100 text-gray-500 text-[11px] font-medium px-2 py-0.5 rounded-full">
+                {deal.source}
+              </span>
+            ) : (
+              <span className="text-sm text-gray-300">—</span>
+            )}
+          </td>
+        );
+
+      case 'health': {
+        const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
+        if (isClosed) {
+          return (
+            <td key="health" className="px-4 py-3">
+              <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
+                deal.stage === 'closed-won'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-red-100 text-red-600'
+              }`}>
+                {deal.stage === 'closed-won' ? 'Won' : 'Lost'}
+              </span>
+            </td>
+          );
+        }
+
+        const cardLite = toDealCardLite(deal);
+        const closeDaysLeft = deal.closeDate ? daysFromNow(deal.closeDate) : null;
+        const healthExpl = explainDealHealth(cardLite, closeDaysLeft);
+        const barColor = healthExpl.tier === 'strong' ? '#10b981'
+          : healthExpl.tier === 'fair' ? '#f59e0b' : '#ef4444';
+        const tierCls = healthExpl.tier === 'strong'
+          ? 'bg-emerald-100 text-emerald-700'
+          : healthExpl.tier === 'fair'
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-red-100 text-red-700';
+
+        return (
+          <td key="health" className="px-4 py-3">
+            <div
+              className="relative"
+              onMouseEnter={() => setHoveredScore(deal.id)}
+              onMouseLeave={() => setHoveredScore(null)}
+            >
+              <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium cursor-default ${tierCls}`}>
+                <span className="font-bold tabular-nums">{deal.aiScore}</span>
+                <span>·</span>
+                <span>{healthExpl.tierLabel}</span>
+              </div>
+              <div className="mt-1.5 h-1 bg-gray-100 rounded-full w-20 overflow-hidden">
+                <div
+                  className="h-1 rounded-full"
+                  style={{ width: `${deal.aiScore}%`, backgroundColor: barColor }}
+                />
+              </div>
+
+              {hoveredScore === deal.id && (
+                <div
+                  className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-900">AI Win Probability</span>
+                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${tierCls}`}>
+                      {healthExpl.tierLabel}
+                    </span>
+                  </div>
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] text-gray-500">Score</span>
+                      <span className="text-sm font-bold tabular-nums" style={{ color: barColor }}>
+                        {healthExpl.score}/100
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ width: `${healthExpl.score}%`, backgroundColor: barColor }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mb-3 leading-snug">{healthExpl.headline}</p>
+                  {healthExpl.risks.length > 0 && (
+                    <div className="mb-2.5">
+                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Risks</div>
+                      <div className="space-y-1.5">
+                        {healthExpl.risks.slice(0, 3).map(r => (
+                          <div key={r.id} className="flex items-start justify-between gap-2">
+                            <div className="flex items-start space-x-1.5 min-w-0">
+                              <AlertTriangle className="h-3 w-3 text-red-400 flex-shrink-0 mt-0.5" />
+                              <span className="text-[11px] text-gray-700 leading-snug">{r.label}</span>
+                            </div>
+                            {r.action && (
+                              <span className="text-[10px] text-gray-400 flex-shrink-0 italic">{r.action}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {healthExpl.positives.length > 0 && (
+                    <div className="mb-2.5">
+                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Positives</div>
+                      <div className="space-y-1.5">
+                        {healthExpl.positives.slice(0, 2).map(p => (
+                          <div key={p.id} className="flex items-center space-x-1.5">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                            <span className="text-[11px] text-gray-700">{p.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[9px] text-gray-400 mt-2 pt-2 border-t border-gray-100 leading-snug">
+                    Score reflects AI-estimated win probability based on engagement, close date, next-step discipline, and deal attributes.
+                  </p>
+                </div>
+              )}
+            </div>
+          </td>
+        );
+      }
+
+      case 'actions':
+        return (
+          <td key="actions" className="px-4 py-3">
+            <div className="relative">
+              <button
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                onClick={(e) => { e.stopPropagation(); setShowActionDropdown(deal.id); }}
+              >
+                <MoreHorizontal className="h-4 w-4 text-gray-600" />
+              </button>
+              {showActionDropdown === deal.id && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
+                  <button onClick={() => navigate(`/crm/deals/${deal.id}/edit`)} className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Edit className="h-4 w-4" /><span>Edit Deal</span>
+                  </button>
+                  <button onClick={() => setShowStageModal(deal.id)} className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Target className="h-4 w-4" /><span>Change Stage</span>
+                  </button>
+                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <User className="h-4 w-4" /><span>Change Owner</span>
+                  </button>
+                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Clock className="h-4 w-4" /><span>Log Activity</span>
+                  </button>
+                  <button onClick={() => setShowEmailModal(deal)} className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Mail className="h-4 w-4" /><span>Send Proposal</span>
+                  </button>
+                  <div className="border-t border-gray-200 my-1" />
+                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50">
+                    <CheckCircle2 className="h-4 w-4" /><span>Mark as Won</span>
+                  </button>
+                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                    <X className="h-4 w-4" /><span>Mark as Lost</span>
+                  </button>
+                  <div className="border-t border-gray-200 my-1" />
+                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <Copy className="h-4 w-4" /><span>Clone Deal</span>
+                  </button>
+                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
+                    <Trash2 className="h-4 w-4" /><span>Delete Deal</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </td>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Stats Bar */}
+
+      {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="grid grid-cols-6 gap-6">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
@@ -257,7 +789,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
             <div className="text-sm text-blue-700 font-medium mt-1">Total Deals</div>
           </div>
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-            <div className="text-3xl font-bold text-green-900">{formatCurrency(totalValue)}</div>
+            <div className="text-3xl font-bold text-green-900">{formatAmountUSD(totalValue)}</div>
             <div className="text-sm text-green-700 font-medium mt-1">Total Value</div>
           </div>
           <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
@@ -279,7 +811,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* ── Filter Bar ────────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-8 py-4">
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div>
@@ -332,9 +864,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All</option>
-              <option value="0-25k">$0-25K</option>
-              <option value="25-50k">$25-50K</option>
-              <option value="50-100k">$50-100K</option>
+              <option value="0-25k">$0–25K</option>
+              <option value="25-50k">$25–50K</option>
+              <option value="50-100k">$50–100K</option>
               <option value="100k+">$100K+</option>
             </select>
           </div>
@@ -355,18 +887,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex-1 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search deals, accounts, contacts..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
+        <div className="flex items-center justify-end">
           <div className="flex items-center space-x-3">
             <button className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300">
               <BarChart3 className="h-4 w-4" />
@@ -376,19 +897,80 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               <Download className="h-4 w-4" />
               <span>Export</span>
             </button>
-            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300">
-              <Settings className="h-4 w-4" />
-            </button>
+
+            {/* Column settings gear */}
+            <div className="relative">
+              <button
+                className="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300"
+                onClick={(e) => { e.stopPropagation(); setShowColumnSettings(v => !v); }}
+                title="Column settings"
+              >
+                <Settings className="h-4 w-4" />
+              </button>
+
+              {showColumnSettings && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="px-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Columns
+                  </p>
+                  {columnOrder.map(key => {
+                    const col = ALL_COLUMNS.find(c => c.key === key)!;
+                    return (
+                      <div
+                        key={key}
+                        draggable
+                        onDragStart={() => { dragKey.current = key; }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (!dragKey.current || dragKey.current === key) return;
+                          setColumnOrder(prev => {
+                            const next = [...prev];
+                            const fromIdx = next.indexOf(dragKey.current!);
+                            const toIdx = next.indexOf(key);
+                            next.splice(fromIdx, 1);
+                            next.splice(toIdx, 0, dragKey.current!);
+                            return next;
+                          });
+                          dragKey.current = null;
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-default"
+                      >
+                        <GripVertical className="h-3.5 w-3.5 text-gray-300 cursor-grab flex-shrink-0" />
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.has(key)}
+                          onChange={() => toggleColumn(key)}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-700">{col.label}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="border-t border-gray-200 mt-1 pt-1 px-3">
+                    <button
+                      onClick={resetColumns}
+                      className="w-full text-left text-xs text-indigo-600 hover:text-indigo-700 py-1.5 font-medium"
+                    >
+                      Reset to default
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ─────────────────────────────────────────────────────────────── */}
       <div className="px-8 py-6">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+          <table className="w-full min-w-[1300px]">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                {/* Checkbox — always visible */}
                 <th className="w-12 px-4 py-3">
                   <input
                     type="checkbox"
@@ -397,62 +979,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                     className="rounded border-gray-300"
                   />
                 </th>
-                <th
-                  className="text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('deal')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Deal / Account</span>
-                    <SortIcon column="deal" />
-                  </div>
-                </th>
-                <th
-                  className="text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('value')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Value</span>
-                    <SortIcon column="value" />
-                  </div>
-                </th>
-                <th
-                  className="text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('stage')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Stage</span>
-                    <SortIcon column="stage" />
-                  </div>
-                </th>
-                <th
-                  className="text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('closeDate')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Close Date</span>
-                    <SortIcon column="closeDate" />
-                  </div>
-                </th>
-                <th
-                  className="text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort('health')}
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>Health</span>
-                    <SortIcon column="health" />
-                  </div>
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                  Actions
-                </th>
+                {orderedVisible.map(key => renderHeader(key))}
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-100">
               {sortedDeals.map((deal) => {
                 const isExpanded = expandedRows.includes(deal.id);
                 const isSelected = selectedDeals.includes(deal.id);
-                const stageColor = getStageColor(deal.stage);
-                const daysAway = getDaysAway(deal.closeDate);
 
                 return (
                   <React.Fragment key={deal.id}>
@@ -460,7 +994,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                       className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
                       onContextMenu={(e) => handleContextMenu(e, deal.id)}
                     >
-                      <td className="px-4 py-4">
+                      {/* Checkbox */}
+                      <td className="px-4 py-3">
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -469,233 +1004,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                           className="rounded border-gray-300"
                         />
                       </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center space-x-2 mb-1">
-                              <Building2 className="h-4 w-4 text-gray-400" />
-                              <span
-                                className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600"
-                                onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                              >
-                                {deal.companyName}
-                              </span>
-                              {deal.isHRMS && (
-                                <span
-                                  className="px-2 py-0.5 text-xs font-medium rounded cursor-pointer hover:opacity-80"
-                                  style={{ backgroundColor: '#fff3cd', border: '1px solid #ff9800', color: '#e65100' }}
-                                  onClick={(e) => { e.stopPropagation(); setShowHRMSModal(deal); }}
-                                >
-                                  HRMS
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-600">{deal.dealName}</div>
-                          </div>
-                          <button onClick={() => toggleRowExpansion(deal.id)}>
-                            {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div
-                          className="text-lg font-bold cursor-pointer hover:underline"
-                          style={{ color: '#667eea' }}
-                          onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                        >
-                          {formatCurrency(deal.amount)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="relative">
-                          <div
-                            className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium cursor-pointer hover:opacity-80"
-                            style={{ backgroundColor: stageColor.bg, color: stageColor.text }}
-                            onClick={(e) => { e.stopPropagation(); setShowStageModal(deal.id); }}
-                            onMouseEnter={() => setHoveredStage(deal.id)}
-                            onMouseLeave={() => setHoveredStage(null)}
-                          >
-                            {getStageName(deal.stage)}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Stage {getStageProgress(deal.stage)}
-                          </div>
-
-                          {/* Stage Timeline Tooltip */}
-                          {hoveredStage === deal.id && (
-                            <div className="absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
-                              <div className="text-sm font-semibold text-gray-900 mb-3">Deal Progress:</div>
-                              <div className="space-y-2">
-                                <div className="flex items-center space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                  <span className="text-gray-700">Prospecting (5 days)</span>
-                                </div>
-                                <div className="flex items-center space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                  <span className="text-gray-700">Qualified (8 days)</span>
-                                </div>
-                                <div className="flex items-center space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                  <span className="text-gray-700">Proposal (12 days)</span>
-                                </div>
-                                <div className="flex items-center space-x-2 text-sm font-medium">
-                                  <div className="h-4 w-4 flex items-center justify-center">➡️</div>
-                                  <span className="text-gray-900">{getStageName(deal.stage)} (15 days) [NOW]</span>
-                                </div>
-                                <div className="flex items-center space-x-2 text-sm text-gray-400">
-                                  <div className="h-4 w-4 rounded-full border-2 border-gray-300"></div>
-                                  <span>Closed-Won</span>
-                                </div>
-                                <div className="flex items-center space-x-2 text-sm text-gray-400">
-                                  <div className="h-4 w-4 rounded-full border-2 border-gray-300"></div>
-                                  <span>Closed-Lost</span>
-                                </div>
-                              </div>
-                              <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
-                                <div>Total: 40 days in pipeline</div>
-                                <div>Avg cycle: {avgDaysCycle} days</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="text-sm text-gray-900">{formatDate(deal.closeDate)}</div>
-                        <div className="text-xs text-gray-500">{daysFromNowLabel(deal.closeDate)}</div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="relative">
-                          <div
-                            className="flex items-center space-x-1 mb-1 cursor-pointer"
-                            onMouseEnter={() => setHoveredScore(deal.id)}
-                            onMouseLeave={() => setHoveredScore(null)}
-                          >
-                            <Sparkles className="h-3 w-3" style={{ color: '#667eea' }} />
-                            <span className="font-bold text-sm" style={{ color: '#667eea' }}>{deal.aiScore}</span>
-                          </div>
-                          <div className="text-xs text-yellow-500">{getHealthStars(deal.aiScore)}</div>
-                          <div className="text-xs text-gray-600">{getHealthText(deal.health)}</div>
-
-                          {/* AI Score Tooltip */}
-                          {hoveredScore === deal.id && (
-                            <div className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
-                              <div className="text-sm font-semibold text-gray-900 mb-3">
-                                AI Health Score: {deal.aiScore}/100
-                              </div>
-                              <div className="space-y-2">
-                                <div className="flex items-start space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                                  <span className="text-gray-700">High engagement: +25</span>
-                                </div>
-                                {deal.isHRMS && (
-                                  <div className="flex items-start space-x-2 text-sm">
-                                    <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                                    <span className="text-gray-700">HRMS connection: +20</span>
-                                  </div>
-                                )}
-                                <div className="flex items-start space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                                  <span className="text-gray-700">Fast response time: +15</span>
-                                </div>
-                                <div className="flex items-start space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                                  <span className="text-gray-700">Deal progressing: +20</span>
-                                </div>
-                                <div className="flex items-start space-x-2 text-sm">
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                                  <span className="text-gray-700">Strong champion: +12</span>
-                                </div>
-                              </div>
-                              <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="text-sm font-medium text-gray-900">
-                                  Rating: {getHealthText(deal.health)}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="relative">
-                          <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={(e) => { e.stopPropagation(); setShowActionDropdown(deal.id); }}
-                          >
-                            <MoreHorizontal className="h-4 w-4 text-gray-600" />
-                          </button>
-
-                          {/* Action Dropdown */}
-                          {showActionDropdown === deal.id && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
-                              <button
-                                onClick={() => navigate(`/crm/deals/${deal.id}/edit`)}
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Edit className="h-4 w-4" />
-                                <span>Edit Deal</span>
-                              </button>
-                              <button
-                                onClick={() => setShowStageModal(deal.id)}
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Target className="h-4 w-4" />
-                                <span>Change Stage</span>
-                              </button>
-                              <button
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <User className="h-4 w-4" />
-                                <span>Change Owner</span>
-                              </button>
-                              <button
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Clock className="h-4 w-4" />
-                                <span>Log Activity</span>
-                              </button>
-                              <button
-                                onClick={() => setShowEmailModal(deal)}
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Mail className="h-4 w-4" />
-                                <span>Send Proposal</span>
-                              </button>
-                              <div className="border-t border-gray-200 my-1"></div>
-                              <button
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50"
-                              >
-                                <CheckCircle2 className="h-4 w-4" />
-                                <span>Mark as Won</span>
-                              </button>
-                              <button
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                              >
-                                <X className="h-4 w-4" />
-                                <span>Mark as Lost</span>
-                              </button>
-                              <div className="border-t border-gray-200 my-1"></div>
-                              <button
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                <Copy className="h-4 w-4" />
-                                <span>Clone Deal</span>
-                              </button>
-                              <button
-                                className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span>Delete Deal</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
+                      {orderedVisible.map(key => renderCell(key, deal, isExpanded))}
                     </tr>
 
-                    {/* Expanded Row Details */}
+                    {/* Expanded Row */}
                     {isExpanded && (
                       <tr className="bg-gray-50">
-                        <td colSpan={7} className="px-4 py-4">
+                        <td colSpan={visibleColCount} className="px-4 py-4">
                           <div className="pl-12">
                             <div className="grid grid-cols-2 gap-6">
                               <div>
@@ -757,9 +1072,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                                 </div>
                               </div>
                               <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                <div className="text-xs font-semibold text-gray-700 uppercase mb-2">
-                                  AI Insights
-                                </div>
+                                <div className="text-xs font-semibold text-gray-700 uppercase mb-2">AI Insights</div>
                                 <div className="space-y-2">
                                   {deal.aiScore >= 80 && (
                                     <div className="flex items-start space-x-2 text-sm">
@@ -793,8 +1106,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
           </table>
 
           {sortedDeals.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No deals found matching your filters.</p>
+            <div className="text-center py-16">
+              <Building2 className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
+              <p className="text-xs text-gray-400 mt-1">Try adjusting the stage, date, or value filters above.</p>
             </div>
           )}
         </div>
@@ -804,7 +1119,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       </div>
 
-      {/* Context Menu */}
+      {/* ── Context Menu ──────────────────────────────────────────────────────── */}
       {contextMenuDeal && (
         <div
           className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
@@ -829,7 +1144,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* Stage Change Modal */}
+      {/* ── Stage Change Modal ────────────────────────────────────────────────── */}
       {showStageModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
@@ -858,7 +1173,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 })}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
               <button
                 onClick={() => setShowStageModal(null)}
                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -870,7 +1185,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* Bulk Update Modal */}
+      {/* ── Bulk Update Modal ─────────────────────────────────────────────────── */}
       {showBulkUpdateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
@@ -921,7 +1236,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* ── Delete Confirmation Modal ─────────────────────────────────────────── */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
@@ -934,9 +1249,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               </div>
             </div>
             <div className="px-6 py-4">
-              <p className="text-sm text-gray-600">
-                This action cannot be undone.
-              </p>
+              <p className="text-sm text-gray-600">This action cannot be undone.</p>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
               <button
@@ -956,7 +1269,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* Email Composer Modal */}
+      {/* ── Email Composer Modal ──────────────────────────────────────────────── */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
@@ -1009,7 +1322,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* Call Logging Modal */}
+      {/* ── Call Logging Modal ────────────────────────────────────────────────── */}
       {showCallModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
@@ -1072,7 +1385,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* HRMS Modal */}
+      {/* ── HRMS Modal ────────────────────────────────────────────────────────── */}
       {showHRMSModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
@@ -1084,8 +1397,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 <div className="flex items-center space-x-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
                   <Building2 className="h-6 w-6 text-orange-600" />
                   <div>
-                    <div className="font-semibold text-gray-900">{showHRMSModal.companyName}</div>
-                    <div className="text-sm text-gray-600">Connected to HRMS System</div>
+                    <div className="font-semibold text-gray-900">{showHRMSModal.dealName}</div>
+                    <div className="text-sm text-gray-600">
+                      {showHRMSModal.companyName
+                        ? `${showHRMSModal.companyName} · Connected to HRMS System`
+                        : 'Connected to HRMS System'}
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1119,9 +1436,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* Bulk Actions Bar */}
+      {/* ── Bulk Actions Bar ──────────────────────────────────────────────────── */}
       {showBulkActions && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl border border-gray-200 px-6 py-4">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl border border-gray-200 px-6 py-4">
           <div className="flex items-center space-x-6">
             <span className="text-sm font-medium text-gray-900">
               {selectedDeals.length} deals selected

@@ -56,9 +56,16 @@ function sortByImpact(drivers: HealthDriver[]): HealthDriver[] {
 }
 
 function resolveTier(score: number): { tier: ScoreTier; tierLabel: string } {
-  if (score >= 75) return { tier: 'strong', tierLabel: 'Strong momentum'   };
-  if (score >= 50) return { tier: 'fair',   tierLabel: 'Needs attention'   };
-  return                  { tier: 'weak',   tierLabel: 'At risk — act now' };
+  if (score >= 70) return { tier: 'strong', tierLabel: 'Healthy'  };
+  if (score >= 40) return { tier: 'fair',   tierLabel: 'Watch'    };
+  return                  { tier: 'weak',   tierLabel: 'At Risk'  };
+}
+
+/** Single-score tier lookup for surfaces that don't need full driver computation. */
+export function scoreToHealthTier(score: number): { tier: ScoreTier; tierLabel: string; color: string } {
+  if (score >= 70) return { tier: 'strong', tierLabel: 'Healthy', color: '#10b981' };
+  if (score >= 40) return { tier: 'fair',   tierLabel: 'Watch',   color: '#f59e0b' };
+  return                  { tier: 'weak',   tierLabel: 'At Risk', color: '#ef4444' };
 }
 
 function buildHeadline(topRisk: HealthDriver | null, tier: ScoreTier): string {

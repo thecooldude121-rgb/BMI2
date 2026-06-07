@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { formatDisplayDate, formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search, Filter, Download, Settings, BarChart3, ChevronDown,
+  Filter, Download, Settings, BarChart3, ChevronDown,
   Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal,
   CheckCircle2, AlertTriangle, TrendingUp, Clock, Target, X, Edit, Copy, Trash2,
   FileText
 } from 'lucide-react';
+import { explainDealHealth } from '../../utils/dealHealthDrivers';
+import type { DealCard } from '../../components/Deal/DealKanbanCard';
+import { getStageStyle } from '../../config/stageColors';
 
 interface Deal {
   id: string;
@@ -45,7 +48,6 @@ interface DealsGridViewProps {
 
 const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onStageChange }) => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [selectedCloseDate, setSelectedCloseDate] = useState<string>('all');
@@ -66,11 +68,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   const allDeals: Deal[] = stages.flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })));
 
   const filteredDeals = allDeals.filter(deal => {
-    const matchesSearch = searchTerm === '' ||
-      deal.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.dealName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      deal.contactName.toLowerCase().includes(searchTerm.toLowerCase());
-
     const matchesStage = selectedStage === 'all' || deal.stage === selectedStage;
     const matchesOwner = selectedOwner === 'all' || deal.owner === selectedOwner;
 
@@ -87,7 +84,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
     const matchesSource = selectedSource === 'all' || deal.source.includes(selectedSource);
 
-    return matchesSearch && matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
+    return matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
   });
 
   const displayedDeals = filteredDeals.slice(0, displayLimit);
@@ -106,17 +103,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   const formatDate = formatCloseDate; // formatCloseDate returns "No close date" for missing values
   const getDaysAway = daysFromNow;
 
-  const getStageColor = (stageId: string) => {
-    switch(stageId) {
-      case 'prospecting': return { bg: '#2196F3', text: '#ffffff', emoji: '🔵' };
-      case 'qualified': return { bg: '#4CAF50', text: '#ffffff', emoji: '🟢' };
-      case 'proposal': return { bg: '#FF9800', text: '#ffffff', emoji: '🟠' };
-      case 'negotiation': return { bg: '#9C27B0', text: '#ffffff', emoji: '🟣' };
-      case 'closed-won': return { bg: '#2E7D32', text: '#ffffff', emoji: '🟢' };
-      case 'closed-lost': return { bg: '#D32F2F', text: '#ffffff', emoji: '🔴' };
-      default: return { bg: '#757575', text: '#ffffff', emoji: '⚪' };
-    }
-  };
 
   const getStageName = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);
@@ -129,27 +115,30 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     return `Stage ${currentIndex + 1} of ${stageOrder.length}`;
   };
 
-  const getHealthText = (health: string) => {
-    switch(health) {
-      case 'excellent': return 'Excellent';
-      case 'healthy': return 'Very Good';
-      case 'at-risk': return 'Good';
-      case 'critical': return 'Fair';
-      default: return health;
-    }
-  };
-
-  const getProgressBarWidth = (aiScore: number) => {
-    return `${aiScore}%`;
-  };
-
-  const getProgressBarColor = (aiScore: number) => {
-    if (aiScore >= 90) return '#4CAF50';
-    if (aiScore >= 80) return '#8BC34A';
-    if (aiScore >= 70) return '#FFC107';
-    if (aiScore >= 60) return '#FF9800';
-    return '#F44336';
-  };
+  // Coerce Grid Deal → DealCard shape for explainDealHealth.
+  const toDealCardLite = (deal: Deal): DealCard => ({
+    id: deal.id,
+    companyName: deal.companyName ?? '',
+    dealName: deal.dealName ?? '',
+    accountName: deal.accountName ?? '',
+    amount: deal.amount,
+    closeDate: deal.closeDate,
+    stage: deal.stage,
+    aiScore: deal.aiScore,
+    contactName: deal.contactName ?? '',
+    contactTitle: deal.contactTitle ?? '',
+    owner: deal.owner ?? '',
+    lastActivity: deal.lastActivity ?? '',
+    daysSinceContact: deal.daysSinceContact ?? 0,
+    isHRMS: deal.isHRMS ?? false,
+    priority: deal.priority ?? 'low',
+    health: (['healthy', 'at-risk', 'stalled'] as const).includes(deal.health as never)
+      ? (deal.health as 'healthy' | 'at-risk' | 'stalled')
+      : deal.health === 'excellent' ? 'healthy'
+      : deal.health === 'critical'  ? 'stalled'
+      : 'healthy',
+    source: deal.source ?? '',
+  });
 
   const handleStageChange = (dealId: string, newStage: string) => {
     if (onStageChange) {
@@ -339,18 +328,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex-1 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search deals, accounts, contacts..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
+        <div className="flex items-center justify-end">
           <div className="flex items-center space-x-3">
             <button className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300">
               <BarChart3 className="h-4 w-4" />
@@ -378,7 +356,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
             <p className="text-sm text-gray-600 mb-6">Try adjusting your filters or search criteria</p>
             <button
               onClick={() => {
-                setSearchTerm('');
                 setSelectedStage('all');
                 setSelectedOwner('all');
                 setSelectedCloseDate('all');
@@ -394,7 +371,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-x-5 gap-y-6">
               {displayedDeals.map((deal) => {
-              const stageColor = getStageColor(deal.stage);
+              const stageColor = getStageStyle(deal.stage);
               const daysAway = getDaysAway(deal.closeDate);
               const isStalled = deal.daysSinceContact >= 7;
               const isWon = deal.stage === 'closed-won';
@@ -462,8 +439,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                     style={{ backgroundColor: stageColor.bg, color: stageColor.text }}
                     onClick={(e) => { e.stopPropagation(); setShowStageModal(deal.id); }}
                   >
-                    <span className="mr-2">{stageColor.emoji}</span>
-                    <span>{getStageName(deal.stage)}</span>
+                    {getStageName(deal.stage)}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
                     {getStageProgress(deal.stage)}
@@ -482,60 +458,115 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
 
                 {/* AI Health Score */}
-                <div className="mb-4 pb-4 border-b border-gray-100 relative">
-                  <div
-                    className="flex items-center space-x-2 mb-2 cursor-pointer hover:opacity-80"
-                    onClick={(e) => { e.stopPropagation(); setShowScoreTooltip(deal.id); }}
-                  >
-                    <Sparkles className="h-4 w-4" style={{ color: '#667eea' }} />
-                    <span className="font-bold text-lg" style={{ color: '#667eea' }}>{deal.aiScore}/100</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
-                    <div
-                      className="h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: getProgressBarWidth(deal.aiScore),
-                        backgroundColor: getProgressBarColor(deal.aiScore)
-                      }}
-                    ></div>
-                  </div>
-                  <div className="text-xs font-medium text-gray-700">
-                    {getHealthText(deal.health)}
-                  </div>
+                {(() => {
+                  if (isWon || isLost) {
+                    return (
+                      <div className="mb-4 pb-4 border-b border-gray-100">
+                        <span className={`inline-flex items-center px-3 py-1.5 text-sm font-semibold rounded-full ${
+                          isWon ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'
+                        }`}>
+                          {isWon ? 'Won' : 'Lost'}
+                        </span>
+                      </div>
+                    );
+                  }
+                  const cardLite = toDealCardLite(deal);
+                  const closeDaysLeft = deal.closeDate ? daysFromNow(deal.closeDate) : null;
+                  const healthExpl = explainDealHealth(cardLite, closeDaysLeft);
+                  const barColor = healthExpl.tier === 'strong' ? '#10b981'
+                    : healthExpl.tier === 'fair' ? '#f59e0b' : '#ef4444';
+                  const tierCls = healthExpl.tier === 'strong'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : healthExpl.tier === 'fair'
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-red-100 text-red-700';
+                  return (
+                    <div className="mb-4 pb-4 border-b border-gray-100 relative">
+                      <div
+                        className="flex items-center justify-between mb-2 cursor-pointer hover:opacity-80"
+                        onClick={(e) => { e.stopPropagation(); setShowScoreTooltip(showScoreTooltip === deal.id ? null : deal.id); }}
+                        title="AI win probability — click for breakdown"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <Sparkles className="h-4 w-4" style={{ color: '#667eea' }} />
+                          <span className="font-bold text-lg tabular-nums" style={{ color: '#667eea' }}>{deal.aiScore}</span>
+                        </div>
+                        <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-full ${tierCls}`}>
+                          {healthExpl.tierLabel}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-1">
+                        <div
+                          className="h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${deal.aiScore}%`, backgroundColor: barColor }}
+                        />
+                      </div>
 
-                  {/* AI Score Tooltip */}
-                  {showScoreTooltip === deal.id && (
-                    <div className="absolute left-0 bottom-full mb-2 w-64 bg-gray-900 text-white rounded-lg shadow-xl p-4 z-50">
-                      <div className="mb-3">
-                        <div className="font-bold text-sm mb-2">AI Health Score Breakdown</div>
-                        <div className="text-xs text-gray-300">Overall Score: {deal.aiScore}/100</div>
-                      </div>
-                      <div className="space-y-2 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-gray-300">Engagement Level:</span>
-                          <span className="font-medium">+25</span>
+                      {showScoreTooltip === deal.id && (
+                        <div
+                          className="absolute left-0 bottom-full mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm font-semibold text-gray-900">AI Win Probability</span>
+                            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${tierCls}`}>
+                              {healthExpl.tierLabel}
+                            </span>
+                          </div>
+                          <div className="mb-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[11px] text-gray-500">Score</span>
+                              <span className="text-sm font-bold tabular-nums" style={{ color: barColor }}>
+                                {healthExpl.score}/100
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-2 rounded-full"
+                                style={{ width: `${healthExpl.score}%`, backgroundColor: barColor }}
+                              />
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mb-3 leading-snug">{healthExpl.headline}</p>
+                          {healthExpl.risks.length > 0 && (
+                            <div className="mb-2.5">
+                              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Risks</div>
+                              <div className="space-y-1.5">
+                                {healthExpl.risks.slice(0, 3).map(r => (
+                                  <div key={r.id} className="flex items-start justify-between gap-2">
+                                    <div className="flex items-start space-x-1.5 min-w-0">
+                                      <AlertTriangle className="h-3 w-3 text-red-400 flex-shrink-0 mt-0.5" />
+                                      <span className="text-[11px] text-gray-700 leading-snug">{r.label}</span>
+                                    </div>
+                                    {r.action && (
+                                      <span className="text-[10px] text-gray-400 flex-shrink-0 italic">{r.action}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {healthExpl.positives.length > 0 && (
+                            <div className="mb-2.5">
+                              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Positives</div>
+                              <div className="space-y-1.5">
+                                {healthExpl.positives.slice(0, 2).map(p => (
+                                  <div key={p.id} className="flex items-center space-x-1.5">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                    <span className="text-[11px] text-gray-700">{p.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <p className="text-[9px] text-gray-400 mt-2 pt-2 border-t border-gray-100 leading-snug">
+                            Score reflects AI-estimated win probability based on engagement, close date, next-step discipline, and deal attributes.
+                          </p>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-300">Response Rate:</span>
-                          <span className="font-medium">+22</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-300">Deal Velocity:</span>
-                          <span className="font-medium">+18</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-300">Budget Alignment:</span>
-                          <span className="font-medium">+15</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-300">Stakeholder Coverage:</span>
-                          <span className="font-medium">+12</span>
-                        </div>
-                      </div>
-                      <div className="absolute -bottom-2 left-4 w-4 h-4 bg-gray-900 transform rotate-45"></div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Contact Info */}
                 <div className="mb-4 pb-4 border-b border-gray-100">

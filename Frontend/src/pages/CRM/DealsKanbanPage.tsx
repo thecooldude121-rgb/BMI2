@@ -14,6 +14,7 @@ import {
   normalizeDateField,
 } from '../../utils/dateUtils';
 import { formatAmountUSD } from '../../utils/currencyUtils';
+import { getStageChartColor } from '../../config/stageColors';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import {
   Plus,
@@ -87,6 +88,7 @@ const DealsKanbanPage: React.FC = () => {
   const sortDropdownRef = useRef<HTMLDivElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
   const viewsOverflowRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
@@ -131,12 +133,12 @@ const DealsKanbanPage: React.FC = () => {
   const [fetchError, setFetchError] = useState(false);
 
   const [stages, setStages] = useState<PipelineStage[]>([
-    { id: 'prospecting', name: 'Prospecting', color: 'bg-blue-100',  deals: [] },
-    { id: 'qualified',   name: 'Qualified',   color: 'bg-green-100', deals: [] },
-    { id: 'proposal',    name: 'Proposal',    color: 'bg-orange-100', deals: [] },
-    { id: 'negotiation', name: 'Negotiation', color: 'bg-purple-100', deals: [] },
-    { id: 'closed-won',  name: 'Closed-Won',  color: 'bg-green-200', deals: [] },
-    { id: 'closed-lost', name: 'Closed-Lost', color: 'bg-red-100',   deals: [] },
+    { id: 'prospecting', name: 'Prospecting', color: 'bg-indigo-50', deals: [] },
+    { id: 'qualified',   name: 'Qualified',   color: 'bg-sky-50',    deals: [] },
+    { id: 'proposal',    name: 'Proposal',    color: 'bg-amber-50',  deals: [] },
+    { id: 'negotiation', name: 'Negotiation', color: 'bg-violet-50', deals: [] },
+    { id: 'closed-won',  name: 'Closed-Won',  color: 'bg-emerald-50',deals: [] },
+    { id: 'closed-lost', name: 'Closed-Lost', color: 'bg-red-50',    deals: [] },
   ]);
 
   // Fetch all deals from the backend and populate stages.
@@ -510,6 +512,17 @@ const DealsKanbanPage: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && inspectionMode) setInspectionMode(false);
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA'
+        || (document.activeElement as HTMLElement)?.isContentEditable;
+      if (e.key === '/' && !isTyping) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (e.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        setSearchTerm('');
+        searchInputRef.current?.blur();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -992,6 +1005,18 @@ const DealsKanbanPage: React.FC = () => {
     return count < filtered.length;
   };
 
+  // Text-search pre-filter passed to List/Grid children so they don't need their own search input.
+  // The kanban view runs filterDeals() (which already uses debouncedSearch) internally during render.
+  const searchFilteredStages = debouncedSearch
+    ? stages.map(stage => ({
+        ...stage,
+        deals: stage.deals.filter(d => {
+          const q = debouncedSearch.toLowerCase();
+          return [d.dealName, d.accountName, d.contactName].some(f => f?.toLowerCase().includes(q));
+        }),
+      }))
+    : stages;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ── Row 1: sticky at top-0 — tabs · AI signals · actions ───────────────── */}
@@ -1256,6 +1281,31 @@ const DealsKanbanPage: React.FC = () => {
             )}
           </div>
 
+          {/* ── Search input — canonical deals search, always visible ──── */}
+          <div className="relative flex-shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search deals..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-7 py-1.5 w-56 text-[13px] bg-white border border-gray-200 rounded-lg
+                focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400
+                placeholder:text-gray-400 transition-colors"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                tabIndex={-1}
+                title="Clear search"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
           <div className="w-px h-4 bg-gray-200 mx-1 flex-shrink-0" />
 
           {([
@@ -1369,7 +1419,7 @@ const DealsKanbanPage: React.FC = () => {
 
       {viewMode === 'list' ? (
         <DealsListView
-          stages={stages}
+          stages={searchFilteredStages}
           onDealClick={handleCardClick}
           onStageChange={(dealId, newStage) => {
             console.log('Stage change:', dealId, newStage);
@@ -1377,7 +1427,7 @@ const DealsKanbanPage: React.FC = () => {
         />
       ) : viewMode === 'grid' ? (
         <DealsGridView
-          stages={stages}
+          stages={searchFilteredStages}
           onDealClick={handleCardClick}
           onStageChange={(dealId, newStage) => {
             console.log('Stage change:', dealId, newStage);
@@ -1419,15 +1469,7 @@ const DealsKanbanPage: React.FC = () => {
               if (debouncedSearch && filteredDeals.length === 0) return null;
               const stageTotal = filteredDeals.reduce((sum, d) => sum + d.amount, 0);
 
-              const STAGE_ACCENT: Record<string, string> = {
-                'prospecting': '#6366f1',
-                'qualified':   '#0ea5e9',
-                'proposal':    '#f59e0b',
-                'negotiation': '#8b5cf6',
-                'closed-won':  '#10b981',
-                'closed-lost': '#f43f5e',
-              };
-              const accentColor = STAGE_ACCENT[stage.id] ?? '#94a3b8';
+              const accentColor = getStageChartColor(stage.id);
 
               return (
                 <div key={stage.id} style={{ width: '280px' }} className="flex-shrink-0">

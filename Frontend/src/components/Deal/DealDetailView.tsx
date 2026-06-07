@@ -9,6 +9,7 @@ import {
 import { Deal } from '../../types/dealManagement';
 import { getUsers } from '../../utils/dealsApi';
 import { formatCloseDate, formatDateTimeShort } from '../../utils/dateUtils';
+import { getStageTailwindClasses } from '../../config/stageColors';
 
 interface DealDetailViewProps {
   deal: Deal;
@@ -71,17 +72,7 @@ const DealDetailView: React.FC<DealDetailViewProps> = ({ deal, onClose, onAssign
   const formatDate     = (s: string) => formatCloseDate(s);
   const formatDateTime = (s: string) => formatDateTimeShort(s);
 
-  const getStageColor = (stageId: string) => {
-    const stageColors = {
-      'lead': 'bg-gray-100 text-gray-800 border-gray-300',
-      'qualified': 'bg-blue-100 text-blue-800 border-blue-300',
-      'proposal': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-      'negotiation': 'bg-orange-100 text-orange-800 border-orange-300',
-      'closed-won': 'bg-green-100 text-green-800 border-green-300',
-      'closed-lost': 'bg-red-100 text-red-800 border-red-300'
-    };
-    return stageColors[stageId as keyof typeof stageColors] || 'bg-gray-100 text-gray-800 border-gray-300';
-  };
+  const getStageColor = getStageTailwindClasses;
 
   const getActivityIcon = (type: string) => {
     const icons = {
