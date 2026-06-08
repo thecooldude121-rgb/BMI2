@@ -1035,7 +1035,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-[1920px] mx-auto px-8 py-8">
+      <div className="max-w-[1920px] mx-auto px-8 pt-2 pb-8">
         <div ref={overviewRef} aria-hidden="true" />
         <div className="flex items-start gap-6">
           {/* Left Column */}
