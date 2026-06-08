@@ -46,6 +46,14 @@ function KbdBadge({ char }: { char: string }) {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+interface PriorityAction {
+  priority: 'high' | 'medium';
+  title: string;
+  reason: string;
+  ctas: string[];
+  totalCount: number;
+}
+
 interface DealHeroSectionProps {
   deal: {
     id: string;
@@ -87,6 +95,8 @@ interface DealHeroSectionProps {
   momentumResult?: MomentumResult;
   revenueSchedule?: RevenueSchedule | null;
   onViewRevenue?: () => void;
+  priorityAction?: PriorityAction | null;
+  onViewAllActions?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -106,8 +116,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   momentumResult,
   revenueSchedule,
   onViewRevenue,
+  priorityAction,
+  onViewAllActions,
 }) => {
   const navigate = useNavigate();
+
+  // Priority action banner dismiss (session only)
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Header more-options
   const [showMoreActions, setShowMoreActions] = useState(false);
@@ -233,6 +248,16 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   const hasNextStage   = deal.stageNumber < deal.totalStages;
   const nextStageNum   = deal.stageNumber + 1;
   const nextStageName  = hasNextStage ? ORDERED_STAGES[nextStageNum] ?? `Stage ${nextStageNum}` : null;
+
+  // Maps banner CTA label → existing action handler
+  function handleBannerCTA(label: string) {
+    const l = label.toLowerCase();
+    if (l.includes('email')) onEmail?.();
+    else if (l.includes('call')) onCall?.();
+    else if (l.includes('meeting') || l.includes('schedule')) onMeeting?.();
+    else if (l.includes('proposal')) onProposal?.();
+    else if (l.includes('stage')) onMoveStage?.();
+  }
 
   // Mobile action list (used in bottom sheet)
   const mobileActions = [
@@ -510,6 +535,60 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           </div>
           <div className="text-sm font-medium text-gray-700">{deal.aiHealth}</div>
         </div>
+
+        {/* ── Today's Priority Action banner ── */}
+        {priorityAction && !bannerDismissed && (
+          <div
+            className="mb-4 bg-amber-50 rounded-lg border border-amber-200 shadow-sm overflow-hidden"
+            style={{ borderLeftWidth: 3, borderLeftColor: priorityAction.priority === 'high' ? '#F59E0B' : '#EAB308' }}
+          >
+            <div className="flex items-center gap-3 px-4 py-3">
+              {/* Icon */}
+              <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-base flex-shrink-0">
+                🎯
+              </div>
+
+              {/* Title + reason */}
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold text-gray-900">{priorityAction.title}</span>
+                <span className="text-gray-400 mx-1.5">·</span>
+                <span className="text-sm text-gray-600 truncate">{priorityAction.reason}</span>
+              </div>
+
+              {/* CTA buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                {priorityAction.ctas.slice(0, 2).map(cta => (
+                  <button
+                    key={cta}
+                    onClick={() => handleBannerCTA(cta)}
+                    className="px-3 py-1.5 text-xs font-medium bg-white text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+                  >
+                    {cta}
+                  </button>
+                ))}
+              </div>
+
+              {/* Dismiss */}
+              <button
+                onClick={() => setBannerDismissed(true)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors flex-shrink-0"
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* View all link */}
+            <div className="px-4 pb-2.5 flex justify-end">
+              <button
+                onClick={onViewAllActions}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              >
+                View all {priorityAction.totalCount} actions ↓
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── DESKTOP action bar (hidden on mobile) ── */}
         <div className="hidden md:flex items-center gap-2.5">

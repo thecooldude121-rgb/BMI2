@@ -993,6 +993,26 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         momentumResult={momentumResult}
         revenueSchedule={activeRevenueSchedule}
         onViewRevenue={handleViewRevenue}
+        priorityAction={(() => {
+          const actions = aiIntelligenceData.nextActions;
+          const top =
+            actions.find(a => a.priority === 'high') ??
+            actions.find(a => a.priority === 'medium') ??
+            null;
+          if (!top || top.priority === 'low') return null;
+          return {
+            priority: top.priority as 'high' | 'medium',
+            title: top.title,
+            reason: top.reason,
+            ctas: top.actions,
+            totalCount: actions.length,
+          };
+        })()}
+        onViewAllActions={() => {
+          setTimeout(() => {
+            aiInsightsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 50);
+        }}
       />
 
       {/* Sticky Tab Navigation */}
