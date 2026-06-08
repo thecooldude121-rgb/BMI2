@@ -301,7 +301,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
       <div className="max-w-7xl mx-auto">
 
         {/* Header Row */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex items-start space-x-4">
             <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
               {deal.companyName.substring(0, 2).toUpperCase()}
@@ -334,7 +334,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         </div>
 
         {/* Key Metrics Grid */}
-        <div className="grid grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-4 gap-6 mb-2">
           {/* Value tile */}
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
             <div className="flex items-center justify-between mb-1">
@@ -491,29 +491,29 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         )}
 
         {/* Account & Contact Info */}
-        <div className="grid grid-cols-3 gap-6 mb-6">
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/accounts/${deal.id}`)}>
-            <Building2 className="h-5 w-5 text-gray-600" />
+        <div className="grid grid-cols-3 gap-4 mb-3">
+          <div className="flex items-center space-x-3 py-2.5 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/accounts/${deal.id}`)}>
+            <Building2 className="h-4 w-4 text-gray-500 flex-shrink-0" />
             <div>
-              <div className="text-xs font-medium text-gray-600">Account</div>
-              <div className="text-sm font-bold text-gray-900">{deal.accountName}</div>
-              <div className="text-xs text-gray-600">{deal.accountSize}, {deal.accountIndustry}</div>
+              <div className="text-[11px] font-medium text-gray-500">Account</div>
+              <div className="text-sm font-semibold text-gray-900">{deal.accountName}</div>
+              <div className="text-[11px] text-gray-400">{deal.accountSize}, {deal.accountIndustry}</div>
             </div>
           </div>
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/crm/contacts/${deal.id}`)}>
-            <User className="h-5 w-5 text-gray-600" />
+          <div className="flex items-center space-x-3 py-2.5 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/crm/contacts/${deal.id}`)}>
+            <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
             <div>
-              <div className="text-xs font-medium text-gray-600">Contact</div>
-              <div className="text-sm font-bold text-gray-900">{deal.contactName}</div>
-              <div className="text-xs text-gray-600">{deal.contactTitle}</div>
+              <div className="text-[11px] font-medium text-gray-500">Contact</div>
+              <div className="text-sm font-semibold text-gray-900">{deal.contactName}</div>
+              <div className="text-[11px] text-gray-400">{deal.contactTitle}</div>
             </div>
           </div>
-          <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
-            <Target className="h-5 w-5 text-gray-600" />
+          <div className="flex items-center space-x-3 py-2.5 px-4 bg-gray-50 rounded-lg">
+            <Target className="h-4 w-4 text-gray-500 flex-shrink-0" />
             <div>
-              <div className="text-xs font-medium text-gray-600">Source</div>
-              <div className="text-sm font-bold text-gray-900">{deal.source}</div>
-              <div className="text-xs text-gray-600">Lead Gen → Lead → Deal</div>
+              <div className="text-[11px] font-medium text-gray-500">Source</div>
+              <div className="text-sm font-semibold text-gray-900">{deal.source}</div>
+              <div className="text-[11px] text-gray-400">Lead Gen → Lead → Deal</div>
             </div>
           </div>
         </div>

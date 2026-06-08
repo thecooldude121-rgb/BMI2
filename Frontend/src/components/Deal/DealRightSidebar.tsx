@@ -118,97 +118,97 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
   return (
     <div className="space-y-6">
       {/* Predictive Insights */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center space-x-2 mb-6">
-          <TrendingUp className="h-6 w-6 text-purple-600" />
-          <h2 className="text-lg font-bold text-gray-900">Predictive Insights</h2>
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center space-x-2 mb-2.5">
+          <TrendingUp className="h-5 w-5 text-purple-600" />
+          <h2 className="text-[15px] font-semibold text-gray-900">Predictive Insights</h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">Expected Close Date:</div>
+            <div className="text-xs font-medium text-gray-500 mb-1">Expected Close Date:</div>
             <div
               onClick={() => setShowCloseDateModal(true)}
               className="flex items-center space-x-2 mb-1 cursor-pointer hover:bg-purple-50 p-2 rounded-lg transition-colors"
               title="Click to see prediction details"
             >
               <Calendar className="h-5 w-5 text-gray-500" />
-              <span className="text-lg font-bold text-gray-900 hover:text-purple-600">{predictive.expectedCloseDate}</span>
+              <span className="text-[18px] font-bold text-gray-900 hover:text-purple-600">{predictive.expectedCloseDate}</span>
             </div>
             {predictive.daysEarlier && (
-              <div className="text-sm text-green-600">({predictive.daysEarlier} days earlier than target)</div>
+              <div className="text-[11px] text-green-600">({predictive.daysEarlier} days earlier than target)</div>
             )}
-            <div className="text-xs text-gray-600 mt-1">Confidence: {predictive.closeDateConfidence}%</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">Confidence: {predictive.closeDateConfidence}%</div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Deal Size Confidence:</div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-gray-600">High ({predictive.dealSizeConfidence}%)</span>
+          <div className="pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-500 mb-1">Deal Size Confidence:</div>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[11px] text-gray-500">High ({predictive.dealSizeConfidence}%)</span>
             </div>
-            <div className="text-sm text-gray-700 mb-1">
+            <div className="text-[11px] text-gray-600 mb-0.5">
               Predicted: <span className="font-medium">{predictive.predictedRange}</span>
             </div>
-            <div className="flex items-center space-x-2 text-sm">
-              <span className="text-gray-600">Current: ${(predictive.currentAmount / 1000).toFixed(0)}K</span>
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <div className="flex items-center space-x-1.5 text-[11px]">
+              <span className="text-gray-500">Current: ${(predictive.currentAmount / 1000).toFixed(0)}K</span>
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
               <span className="text-green-600 font-medium">Within range</span>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Risk Level:</div>
+          <div className="pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-500 mb-1">Risk Level:</div>
             <div className="flex items-center space-x-2 mb-2">
               <span className="text-2xl">{getRiskEmoji(predictive.riskLevel)}</span>
               <span className={`text-lg font-bold capitalize ${getRiskColor(predictive.riskLevel)}`}>
                 {predictive.riskLevel}
               </span>
             </div>
-            <div className="text-sm text-gray-700 mb-1">
+            <div className="text-[11px] text-gray-600 mb-0.5">
               <span className="font-semibold">Primary Risk:</span> {predictive.primaryRisk}
             </div>
-            <div className="text-sm text-gray-700">
+            <div className="text-[11px] text-gray-600">
               <span className="font-semibold">Mitigation:</span> {predictive.mitigation}
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Churn Risk (if won):</div>
+          <div className="pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-500 mb-1">Churn Risk (if won):</div>
             <div className="flex items-center space-x-2 mb-1">
               <span className="text-2xl">🟢</span>
               <span className="text-lg font-bold text-green-600">Low ({predictive.churnRisk}%)</span>
             </div>
-            <div className="text-sm text-gray-600">Why: {predictive.churnReason}</div>
+            <div className="text-[11px] text-gray-400">Why: {predictive.churnReason}</div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Upsell Opportunity:</div>
+          <div className="pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-500 mb-1">Upsell Opportunity:</div>
             <div className="flex items-center space-x-2 mb-1">
               <span className="text-2xl">🟡</span>
               <span className="text-lg font-bold text-yellow-600 capitalize">{predictive.upsellOpportunity}</span>
             </div>
-            <div className="text-sm text-gray-700 mb-1">
+            <div className="text-[11px] text-gray-600 mb-0.5">
               Potential: <span className="font-medium">{predictive.upsellPotential}</span>
             </div>
-            <div className="text-sm text-gray-600">Best timing: {predictive.upsellTiming}</div>
+            <div className="text-[11px] text-gray-400">Best timing: {predictive.upsellTiming}</div>
           </div>
 
-          <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-            <div className="text-sm font-semibold text-purple-900 mb-1">🤖 AI Recommendation:</div>
-            <div className="text-sm text-purple-800">{predictive.recommendation}</div>
+          <div className="bg-purple-50 rounded-lg p-2.5 border border-purple-200">
+            <div className="text-[11px] font-semibold text-purple-900 mb-0.5">🤖 AI Recommendation:</div>
+            <div className="text-[11px] text-purple-800">{predictive.recommendation}</div>
           </div>
         </div>
       </div>
 
       {/* Similar Deals */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center space-x-2 mb-4">
-          <BarChart3 className="h-6 w-6 text-orange-600" />
-          <h2 className="text-lg font-bold text-gray-900">Similar Deals</h2>
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center space-x-2 mb-2.5">
+          <BarChart3 className="h-5 w-5 text-orange-600" />
+          <h2 className="text-[15px] font-semibold text-gray-900">Similar Deals</h2>
+          <span className="text-[11px] text-gray-400">(Learn from Past Wins)</span>
         </div>
-        <div className="text-xs text-gray-600 mb-4">(Learn from Past Wins)</div>
 
-        <div className="text-xs text-gray-600 mb-4">
+        <div className="text-[11px] text-gray-400 mb-2">
           Based on: Industry, size, deal value, stage
         </div>
 
@@ -257,9 +257,9 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
           ))}
         </div>
 
-        <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-          <div className="text-sm font-semibold text-blue-900 mb-2">💡 Insights from Similar Won Deals:</div>
-          <div className="space-y-1 text-xs text-blue-800">
+        <div className="bg-blue-50 rounded-lg p-2.5 border border-blue-200">
+          <div className="text-[11px] font-semibold text-blue-900 mb-1">💡 Insights from Similar Won Deals:</div>
+          <div className="space-y-0.5 text-[11px] text-blue-800">
             <div>• Avg close time: {similarInsights.avgCloseTime} days (you're at {similarInsights.currentDays})</div>
             <div>• Avg deal size: {similarInsights.avgDealSize} (yours: {similarInsights.currentDealSize})</div>
             <div>• Common objection: {similarInsights.commonObjection}</div>
@@ -270,62 +270,62 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
       </div>
 
       {/* Deal Metrics */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center space-x-2 mb-4">
-          <BarChart3 className="h-6 w-6 text-green-600" />
-          <h2 className="text-lg font-bold text-gray-900">Deal Metrics</h2>
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center space-x-2 mb-2.5">
+          <BarChart3 className="h-5 w-5 text-green-600" />
+          <h2 className="text-[15px] font-semibold text-gray-900">Deal Metrics</h2>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-2">
           <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">Timeline:</div>
-            <div className="space-y-1 text-sm">
+            <div className="text-xs font-medium text-gray-500 mb-1">Timeline:</div>
+            <div className="space-y-1 text-[12px]">
               <div className="flex justify-between">
-                <span className="text-gray-600">Deal Age:</span>
+                <span className="text-gray-500">Deal Age:</span>
                 <span className="font-medium text-gray-900">{metrics.dealAge} days</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Time in Current Stage:</span>
+                <span className="text-gray-500">Time in Current Stage:</span>
                 <span className="font-medium text-gray-900">{metrics.timeInStage} days</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Avg Stage Duration:</span>
+                <span className="text-gray-500">Avg Stage Duration:</span>
                 <span className="font-medium text-gray-900">{metrics.avgStageDuration} days (on track)</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Days to Close:</span>
+                <span className="text-gray-500">Days to Close:</span>
                 <span className="font-medium text-gray-900">{metrics.daysToClose} days</span>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-sm font-semibold text-gray-700 mb-2">Engagement:</div>
-            <div className="space-y-1 text-sm">
+          <div className="pt-2 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-500 mb-1">Engagement:</div>
+            <div className="space-y-1 text-[12px]">
               <div className="flex justify-between">
-                <span className="text-gray-600">Meetings:</span>
+                <span className="text-gray-500">Meetings:</span>
                 <span className="font-medium text-gray-900">{metrics.meetings}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Emails:</span>
+                <span className="text-gray-500">Emails:</span>
                 <span className="font-medium text-gray-900">{metrics.emailsSent} sent, {metrics.emailsOpened} opened ({Math.round((metrics.emailsOpened / metrics.emailsSent) * 100)}%)</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Calls:</span>
+                <span className="text-gray-500">Calls:</span>
                 <span className="font-medium text-gray-900">{metrics.calls}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Last Activity:</span>
+                <span className="text-gray-500">Last Activity:</span>
                 <span className={`font-medium ${metrics.lastActivityDays >= 5 ? 'text-red-600' : 'text-gray-900'}`}>
                   {metrics.lastActivityDays} days ago {metrics.lastActivityDays >= 5 ? '⚠️' : ''}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Response Rate:</span>
+                <span className="text-gray-500">Response Rate:</span>
                 <span className="font-medium text-green-600">{metrics.responseRate}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Avg Response Time:</span>
+                <span className="text-gray-500">Avg Response Time:</span>
                 <span className="font-medium text-gray-900">{metrics.avgResponseTime}</span>
               </div>
             </div>
@@ -335,28 +335,28 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
       </div>
 
       {/* Forecast Impact */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex items-center space-x-2 mb-4">
-          <BarChart3 className="h-6 w-6 text-green-600" />
-          <h2 className="text-lg font-bold text-gray-900">Forecast Impact</h2>
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center space-x-2 mb-2.5">
+          <BarChart3 className="h-5 w-5 text-green-600" />
+          <h2 className="text-[15px] font-semibold text-gray-900">Forecast Impact</h2>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">This Quarter</span>
-            <span className="text-lg font-bold text-gray-900">
+            <span className="text-xs text-gray-500">This Quarter</span>
+            <span className="text-base font-bold text-gray-900">
               ${(metrics.quarterlyForecast / 1000).toFixed(0)}K
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Weighted Value</span>
-            <span className="text-sm font-medium text-gray-900">
+            <span className="text-xs text-gray-500">Weighted Value</span>
+            <span className="text-[12px] font-medium text-gray-900">
               ${(metrics.weightedValue / 1000).toFixed(1)}K
               ({Math.round((metrics.weightedValue / metrics.quarterlyForecast) * 100)}% probability)
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Contribution to Quota</span>
-            <span className="text-sm font-bold text-blue-600">{metrics.quotaContribution}%</span>
+            <span className="text-xs text-gray-500">Contribution to Quota</span>
+            <span className="text-[12px] font-bold text-blue-600">{metrics.quotaContribution}%</span>
           </div>
         </div>
       </div>

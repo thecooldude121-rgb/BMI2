@@ -84,12 +84,12 @@ export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ form
     .reduce((s, i) => s + (i.max - i.earned), 0);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">Deal Health Score</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{subtitle ?? 'Updates as you fill the form'}</p>
+          <h2 className="text-[15px] font-semibold text-gray-900">Deal Health Score</h2>
+          <p className="text-[11px] text-gray-400 mt-0.5">{subtitle ?? 'Updates as you fill the form'}</p>
         </div>
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${tierBadge}`}>
           {result.label}
@@ -97,7 +97,7 @@ export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ form
       </div>
 
       {/* Gauge + available points */}
-      <div className="flex items-center space-x-4 mb-5">
+      <div className="flex items-center space-x-4 mb-2">
         <CircleGauge score={result.score} tier={result.tier} />
         <div className="flex-1">
           {availablePts > 0 ? (
@@ -119,7 +119,7 @@ export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ form
       </div>
 
       {/* Score items */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {/* Show missing + partial first (opportunity items) */}
         {[...partialItems, ...missingItems].map(item => (
           <div key={item.id} className="flex items-start space-x-2.5">
@@ -140,8 +140,8 @@ export const DealHealthScorePanel: React.FC<DealHealthScorePanelProps> = ({ form
 
         {/* Divider when there are both earned and not-earned */}
         {earnedItems.length > 0 && (partialItems.length > 0 || missingItems.length > 0) && (
-          <div className="border-t border-gray-100 pt-2 mt-1">
-            <p className="text-xs text-gray-400 mb-2">Completed</p>
+          <div className="border-t border-gray-100 pt-1.5 mt-1">
+            <p className="text-[11px] text-gray-400 mb-1">Completed</p>
           </div>
         )}
 
