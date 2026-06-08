@@ -54,6 +54,7 @@ interface DealsListViewProps {
   ) => void;
   availableOwners?: string[];
   availableStages?: string[];
+  onFieldUpdate?: (dealId: string, field: string, value: unknown) => Promise<void>;
 }
 
 // ── Column definitions ────────────────────────────────────────────────────────
@@ -88,15 +89,23 @@ const DEFAULT_ORDER: ColumnKey[] = [
   'health', 'actions',
 ];
 
+// PERF NOTE: renderCell re-runs for all visible cells on each editValue keystroke.
+// For tables > 500 rows, extract each editable cell as React.memo component.
+// Current dataset is < 200 rows — acceptable without memoization.
+
+const EDITABLE_FIELDS = ['value', 'stage', 'closeDate', 'owner', 'probability', 'nextStep'] as const;
+type EditableField = typeof EDITABLE_FIELDS[number];
+
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onStageChange, onBulkAction, availableOwners = [] }) => {
+const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onStageChange, onBulkAction, availableOwners = [], onFieldUpdate }) => {
   const navigate = useNavigate();
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [selectedCloseDate, setSelectedCloseDate] = useState<string>('all');
   const [selectedValue, setSelectedValue] = useState<string>('all');
   const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [activeKpiFilter, setActiveKpiFilter] = useState<'closingWeek' | 'stalled' | null>(null);
   const [sortBy, setSortBy] = useState<
     'deal' | 'account' | 'value' | 'stage' | 'closeDate' | 'health'
     | 'owner' | 'contact' | 'probability' | 'dealAge' | 'source'
@@ -124,6 +133,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
   const lastSelectedIndex = useRef<number | null>(null);
 
+  const [editingCell, setEditingCell] = useState<{ dealId: string; field: string } | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingCell, setSavingCell] = useState<{ dealId: string; field: string } | null>(null);
+  const [localEdits, setLocalEdits] = useState<Record<string, Partial<Deal>>>({});
+  const [errorCell, setErrorCell] = useState<{ dealId: string; field: string } | null>(null);
+  const editInputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const commitEditRef = useRef<() => Promise<void>>(async () => {});
+
   const allDeals: Deal[] = stages.flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })));
 
   const selectedDealSet = useMemo(() => new Set(selectedDeals), [selectedDeals]);
@@ -148,7 +165,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     return matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
   });
 
-  const sortedDeals = [...filteredDeals].sort((a, b) => {
+  const kpiFilteredDeals = useMemo(() => {
+    if (activeKpiFilter === 'closingWeek') {
+      return filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
+    }
+    if (activeKpiFilter === 'stalled') {
+      return filteredDeals.filter(d => d.daysSinceContact >= 5);
+    }
+    return filteredDeals;
+  }, [filteredDeals, activeKpiFilter]);
+
+  const sortedDeals = [...kpiFilteredDeals].sort((a, b) => {
     let comparison = 0;
     switch (sortBy) {
       case 'deal':
@@ -315,6 +342,161 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     setTimeout(() => setBulkToast(null), 2500);
   };
 
+  const getDisplayValue = <K extends keyof Deal>(deal: Deal, key: K): Deal[K] =>
+    ((localEdits[deal.id]?.[key] ?? deal[key]) as Deal[K]);
+
+  const parseFieldUpdate = (field: string, rawValue: string): { dealKey: keyof Deal; value: unknown } | null => {
+    const trimmed = rawValue.trim();
+    switch (field) {
+      case 'value': {
+        const n = Number(trimmed);
+        if (isNaN(n) || n < 0) return null;
+        return { dealKey: 'amount', value: n };
+      }
+      case 'stage':     return trimmed ? { dealKey: 'stage',     value: trimmed } : null;
+      case 'closeDate': return trimmed ? { dealKey: 'closeDate', value: trimmed } : null;
+      case 'owner':     return trimmed ? { dealKey: 'owner',     value: trimmed } : null;
+      case 'probability': {
+        const n = Number(trimmed);
+        if (isNaN(n) || n < 0 || n > 100) return null;
+        return { dealKey: 'aiScore', value: n };
+      }
+      case 'nextStep':  return { dealKey: 'nextStep', value: trimmed };
+      default:          return null;
+    }
+  };
+
+  const startEdit = (dealId: string, field: string) => {
+    const deal = allDeals.find(d => d.id === dealId);
+    if (!deal) return;
+    let initialValue = '';
+    switch (field) {
+      case 'value':       initialValue = String(getDisplayValue(deal, 'amount') ?? ''); break;
+      case 'stage':       initialValue = getDisplayValue(deal, 'stage') ?? ''; break;
+      case 'closeDate': {
+        const raw = getDisplayValue(deal, 'closeDate') ?? '';
+        if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+          initialValue = raw.slice(0, 10);
+        } else {
+          const ms = parseDateMs(raw);
+          if (isFinite(ms)) initialValue = new Date(ms).toISOString().slice(0, 10);
+        }
+        break;
+      }
+      case 'owner':       initialValue = getDisplayValue(deal, 'owner') ?? ''; break;
+      case 'probability': initialValue = String(getDisplayValue(deal, 'aiScore') ?? ''); break;
+      case 'nextStep':    initialValue = getDisplayValue(deal, 'nextStep') ?? ''; break;
+    }
+    setEditingCell({ dealId, field });
+    setEditValue(initialValue);
+  };
+
+  const commitEdit = async () => {
+    if (!editingCell) return;
+    const { dealId, field } = editingCell;
+    const parsed = parseFieldUpdate(field, editValue);
+    if (parsed === null) {
+      if (field === 'probability') {
+        setErrorCell({ dealId, field });
+        setTimeout(() => setErrorCell(null), 1500);
+      }
+      setEditingCell(null);
+      return;
+    }
+    const origDeal = allDeals.find(d => d.id === dealId);
+    const currentVal = origDeal
+      ? (localEdits[dealId]?.[parsed.dealKey] ?? origDeal[parsed.dealKey])
+      : undefined;
+    if (String(parsed.value ?? '') === String(currentVal ?? '')) {
+      setEditingCell(null);
+      return;
+    }
+    setLocalEdits(prev => ({
+      ...prev,
+      [dealId]: { ...prev[dealId], [parsed.dealKey]: parsed.value as Deal[typeof parsed.dealKey] },
+    }));
+    setEditingCell(null);
+    setSavingCell({ dealId, field });
+    try {
+      await onFieldUpdate?.(dealId, field, parsed.value);
+    } catch {
+      setLocalEdits(prev => {
+        if (!prev[dealId]) return prev;
+        const next = { ...prev };
+        const copy = { ...prev[dealId] } as Record<string, unknown>;
+        delete copy[parsed.dealKey];
+        if (!Object.keys(copy).length) delete next[dealId];
+        else next[dealId] = copy as Partial<Deal>;
+        return next;
+      });
+      showBulkToast('Failed to save — change reverted');
+    } finally {
+      setSavingCell(null);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent, dealId: string, field: string) => {
+    if (e.key === 'Enter')  { e.preventDefault(); commitEdit(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      commitEdit();
+      const visibleEditableFields = EDITABLE_FIELDS.filter(f => visibleColumns.has(f as ColumnKey));
+      const curFieldIdx  = visibleEditableFields.indexOf(field as EditableField);
+      const curRowIdx    = sortedDeals.findIndex(d => d.id === dealId);
+      let nextField: string | null = null;
+      let nextDealId = dealId;
+      if (!e.shiftKey) {
+        if (curFieldIdx < visibleEditableFields.length - 1) {
+          nextField = visibleEditableFields[curFieldIdx + 1];
+        } else if (curRowIdx < sortedDeals.length - 1) {
+          nextDealId = sortedDeals[curRowIdx + 1].id;
+          nextField  = visibleEditableFields[0];
+        }
+      } else {
+        if (curFieldIdx > 0) {
+          nextField = visibleEditableFields[curFieldIdx - 1];
+        } else if (curRowIdx > 0) {
+          nextDealId = sortedDeals[curRowIdx - 1].id;
+          nextField  = visibleEditableFields[visibleEditableFields.length - 1];
+        }
+      }
+      if (nextField) setTimeout(() => startEdit(nextDealId, nextField!), 0);
+    }
+  };
+
+  const commitImmediateSelect = async (dealId: string, field: string, value: string) => {
+    const parsed = parseFieldUpdate(field, value);
+    if (!parsed) return;
+    setLocalEdits(prev => ({
+      ...prev,
+      [dealId]: { ...prev[dealId], [parsed.dealKey]: parsed.value as Deal[typeof parsed.dealKey] },
+    }));
+    setEditingCell(null);
+    setSavingCell({ dealId, field });
+    try {
+      await onFieldUpdate?.(dealId, field, parsed.value);
+    } catch {
+      setLocalEdits(prev => {
+        if (!prev[dealId]) return prev;
+        const next = { ...prev };
+        const copy = { ...prev[dealId] } as Record<string, unknown>;
+        delete copy[parsed.dealKey];
+        if (!Object.keys(copy).length) delete next[dealId];
+        else next[dealId] = copy as Partial<Deal>;
+        return next;
+      });
+      showBulkToast('Failed to save — change reverted');
+    } finally {
+      setSavingCell(null);
+    }
+  };
+
   const toggleColumn = (key: ColumnKey) => {
     setVisibleColumns(prev => {
       const next = new Set(prev);
@@ -342,12 +524,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   useEffect(() => {
     if (!headerCheckboxRef.current) return;
     headerCheckboxRef.current.indeterminate =
-      selectedDeals.length > 0 && selectedDeals.length < filteredDeals.length;
-  }, [selectedDeals, filteredDeals]);
+      selectedDeals.length > 0 && selectedDeals.length < kpiFilteredDeals.length;
+  }, [selectedDeals, kpiFilteredDeals]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      if (editingCell) { setEditingCell(null); setEditValue(''); return; }
       if (openPopover) { setOpenPopover(null); return; }
       if (selectedDeals.length > 0) {
         setSelectedDeals([]);
@@ -356,13 +539,30 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [openPopover, selectedDeals]);
+  }, [editingCell, openPopover, selectedDeals]);
+
+  useEffect(() => {
+    if (!editingCell) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const el = document.querySelector('[data-cell-editing="true"]');
+      if (el && !el.contains(e.target as Node)) commitEditRef.current();
+    };
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [editingCell]);
 
   const totalValue = sortedDeals.reduce((sum, deal) => sum + deal.amount, 0);
   const avgWinRate = 67;
-  const closingThisWeek = sortedDeals.filter(d => isWithinDays(d.closeDate, 7)).length;
-  const stalledDeals = sortedDeals.filter(d => d.daysSinceContact >= 5).length;
+  // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
+  const kpiClosingCount  = filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7)).length;
+  const kpiStalledCount  = filteredDeals.filter(d => d.daysSinceContact >= 5).length;
   const avgDaysCycle = 45;
+
+  // Reset KPI shortcut when any dropdown filter changes to avoid phantom pills
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setActiveKpiFilter(null); }, [selectedStage, selectedOwner, selectedCloseDate, selectedValue, selectedSource]);
+
+  commitEditRef.current = commitEdit;
 
   const showBulkActions = selectedDeals.length > 0;
   const orderedVisible = columnOrder.filter(k => visibleColumns.has(k));
@@ -412,8 +612,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   };
 
   const renderCell = (key: ColumnKey, deal: Deal, isExpanded: boolean): React.ReactNode => {
-    const stageColor = getStageStyle(deal.stage);
-
     switch (key) {
       case 'dealName':
         return (
@@ -467,18 +665,49 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         );
 
       case 'owner': {
-        const firstName = deal.owner ? deal.owner.split(' ')[0] : '';
+        const isEditing      = editingCell?.dealId === deal.id && editingCell?.field === 'owner';
+        const isSaving       = savingCell?.dealId  === deal.id && savingCell?.field  === 'owner';
+        const displayOwner   = getDisplayValue(deal, 'owner');
+        const firstName      = displayOwner ? displayOwner.split(' ')[0] : '';
+        const ownerOptions   = availableOwners.length > 0
+          ? availableOwners
+          : Array.from(new Set(allDeals.map(d => d.owner).filter(Boolean)));
         return (
-          <td key="owner" className="px-4 py-3">
-            {deal.owner ? (
-              <div className="flex items-center gap-1.5">
-                <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-semibold text-indigo-700">{getInitials(deal.owner)}</span>
-                </div>
-                <span className="text-sm text-gray-700">{firstName}</span>
-              </div>
+          <td
+            key="owner"
+            data-cell-editing={isEditing ? 'true' : undefined}
+            className={[
+              'px-4 py-3 cursor-text transition-colors',
+              isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
+            ].join(' ')}
+            onClick={() => { if (!isEditing) startEdit(deal.id, 'owner'); }}
+          >
+            {isEditing ? (
+              <select
+                className="text-sm bg-white border border-indigo-300 rounded-md px-2 py-1 outline-none w-full"
+                value={editValue}
+                onChange={e => commitImmediateSelect(deal.id, 'owner', e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') cancelEdit(); }}
+                onBlur={cancelEdit}
+                autoFocus
+              >
+                {ownerOptions.map(o => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
             ) : (
-              <span className="text-sm text-gray-400">—</span>
+              <div className={`${isSaving ? 'animate-pulse opacity-60' : ''}`}>
+                {displayOwner ? (
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[10px] font-semibold text-indigo-700">{getInitials(displayOwner)}</span>
+                    </div>
+                    <span className="text-sm text-gray-700">{firstName}</span>
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
             )}
           </td>
         );
@@ -500,81 +729,160 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
           </td>
         );
 
-      case 'value':
+      case 'value': {
+        const isEditing = editingCell?.dealId === deal.id && editingCell?.field === 'value';
+        const isSaving  = savingCell?.dealId  === deal.id && savingCell?.field  === 'value';
+        const isError   = errorCell?.dealId   === deal.id && errorCell?.field   === 'value';
+        const displayAmount = getDisplayValue(deal, 'amount');
         return (
-          <td key="value" className="px-4 py-3">
-            <div
-              className="text-lg font-bold cursor-pointer hover:underline"
-              style={{ color: '#667eea' }}
-              onClick={() => navigate(`/crm/deals/${deal.id}`)}
-            >
-              {formatAmountUSD(deal.amount)}
-            </div>
-          </td>
-        );
-
-      case 'stage':
-        return (
-          <td key="stage" className="px-4 py-3">
-            <div className="relative">
+          <td
+            key="value"
+            data-cell-editing={isEditing ? 'true' : undefined}
+            className={[
+              'px-4 py-3 cursor-text transition-colors',
+              isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
+              isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
+            ].join(' ')}
+            onClick={() => { if (!isEditing) startEdit(deal.id, 'value'); }}
+          >
+            {isEditing ? (
+              <input
+                type="number"
+                min={0}
+                className="w-full bg-transparent text-indigo-600 font-bold text-lg outline-none border-none p-0"
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => handleEditKeyDown(e, deal.id, 'value')}
+                autoFocus
+              />
+            ) : (
               <div
-                className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium cursor-pointer hover:opacity-80"
-                style={{ backgroundColor: stageColor.bg, color: stageColor.text }}
-                onClick={(e) => { e.stopPropagation(); setShowStageModal(deal.id); }}
-                onMouseEnter={() => setHoveredStage(deal.id)}
-                onMouseLeave={() => setHoveredStage(null)}
+                className={`text-lg font-bold ${isSaving ? 'animate-pulse opacity-60' : ''}`}
+                style={{ color: '#667eea' }}
               >
-                {getStageName(deal.stage)}
+                {formatAmountUSD(displayAmount)}
               </div>
-              <div className="text-xs text-gray-500 mt-1">
-                Stage {getStageProgress(deal.stage)}
-              </div>
-              {hoveredStage === deal.id && (
-                <div className="absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
-                  <div className="text-sm font-semibold text-gray-900 mb-3">Deal Progress:</div>
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="text-gray-700">Prospecting (5 days)</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="text-gray-700">Qualified (8 days)</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="text-gray-700">Proposal (12 days)</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm font-medium">
-                      <div className="h-4 w-4 flex items-center justify-center">➡️</div>
-                      <span className="text-gray-900">{getStageName(deal.stage)} (15 days) [NOW]</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm text-gray-400">
-                      <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                      <span>Closed-Won</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-sm text-gray-400">
-                      <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                      <span>Closed-Lost</span>
-                    </div>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
-                    <div>Total: 40 days in pipeline</div>
-                    <div>Avg cycle: {avgDaysCycle} days</div>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </td>
         );
+      }
 
-      case 'closeDate':
+      case 'stage': {
+        const isEditing     = editingCell?.dealId === deal.id && editingCell?.field === 'stage';
+        const isSaving      = savingCell?.dealId  === deal.id && savingCell?.field  === 'stage';
+        const displayStage  = getDisplayValue(deal, 'stage');
+        const displayColor  = getStageStyle(displayStage);
         return (
-          <td key="closeDate" className="px-4 py-3">
-            <div className="text-sm text-gray-900">{formatDate(deal.closeDate)}</div>
-            <div className="text-xs text-gray-500">{daysFromNowLabel(deal.closeDate)}</div>
+          <td
+            key="stage"
+            data-cell-editing={isEditing ? 'true' : undefined}
+            className={[
+              'px-4 py-3 cursor-text transition-colors',
+              isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
+            ].join(' ')}
+            onClick={() => { if (!isEditing) startEdit(deal.id, 'stage'); }}
+          >
+            {isEditing ? (
+              <select
+                className="text-xs bg-white border border-indigo-300 rounded-md px-2 py-1 outline-none font-medium w-full"
+                value={editValue}
+                onChange={e => commitImmediateSelect(deal.id, 'stage', e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') cancelEdit(); }}
+                onBlur={cancelEdit}
+                autoFocus
+              >
+                {stages.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="relative">
+                <div
+                  className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium ${isSaving ? 'animate-pulse opacity-60' : ''}`}
+                  style={{ backgroundColor: displayColor.bg, color: displayColor.text }}
+                  onMouseEnter={() => setHoveredStage(deal.id)}
+                  onMouseLeave={() => setHoveredStage(null)}
+                >
+                  {getStageName(displayStage)}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Stage {getStageProgress(displayStage)}
+                </div>
+                {hoveredStage === deal.id && (
+                  <div className="absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
+                    <div className="text-sm font-semibold text-gray-900 mb-3">Deal Progress:</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-gray-700">Prospecting (5 days)</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-gray-700">Qualified (8 days)</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <span className="text-gray-700">Proposal (12 days)</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm font-medium">
+                        <div className="h-4 w-4 flex items-center justify-center">➡️</div>
+                        <span className="text-gray-900">{getStageName(displayStage)} (15 days) [NOW]</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm text-gray-400">
+                        <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                        <span>Closed-Won</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm text-gray-400">
+                        <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
+                        <span>Closed-Lost</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
+                      <div>Total: 40 days in pipeline</div>
+                      <div>Avg cycle: {avgDaysCycle} days</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </td>
         );
+      }
+
+      case 'closeDate': {
+        const isEditing     = editingCell?.dealId === deal.id && editingCell?.field === 'closeDate';
+        const isSaving      = savingCell?.dealId  === deal.id && savingCell?.field  === 'closeDate';
+        const displayDate   = getDisplayValue(deal, 'closeDate');
+        return (
+          <td
+            key="closeDate"
+            data-cell-editing={isEditing ? 'true' : undefined}
+            className={[
+              'px-4 py-3 cursor-text transition-colors',
+              isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
+            ].join(' ')}
+            onClick={() => { if (!isEditing) startEdit(deal.id, 'closeDate'); }}
+          >
+            {isEditing ? (
+              <input
+                type="date"
+                className="text-sm bg-transparent border-none outline-none"
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => handleEditKeyDown(e, deal.id, 'closeDate')}
+                autoFocus
+              />
+            ) : (
+              <div className={isSaving ? 'animate-pulse opacity-60' : ''}>
+                <div className="text-sm text-gray-900">{formatDate(displayDate)}</div>
+                <div className="text-xs text-gray-500">{daysFromNowLabel(displayDate)}</div>
+              </div>
+            )}
+          </td>
+        );
+      }
 
       case 'lastActivity':
         return (
@@ -588,6 +896,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
         );
 
       case 'nextStep': {
+        const isEditing       = editingCell?.dealId === deal.id && editingCell?.field === 'nextStep';
+        const isSaving        = savingCell?.dealId  === deal.id && savingCell?.field  === 'nextStep';
+        const displayNextStep = getDisplayValue(deal, 'nextStep');
         const daysUntilDue = deal.nextStepDueDate ? daysFromNow(deal.nextStepDueDate) : null;
         const urgencyBadge = daysUntilDue !== null
           ? daysUntilDue < 0
@@ -599,14 +910,37 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 : null
           : null;
         return (
-          <td key="nextStep" className="px-4 py-3 max-w-[200px]">
-            {deal.nextStep ? (
-              <div className="flex items-center">
-                <span className="text-sm text-gray-700 truncate">{deal.nextStep}</span>
-                {urgencyBadge}
-              </div>
+          <td
+            key="nextStep"
+            data-cell-editing={isEditing ? 'true' : undefined}
+            className={[
+              'px-4 py-3 max-w-[200px] cursor-text transition-colors',
+              isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
+            ].join(' ')}
+            onClick={() => { if (!isEditing) startEdit(deal.id, 'nextStep'); }}
+          >
+            {isEditing ? (
+              <input
+                type="text"
+                className="w-full text-sm bg-transparent outline-none border-none p-0 placeholder-gray-300"
+                placeholder="Add next step…"
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => handleEditKeyDown(e, deal.id, 'nextStep')}
+                autoFocus
+              />
             ) : (
-              <span className="text-sm text-gray-300">—</span>
+              <div className={isSaving ? 'animate-pulse opacity-60' : ''}>
+                {displayNextStep ? (
+                  <div className="flex items-center">
+                    <span className="text-sm text-gray-700 truncate">{displayNextStep}</span>
+                    {urgencyBadge}
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-300">—</span>
+                )}
+              </div>
             )}
           </td>
         );
@@ -633,18 +967,43 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
       }
 
       case 'probability': {
-        // TODO: rename aiScore → probability
-        const prob = deal.aiScore;
-        const probCls = prob >= 70
+        const isEditing = editingCell?.dealId === deal.id && editingCell?.field === 'probability';
+        const isSaving  = savingCell?.dealId  === deal.id && savingCell?.field  === 'probability';
+        const isError   = errorCell?.dealId   === deal.id && errorCell?.field   === 'probability';
+        const prob      = getDisplayValue(deal, 'aiScore');
+        const probCls   = prob >= 70
           ? 'bg-green-100 text-green-700'
           : prob >= 40
             ? 'bg-amber-100 text-amber-700'
             : 'bg-red-100 text-red-700';
         return (
-          <td key="probability" className="px-4 py-3">
-            <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${probCls}`}>
-              {prob}%
-            </span>
+          <td
+            key="probability"
+            data-cell-editing={isEditing ? 'true' : undefined}
+            className={[
+              'px-4 py-3 cursor-text transition-colors',
+              isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
+              isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
+            ].join(' ')}
+            onClick={() => { if (!isEditing) startEdit(deal.id, 'probability'); }}
+          >
+            {isEditing ? (
+              <input
+                type="number"
+                min={0}
+                max={100}
+                className={`w-16 text-sm bg-transparent outline-none border-none p-0 ${isError ? 'text-red-600' : ''}`}
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => handleEditKeyDown(e, deal.id, 'probability')}
+                autoFocus
+              />
+            ) : (
+              <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${probCls} ${isSaving ? 'animate-pulse opacity-60' : ''}`}>
+                {prob}%
+              </span>
+            )}
           </td>
         );
       }
@@ -678,8 +1037,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
           );
         }
 
-        const cardLite = toDealCardLite(deal);
-        const closeDaysLeft = deal.closeDate ? daysFromNow(deal.closeDate) : null;
+        const mergedDeal = localEdits[deal.id] ? { ...deal, ...localEdits[deal.id] } : deal;
+        const cardLite = toDealCardLite(mergedDeal);
+        const closeDaysLeft = mergedDeal.closeDate ? daysFromNow(mergedDeal.closeDate) : null;
         const healthExpl = explainDealHealth(cardLite, closeDaysLeft);
         const barColor = healthExpl.tier === 'strong' ? '#10b981'
           : healthExpl.tier === 'fair' ? '#f59e0b' : '#ef4444';
@@ -833,30 +1193,110 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
       {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="grid grid-cols-6 gap-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-            <div className="text-3xl font-bold text-blue-900">{sortedDeals.length}</div>
+
+          {/* Card 1: Total Deals — clickable, active when no KPI filter */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveKpiFilter(null)}
+            onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(null)}
+            className={[
+              'relative bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border',
+              'cursor-pointer select-none transition-all duration-150',
+              'hover:shadow-md hover:scale-[1.01]',
+              activeKpiFilter === null
+                ? 'border-indigo-400 ring-2 ring-indigo-400 ring-offset-1'
+                : 'border-blue-200',
+            ].join(' ')}
+          >
+            <div className={`text-3xl text-blue-900 ${activeKpiFilter === null ? 'font-extrabold' : 'font-bold'}`}>
+              {filteredDeals.length}
+            </div>
             <div className="text-sm text-blue-700 font-medium mt-1">Total Deals</div>
           </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+
+          {/* Card 2: Total Value — decorative only */}
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 cursor-default">
             <div className="text-3xl font-bold text-green-900">{formatAmountUSD(totalValue)}</div>
             <div className="text-sm text-green-700 font-medium mt-1">Total Value</div>
           </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+
+          {/* Card 3: Avg Win Rate — decorative only */}
+          <div
+            className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200 cursor-default"
+            title="Win rate based on closed deals in the current period"
+          >
             <div className="text-3xl font-bold text-purple-900">{avgWinRate}%</div>
             <div className="text-sm text-purple-700 font-medium mt-1">Avg Win Rate</div>
           </div>
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
-            <div className="text-3xl font-bold text-orange-900">{closingThisWeek}</div>
+
+          {/* Card 4: Closing This Week — clickable filter */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveKpiFilter(activeKpiFilter === 'closingWeek' ? null : 'closingWeek')}
+            onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'closingWeek' ? null : 'closingWeek')}
+            className={[
+              'relative bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border',
+              'cursor-pointer select-none transition-all duration-150',
+              'hover:shadow-md hover:scale-[1.01]',
+              activeKpiFilter === 'closingWeek'
+                ? 'border-orange-400 ring-2 ring-orange-400 ring-offset-2 scale-[1.02]'
+                : 'border-orange-200',
+            ].join(' ')}
+          >
+            {activeKpiFilter === 'closingWeek' && (
+              <button
+                title="Clear filter"
+                onClick={e => { e.stopPropagation(); setActiveKpiFilter(null); }}
+                className="absolute top-2 right-2 w-4 h-4 text-gray-400 hover:text-gray-600 leading-none"
+                tabIndex={-1}
+              >×</button>
+            )}
+            <div className={`text-3xl text-orange-900 ${activeKpiFilter === 'closingWeek' ? 'font-extrabold' : 'font-bold'}`}>
+              {kpiClosingCount}
+            </div>
             <div className="text-sm text-orange-700 font-medium mt-1">Closing This Week</div>
           </div>
-          <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
-            <div className="text-3xl font-bold text-red-900">{stalledDeals}</div>
+
+          {/* Card 5: Stalled Deals — clickable filter */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
+            onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
+            className={[
+              'relative bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border',
+              'cursor-pointer select-none transition-all duration-150',
+              'hover:shadow-md hover:scale-[1.01]',
+              activeKpiFilter === 'stalled'
+                ? 'border-red-400 ring-2 ring-red-400 ring-offset-2 scale-[1.02]'
+                : 'border-red-200',
+            ].join(' ')}
+          >
+            {activeKpiFilter === 'stalled' && (
+              <button
+                title="Clear filter"
+                onClick={e => { e.stopPropagation(); setActiveKpiFilter(null); }}
+                className="absolute top-2 right-2 w-4 h-4 text-gray-400 hover:text-gray-600 leading-none"
+                tabIndex={-1}
+              >×</button>
+            )}
+            <div className={`text-3xl text-red-900 ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-bold'}`}>
+              {kpiStalledCount}
+            </div>
             <div className="text-sm text-red-700 font-medium mt-1">Stalled Deals</div>
           </div>
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200">
+
+          {/* Card 6: Days Avg Cycle — decorative only */}
+          <div
+            className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200 cursor-default"
+            title="Average deal cycle based on closed deals"
+          >
             <div className="text-3xl font-bold text-gray-900">{avgDaysCycle}</div>
             <div className="text-sm text-gray-700 font-medium mt-1">Days Avg Cycle</div>
           </div>
+
         </div>
       </div>
 
@@ -935,6 +1375,21 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
             </select>
           </div>
         </div>
+
+        {/* KPI filter active pill */}
+        {activeKpiFilter && (
+          <div className="flex items-center gap-2 px-1 pb-2">
+            <span className="text-xs text-gray-500">Filtered:</span>
+            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
+              {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
+              <button
+                onClick={() => setActiveKpiFilter(null)}
+                className="ml-1 text-indigo-400 hover:text-indigo-600 leading-none"
+                title="Clear filter"
+              >×</button>
+            </span>
+          </div>
+        )}
 
         <div className="flex items-center justify-end">
           <div className="flex items-center space-x-3">
@@ -1452,12 +1907,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
             <span className="text-sm font-medium text-white">
               {selectedDeals.length} deal{selectedDeals.length !== 1 ? 's' : ''} selected
             </span>
-            {selectedDeals.length < filteredDeals.length && filteredDeals.length > 0 && (
+            {selectedDeals.length < kpiFilteredDeals.length && kpiFilteredDeals.length > 0 && (
               <button
                 onClick={selectAllDeals}
                 className="text-sm text-indigo-300 hover:text-indigo-200 underline transition-colors"
               >
-                Select all {filteredDeals.length}
+                Select all {kpiFilteredDeals.length}
               </button>
             )}
           </div>

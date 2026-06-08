@@ -1430,6 +1430,9 @@ const DealsKanbanPage: React.FC = () => {
           availableOwners={Array.from(new Set(
             stages.flatMap(s => s.deals.map(d => d.owner)).filter(Boolean)
           ))}
+          onFieldUpdate={async (dealId, field, value) => {
+            console.log('[FieldUpdate]', dealId, field, value);
+          }}
         />
       ) : viewMode === 'grid' ? (
         <DealsGridView
