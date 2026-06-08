@@ -519,8 +519,8 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         </div>
 
         {/* AI Health Score */}
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-5 border border-purple-200 mb-6">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 border border-purple-200 mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
               <Sparkles className="h-5 w-5 text-purple-600" />
               <span className="text-sm font-semibold text-purple-900">AI Health Score</span>
@@ -530,10 +530,12 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               <div className={`text-3xl font-bold ${getHealthColor(deal.aiScore)}`}>{deal.aiScore}/100</div>
             </div>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-            <div className={`h-3 rounded-full transition-all duration-300 ${getHealthBarColor(deal.aiScore)}`} style={{ width: `${deal.aiScore}%` }} />
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-gray-200 rounded-full h-2.5">
+              <div className={`h-2.5 rounded-full transition-all duration-300 ${getHealthBarColor(deal.aiScore)}`} style={{ width: `${deal.aiScore}%` }} />
+            </div>
+            <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap flex-shrink-0">{deal.aiHealth}</span>
           </div>
-          <div className="text-sm font-medium text-gray-700">{deal.aiHealth}</div>
         </div>
 
         {/* ── Today's Priority Action banner ── */}

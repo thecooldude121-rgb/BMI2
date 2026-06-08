@@ -142,55 +142,54 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
           </div>
 
           <div className="pt-2 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-500 mb-1">Deal Size Confidence:</div>
+            <div className="flex items-start justify-between">
+              <span className="text-xs font-medium text-gray-500">Deal Size Confidence</span>
+              <div className="text-right">
+                <div className="text-[13px] font-semibold text-gray-900">High ({predictive.dealSizeConfidence}%)</div>
+                <div className="text-[11px] text-gray-500">{predictive.predictedRange}</div>
+                <div className="flex items-center gap-1 justify-end text-[11px]">
+                  <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  <span className="text-green-600">Within range</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-gray-200">
+            <div className="flex items-start justify-between mb-1">
+              <span className="text-xs font-medium text-gray-500">Risk Level</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base leading-none">{getRiskEmoji(predictive.riskLevel)}</span>
+                <span className={`text-[13px] font-semibold capitalize ${getRiskColor(predictive.riskLevel)}`}>
+                  {predictive.riskLevel}
+                </span>
+              </div>
+            </div>
+            <div className="text-[11px] text-gray-500">
+              {predictive.primaryRisk} · <span className="italic">{predictive.mitigation}</span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-gray-200">
             <div className="flex items-center justify-between mb-0.5">
-              <span className="text-[11px] text-gray-500">High ({predictive.dealSizeConfidence}%)</span>
+              <span className="text-xs font-medium text-gray-500">Churn Risk (if won)</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base leading-none">🟢</span>
+                <span className="text-[13px] font-semibold text-green-600">Low ({predictive.churnRisk}%)</span>
+              </div>
             </div>
-            <div className="text-[11px] text-gray-600 mb-0.5">
-              Predicted: <span className="font-medium">{predictive.predictedRange}</span>
-            </div>
-            <div className="flex items-center space-x-1.5 text-[11px]">
-              <span className="text-gray-500">Current: ${(predictive.currentAmount / 1000).toFixed(0)}K</span>
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-              <span className="text-green-600 font-medium">Within range</span>
-            </div>
+            <div className="text-[11px] text-gray-400 text-right">{predictive.churnReason}</div>
           </div>
 
           <div className="pt-2 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-500 mb-1">Risk Level:</div>
-            <div className="flex items-center space-x-2 mb-2">
-              <span className="text-2xl">{getRiskEmoji(predictive.riskLevel)}</span>
-              <span className={`text-lg font-bold capitalize ${getRiskColor(predictive.riskLevel)}`}>
-                {predictive.riskLevel}
-              </span>
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-xs font-medium text-gray-500">Upsell Opportunity</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base leading-none">🟡</span>
+                <span className="text-[13px] font-semibold text-yellow-600 capitalize">{predictive.upsellOpportunity}</span>
+              </div>
             </div>
-            <div className="text-[11px] text-gray-600 mb-0.5">
-              <span className="font-semibold">Primary Risk:</span> {predictive.primaryRisk}
-            </div>
-            <div className="text-[11px] text-gray-600">
-              <span className="font-semibold">Mitigation:</span> {predictive.mitigation}
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-500 mb-1">Churn Risk (if won):</div>
-            <div className="flex items-center space-x-2 mb-1">
-              <span className="text-2xl">🟢</span>
-              <span className="text-lg font-bold text-green-600">Low ({predictive.churnRisk}%)</span>
-            </div>
-            <div className="text-[11px] text-gray-400">Why: {predictive.churnReason}</div>
-          </div>
-
-          <div className="pt-2 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-500 mb-1">Upsell Opportunity:</div>
-            <div className="flex items-center space-x-2 mb-1">
-              <span className="text-2xl">🟡</span>
-              <span className="text-lg font-bold text-yellow-600 capitalize">{predictive.upsellOpportunity}</span>
-            </div>
-            <div className="text-[11px] text-gray-600 mb-0.5">
-              Potential: <span className="font-medium">{predictive.upsellPotential}</span>
-            </div>
-            <div className="text-[11px] text-gray-400">Best timing: {predictive.upsellTiming}</div>
+            <div className="text-[11px] text-gray-500 text-right">{predictive.upsellPotential} · {predictive.upsellTiming}</div>
           </div>
 
           <div className="bg-purple-50 rounded-lg p-2.5 border border-purple-200">

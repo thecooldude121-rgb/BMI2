@@ -139,25 +139,29 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 flex-wrap">
+            {/* Single compact row: label · value · confidence badge */}
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
                 <h3 className="text-[15px] font-semibold text-gray-900">Win Probability</h3>
                 {winProbConfidence !== undefined && (
-                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs font-medium rounded">
-                    {winProbConfidence}% confidence
+                  <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-medium rounded-full">
+                    {winProbConfidence}% confidence ↑
                   </span>
                 )}
               </div>
-              <span className="text-3xl font-bold text-blue-600">{winProbAI ?? winProbability}%</span>
+              <span className="text-[28px] font-bold text-blue-600 leading-none">{winProbAI ?? winProbability}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-              <div
-                className={`h-4 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbAI ?? winProbability)}`}
-                style={{ width: `${winProbAI ?? winProbability}%` }}
-              />
-            </div>
-            <div className="text-sm font-medium text-gray-700 mb-4">
-              {getWinProbabilityText(winProbAI ?? winProbability)}
+            {/* Progress bar with inline "Likely to Close" label */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex-1 bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${getWinProbabilityColor(winProbAI ?? winProbability)}`}
+                  style={{ width: `${winProbAI ?? winProbability}%` }}
+                />
+              </div>
+              <span className="text-[11px] text-gray-500 whitespace-nowrap flex-shrink-0">
+                {getWinProbabilityText(winProbAI ?? winProbability)}
+              </span>
             </div>
           </>
         )}
@@ -193,21 +197,21 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
 
         <div className="mb-3">
           <div className="text-xs font-medium text-gray-500 mb-1.5">Strengths:</div>
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2 text-sm text-gray-900">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+            <div className="flex items-center gap-1.5 text-xs text-gray-900">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
               <span>Contact responds quickly (avg 2 hours)</span>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-900">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <div className="flex items-center gap-1.5 text-xs text-gray-900">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
               <span>Multiple touchpoints (3 meetings, 8 emails)</span>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-900">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <div className="flex items-center gap-1.5 text-xs text-gray-900">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
               <span>Budget confirmed ($50K available)</span>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-900">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <div className="flex items-center gap-1.5 text-xs text-gray-900">
+              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
               <span>Strong business case (ROI: 240%)</span>
             </div>
           </div>
