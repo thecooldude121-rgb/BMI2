@@ -27,8 +27,42 @@
 
 import type { DealCard } from '../components/Deal/DealKanbanCard';
 import { isWithinDays } from './dateUtils';
+import type { ColumnKey, CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from './dealsColumns';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+/**
+ * A user-created saved view — persisted to localStorage.
+ * Captures the full page state so applyUserView() can restore it exactly.
+ */
+export type UserSavedView = {
+  id: string;
+  name: string;
+  isPinned: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  // KanbanPage filter state
+  selectedOwner: string;
+  selectedCloseDateFilter: string;
+  selectedValueFilter: string;
+  selectedSourceFilter: string;
+  sortBy: string;
+  viewMode: 'kanban' | 'list' | 'grid' | 'calendar';
+  cardDensity: 'standard' | 'compact';
+  activeKpiFilter: 'closingWeek' | 'stalled' | null;
+  // Column state (lifted from DealsListView)
+  visibleColumns: ColumnKey[];
+  columnOrder: ColumnKey[];
+  // Filter state v2 — multi-select and range shapes.
+  // v1 string fields remain for backward compatibility with saved views already in localStorage.
+  selectedStagesV2?: string[];
+  selectedOwnersV2?: string[];
+  selectedSourcesV2?: string[];
+  selectedHealthTiersV2?: HealthTierFilter[];
+  closeDateFilterV2?: CloseDateFilter;
+  valueFilterV2?: ValueFilter;
+  pipelineAgeFilterV2?: PipelineAgeFilter;
+};
 
 /** Values for the existing dropdown filter controls. */
 export interface DropdownFilterPreset {

@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Building2, User, Sparkles, Mail, Phone, Eye, MoreHorizontal,
-  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical, Archive
+  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical, Archive,
+  StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal,
 } from 'lucide-react';
 import { formatAmountUSD } from '../../utils/currencyUtils';
-import { explainDealHealth } from '../../utils/dealHealthDrivers';
+import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
+import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER } from '../../utils/dealsColumns';
+import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 
 interface Deal {
   id: string;
@@ -55,39 +58,33 @@ interface DealsListViewProps {
   availableOwners?: string[];
   availableStages?: string[];
   onFieldUpdate?: (dealId: string, field: string, value: unknown) => Promise<void>;
+  onAddNote?: (dealId: string) => void;
+  onScheduleFollowUp?: (dealId: string) => void;
+  externalFilters?: {
+    stages?: Set<string>;
+    owners?: Set<string>;
+    sources?: Set<string>;
+    healthTiers?: Set<HealthTierFilter>;
+    closeDateFilter?: CloseDateFilter;
+    valueFilter?: ValueFilter;
+    pipelineAgeFilter?: PipelineAgeFilter;
+  };
+  onFiltersChange?: (filters: {
+    stages: Set<string>;
+    owners: Set<string>;
+    sources: Set<string>;
+    healthTiers: Set<HealthTierFilter>;
+    closeDateFilter: CloseDateFilter;
+    valueFilter: ValueFilter;
+    pipelineAgeFilter: PipelineAgeFilter;
+  }) => void;
+  visibleColumns: Set<ColumnKey>;
+  setVisibleColumns: React.Dispatch<React.SetStateAction<Set<ColumnKey>>>;
+  columnOrder: ColumnKey[];
+  setColumnOrder: React.Dispatch<React.SetStateAction<ColumnKey[]>>;
+  activeKpiFilter: 'closingWeek' | 'stalled' | null;
+  setActiveKpiFilter: React.Dispatch<React.SetStateAction<'closingWeek' | 'stalled' | null>>;
 }
-
-// ── Column definitions ────────────────────────────────────────────────────────
-
-type ColumnKey =
-  | 'dealName' | 'account' | 'owner' | 'contact'
-  | 'value' | 'stage' | 'closeDate' | 'lastActivity'
-  | 'nextStep' | 'dealAge' | 'probability' | 'source'
-  | 'health' | 'actions';
-
-const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
-  { key: 'dealName',     label: 'Deal Name'       },
-  { key: 'account',      label: 'Account'         },
-  { key: 'owner',        label: 'Owner'           },
-  { key: 'contact',      label: 'Primary Contact' },
-  { key: 'value',        label: 'Value'           },
-  { key: 'stage',        label: 'Stage'           },
-  { key: 'closeDate',    label: 'Close Date'      },
-  { key: 'lastActivity', label: 'Last Activity'   },
-  { key: 'nextStep',     label: 'Next Step'       },
-  { key: 'dealAge',      label: 'Deal Age'        },
-  { key: 'probability',  label: 'Probability'     },
-  { key: 'source',       label: 'Source'          },
-  { key: 'health',       label: 'Health'          },
-  { key: 'actions',      label: 'Actions'         },
-];
-
-const DEFAULT_ORDER: ColumnKey[] = [
-  'dealName', 'account', 'owner', 'contact',
-  'value', 'stage', 'closeDate', 'lastActivity',
-  'nextStep', 'dealAge', 'probability', 'source',
-  'health', 'actions',
-];
 
 // PERF NOTE: renderCell re-runs for all visible cells on each editValue keystroke.
 // For tables > 500 rows, extract each editable cell as React.memo component.
@@ -98,14 +95,59 @@ type EditableField = typeof EDITABLE_FIELDS[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onStageChange, onBulkAction, availableOwners = [], onFieldUpdate }) => {
+const DealsListView: React.FC<DealsListViewProps> = ({
+  stages, onDealClick, onStageChange, onBulkAction,
+  availableOwners = [], onFieldUpdate, onAddNote, onScheduleFollowUp,
+  externalFilters, onFiltersChange,
+  visibleColumns, setVisibleColumns, columnOrder, setColumnOrder,
+  activeKpiFilter, setActiveKpiFilter,
+}) => {
   const navigate = useNavigate();
-  const [selectedStage, setSelectedStage] = useState<string>('all');
-  const [selectedOwner, setSelectedOwner] = useState<string>('all');
-  const [selectedCloseDate, setSelectedCloseDate] = useState<string>('all');
-  const [selectedValue, setSelectedValue] = useState<string>('all');
-  const [selectedSource, setSelectedSource] = useState<string>('all');
-  const [activeKpiFilter, setActiveKpiFilter] = useState<'closingWeek' | 'stalled' | null>(null);
+
+  // NOTE: URL sync covers DealsListView (list mode) filters only.
+  // KanbanPage-level filters (kanban/grid/calendar) are not URL-synced.
+  // These two filter systems will be unified in a future refactor.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // ── Filter state (7 dimensions) ──────────────────────────────────────────
+  const [selectedStages, setSelectedStages] = useState<Set<string>>(() => {
+    const p = searchParams.get('stages');
+    return p ? new Set(p.split(',').filter(Boolean)) : new Set();
+  });
+  const [selectedOwners, setSelectedOwners] = useState<Set<string>>(() => {
+    const p = searchParams.get('owners');
+    return p ? new Set(p.split(',').filter(Boolean)) : new Set();
+  });
+  const [closeDateFilter, setCloseDateFilter] = useState<CloseDateFilter>(() => {
+    const preset = searchParams.get('closeDatePreset') as CloseDateFilter['preset'] | null;
+    return {
+      preset: preset ?? 'all',
+      from: searchParams.get('closeDateFrom') ?? undefined,
+      to: searchParams.get('closeDateTo') ?? undefined,
+    };
+  });
+  const [valueFilter, setValueFilter] = useState<ValueFilter>(() => {
+    const min = searchParams.get('valueMin');
+    const max = searchParams.get('valueMax');
+    return { min: min ? parseFloat(min) : null, max: max ? parseFloat(max) : null };
+  });
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(() => {
+    const p = searchParams.get('sources');
+    return p ? new Set(p.split(',').filter(Boolean)) : new Set();
+  });
+  const [selectedHealthTiers, setSelectedHealthTiers] = useState<Set<HealthTierFilter>>(() => {
+    const p = searchParams.get('healthTiers');
+    return p ? new Set(p.split(',').filter(Boolean) as HealthTierFilter[]) : new Set();
+  });
+  const [pipelineAgeFilter, setPipelineAgeFilter] = useState<PipelineAgeFilter>(() => {
+    const min = searchParams.get('pipelineAgeMin');
+    const max = searchParams.get('pipelineAgeMax');
+    return { min: min ? parseInt(min) : null, max: max ? parseInt(max) : null };
+  });
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const filterBarRef = useRef<HTMLDivElement>(null);
+
   const [sortBy, setSortBy] = useState<
     'deal' | 'account' | 'value' | 'stage' | 'closeDate' | 'health'
     | 'owner' | 'contact' | 'probability' | 'dealAge' | 'source'
@@ -124,8 +166,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
   const [showHRMSModal, setShowHRMSModal] = useState<Deal | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
-  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => new Set(DEFAULT_ORDER));
-  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([...DEFAULT_ORDER]);
   const dragKey = useRef<ColumnKey | null>(null);
   const [openPopover, setOpenPopover] = useState<'stage' | 'owner' | 'tag' | 'archive' | null>(null);
   const [bulkToast, setBulkToast] = useState<string | null>(null);
@@ -143,27 +183,78 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
 
   const allDeals: Deal[] = stages.flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })));
 
+  const stageFilterOptions = useMemo(
+    () => [...new Set(allDeals.map(d => d.stage).filter(Boolean))].sort(),
+    [allDeals]
+  );
+  const ownerFilterOptions = useMemo(
+    () => availableOwners.length > 0
+      ? availableOwners
+      : [...new Set(allDeals.map(d => d.owner).filter(Boolean))].sort(),
+    [allDeals, availableOwners]
+  );
+  const sourceFilterOptions = useMemo(
+    () => [...new Set(allDeals.map(d => d.source).filter(Boolean))].sort(),
+    [allDeals]
+  );
+
   const selectedDealSet = useMemo(() => new Set(selectedDeals), [selectedDeals]);
 
-  const filteredDeals = allDeals.filter(deal => {
-    const matchesStage = selectedStage === 'all' || deal.stage === selectedStage;
-    const matchesOwner = selectedOwner === 'all' || deal.owner === selectedOwner;
+  const filteredDeals = useMemo(() => {
+    return allDeals.filter(deal => {
+      // Stage
+      if (selectedStages.size > 0 && !selectedStages.has(deal.stage)) return false;
 
-    const matchesCloseDate = selectedCloseDate === 'all' ||
-      (selectedCloseDate === 'week'    && isWithinDays(deal.closeDate, 7))  ||
-      (selectedCloseDate === 'month'   && isWithinDays(deal.closeDate, 30)) ||
-      (selectedCloseDate === 'quarter' && isWithinDays(deal.closeDate, 90));
+      // Owner
+      if (selectedOwners.size > 0 && !selectedOwners.has(deal.owner)) return false;
 
-    const matchesValue = selectedValue === 'all' ||
-      (selectedValue === '0-25k'   && deal.amount < 25000) ||
-      (selectedValue === '25-50k'  && deal.amount >= 25000  && deal.amount < 50000) ||
-      (selectedValue === '50-100k' && deal.amount >= 50000  && deal.amount < 100000) ||
-      (selectedValue === '100k+'   && deal.amount >= 100000);
+      // Close Date
+      if (closeDateFilter.preset !== 'all') {
+        const close = deal.closeDate ? new Date(deal.closeDate) : null;
+        const now = new Date();
+        if (!close) return false;
+        if (closeDateFilter.preset === 'thisWeek') {
+          const end = new Date(now.getTime() + 7 * 86400000);
+          if (close < now || close > end) return false;
+        } else if (closeDateFilter.preset === 'thisMonth') {
+          if (close.getMonth() !== now.getMonth() || close.getFullYear() !== now.getFullYear()) return false;
+        } else if (closeDateFilter.preset === 'thisQuarter') {
+          const q = Math.floor(now.getMonth() / 3);
+          if (Math.floor(close.getMonth() / 3) !== q || close.getFullYear() !== now.getFullYear()) return false;
+        } else if (closeDateFilter.preset === 'overdue') {
+          if (close >= now) return false;
+        } else if (closeDateFilter.preset === 'custom') {
+          if (closeDateFilter.from && close < new Date(closeDateFilter.from)) return false;
+          if (closeDateFilter.to && close > new Date(closeDateFilter.to)) return false;
+        }
+      }
 
-    const matchesSource = selectedSource === 'all' || deal.source.includes(selectedSource);
+      // Value
+      if (valueFilter.min !== null && deal.amount < valueFilter.min) return false;
+      if (valueFilter.max !== null && deal.amount > valueFilter.max) return false;
 
-    return matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
-  });
+      // Source
+      if (selectedSources.size > 0 && !selectedSources.has(deal.source)) return false;
+
+      // Health tier
+      if (selectedHealthTiers.size > 0) {
+        const { tier } = scoreToHealthTier(deal.aiScore);
+        if (!selectedHealthTiers.has(tier)) return false;
+      }
+
+      // Pipeline age
+      if (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) {
+        const age = deal.createdAt
+          ? Math.floor((Date.now() - new Date(deal.createdAt).getTime()) / 86400000)
+          : null;
+        if (age === null) return false;
+        if (pipelineAgeFilter.min !== null && age < pipelineAgeFilter.min) return false;
+        if (pipelineAgeFilter.max !== null && age > pipelineAgeFilter.max) return false;
+      }
+
+      return true;
+    });
+  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
 
   const kpiFilteredDeals = useMemo(() => {
     if (activeKpiFilter === 'closingWeek') {
@@ -506,8 +597,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   };
 
   const resetColumns = () => {
-    setColumnOrder([...DEFAULT_ORDER]);
-    setVisibleColumns(new Set(DEFAULT_ORDER));
+    setColumnOrder([...DEFAULT_COLUMN_ORDER]);
+    setVisibleColumns(new Set(DEFAULT_COLUMN_ORDER));
   };
 
   useEffect(() => {
@@ -551,6 +642,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [editingCell]);
 
+  useEffect(() => {
+    if (!openFilter) return;
+    const handler = (e: MouseEvent) => {
+      if (filterBarRef.current && !filterBarRef.current.contains(e.target as Node)) {
+        setOpenFilter(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openFilter]);
+
   const totalValue = sortedDeals.reduce((sum, deal) => sum + deal.amount, 0);
   const avgWinRate = 67;
   // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
@@ -560,9 +662,91 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
 
   // Reset KPI shortcut when any dropdown filter changes to avoid phantom pills
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setActiveKpiFilter(null); }, [selectedStage, selectedOwner, selectedCloseDate, selectedValue, selectedSource]);
+  useEffect(() => { setActiveKpiFilter(null); }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
 
   commitEditRef.current = commitEdit;
+
+  // ── URL sync ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    const set = (k: string, v: string | null) => {
+      if (v) params.set(k, v); else params.delete(k);
+    };
+    set('stages',          selectedStages.size > 0 ? [...selectedStages].join(',') : null);
+    set('owners',          selectedOwners.size > 0 ? [...selectedOwners].join(',') : null);
+    set('closeDatePreset', closeDateFilter.preset !== 'all' ? closeDateFilter.preset : null);
+    set('closeDateFrom',   closeDateFilter.from ?? null);
+    set('closeDateTo',     closeDateFilter.to ?? null);
+    set('valueMin',        valueFilter.min !== null ? String(valueFilter.min) : null);
+    set('valueMax',        valueFilter.max !== null ? String(valueFilter.max) : null);
+    set('sources',         selectedSources.size > 0 ? [...selectedSources].join(',') : null);
+    set('healthTiers',     selectedHealthTiers.size > 0 ? [...selectedHealthTiers].join(',') : null);
+    set('pipelineAgeMin',  pipelineAgeFilter.min !== null ? String(pipelineAgeFilter.min) : null);
+    set('pipelineAgeMax',  pipelineAgeFilter.max !== null ? String(pipelineAgeFilter.max) : null);
+    setSearchParams(params, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
+
+  // ── Apply external filters (from saved views via DealsKanbanPage) ──────────
+  useEffect(() => {
+    if (!externalFilters) return;
+    if (externalFilters.stages)           setSelectedStages(externalFilters.stages);
+    if (externalFilters.owners)           setSelectedOwners(externalFilters.owners);
+    if (externalFilters.sources)          setSelectedSources(externalFilters.sources);
+    if (externalFilters.healthTiers)      setSelectedHealthTiers(externalFilters.healthTiers);
+    if (externalFilters.closeDateFilter)  setCloseDateFilter(externalFilters.closeDateFilter);
+    if (externalFilters.valueFilter)      setValueFilter(externalFilters.valueFilter);
+    if (externalFilters.pipelineAgeFilter) setPipelineAgeFilter(externalFilters.pipelineAgeFilter);
+  }, [externalFilters]);
+
+  // ── Notify parent of filter changes (for saveCurrentView) ─────────────────
+  useEffect(() => {
+    onFiltersChange?.({ stages: selectedStages, owners: selectedOwners, sources: selectedSources,
+      healthTiers: selectedHealthTiers, closeDateFilter, valueFilter, pipelineAgeFilter });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
+
+  const clearAllFilters = () => {
+    setSelectedStages(new Set());
+    setSelectedOwners(new Set());
+    setCloseDateFilter({ preset: 'all' });
+    setValueFilter({ min: null, max: null });
+    setSelectedSources(new Set());
+    setSelectedHealthTiers(new Set());
+    setPipelineAgeFilter({ min: null, max: null });
+  };
+
+  const hasActiveFilters =
+    selectedStages.size > 0 || selectedOwners.size > 0 ||
+    closeDateFilter.preset !== 'all' ||
+    valueFilter.min !== null || valueFilter.max !== null ||
+    selectedSources.size > 0 || selectedHealthTiers.size > 0 ||
+    pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null;
+
+  const activeFilterCount =
+    selectedStages.size + selectedOwners.size + selectedSources.size + selectedHealthTiers.size +
+    (closeDateFilter.preset !== 'all' ? 1 : 0) +
+    (valueFilter.min !== null || valueFilter.max !== null ? 1 : 0) +
+    (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ? 1 : 0);
+
+  const HEALTH_TIER_LABELS: Record<HealthTierFilter, string> = {
+    strong: 'Healthy',
+    fair:   'Watch',
+    weak:   'At Risk',
+  };
+
+  const closeDatePresetLabel: Record<string, string> = {
+    thisWeek: 'This Week', thisMonth: 'This Month',
+    thisQuarter: 'This Quarter', overdue: 'Overdue',
+    custom: `${closeDateFilter.from ?? ''}–${closeDateFilter.to ?? ''}`,
+  };
+
+  const FilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
+    <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
+      {label}
+      <button onClick={onRemove} className="text-indigo-400 hover:text-indigo-600 ml-0.5 leading-none">×</button>
+    </span>
+  );
 
   const showBulkActions = selectedDeals.length > 0;
   const orderedVisible = columnOrder.filter(k => visibleColumns.has(k));
@@ -621,7 +805,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span
                     className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 leading-snug"
-                    onClick={() => navigate(`/crm/deals/${deal.id}`)}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
                   >
                     {deal.dealName}
                   </span>
@@ -638,7 +822,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 </div>
               </div>
               <button
-                onClick={() => toggleRowExpansion(deal.id)}
+                onClick={(e) => { e.stopPropagation(); toggleRowExpansion(deal.id); }}
                 className="flex-shrink-0 p-0.5 hover:bg-gray-100 rounded mt-0.5"
                 title={isExpanded ? 'Collapse' : 'Expand row'}
               >
@@ -680,7 +864,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               'px-4 py-3 cursor-text transition-colors',
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
-            onClick={() => { if (!isEditing) startEdit(deal.id, 'owner'); }}
+            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'owner'); }}
           >
             {isEditing ? (
               <select
@@ -743,7 +927,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
               isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
             ].join(' ')}
-            onClick={() => { if (!isEditing) startEdit(deal.id, 'value'); }}
+            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'value'); }}
           >
             {isEditing ? (
               <input
@@ -781,7 +965,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               'px-4 py-3 cursor-text transition-colors',
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
-            onClick={() => { if (!isEditing) startEdit(deal.id, 'stage'); }}
+            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'stage'); }}
           >
             {isEditing ? (
               <select
@@ -862,7 +1046,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               'px-4 py-3 cursor-text transition-colors',
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
-            onClick={() => { if (!isEditing) startEdit(deal.id, 'closeDate'); }}
+            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'closeDate'); }}
           >
             {isEditing ? (
               <input
@@ -917,7 +1101,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               'px-4 py-3 max-w-[200px] cursor-text transition-colors',
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
-            onClick={() => { if (!isEditing) startEdit(deal.id, 'nextStep'); }}
+            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'nextStep'); }}
           >
             {isEditing ? (
               <input
@@ -985,7 +1169,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
               isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
             ].join(' ')}
-            onClick={() => { if (!isEditing) startEdit(deal.id, 'probability'); }}
+            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'probability'); }}
           >
             {isEditing ? (
               <input
@@ -1301,117 +1485,351 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
       </div>
 
       {/* ── Filter Bar ────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-8 py-4">
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Stage:</label>
-            <select
-              value={selectedStage}
-              onChange={(e) => setSelectedStage(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              {stages.map(stage => (
-                <option key={stage.id} value={stage.id}>{stage.name}</option>
-              ))}
-            </select>
-          </div>
+      <div className="bg-white border-b border-gray-100" ref={filterBarRef}>
 
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Owner:</label>
-            <select
-              value={selectedOwner}
-              onChange={(e) => setSelectedOwner(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="Alex Rodriguez">Alex Rodriguez</option>
-              <option value="Sarah Chen">Sarah Chen</option>
-              <option value="Mike Johnson">Mike Johnson</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Close Date:</label>
-            <select
-              value={selectedCloseDate}
-              onChange={(e) => setSelectedCloseDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Value:</label>
-            <select
-              value={selectedValue}
-              onChange={(e) => setSelectedValue(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="0-25k">$0–25K</option>
-              <option value="25-50k">$25–50K</option>
-              <option value="50-100k">$50–100K</option>
-              <option value="100k+">$100K+</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">Source:</label>
-            <select
-              value={selectedSource}
-              onChange={(e) => setSelectedSource(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="Lead Gen">Lead Gen</option>
-              <option value="HRMS">HRMS</option>
-              <option value="Website">Website</option>
-              <option value="Manual">Manual</option>
-            </select>
-          </div>
+        {/* Mobile: single "Filters" button */}
+        <div className="md:hidden flex items-center gap-2 px-4 py-3">
+          <button
+            onClick={() => setShowMobileFilters(true)}
+            className="flex items-center gap-2 text-sm font-medium px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-600"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filters
+            {hasActiveFilters && (
+              <span className="bg-indigo-500 text-white text-[10px] rounded-full px-1.5 py-0.5 leading-none">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {hasActiveFilters && (
+            <button onClick={clearAllFilters} className="text-sm text-red-500 hover:text-red-700 font-medium">
+              Clear all
+            </button>
+          )}
         </div>
 
-        {/* KPI filter active pill */}
-        {activeKpiFilter && (
-          <div className="flex items-center gap-2 px-1 pb-2">
-            <span className="text-xs text-gray-500">Filtered:</span>
-            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
-              {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
-              <button
-                onClick={() => setActiveKpiFilter(null)}
-                className="ml-1 text-indigo-400 hover:text-indigo-600 leading-none"
-                title="Clear filter"
-              >×</button>
-            </span>
-          </div>
-        )}
+        {/* Desktop: full filter row */}
+        <div className="hidden md:flex items-center gap-2 flex-wrap px-4 py-3">
 
-        <div className="flex items-center justify-end">
-          <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300">
-              <BarChart3 className="h-4 w-4" />
-              <span>View: List</span>
+          {/* ── Stage ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'stage' ? null : 'stage')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                selectedStages.size > 0
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {selectedStages.size === 0 ? 'Stage' : selectedStages.size === 1 ? [...selectedStages][0] : `${selectedStages.size} stages`}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'stage' ? 'rotate-180' : ''}`} />
             </button>
-            <button className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300">
-              <Download className="h-4 w-4" />
-              <span>Export</span>
+            {openFilter === 'stage' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[180px]">
+                {stageFilterOptions.map(s => (
+                  <label key={s} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedStages.has(s)}
+                      onChange={() => setSelectedStages(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700 capitalize">{s}</span>
+                  </label>
+                ))}
+                {stageFilterOptions.length === 0 && <p className="text-xs text-gray-400 px-1">No stages found</p>}
+              </div>
+            )}
+          </div>
+
+          {/* ── Owner ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'owner' ? null : 'owner')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                selectedOwners.size > 0
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {selectedOwners.size === 0 ? 'Owner' : selectedOwners.size === 1 ? [...selectedOwners][0].split(' ')[0] : `${selectedOwners.size} owners`}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'owner' ? 'rotate-180' : ''}`} />
             </button>
+            {openFilter === 'owner' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
+                {ownerFilterOptions.map(o => (
+                  <label key={o} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedOwners.has(o)}
+                      onChange={() => setSelectedOwners(prev => { const n = new Set(prev); n.has(o) ? n.delete(o) : n.add(o); return n; })}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-[9px] font-semibold text-indigo-700">{getInitials(o)}</span>
+                    </div>
+                    <span className="text-sm text-gray-700">{o}</span>
+                  </label>
+                ))}
+                {ownerFilterOptions.length === 0 && <p className="text-xs text-gray-400 px-1">No owners found</p>}
+              </div>
+            )}
+          </div>
+
+          {/* ── Close Date ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'closeDate' ? null : 'closeDate')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                closeDateFilter.preset !== 'all'
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {closeDateFilter.preset === 'all' ? 'Close Date' : closeDatePresetLabel[closeDateFilter.preset] ?? 'Close Date'}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'closeDate' ? 'rotate-180' : ''}`} />
+            </button>
+            {openFilter === 'closeDate' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[220px]">
+                {(['all', 'thisWeek', 'thisMonth', 'thisQuarter', 'overdue', 'custom'] as const).map(preset => (
+                  <label key={preset} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="radio"
+                      name="closeDatePreset"
+                      checked={closeDateFilter.preset === preset}
+                      onChange={() => setCloseDateFilter({ preset })}
+                      className="text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">
+                      {preset === 'all' ? 'Any date' : preset === 'thisWeek' ? 'This week' : preset === 'thisMonth' ? 'This month' : preset === 'thisQuarter' ? 'This quarter' : preset === 'overdue' ? 'Overdue' : 'Custom range'}
+                    </span>
+                  </label>
+                ))}
+                {closeDateFilter.preset === 'custom' && (
+                  <div className="mt-2 space-y-2 pt-2 border-t border-gray-100">
+                    <div>
+                      <label className="text-[11px] text-gray-500 font-medium block mb-0.5">From</label>
+                      <input
+                        type="date"
+                        value={closeDateFilter.from ?? ''}
+                        onChange={e => setCloseDateFilter(prev => ({ ...prev, from: e.target.value || undefined }))}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-gray-500 font-medium block mb-0.5">To</label>
+                      <input
+                        type="date"
+                        value={closeDateFilter.to ?? ''}
+                        onChange={e => setCloseDateFilter(prev => ({ ...prev, to: e.target.value || undefined }))}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Value ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'value' ? null : 'value')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                valueFilter.min !== null || valueFilter.max !== null
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {valueFilter.min === null && valueFilter.max === null
+                ? 'Value'
+                : valueFilter.min !== null && valueFilter.max !== null
+                  ? `$${(valueFilter.min/1000).toFixed(0)}K–$${(valueFilter.max/1000).toFixed(0)}K`
+                  : valueFilter.min !== null
+                    ? `≥$${(valueFilter.min/1000).toFixed(0)}K`
+                    : `≤$${(valueFilter.max!/1000).toFixed(0)}K`}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'value' ? 'rotate-180' : ''}`} />
+            </button>
+            {openFilter === 'value' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
+                <p className="text-[11px] text-gray-500 font-medium mb-2">Deal value range</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Min $</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={valueFilter.min ?? ''}
+                      onChange={e => setValueFilter(prev => ({ ...prev, min: e.target.value ? parseFloat(e.target.value) : null }))}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    />
+                  </div>
+                  <span className="text-gray-300 text-sm mt-3">–</span>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Max $</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="∞"
+                      value={valueFilter.max ?? ''}
+                      onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => setValueFilter({ min: null, max: null })}
+                  className="mt-2 text-xs text-gray-400 hover:text-gray-600 w-full text-left"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Source ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'source' ? null : 'source')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                selectedSources.size > 0
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {selectedSources.size === 0 ? 'Source' : selectedSources.size === 1 ? [...selectedSources][0] : `${selectedSources.size} sources`}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'source' ? 'rotate-180' : ''}`} />
+            </button>
+            {openFilter === 'source' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[180px]">
+                {sourceFilterOptions.map(s => (
+                  <label key={s} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedSources.has(s)}
+                      onChange={() => setSelectedSources(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">{s}</span>
+                  </label>
+                ))}
+                {sourceFilterOptions.length === 0 && <p className="text-xs text-gray-400 px-1">No sources found</p>}
+              </div>
+            )}
+          </div>
+
+          {/* ── Health ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'health' ? null : 'health')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                selectedHealthTiers.size > 0
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {selectedHealthTiers.size === 0 ? 'Health' : `${selectedHealthTiers.size} tiers`}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'health' ? 'rotate-180' : ''}`} />
+            </button>
+            {openFilter === 'health' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[180px]">
+                {([['strong','Healthy','bg-green-400'],['fair','Watch','bg-amber-400'],['weak','At Risk','bg-red-400']] as [HealthTierFilter, string, string][]).map(([tier, label, dot]) => (
+                  <label key={tier} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedHealthTiers.has(tier)}
+                      onChange={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.has(tier) ? n.delete(tier) : n.add(tier); return n; })}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className={`h-2 w-2 rounded-full flex-shrink-0 ${dot}`} />
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Pipeline Age ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'pipelineAge' ? null : 'pipelineAge')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {pipelineAgeFilter.min === null && pipelineAgeFilter.max === null
+                ? 'Pipeline Age'
+                : pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
+                  ? `${pipelineAgeFilter.min}–${pipelineAgeFilter.max}d`
+                  : pipelineAgeFilter.min !== null
+                    ? `≥${pipelineAgeFilter.min}d`
+                    : `≤${pipelineAgeFilter.max}d`}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'pipelineAge' ? 'rotate-180' : ''}`} />
+            </button>
+            {openFilter === 'pipelineAge' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
+                <p className="text-[11px] text-gray-500 font-medium mb-1">
+                  Pipeline Age (days)
+                  <span title="Days since deal was created. Stage-level tracking coming soon." className="ml-1 cursor-help text-gray-400">ⓘ</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Min days</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={pipelineAgeFilter.min ?? ''}
+                      onChange={e => setPipelineAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    />
+                  </div>
+                  <span className="text-gray-300 text-sm mt-3">–</span>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Max days</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="∞"
+                      value={pipelineAgeFilter.max ?? ''}
+                      onChange={e => setPipelineAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPipelineAgeFilter({ min: null, max: null })}
+                  className="mt-2 text-xs text-gray-400 hover:text-gray-600 w-full text-left"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Clear all + Column settings ── */}
+          <div className="ml-auto flex items-center gap-2">
+            {hasActiveFilters && (
+              <button
+                onClick={clearAllFilters}
+                className="text-sm text-red-500 hover:text-red-700 font-medium"
+              >
+                Clear all
+              </button>
+            )}
 
             {/* Column settings gear */}
             <div className="relative">
               <button
-                className="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-300"
+                className="flex items-center px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-200"
                 onClick={(e) => { e.stopPropagation(); setShowColumnSettings(v => !v); }}
                 title="Column settings"
               >
                 <Settings className="h-4 w-4" />
               </button>
-
               {showColumnSettings && (
                 <div
                   className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50"
@@ -1465,8 +1883,173 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
               )}
             </div>
           </div>
+
         </div>
+
+        {/* Active filter chips */}
+        {hasActiveFilters && (
+          <div className="hidden md:flex items-center gap-2 px-4 py-2 flex-wrap border-t border-gray-100">
+            <span className="text-xs text-gray-400">Active filters:</span>
+            {[...selectedStages].map(s => (
+              <FilterChip key={`stage-${s}`} label={s} onRemove={() => setSelectedStages(prev => { const n = new Set(prev); n.delete(s); return n; })} />
+            ))}
+            {[...selectedOwners].map(o => (
+              <FilterChip key={`owner-${o}`} label={o.split(' ')[0]} onRemove={() => setSelectedOwners(prev => { const n = new Set(prev); n.delete(o); return n; })} />
+            ))}
+            {closeDateFilter.preset !== 'all' && (
+              <FilterChip label={closeDatePresetLabel[closeDateFilter.preset] ?? closeDateFilter.preset} onRemove={() => setCloseDateFilter({ preset: 'all' })} />
+            )}
+            {(valueFilter.min !== null || valueFilter.max !== null) && (
+              <FilterChip
+                label={valueFilter.min !== null && valueFilter.max !== null
+                  ? `$${(valueFilter.min/1000).toFixed(0)}K–$${(valueFilter.max/1000).toFixed(0)}K`
+                  : valueFilter.min !== null ? `≥$${(valueFilter.min/1000).toFixed(0)}K` : `≤$${(valueFilter.max!/1000).toFixed(0)}K`}
+                onRemove={() => setValueFilter({ min: null, max: null })}
+              />
+            )}
+            {[...selectedSources].map(s => (
+              <FilterChip key={`source-${s}`} label={s} onRemove={() => setSelectedSources(prev => { const n = new Set(prev); n.delete(s); return n; })} />
+            ))}
+            {[...selectedHealthTiers].map(t => (
+              <FilterChip key={`health-${t}`} label={HEALTH_TIER_LABELS[t]} onRemove={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.delete(t); return n; })} />
+            ))}
+            {(pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) && (
+              <FilterChip
+                label={pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
+                  ? `${pipelineAgeFilter.min}–${pipelineAgeFilter.max} days`
+                  : pipelineAgeFilter.min !== null ? `≥${pipelineAgeFilter.min}d` : `≤${pipelineAgeFilter.max}d`}
+                onRemove={() => setPipelineAgeFilter({ min: null, max: null })}
+              />
+            )}
+          </div>
+        )}
+
+        {/* KPI filter active pill */}
+        {activeKpiFilter && (
+          <div className="flex items-center gap-2 px-4 pb-2">
+            <span className="text-xs text-gray-500">Filtered:</span>
+            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
+              {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
+              <button
+                onClick={() => setActiveKpiFilter(null)}
+                className="ml-1 text-indigo-400 hover:text-indigo-600 leading-none"
+                title="Clear filter"
+              >×</button>
+            </span>
+          </div>
+        )}
+
       </div>
+
+      {/* Mobile filter sheet */}
+      {showMobileFilters && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto md:hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 sticky top-0 bg-white">
+            <h2 className="text-base font-semibold text-gray-900">Filters</h2>
+            <button onClick={() => setShowMobileFilters(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="p-4 space-y-6">
+            {/* Stage */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Stage</p>
+              <div className="space-y-2">
+                {stageFilterOptions.map(s => (
+                  <label key={s} className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={selectedStages.has(s)} onChange={() => setSelectedStages(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })} className="rounded border-gray-300 text-indigo-600" />
+                    <span className="text-sm text-gray-700 capitalize">{s}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Owner */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Owner</p>
+              <div className="space-y-2">
+                {ownerFilterOptions.map(o => (
+                  <label key={o} className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={selectedOwners.has(o)} onChange={() => setSelectedOwners(prev => { const n = new Set(prev); n.has(o) ? n.delete(o) : n.add(o); return n; })} className="rounded border-gray-300 text-indigo-600" />
+                    <span className="text-sm text-gray-700">{o}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Source */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Source</p>
+              <div className="space-y-2">
+                {sourceFilterOptions.map(s => (
+                  <label key={s} className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={selectedSources.has(s)} onChange={() => setSelectedSources(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })} className="rounded border-gray-300 text-indigo-600" />
+                    <span className="text-sm text-gray-700">{s}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Health */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Health</p>
+              <div className="space-y-2">
+                {([['strong','Healthy','bg-green-400'],['fair','Watch','bg-amber-400'],['weak','At Risk','bg-red-400']] as [HealthTierFilter,string,string][]).map(([tier,label,dot]) => (
+                  <label key={tier} className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={selectedHealthTiers.has(tier)} onChange={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.has(tier) ? n.delete(tier) : n.add(tier); return n; })} className="rounded border-gray-300 text-indigo-600" />
+                    <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Close Date */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Close Date</p>
+              <div className="space-y-2">
+                {(['all','thisWeek','thisMonth','thisQuarter','overdue','custom'] as const).map(preset => (
+                  <label key={preset} className="flex items-center gap-3 cursor-pointer">
+                    <input type="radio" name="mobileCloseDatePreset" checked={closeDateFilter.preset === preset} onChange={() => setCloseDateFilter({ preset })} className="text-indigo-600" />
+                    <span className="text-sm text-gray-700">{preset === 'all' ? 'Any' : preset === 'thisWeek' ? 'This week' : preset === 'thisMonth' ? 'This month' : preset === 'thisQuarter' ? 'This quarter' : preset === 'overdue' ? 'Overdue' : 'Custom'}</span>
+                  </label>
+                ))}
+                {closeDateFilter.preset === 'custom' && (
+                  <div className="space-y-2 pl-6">
+                    <input type="date" value={closeDateFilter.from ?? ''} onChange={e => setCloseDateFilter(prev => ({ ...prev, from: e.target.value || undefined }))} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                    <input type="date" value={closeDateFilter.to ?? ''} onChange={e => setCloseDateFilter(prev => ({ ...prev, to: e.target.value || undefined }))} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Value */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Value range</p>
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} placeholder="Min $" value={valueFilter.min ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, min: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                <span className="text-gray-400">–</span>
+                <input type="number" min={0} placeholder="Max $" value={valueFilter.max ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+              </div>
+            </div>
+            {/* Pipeline Age */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">Pipeline Age (days)</p>
+              <p className="text-xs text-gray-400 mb-2">Days since deal was created.</p>
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} placeholder="Min" value={pipelineAgeFilter.min ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                <span className="text-gray-400">–</span>
+                <input type="number" min={0} placeholder="Max" value={pipelineAgeFilter.max ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+              </div>
+            </div>
+          </div>
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-3">
+            {hasActiveFilters && (
+              <button onClick={clearAllFilters} className="flex-1 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
+                Clear all
+              </button>
+            )}
+            <button onClick={() => setShowMobileFilters(false)} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+              Done ({filteredDeals.length} deals)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Table ─────────────────────────────────────────────────────────────── */}
       <div className="px-8 py-6">
@@ -1494,14 +2077,40 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 const isExpanded = expandedRows.includes(deal.id);
                 const isSelected = selectedDealSet.has(deal.id);
 
+                // Pre-compute expanded panel data for all rows (< 200 rows, acceptable per PERF NOTE)
+                const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
+                const expandedMerged = localEdits[deal.id] ? { ...deal, ...localEdits[deal.id] } : deal;
+                const expandedCardLite = toDealCardLite(expandedMerged);
+                const expandedCloseDays = expandedMerged.closeDate ? daysFromNow(expandedMerged.closeDate) : null;
+                const healthExpl = isClosed ? null : explainDealHealth(expandedCardLite, expandedCloseDays);
+                const { tier: healthTier } = scoreToHealthTier(deal.aiScore);
+                const accentClass = isClosed ? 'border-gray-300'
+                  : healthTier === 'strong' ? 'border-green-400'
+                  : healthTier === 'fair'   ? 'border-amber-400'
+                  : 'border-red-400';
+                const pipelineDays = getDealAgeDays(deal.createdAt);
+                const pipelineDaysLabel = pipelineDays < 1 ? '<1d' : `${pipelineDays}d`;
+                const pipelineDaysCls = pipelineDays < 14 ? 'bg-gray-100 text-gray-600'
+                  : pipelineDays < 30 ? 'bg-amber-100 text-amber-700'
+                  : 'bg-red-100 text-red-700';
+                const dueInDays = deal.nextStepDueDate ? daysFromNow(deal.nextStepDueDate) : null;
+                const allSignals = healthExpl
+                  ? [...healthExpl.risks, ...healthExpl.positives].slice(0, 4)
+                  : [];
+
                 return (
                   <React.Fragment key={deal.id}>
                     <tr
-                      className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                      className={`transition-colors cursor-pointer ${
+                        isSelected ? 'bg-blue-50' :
+                        isExpanded ? 'bg-indigo-50/30' :
+                        'hover:bg-gray-50/40'
+                      }`}
+                      onClick={() => toggleRowExpansion(deal.id)}
                       onContextMenu={(e) => handleContextMenu(e, deal.id)}
                     >
                       {/* Checkbox */}
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -1514,93 +2123,143 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                       {orderedVisible.map(key => renderCell(key, deal, isExpanded))}
                     </tr>
 
-                    {/* Expanded Row */}
+                    {/* Expanded Panel — Deal Cockpit */}
                     {isExpanded && (
-                      <tr className="bg-gray-50">
-                        <td colSpan={visibleColCount} className="px-4 py-4">
-                          <div className="pl-12">
-                            <div className="grid grid-cols-2 gap-6">
-                              <div>
-                                <div className="flex items-center space-x-2 text-sm mb-2">
-                                  <User className="h-4 w-4 text-gray-400" />
-                                  <span
-                                    className="font-medium text-gray-900 cursor-pointer hover:text-blue-600"
-                                    onClick={() => navigate(`/crm/contacts/${deal.id}`)}
-                                  >
-                                    {deal.contactName}
-                                  </span>
-                                  <span className="text-gray-600">({deal.contactTitle})</span>
-                                </div>
-                                <div className="text-sm text-gray-600 mb-2">
-                                  <span className="font-medium">Owner:</span>
-                                  <span
-                                    className="ml-1 cursor-pointer hover:text-blue-600"
-                                    onClick={() => navigate('/settings/team')}
-                                  >
-                                    {deal.owner}
+                      <tr>
+                        <td colSpan={visibleColCount} className="p-0 border-0">
+                          <div className="mx-3 mb-3 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden transition-opacity duration-150">
+                            <div className={`flex border-l-4 ${accentClass}`}>
+
+                              {/* Zone 1 — People & Time */}
+                              <div className="w-48 flex-shrink-0 border-r border-gray-100 p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-[10px] font-semibold text-indigo-700">{getInitials(deal.owner || '')}</span>
+                                  </div>
+                                  <span className="text-sm text-gray-700 truncate">
+                                    {deal.owner || <span className="text-gray-400">Unassigned</span>}
                                   </span>
                                 </div>
-                                <div className="flex items-center space-x-4 text-sm mb-3">
-                                  {deal.daysSinceContact >= 5 ? (
-                                    <span className="flex items-center space-x-1 text-red-600">
-                                      <AlertTriangle className="h-4 w-4" />
-                                      <span>{deal.daysSinceContact} days no contact</span>
-                                    </span>
+                                <div className="mb-3">
+                                  {deal.contactName ? (
+                                    <>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/crm/contacts/${deal.id}`); }}
+                                        className="text-sm font-medium text-indigo-600 hover:underline text-left leading-snug block"
+                                      >
+                                        {deal.contactName}
+                                      </button>
+                                      {deal.contactTitle && (
+                                        <div className="text-[11px] text-gray-400 leading-snug">{deal.contactTitle}</div>
+                                      )}
+                                    </>
                                   ) : (
-                                    <span className="flex items-center space-x-1 text-green-600">
-                                      <CheckCircle2 className="h-4 w-4" />
-                                      <span>{formatRelativeTime(deal.lastActivity, 'No recent activity')}</span>
-                                    </span>
+                                    <span className="text-sm text-gray-400">No contact</span>
                                   )}
-                                  <span className="text-gray-500">| {deal.source}</span>
                                 </div>
-                                <div className="flex items-center space-x-2">
+                                <div className="text-xs text-gray-500 mb-3">
+                                  {deal.lastActivity
+                                    ? `Last contact: ${formatRelativeTime(deal.lastActivity, 'unknown')}`
+                                    : 'No activity'}
+                                </div>
+                                <span
+                                  title="Days since deal was created. Stage-level tracking coming soon."
+                                  className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${pipelineDaysCls}`}
+                                >
+                                  {pipelineDaysLabel} in pipeline
+                                </span>
+                              </div>
+
+                              {/* Zone 2 — What's Next */}
+                              <div className="flex-1 border-r border-gray-100 p-4">
+                                {!isClosed && (
+                                  <>
+                                    <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Next Step</div>
+                                    <div className="line-clamp-2 text-sm text-gray-700">
+                                      {deal.nextStep?.trim()
+                                        ? deal.nextStep
+                                        : <span className="text-gray-400 italic">No next step defined</span>}
+                                    </div>
+                                    {dueInDays !== null && (
+                                      <div className="mt-1">
+                                        {dueInDays < 0
+                                          ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded">Late</span>
+                                          : dueInDays === 0
+                                            ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-orange-100 text-orange-700 rounded">Today</span>
+                                            : dueInDays <= 2
+                                              ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">{dueInDays}d</span>
+                                              : null}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                <div className={`text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1${!isClosed ? ' mt-3' : ''}`}>Latest Note</div>
+                                <div className="text-sm text-gray-400 italic">No notes yet</div>
+                              </div>
+
+                              {/* Zone 3 — AI Signals */}
+                              <div className="flex-1 border-r border-gray-100 p-4">
+                                <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">AI Signals</div>
+                                {isClosed ? (
+                                  <div className="flex items-center gap-2">
+                                    {deal.stage === 'closed-won'
+                                      ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
+                                      : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
+                                  </div>
+                                ) : allSignals.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {allSignals.map(signal => (
+                                      <div key={signal.id} className="flex items-start gap-2">
+                                        {signal.sentiment === 'positive'
+                                          ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                                          : signal.impact === 'high'
+                                            ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                                            : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
+                                        <span className="text-sm text-gray-700 leading-snug">{signal.label}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">Score based on deal activity and engagement</span>
+                                )}
+                              </div>
+
+                              {/* Zone 4 — Quick Actions */}
+                              <div className="w-44 flex-shrink-0 p-4">
+                                <div className="space-y-0.5">
                                   <button
-                                    onClick={() => setShowEmailModal(deal)}
-                                    className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); setShowCallModal(deal); }}
+                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
                                   >
-                                    <Mail className="h-4 w-4" />
-                                    <span>Email</span>
+                                    <Phone className="h-4 w-4 flex-shrink-0" /><span>Call</span>
                                   </button>
                                   <button
-                                    onClick={() => setShowCallModal(deal)}
-                                    className="flex items-center space-x-1 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); setShowEmailModal(deal); }}
+                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
                                   >
-                                    <Phone className="h-4 w-4" />
-                                    <span>Call</span>
+                                    <Mail className="h-4 w-4 flex-shrink-0" /><span>Email</span>
                                   </button>
                                   <button
-                                    onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                                    className="flex items-center space-x-1 px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); onAddNote?.(deal.id); showBulkToast(`Add note for ${deal.dealName} — coming soon`); }}
+                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
                                   >
-                                    <Eye className="h-4 w-4" />
-                                    <span>View Deal</span>
+                                    <StickyNote className="h-4 w-4 flex-shrink-0" /><span>Add Note</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); onScheduleFollowUp?.(deal.id); showBulkToast(`Follow-up scheduled for ${deal.dealName}`); }}
+                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
+                                  >
+                                    <CalendarPlus className="h-4 w-4 flex-shrink-0" /><span>Schedule Follow-up</span>
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
+                                    className="flex items-center gap-2 w-full text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 rounded-lg transition-colors text-left"
+                                  >
+                                    <ExternalLink className="h-4 w-4 flex-shrink-0" /><span>Open Full Deal</span>
                                   </button>
                                 </div>
                               </div>
-                              <div className="bg-white rounded-lg p-4 border border-gray-200">
-                                <div className="text-xs font-semibold text-gray-700 uppercase mb-2">AI Insights</div>
-                                <div className="space-y-2">
-                                  {deal.aiScore >= 80 && (
-                                    <div className="flex items-start space-x-2 text-sm">
-                                      <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
-                                      <span className="text-gray-700">Strong engagement signals</span>
-                                    </div>
-                                  )}
-                                  {deal.daysSinceContact >= 5 && (
-                                    <div className="flex items-start space-x-2 text-sm">
-                                      <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5" />
-                                      <span className="text-gray-700">No recent contact activity</span>
-                                    </div>
-                                  )}
-                                  {deal.isHRMS && (
-                                    <div className="flex items-start space-x-2 text-sm">
-                                      <Building2 className="h-4 w-4 text-orange-500 mt-0.5" />
-                                      <span className="text-gray-700">Connected to HRMS account</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+
                             </div>
                           </div>
                         </td>

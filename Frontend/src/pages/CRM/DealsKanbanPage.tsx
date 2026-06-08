@@ -48,6 +48,9 @@ import {
   ChevronDown,
   ArrowUpDown,
   Check,
+  Bookmark,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
@@ -59,12 +62,42 @@ import {
   getActiveFilterPills,
   isAnyFilterActive,
   type SavedView,
+  type UserSavedView,
 } from '../../utils/dealViews';
+import { type ColumnKey, DEFAULT_COLUMN_ORDER } from '../../utils/dealsColumns';
+import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 import ManagerInspectionBar from '../../components/Deal/ManagerInspectionBar';
 import {
   computeInspectionSignals,
   getInspectionBadge,
 } from '../../utils/inspectionSignals';
+
+// ── localStorage helpers for user-created saved views ────────────────────────
+
+const LS_VIEWS_KEY   = 'bmi_deals_user_views';
+const LS_DEFAULT_KEY = 'bmi_deals_default_view_id';
+
+function loadUserViews(): UserSavedView[] {
+  try {
+    const raw = localStorage.getItem(LS_VIEWS_KEY);
+    return raw ? (JSON.parse(raw) as UserSavedView[]) : [];
+  } catch { return []; }
+}
+
+function saveUserViewsToLS(views: UserSavedView[]) {
+  localStorage.setItem(LS_VIEWS_KEY, JSON.stringify(views));
+}
+
+function loadDefaultViewId(): string | null {
+  return localStorage.getItem(LS_DEFAULT_KEY);
+}
+
+function saveDefaultViewId(id: string | null) {
+  if (id) localStorage.setItem(LS_DEFAULT_KEY, id);
+  else localStorage.removeItem(LS_DEFAULT_KEY);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface PipelineStage {
   id: string;
@@ -310,8 +343,45 @@ const DealsKanbanPage: React.FC = () => {
 
   // Saved-view state — activeViewId tracks which chip is highlighted;
   // viewPredicate is the view's extra filter function (null for dropdown-only views).
-  const [activeViewId, setActiveViewId] = useState('all');
+  const [activeViewId, setActiveViewId] = useState<string | null>('all');
   const [viewPredicate, setViewPredicate] = useState<((d: DealCard) => boolean) | null>(null);
+
+  // Column state lifted from DealsListView so saved views can capture them
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
+    () => new Set(DEFAULT_COLUMN_ORDER)
+  );
+  const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([...DEFAULT_COLUMN_ORDER]);
+  const [activeKpiFilter, setActiveKpiFilter] = useState<'closingWeek' | 'stalled' | null>(null);
+
+  // User-created saved views
+  const [userViews, setUserViews] = useState<UserSavedView[]>(() => loadUserViews());
+  const [openViewMenu, setOpenViewMenu] = useState<string | null>(null);
+  const [renamingViewId, setRenamingViewId] = useState<string | null>(null);
+  const [newViewName, setNewViewName] = useState('');
+  const [showSaveViewPopover, setShowSaveViewPopover] = useState(false);
+  const [saveViewName, setSaveViewName] = useState('');
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+
+  const [externalListFilters, setExternalListFilters] = useState<{
+    stages?: Set<string>;
+    owners?: Set<string>;
+    sources?: Set<string>;
+    healthTiers?: Set<HealthTierFilter>;
+    closeDateFilter?: CloseDateFilter;
+    valueFilter?: ValueFilter;
+    pipelineAgeFilter?: PipelineAgeFilter;
+  } | undefined>(undefined);
+
+  // Latest list-view filter state reported back by DealsListView via onFiltersChange
+  const listFiltersRef = React.useRef<{
+    stages: Set<string>;
+    owners: Set<string>;
+    sources: Set<string>;
+    healthTiers: Set<HealthTierFilter>;
+    closeDateFilter: CloseDateFilter;
+    valueFilter: ValueFilter;
+    pipelineAgeFilter: PipelineAgeFilter;
+  } | null>(null);
 
   // Manager Inspection Mode — toggle with the ShieldAlert button or Esc to exit.
   const [inspectionMode, setInspectionMode] = useState(false);
@@ -321,6 +391,31 @@ const DealsKanbanPage: React.FC = () => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 200);
     return () => clearTimeout(t);
   }, [searchTerm]);
+
+  // Persist user views whenever they change
+  useEffect(() => { saveUserViewsToLS(userViews); }, [userViews]);
+
+  // Apply the default user view on first mount (once stages are loaded)
+  useEffect(() => {
+    const defaultId = loadDefaultViewId();
+    if (!defaultId) return;
+    const view = userViews.find(v => v.id === defaultId);
+    if (view) applyUserView(view);
+  // Only on mount — not driven by userViews changes to avoid overwriting manual edits
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Close the view context menu when clicking outside it
+  useEffect(() => {
+    if (!openViewMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) {
+        setOpenViewMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openViewMenu]);
 
   const kpis = useMemo(() => {
     // Dedup across stages before counting: if a deal somehow appears in two
@@ -834,6 +929,95 @@ const DealsKanbanPage: React.FC = () => {
     setViewPredicate(view.predicate ? () => view.predicate! : null);
   };
 
+  // Apply a user-created saved view — restores all captured state.
+  const applyUserView = (view: UserSavedView) => {
+    setActiveViewId(view.id);
+    setViewPredicate(null);
+    setSelectedOwner(view.selectedOwner);
+    setSelectedCloseDateFilter(view.selectedCloseDateFilter);
+    setSelectedValueFilter(view.selectedValueFilter);
+    setSelectedSourceFilter(view.selectedSourceFilter);
+    setSortBy(view.sortBy as any);
+    setViewMode(view.viewMode);
+    setCardDensity(view.cardDensity);
+    setActiveKpiFilter(view.activeKpiFilter);
+    setVisibleColumns(new Set(view.visibleColumns));
+    setColumnOrder([...view.columnOrder]);
+    if (view.selectedStagesV2 || view.selectedOwnersV2 || view.selectedSourcesV2 ||
+        view.selectedHealthTiersV2 || view.closeDateFilterV2 || view.valueFilterV2 ||
+        view.pipelineAgeFilterV2) {
+      setExternalListFilters({
+        stages:            new Set(view.selectedStagesV2 ?? []),
+        owners:            new Set(view.selectedOwnersV2 ?? []),
+        sources:           new Set(view.selectedSourcesV2 ?? []),
+        healthTiers:       new Set((view.selectedHealthTiersV2 ?? []) as HealthTierFilter[]),
+        closeDateFilter:   view.closeDateFilterV2 ?? { preset: 'all' },
+        valueFilter:       view.valueFilterV2 ?? { min: null, max: null },
+        pipelineAgeFilter: view.pipelineAgeFilterV2 ?? { min: null, max: null },
+      });
+    }
+  };
+
+  // Capture the current page state as a new saved view.
+  const saveCurrentView = (name: string) => {
+    const lf = listFiltersRef.current;
+    const view: UserSavedView = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      isPinned: false,
+      isDefault: false,
+      createdAt: new Date().toISOString(),
+      selectedOwner,
+      selectedCloseDateFilter,
+      selectedValueFilter,
+      selectedSourceFilter,
+      sortBy,
+      viewMode,
+      cardDensity,
+      activeKpiFilter,
+      visibleColumns: Array.from(visibleColumns),
+      columnOrder: [...columnOrder],
+      // V2 list-view filter state
+      selectedStagesV2: lf ? Array.from(lf.stages) : [],
+      selectedOwnersV2: lf ? Array.from(lf.owners) : [],
+      selectedSourcesV2: lf ? Array.from(lf.sources) : [],
+      selectedHealthTiersV2: lf ? Array.from(lf.healthTiers) : [],
+      closeDateFilterV2: lf?.closeDateFilter ?? { preset: 'all' },
+      valueFilterV2: lf?.valueFilter ?? { min: null, max: null },
+      pipelineAgeFilterV2: lf?.pipelineAgeFilter ?? { min: null, max: null },
+    };
+    setUserViews(prev => [...prev, view]);
+    setActiveViewId(view.id);
+    setShowSaveViewPopover(false);
+    setSaveViewName('');
+    setToast({ message: `View "${view.name}" saved`, type: 'success' });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const deleteUserView = (id: string) => {
+    setUserViews(prev => prev.filter(v => v.id !== id));
+    if (activeViewId === id) { setActiveViewId('all'); setViewPredicate(null); }
+    const defaultId = loadDefaultViewId();
+    if (defaultId === id) saveDefaultViewId(null);
+  };
+
+  const renameUserView = (id: string, name: string) => {
+    setUserViews(prev => prev.map(v => v.id === id ? { ...v, name } : v));
+    setRenamingViewId(null);
+    setNewViewName('');
+  };
+
+  const toggleDefaultView = (id: string) => {
+    const current = loadDefaultViewId();
+    if (current === id) {
+      saveDefaultViewId(null);
+      setUserViews(prev => prev.map(v => ({ ...v, isDefault: false })));
+    } else {
+      saveDefaultViewId(id);
+      setUserViews(prev => prev.map(v => ({ ...v, isDefault: v.id === id })));
+    }
+  };
+
   // Reset every filter, saved view, and search back to defaults.
   const resetFilters = () => {
     setActiveViewId('all');
@@ -845,6 +1029,7 @@ const DealsKanbanPage: React.FC = () => {
     setSelectedAccountFilter('all');
     setSearchTerm('');
     setSortBy('closeDate');
+    setActiveKpiFilter(null);
   };
 
   // Clear a single active-filter pill by its key.
@@ -1045,12 +1230,78 @@ const DealsKanbanPage: React.FC = () => {
             >
               All Deals
             </button>
+            {/* ── User-created saved view tabs ──────────────────────── */}
+            {userViews.map(view => (
+              <div key={view.id} className="relative flex items-center group" ref={openViewMenu === view.id ? viewMenuRef : null}>
+                <button
+                  onClick={() => applyUserView(view)}
+                  title={view.name}
+                  className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-all duration-150 whitespace-nowrap pr-1.5
+                    ${activeViewId === view.id
+                      ? 'bg-gray-900 text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+                >
+                  {view.isDefault && <span className="mr-1 text-[10px]">★</span>}
+                  {view.name}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setOpenViewMenu(openViewMenu === view.id ? null : view.id); }}
+                  className={`px-1 py-1.5 rounded-md transition-colors opacity-0 group-hover:opacity-100 -ml-0.5
+                    ${activeViewId === view.id ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+                {openViewMenu === view.id && (
+                  <div className="absolute left-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
+                    {renamingViewId === view.id ? (
+                      <div className="px-3 py-2">
+                        <input
+                          autoFocus
+                          value={newViewName}
+                          onChange={e => setNewViewName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && newViewName.trim()) renameUserView(view.id, newViewName.trim());
+                            if (e.key === 'Escape') { setRenamingViewId(null); setNewViewName(''); }
+                          }}
+                          className="w-full text-[13px] border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          placeholder="New name"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setRenamingViewId(view.id); setNewViewName(view.name); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-gray-400" />Rename
+                        </button>
+                        <button
+                          onClick={() => toggleDefaultView(view.id)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <Bookmark className="h-3.5 w-3.5 text-gray-400" />
+                          {view.isDefault ? 'Remove default' : 'Set as default'}
+                        </button>
+                        <div className="border-t border-gray-100 my-1" />
+                        <button
+                          onClick={() => { deleteUserView(view.id); setOpenViewMenu(null); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+
             <div className="relative" ref={viewsOverflowRef}>
               <button
                 onClick={() => setShowViewsOverflow(v => !v)}
                 title="More saved views"
                 className={`px-2 py-1.5 rounded-md transition-all duration-150
-                  ${!['all', 'my-deals'].includes(activeViewId)
+                  ${activeViewId !== null && !['all', 'my-deals'].includes(activeViewId) && !userViews.some(v => v.id === activeViewId)
                     ? 'bg-gray-900 text-white shadow-sm'
                     : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
               >
@@ -1212,10 +1463,16 @@ const DealsKanbanPage: React.FC = () => {
         <div className="flex items-center gap-1.5 px-6 py-2">
 
           {(() => {
-            const pills = getActiveFilterPills(
-              activeViewId, selectedOwner, selectedCloseDateFilter,
+            const builtInIds = SAVED_VIEWS.map(v => v.id);
+            const displayViewId = activeViewId && builtInIds.includes(activeViewId) ? activeViewId : 'all';
+            const activeUserView = activeViewId ? userViews.find(v => v.id === activeViewId) : null;
+            const rawPills = getActiveFilterPills(
+              displayViewId, selectedOwner, selectedCloseDateFilter,
               selectedValueFilter, selectedSourceFilter, selectedAccountFilter, searchTerm,
             );
+            const pills = activeUserView
+              ? [{ key: 'view', label: `🔖 ${activeUserView.name}` }, ...rawPills.filter(p => p.key !== 'view')]
+              : rawPills;
             const activeCount = pills.length;
             return (
               <div className="flex items-center">
@@ -1336,6 +1593,55 @@ const DealsKanbanPage: React.FC = () => {
             {cardDensity === 'compact' ? <AlignJustify className="h-[15px] w-[15px]" /> : <LayoutList className="h-[15px] w-[15px]" />}
           </button>
 
+          {/* ── Save View button + popover ──────────────────────────── */}
+          <div className="relative">
+            <button
+              onClick={() => { setSaveViewName(''); setShowSaveViewPopover(v => !v); }}
+              title="Save current view"
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-[13px] font-medium border transition-colors
+                ${showSaveViewPopover
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                  : 'bg-white border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+            >
+              <Bookmark className="h-3.5 w-3.5" />
+              <span>Save</span>
+            </button>
+            {showSaveViewPopover && (
+              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-gray-200/80 p-3 z-50">
+                <p className="text-[12px] text-gray-500 mb-2">Name this view</p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={saveViewName}
+                  onChange={e => setSaveViewName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && saveViewName.trim()) saveCurrentView(saveViewName);
+                    if (e.key === 'Escape') setShowSaveViewPopover(false);
+                  }}
+                  placeholder="e.g. My Q3 Pipeline"
+                  className="w-full text-[13px] border border-gray-200 rounded-md px-2.5 py-1.5 mb-2
+                    focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { if (saveViewName.trim()) saveCurrentView(saveViewName); }}
+                    disabled={!saveViewName.trim()}
+                    className="flex-1 py-1.5 bg-indigo-600 text-white rounded-md text-[12px] font-medium
+                      hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Save view
+                  </button>
+                  <button
+                    onClick={() => setShowSaveViewPopover(false)}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-[12px] hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <button onClick={handleExportCSV} title="Export pipeline"
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors">
             <Download className="h-[15px] w-[15px]" />
@@ -1433,6 +1739,16 @@ const DealsKanbanPage: React.FC = () => {
           onFieldUpdate={async (dealId, field, value) => {
             console.log('[FieldUpdate]', dealId, field, value);
           }}
+          onAddNote={(dealId) => console.log('[onAddNote]', dealId)}
+          onScheduleFollowUp={(dealId) => console.log('[onScheduleFollowUp]', dealId)}
+          visibleColumns={visibleColumns}
+          setVisibleColumns={setVisibleColumns}
+          columnOrder={columnOrder}
+          setColumnOrder={setColumnOrder}
+          activeKpiFilter={activeKpiFilter}
+          setActiveKpiFilter={setActiveKpiFilter}
+          externalFilters={externalListFilters}
+          onFiltersChange={(filters) => { listFiltersRef.current = filters; }}
         />
       ) : viewMode === 'grid' ? (
         <DealsGridView
