@@ -1017,9 +1017,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       {/* Main Content */}
       <div className="max-w-[1920px] mx-auto px-8 py-8">
         <div ref={overviewRef} aria-hidden="true" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column (65% width) */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="flex items-start gap-6">
+          {/* Left Column */}
+          <div className="flex-1 min-w-0 space-y-6">
 
             {/* AI Insights */}
             <div ref={aiInsightsRef}>
@@ -1095,8 +1095,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <DealDataAttribution dataSources={sidebarData.dataSources} />
           </div>
 
-          {/* Right Sidebar (35% width) */}
-          <div className="lg:col-span-1 space-y-6">
+          {/* Right Sidebar — sticky throughout full page scroll */}
+          <div className="w-[380px] shrink-0 sticky top-[120px] max-h-[calc(100vh-140px)] overflow-y-auto space-y-6">
             <DealHealthScorePanel formData={healthFormData} subtitle="Based on current deal completeness" />
             <DealRightSidebar {...sidebarData} />
           </div>
