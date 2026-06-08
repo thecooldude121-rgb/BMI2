@@ -808,6 +808,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         // DealManagementPage normalises unrecognised stages to 'qualified'.
         const rawValue = parseAmountInput(formData.dealValue?.toString() || '0') || 0;
         addDealToContext({
+          id: savedDealId,
           name: formData.dealName,
           title: formData.dealName,
           leadId: '',
@@ -818,6 +819,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           assignedTo: formData.owner || 'current-user',
           description: formData.description || undefined,
           nextStep: formData.nextSteps || undefined,
+          notes: formData.description || undefined,
         });
       }
 
@@ -888,7 +890,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
     switch (action) {
       case 'view':
-        navigate(dealId ? `/crm/deals/${dealId}` : '/crm/deals');
+        if (!dealId || dealId === 'undefined') {
+          console.error('[PostSave] dealId is falsy — cannot navigate to deal detail', dealId);
+          navigate('/crm/deals');
+        } else {
+          navigate(`/crm/deals/${dealId}`);
+        }
         break;
       case 'task':
         navigate('/crm/tasks', { state: { createTask: true, dealId, dealName } });

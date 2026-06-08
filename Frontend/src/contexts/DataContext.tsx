@@ -195,7 +195,7 @@ interface DataContextType {
   updateContact: (id: string, contact: Partial<Contact>) => void;
   addActivity: (activity: Omit<Activity, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateActivity: (id: string, activity: Partial<Activity>) => void;
-  addDeal: (deal: Omit<Deal, 'id' | 'createdAt'>) => void;
+  addDeal: (deal: Omit<Deal, 'id' | 'createdAt'> & { id?: string }) => void;
   updateDeal: (id: string, deal: Partial<Deal>) => void;
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, task: Partial<Task>) => void;
@@ -318,12 +318,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     ));
   };
 
-  const addDeal = (deal: Omit<Deal, 'id' | 'createdAt'>) => {
+  const addDeal = (deal: Omit<Deal, 'id' | 'createdAt'> & { id?: string }) => {
     console.log('DataContext: Adding deal:', deal);
-    
+
     const newDeal: Deal = {
       ...deal,
-      id: Date.now().toString(),
+      id: deal.id || Date.now().toString(),
       createdAt: new Date().toISOString(),
       // Ensure all required fields are present
       title: deal.title || deal.name || 'Untitled Deal',
