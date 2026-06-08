@@ -1424,6 +1424,12 @@ const DealsKanbanPage: React.FC = () => {
           onStageChange={(dealId, newStage) => {
             console.log('Stage change:', dealId, newStage);
           }}
+          onBulkAction={(action, dealIds, payload) => {
+            console.log('[BulkAction]', action, dealIds, payload);
+          }}
+          availableOwners={Array.from(new Set(
+            stages.flatMap(s => s.deals.map(d => d.owner)).filter(Boolean)
+          ))}
         />
       ) : viewMode === 'grid' ? (
         <DealsGridView

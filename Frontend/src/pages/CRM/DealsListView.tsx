@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import {
   Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Building2, User, Sparkles, Mail, Phone, Eye, MoreHorizontal,
-  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical
+  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical, Archive
 } from 'lucide-react';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
@@ -47,6 +47,13 @@ interface DealsListViewProps {
   stages: PipelineStage[];
   onDealClick: (dealId: string) => void;
   onStageChange?: (dealId: string, newStage: string) => void;
+  onBulkAction?: (
+    action: 'stage' | 'owner' | 'tag' | 'archive' | 'delete' | 'export',
+    dealIds: string[],
+    payload?: { stage?: string; owner?: string; tag?: string }
+  ) => void;
+  availableOwners?: string[];
+  availableStages?: string[];
 }
 
 // ── Column definitions ────────────────────────────────────────────────────────
@@ -83,7 +90,7 @@ const DEFAULT_ORDER: ColumnKey[] = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onStageChange }) => {
+const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onStageChange, onBulkAction, availableOwners = [] }) => {
   const navigate = useNavigate();
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
@@ -97,14 +104,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
-  const [showBulkActions, setShowBulkActions] = useState(false);
   const [hoveredScore, setHoveredScore] = useState<string | null>(null);
   const [hoveredStage, setHoveredStage] = useState<string | null>(null);
   const [contextMenuDeal, setContextMenuDeal] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [showStageModal, setShowStageModal] = useState<string | null>(null);
   const [showActionDropdown, setShowActionDropdown] = useState<string | null>(null);
-  const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState<Deal | null>(null);
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
@@ -113,8 +118,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => new Set(DEFAULT_ORDER));
   const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([...DEFAULT_ORDER]);
   const dragKey = useRef<ColumnKey | null>(null);
+  const [openPopover, setOpenPopover] = useState<'stage' | 'owner' | 'tag' | 'archive' | null>(null);
+  const [bulkToast, setBulkToast] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState('');
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  const lastSelectedIndex = useRef<number | null>(null);
 
   const allDeals: Deal[] = stages.flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })));
+
+  const selectedDealSet = useMemo(() => new Set(selectedDeals), [selectedDeals]);
 
   const filteredDeals = allDeals.filter(deal => {
     const matchesStage = selectedStage === 'all' || deal.stage === selectedStage;
@@ -244,15 +256,25 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
     );
   };
 
-  const toggleDealSelection = (dealId: string) => {
-    setSelectedDeals(prev =>
-      prev.includes(dealId) ? prev.filter(id => id !== dealId) : [...prev, dealId]
-    );
+  const toggleDealSelection = (dealId: string, shiftKey = false) => {
+    const currentIndex = sortedDeals.findIndex(d => d.id === dealId);
+    if (shiftKey && lastSelectedIndex.current !== null && currentIndex !== -1) {
+      const start = Math.min(lastSelectedIndex.current, currentIndex);
+      const end   = Math.max(lastSelectedIndex.current, currentIndex);
+      const rangeIds = sortedDeals.slice(start, end + 1).map(d => d.id);
+      setSelectedDeals(prev => Array.from(new Set([...prev, ...rangeIds])));
+    } else {
+      setSelectedDeals(prev =>
+        prev.includes(dealId) ? prev.filter(id => id !== dealId) : [...prev, dealId]
+      );
+    }
+    if (currentIndex !== -1) lastSelectedIndex.current = currentIndex;
   };
 
   const selectAllDeals = () => {
     if (selectedDeals.length === sortedDeals.length) {
       setSelectedDeals([]);
+      lastSelectedIndex.current = null;
     } else {
       setSelectedDeals(sortedDeals.map(d => d.id));
     }
@@ -279,8 +301,18 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   };
 
   const handleBulkDelete = () => {
+    const count = selectedDeals.length;
+    onBulkAction?.('delete', [...selectedDeals]);
     setSelectedDeals([]);
+    lastSelectedIndex.current = null;
     setShowDeleteModal(false);
+    setBulkToast(`${count} deal${count !== 1 ? 's' : ''} deleted`);
+    setTimeout(() => setBulkToast(null), 2500);
+  };
+
+  const showBulkToast = (message: string) => {
+    setBulkToast(message);
+    setTimeout(() => setBulkToast(null), 2500);
   };
 
   const toggleColumn = (key: ColumnKey) => {
@@ -297,18 +329,34 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   };
 
   useEffect(() => {
-    setShowBulkActions(selectedDeals.length > 0);
-  }, [selectedDeals]);
-
-  useEffect(() => {
     const handleClickOutside = () => {
       setContextMenuDeal(null);
       setShowActionDropdown(null);
       setShowColumnSettings(false);
+      setOpenPopover(null);
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!headerCheckboxRef.current) return;
+    headerCheckboxRef.current.indeterminate =
+      selectedDeals.length > 0 && selectedDeals.length < filteredDeals.length;
+  }, [selectedDeals, filteredDeals]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (openPopover) { setOpenPopover(null); return; }
+      if (selectedDeals.length > 0) {
+        setSelectedDeals([]);
+        lastSelectedIndex.current = null;
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [openPopover, selectedDeals]);
 
   const totalValue = sortedDeals.reduce((sum, deal) => sum + deal.amount, 0);
   const avgWinRate = 67;
@@ -316,6 +364,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
   const stalledDeals = sortedDeals.filter(d => d.daysSinceContact >= 5).length;
   const avgDaysCycle = 45;
 
+  const showBulkActions = selectedDeals.length > 0;
   const orderedVisible = columnOrder.filter(k => visibleColumns.has(k));
   // +1 for the always-visible checkbox column
   const visibleColCount = 1 + orderedVisible.length;
@@ -973,9 +1022,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 {/* Checkbox — always visible */}
                 <th className="w-12 px-4 py-3">
                   <input
+                    ref={headerCheckboxRef}
                     type="checkbox"
                     checked={selectedDeals.length === sortedDeals.length && sortedDeals.length > 0}
                     onChange={selectAllDeals}
+                    aria-label="Select all deals"
                     className="rounded border-gray-300"
                   />
                 </th>
@@ -986,7 +1037,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
             <tbody className="divide-y divide-gray-100">
               {sortedDeals.map((deal) => {
                 const isExpanded = expandedRows.includes(deal.id);
-                const isSelected = selectedDeals.includes(deal.id);
+                const isSelected = selectedDealSet.has(deal.id);
 
                 return (
                   <React.Fragment key={deal.id}>
@@ -999,8 +1050,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleDealSelection(deal.id)}
+                          onChange={(e) => toggleDealSelection(deal.id, (e.nativeEvent as MouseEvent | KeyboardEvent).shiftKey)}
                           onClick={(e) => e.stopPropagation()}
+                          aria-label={`Select ${deal.dealName}`}
                           className="rounded border-gray-300"
                         />
                       </td>
@@ -1179,57 +1231,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
                 className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Bulk Update Modal ─────────────────────────────────────────────────── */}
-      {showBulkUpdateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Bulk Update ({selectedDeals.length} deals selected)
-              </h3>
-            </div>
-            <div className="px-6 py-4">
-              <div className="space-y-3">
-                <label className="flex items-center space-x-3">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                  <span className="text-sm text-gray-700">Stage</span>
-                </label>
-                <label className="flex items-center space-x-3">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                  <span className="text-sm text-gray-700">Owner</span>
-                </label>
-                <label className="flex items-center space-x-3">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                  <span className="text-sm text-gray-700">Close Date</span>
-                </label>
-                <label className="flex items-center space-x-3">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                  <span className="text-sm text-gray-700">Priority</span>
-                </label>
-                <label className="flex items-center space-x-3">
-                  <input type="checkbox" className="rounded border-gray-300" />
-                  <span className="text-sm text-gray-700">Tags</span>
-                </label>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowBulkUpdateModal(false)}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => setShowBulkUpdateModal(false)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Update Deals
               </button>
             </div>
           </div>
@@ -1437,42 +1438,264 @@ const DealsListView: React.FC<DealsListViewProps> = ({ stages, onDealClick, onSt
       )}
 
       {/* ── Bulk Actions Bar ──────────────────────────────────────────────────── */}
-      {showBulkActions && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-lg shadow-xl border border-gray-200 px-6 py-4">
-          <div className="flex items-center space-x-6">
-            <span className="text-sm font-medium text-gray-900">
-              {selectedDeals.length} deals selected
+      <div
+        role="toolbar"
+        aria-label="Bulk actions"
+        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-all duration-200 ease-out
+          ${showBulkActions ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-2">
+
+          {/* Selection count + Select all affordance */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-sm font-medium text-white">
+              {selectedDeals.length} deal{selectedDeals.length !== 1 ? 's' : ''} selected
             </span>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
-              <span>Change Stage</span>
-              <ChevronDown className="h-4 w-4" />
-            </button>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors">
-              <span>Change Owner</span>
-              <ChevronDown className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setShowBulkUpdateModal(true)}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
-            >
-              Bulk Update
-            </button>
-            <button className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 transition-colors">
-              Export
-            </button>
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
-            >
-              Delete
-            </button>
-            <button
-              onClick={() => setSelectedDeals([])}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="h-4 w-4 text-gray-600" />
-            </button>
+            {selectedDeals.length < filteredDeals.length && filteredDeals.length > 0 && (
+              <button
+                onClick={selectAllDeals}
+                className="text-sm text-indigo-300 hover:text-indigo-200 underline transition-colors"
+              >
+                Select all {filteredDeals.length}
+              </button>
+            )}
           </div>
+
+          <div className="w-px h-5 bg-gray-600 mx-1 flex-shrink-0" />
+
+          {/* Change Stage */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'stage' ? null : 'stage'); }}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+            >
+              <Target className="h-3.5 w-3.5" />
+              Change Stage
+            </button>
+            {openPopover === 'stage' && (
+              <div
+                className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg p-2 min-w-[160px] z-50 text-gray-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {stages.map(stage => (
+                  <button
+                    key={stage.id}
+                    onClick={() => {
+                      const count = selectedDeals.length;
+                      onBulkAction?.('stage', [...selectedDeals], { stage: stage.id });
+                      setOpenPopover(null);
+                      setSelectedDeals([]);
+                      lastSelectedIndex.current = null;
+                      showBulkToast(`Stage updated for ${count} deal${count !== 1 ? 's' : ''}`);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    {stage.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Reassign Owner */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'owner' ? null : 'owner'); }}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+            >
+              <User className="h-3.5 w-3.5" />
+              Reassign Owner
+            </button>
+            {openPopover === 'owner' && (
+              <div
+                className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg p-2 min-w-[160px] z-50 text-gray-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {(availableOwners.length > 0
+                  ? availableOwners
+                  : Array.from(new Set(allDeals.map(d => d.owner).filter(Boolean)))
+                ).map(ownerName => (
+                  <button
+                    key={ownerName}
+                    onClick={() => {
+                      const count = selectedDeals.length;
+                      onBulkAction?.('owner', [...selectedDeals], { owner: ownerName });
+                      setOpenPopover(null);
+                      setSelectedDeals([]);
+                      lastSelectedIndex.current = null;
+                      showBulkToast(`Owner updated for ${count} deal${count !== 1 ? 's' : ''}`);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    {ownerName}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add Tag */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'tag' ? null : 'tag'); setTagInput(''); }}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Add Tag
+            </button>
+            {openPopover === 'tag' && (
+              <div
+                className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-52 z-50 text-gray-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    placeholder="Tag name..."
+                    autoFocus
+                    className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && tagInput.trim()) {
+                        const count = selectedDeals.length;
+                        onBulkAction?.('tag', [...selectedDeals], { tag: tagInput.trim() });
+                        setOpenPopover(null);
+                        setSelectedDeals([]);
+                        lastSelectedIndex.current = null;
+                        setTagInput('');
+                        showBulkToast(`Tag added to ${count} deal${count !== 1 ? 's' : ''}`);
+                      }
+                      if (e.key === 'Escape') setOpenPopover(null);
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!tagInput.trim()) return;
+                      const count = selectedDeals.length;
+                      onBulkAction?.('tag', [...selectedDeals], { tag: tagInput.trim() });
+                      setOpenPopover(null);
+                      setSelectedDeals([]);
+                      lastSelectedIndex.current = null;
+                      setTagInput('');
+                      showBulkToast(`Tag added to ${count} deal${count !== 1 ? 's' : ''}`);
+                    }}
+                    className="px-2.5 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Export — immediate CSV download, no modal */}
+          <button
+            onClick={() => {
+              const selectedList = allDeals.filter(d => selectedDealSet.has(d.id));
+              const today = new Date().toISOString().slice(0, 10);
+              const headers = ['Deal Name', 'Account', 'Owner', 'Contact', 'Value', 'Stage', 'Close Date', 'Health Score', 'Source', 'Deal Age (days)'];
+              const rows = selectedList.map(d => [
+                d.dealName,
+                d.companyName || d.accountName || '',
+                d.owner || '',
+                d.contactName || '',
+                d.amount.toString(),
+                d.stage,
+                d.closeDate || '',
+                d.aiScore.toString(),
+                d.source || '',
+                getDealAgeDays(d.createdAt).toString(),
+              ]);
+              const csv = [headers, ...rows]
+                .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                .join('\n');
+              const blob = new Blob([csv], { type: 'text/csv' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `deals-export-${today}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              const count = selectedDeals.length;
+              showBulkToast(`Exported ${count} deal${count !== 1 ? 's' : ''}`);
+            }}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5 flex-shrink-0"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </button>
+
+          {/* Archive */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'archive' ? null : 'archive'); }}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+            >
+              <Archive className="h-3.5 w-3.5" />
+              Archive
+            </button>
+            {openPopover === 'archive' && (
+              <div
+                className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg p-3 w-64 z-50 text-gray-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <p className="text-sm text-gray-700 mb-3">
+                  Archive {selectedDeals.length} deal{selectedDeals.length !== 1 ? 's' : ''}? They will be hidden from the active pipeline.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setOpenPopover(null)}
+                    className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const count = selectedDeals.length;
+                      onBulkAction?.('archive', [...selectedDeals]);
+                      setOpenPopover(null);
+                      setSelectedDeals([]);
+                      lastSelectedIndex.current = null;
+                      showBulkToast(`${count} deal${count !== 1 ? 's' : ''} archived`);
+                    }}
+                    className="px-3 py-1.5 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors"
+                  >
+                    Archive
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Delete */}
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1.5 flex-shrink-0 text-red-300 hover:text-white"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
+
+          <div className="w-px h-5 bg-gray-600 mx-1 flex-shrink-0" />
+
+          {/* Clear selection */}
+          <button
+            onClick={() => { setSelectedDeals([]); lastSelectedIndex.current = null; }}
+            className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors flex-shrink-0"
+            title="Clear selection (Esc)"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Bulk Action Toast ─────────────────────────────────────────────────── */}
+      {bulkToast && (
+        <div className="fixed top-5 right-5 z-50 bg-gray-800 text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+          {bulkToast}
         </div>
       )}
     </div>
