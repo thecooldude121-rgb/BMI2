@@ -13,6 +13,62 @@ import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
 import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
+import { AdvancedFilterBuilder } from '../../components/Deals/AdvancedFilterBuilder';
+import type { FilterCondition, Conjunction } from '../../components/Deals/AdvancedFilterBuilder';
+
+// ── Advanced filter builder predicate ─────────────────────────────────────────
+// Evaluates a single FilterCondition against a deal. Returns true for incomplete
+// conditions (empty valueStrings / null numbers) so building mid-air never hides results.
+function evaluateCondition(deal: {
+  stage: string; owner: string; amount: number; closeDate: string;
+  daysSinceContact: number; aiScore: number; contactName: string;
+}, c: FilterCondition): boolean {
+  switch (c.field) {
+    case 'stage':
+      if (c.valueStrings.length === 0) return true;
+      return c.operator === 'isNoneOf'
+        ? !c.valueStrings.includes(deal.stage)
+        : c.valueStrings.includes(deal.stage);
+    case 'owner':
+      if (c.valueStrings.length === 0) return true;
+      return c.operator === 'isNoneOf'
+        ? !c.valueStrings.includes(deal.owner)
+        : c.valueStrings.includes(deal.owner);
+    case 'value':
+      if (c.operator === 'between') {
+        if (c.valueNumber !== null && deal.amount < c.valueNumber) return false;
+        if (c.valueNumber2 !== null && deal.amount > c.valueNumber2) return false;
+        return true;
+      }
+      if (c.valueNumber === null) return true;
+      return c.operator === 'greaterThan' ? deal.amount > c.valueNumber : deal.amount < c.valueNumber;
+    case 'closeDate': {
+      if (!c.valueDate) return true;
+      const closeMs = deal.closeDate ? new Date(deal.closeDate).getTime() : null;
+      if (closeMs === null) return false;
+      const filterMs = new Date(c.valueDate).getTime();
+      return c.operator === 'before' ? closeMs < filterMs : closeMs > filterMs;
+    }
+    case 'lastActivity':
+      if (c.valueNumber === null) return true;
+      return c.operator === 'olderThan'
+        ? deal.daysSinceContact > c.valueNumber
+        : deal.daysSinceContact <= c.valueNumber;
+    case 'health': {
+      const { tier } = scoreToHealthTier(deal.aiScore);
+      if (c.operator === 'is')
+        return c.valueStrings.length === 0 || c.valueStrings.includes(tier);
+      if (c.operator === 'isNot')
+        return c.valueStrings.length === 0 || !c.valueStrings.includes(tier);
+      if (c.valueNumber === null) return true;
+      return c.operator === 'scoreBelow' ? deal.aiScore < c.valueNumber : deal.aiScore > c.valueNumber;
+    }
+    case 'contact':
+      return c.operator === 'isSet' ? !!deal.contactName : !deal.contactName;
+    default:
+      return true;
+  }
+}
 
 interface Deal {
   id: string;
@@ -146,7 +202,22 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   });
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showBuilder, setShowBuilder] = useState(false);
   const filterBarRef = useRef<HTMLDivElement>(null);
+
+  // ── Advanced filter builder state (URL key: advancedFilters) ──────────────
+  const [advancedConditions, setAdvancedConditions] = useState<FilterCondition[]>(() => {
+    const p = searchParams.get('advancedFilters');
+    if (!p) return [];
+    try { return (JSON.parse(decodeURIComponent(p)) as { conditions: FilterCondition[] }).conditions ?? []; }
+    catch { return []; }
+  });
+  const [advancedConjunction, setAdvancedConjunction] = useState<Conjunction>(() => {
+    const p = searchParams.get('advancedFilters');
+    if (!p) return 'AND';
+    try { return (JSON.parse(decodeURIComponent(p)) as { conjunction: Conjunction }).conjunction ?? 'AND'; }
+    catch { return 'AND'; }
+  });
 
   const [sortBy, setSortBy] = useState<
     'deal' | 'account' | 'value' | 'stage' | 'closeDate' | 'health'
@@ -249,9 +320,18 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         if (pipelineAgeFilter.max !== null && idleDays > pipelineAgeFilter.max) return false;
       }
 
+      // Advanced filter builder conditions (additive AND with quick filters)
+      if (advancedConditions.length > 0) {
+        const results = advancedConditions.map(c => evaluateCondition(deal, c));
+        const passes = advancedConjunction === 'AND'
+          ? results.every(Boolean)
+          : results.some(Boolean);
+        if (!passes) return false;
+      }
+
       return true;
     });
-  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
+  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, advancedConditions, advancedConjunction]);
 
   const kpiFilteredDeals = useMemo(() => {
     if (activeKpiFilter === 'closingWeek') {
@@ -659,7 +739,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   // Reset KPI shortcut when any dropdown filter changes to avoid phantom pills
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setActiveKpiFilter(null); }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
+  useEffect(() => { setActiveKpiFilter(null); }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, advancedConditions]);
 
   commitEditRef.current = commitEdit;
 
@@ -683,6 +763,20 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     setSearchParams(params, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
+
+  // ── URL sync: advanced filter builder ─────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (advancedConditions.length > 0) {
+      params.set('advancedFilters', encodeURIComponent(
+        JSON.stringify({ conjunction: advancedConjunction, conditions: advancedConditions })
+      ));
+    } else {
+      params.delete('advancedFilters');
+    }
+    setSearchParams(params, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advancedConditions, advancedConjunction]);
 
   // ── Apply external filters (from saved views via DealsKanbanPage) ──────────
   useEffect(() => {
@@ -711,6 +805,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     setSelectedSources(new Set());
     setSelectedHealthTiers(new Set());
     setPipelineAgeFilter({ min: null, max: null });
+    setAdvancedConditions([]);
   };
 
   const hasActiveFilters =
@@ -718,13 +813,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     closeDateFilter.preset !== 'all' ||
     valueFilter.min !== null || valueFilter.max !== null ||
     selectedSources.size > 0 || selectedHealthTiers.size > 0 ||
-    pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null;
+    pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ||
+    advancedConditions.length > 0;
 
   const activeFilterCount =
     selectedStages.size + selectedOwners.size + selectedSources.size + selectedHealthTiers.size +
     (closeDateFilter.preset !== 'all' ? 1 : 0) +
     (valueFilter.min !== null || valueFilter.max !== null ? 1 : 0) +
-    (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ? 1 : 0);
+    (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ? 1 : 0) +
+    advancedConditions.length;
 
   const HEALTH_TIER_LABELS: Record<HealthTierFilter, string> = {
     strong: 'Healthy',
@@ -1878,6 +1975,23 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             )}
           </div>
 
+          {/* ── Advanced filter builder toggle ── */}
+          <button
+            onClick={() => setShowBuilder(v => !v)}
+            className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+              advancedConditions.length > 0
+                ? 'bg-violet-50 border-violet-300 text-violet-700 font-medium'
+                : showBuilder
+                  ? 'bg-gray-100 border-gray-300 text-gray-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {advancedConditions.length > 0
+              ? `${advancedConditions.length} condition${advancedConditions.length !== 1 ? 's' : ''}`
+              : 'Build filter'}
+          </button>
+
           {/* ── Column settings ── */}
           <div className="ml-auto flex items-center gap-2">
 
@@ -2008,6 +2122,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onRemove={() => setPipelineAgeFilter({ min: null, max: null })}
               />
             )}
+            {advancedConditions.length > 0 && (
+              <FilterChip
+                color="purple"
+                label={`⚙ ${advancedConditions.length} condition${advancedConditions.length !== 1 ? 's' : ''}`}
+                onRemove={() => setAdvancedConditions([])}
+              />
+            )}
             <button
               onClick={clearAllFilters}
               className="text-xs text-red-500 hover:text-red-700 font-medium ml-auto shrink-0"
@@ -2033,6 +2154,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         )}
 
       </div>
+
+      {/* ── Advanced Filter Builder Panel ─────────────────────────────────────── */}
+      {showBuilder && (
+        <AdvancedFilterBuilder
+          conditions={advancedConditions}
+          conjunction={advancedConjunction}
+          onConditionsChange={setAdvancedConditions}
+          onConjunctionChange={setAdvancedConjunction}
+          stageOptions={stageFilterOptions}
+          ownerOptions={ownerFilterOptions}
+          onClose={() => setShowBuilder(false)}
+        />
+      )}
 
       {/* Mobile filter sheet */}
       {showMobileFilters && (
