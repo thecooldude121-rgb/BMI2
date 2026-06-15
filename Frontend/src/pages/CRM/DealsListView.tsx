@@ -242,14 +242,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         if (!selectedHealthTiers.has(tier)) return false;
       }
 
-      // Pipeline age
+      // Activity gap (days since last contact)
       if (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) {
-        const age = deal.createdAt
-          ? Math.floor((Date.now() - new Date(deal.createdAt).getTime()) / 86400000)
-          : null;
-        if (age === null) return false;
-        if (pipelineAgeFilter.min !== null && age < pipelineAgeFilter.min) return false;
-        if (pipelineAgeFilter.max !== null && age > pipelineAgeFilter.max) return false;
+        const idleDays = deal.daysSinceContact;
+        if (pipelineAgeFilter.min !== null && idleDays < pipelineAgeFilter.min) return false;
+        if (pipelineAgeFilter.max !== null && idleDays > pipelineAgeFilter.max) return false;
       }
 
       return true;
@@ -741,12 +738,27 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     custom: `${closeDateFilter.from ?? ''}–${closeDateFilter.to ?? ''}`,
   };
 
-  const FilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
-    <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
-      {label}
-      <button onClick={onRemove} className="text-indigo-400 hover:text-indigo-600 ml-0.5 leading-none">×</button>
-    </span>
-  );
+  const FilterChip = ({
+    label, color = 'indigo', onRemove,
+  }: { label: string; color?: 'indigo' | 'green' | 'amber' | 'red' | 'purple' | 'blue' | 'orange'; onRemove: () => void }) => {
+    const colorMap = {
+      indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      green:  'bg-green-50  text-green-700  border-green-200',
+      amber:  'bg-amber-50  text-amber-700  border-amber-200',
+      red:    'bg-red-50    text-red-700    border-red-200',
+      purple: 'bg-purple-50 text-purple-700 border-purple-200',
+      blue:   'bg-blue-50   text-blue-700   border-blue-200',
+      orange: 'bg-orange-50 text-orange-700 border-orange-200',
+    };
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border ${colorMap[color]}`}>
+        {label}
+        <button onClick={onRemove} className="ml-0.5 opacity-60 hover:opacity-100 text-current leading-none">×</button>
+      </span>
+    );
+  };
+
+  const fmtValK = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`;
 
   const showBulkActions = selectedDeals.length > 0;
   const orderedVisible = columnOrder.filter(k => visibleColumns.has(k));
@@ -1521,7 +1533,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {selectedStages.size === 0 ? 'Stage' : selectedStages.size === 1 ? [...selectedStages][0] : `${selectedStages.size} stages`}
+              Stage
+              {selectedStages.size > 0 && (
+                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
+                  {selectedStages.size}
+                </span>
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'stage' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'stage' && (
@@ -1552,7 +1569,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {selectedOwners.size === 0 ? 'Owner' : selectedOwners.size === 1 ? [...selectedOwners][0].split(' ')[0] : `${selectedOwners.size} owners`}
+              Owner
+              {selectedOwners.size > 0 && (
+                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
+                  {selectedOwners.size}
+                </span>
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'owner' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'owner' && (
@@ -1586,27 +1608,39 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {closeDateFilter.preset === 'all' ? 'Close Date' : closeDatePresetLabel[closeDateFilter.preset] ?? 'Close Date'}
+              Close Date
+              {closeDateFilter.preset !== 'all' && (
+                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'closeDate' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'closeDate' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[220px]">
-                {(['all', 'thisWeek', 'thisMonth', 'thisQuarter', 'overdue', 'custom'] as const).map(preset => (
-                  <label key={preset} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="radio"
-                      name="closeDatePreset"
-                      checked={closeDateFilter.preset === preset}
-                      onChange={() => setCloseDateFilter({ preset })}
-                      className="text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">
-                      {preset === 'all' ? 'Any date' : preset === 'thisWeek' ? 'This week' : preset === 'thisMonth' ? 'This month' : preset === 'thisQuarter' ? 'This quarter' : preset === 'overdue' ? 'Overdue' : 'Custom range'}
-                    </span>
-                  </label>
-                ))}
-                {closeDateFilter.preset === 'custom' && (
-                  <div className="mt-2 space-y-2 pt-2 border-t border-gray-100">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[240px]">
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {([
+                    { value: 'thisWeek',    label: 'This Week' },
+                    { value: 'thisMonth',   label: 'This Month' },
+                    { value: 'thisQuarter', label: 'This Quarter' },
+                    { value: 'overdue',     label: 'Overdue' },
+                    { value: 'custom',      label: 'Custom Range' },
+                  ] as const).map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => setCloseDateFilter(
+                        closeDateFilter.preset === value ? { preset: 'all' } : { preset: value }
+                      )}
+                      className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                        closeDateFilter.preset === value
+                          ? 'bg-purple-100 text-purple-700 border-purple-300'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className={closeDateFilter.preset === 'custom' ? 'block mt-2 pt-2 border-t border-gray-100' : 'hidden'}>
+                  <div className="space-y-2">
                     <div>
                       <label className="text-[11px] text-gray-500 font-medium block mb-0.5">From</label>
                       <input
@@ -1626,7 +1660,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       />
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>
@@ -1641,18 +1675,39 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {valueFilter.min === null && valueFilter.max === null
-                ? 'Value'
-                : valueFilter.min !== null && valueFilter.max !== null
-                  ? `$${(valueFilter.min/1000).toFixed(0)}K–$${(valueFilter.max/1000).toFixed(0)}K`
-                  : valueFilter.min !== null
-                    ? `≥$${(valueFilter.min/1000).toFixed(0)}K`
-                    : `≤$${(valueFilter.max!/1000).toFixed(0)}K`}
+              Value
+              {(valueFilter.min !== null || valueFilter.max !== null) && (
+                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'value' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'value' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
-                <p className="text-[11px] text-gray-500 font-medium mb-2">Deal value range</p>
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[220px]">
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {([
+                    { label: '< $10K',       min: null,   max: 10000  },
+                    { label: '$10K – $50K',  min: 10000,  max: 50000  },
+                    { label: '$50K – $200K', min: 50000,  max: 200000 },
+                    { label: '> $200K',      min: 200000, max: null   },
+                  ] as const).map((preset) => {
+                    const isActive = valueFilter.min === preset.min && valueFilter.max === preset.max;
+                    return (
+                      <button
+                        key={preset.label}
+                        onClick={() => setValueFilter(isActive ? { min: null, max: null } : { min: preset.min, max: preset.max })}
+                        className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                          isActive
+                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="border-t border-gray-100 my-2" />
+                <div className="text-xs text-gray-400 mb-1.5">Custom range</div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
                     <label className="text-[10px] text-gray-400 block mb-0.5">Min $</label>
@@ -1678,12 +1733,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     />
                   </div>
                 </div>
-                <button
-                  onClick={() => setValueFilter({ min: null, max: null })}
-                  className="mt-2 text-xs text-gray-400 hover:text-gray-600 w-full text-left"
-                >
-                  Clear
-                </button>
               </div>
             )}
           </div>
@@ -1698,7 +1747,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {selectedSources.size === 0 ? 'Source' : selectedSources.size === 1 ? [...selectedSources][0] : `${selectedSources.size} sources`}
+              Source
+              {selectedSources.size > 0 && (
+                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
+                  {selectedSources.size}
+                </span>
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'source' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'source' && (
@@ -1729,28 +1783,45 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {selectedHealthTiers.size === 0 ? 'Health' : `${selectedHealthTiers.size} tiers`}
+              Health
+              {selectedHealthTiers.size > 0 && (
+                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
+                  {selectedHealthTiers.size}
+                </span>
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'health' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'health' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[180px]">
-                {([['strong','Healthy','bg-green-400'],['fair','Watch','bg-amber-400'],['weak','At Risk','bg-red-400']] as [HealthTierFilter, string, string][]).map(([tier, label, dot]) => (
-                  <label key={tier} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedHealthTiers.has(tier)}
-                      onChange={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.has(tier) ? n.delete(tier) : n.add(tier); return n; })}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className={`h-2 w-2 rounded-full flex-shrink-0 ${dot}`} />
-                    <span className="text-sm text-gray-700">{label}</span>
-                  </label>
-                ))}
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[260px]">
+                <div className="flex gap-2">
+                  {([
+                    { tier: 'strong' as HealthTierFilter, label: 'Healthy', dot: 'bg-green-500', activeClass: 'bg-green-100 text-green-700 border-green-300' },
+                    { tier: 'fair'   as HealthTierFilter, label: 'Watch',   dot: 'bg-amber-500', activeClass: 'bg-amber-100 text-amber-700 border-amber-300' },
+                    { tier: 'weak'   as HealthTierFilter, label: 'At Risk', dot: 'bg-red-500',   activeClass: 'bg-red-100   text-red-700   border-red-300'   },
+                  ]).map(({ tier, label, dot, activeClass }) => (
+                    <button
+                      key={tier}
+                      onClick={() => {
+                        const next = new Set(selectedHealthTiers);
+                        next.has(tier) ? next.delete(tier) : next.add(tier);
+                        setSelectedHealthTiers(next);
+                      }}
+                      className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                        selectedHealthTiers.has(tier)
+                          ? activeClass
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* ── Pipeline Age ── */}
+          {/* ── Activity Gap ── */}
           <div className="relative">
             <button
               onClick={() => setOpenFilter(openFilter === 'pipelineAge' ? null : 'pipelineAge')}
@@ -1760,20 +1831,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {pipelineAgeFilter.min === null && pipelineAgeFilter.max === null
-                ? 'Pipeline Age'
-                : pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
-                  ? `${pipelineAgeFilter.min}–${pipelineAgeFilter.max}d`
-                  : pipelineAgeFilter.min !== null
-                    ? `≥${pipelineAgeFilter.min}d`
-                    : `≤${pipelineAgeFilter.max}d`}
+              Activity Gap
+              {(pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) && (
+                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
+              )}
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'pipelineAge' ? 'rotate-180' : ''}`} />
             </button>
             {openFilter === 'pipelineAge' && (
               <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
                 <p className="text-[11px] text-gray-500 font-medium mb-1">
-                  Pipeline Age (days)
-                  <span title="Days since deal was created. Stage-level tracking coming soon." className="ml-1 cursor-help text-gray-400">ⓘ</span>
+                  Activity Gap (days)
+                  <span title="Deals with no contact activity in the last N days" className="ml-1 cursor-help text-gray-400">ⓘ</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
@@ -1810,16 +1878,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             )}
           </div>
 
-          {/* ── Clear all + Column settings ── */}
+          {/* ── Column settings ── */}
           <div className="ml-auto flex items-center gap-2">
-            {hasActiveFilters && (
-              <button
-                onClick={clearAllFilters}
-                className="text-sm text-red-500 hover:text-red-700 font-medium"
-              >
-                Clear all
-              </button>
-            )}
 
             {/* Column settings gear */}
             <div className="relative">
@@ -1886,41 +1946,74 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
         </div>
 
-        {/* Active filter chips */}
+        {/* Active filter chips row */}
         {hasActiveFilters && (
-          <div className="hidden md:flex items-center gap-2 px-4 py-2 flex-wrap border-t border-gray-100">
-            <span className="text-xs text-gray-400">Active filters:</span>
+          <div className="hidden md:flex items-center gap-2 flex-wrap px-4 py-2 border-t border-gray-100 bg-gray-50/50">
+            <span className="text-xs text-gray-400 font-medium shrink-0">Active:</span>
             {[...selectedStages].map(s => (
-              <FilterChip key={`stage-${s}`} label={s} onRemove={() => setSelectedStages(prev => { const n = new Set(prev); n.delete(s); return n; })} />
+              <FilterChip key={`stage-${s}`} label={s} color="indigo" onRemove={() => setSelectedStages(prev => { const n = new Set(prev); n.delete(s); return n; })} />
             ))}
             {[...selectedOwners].map(o => (
-              <FilterChip key={`owner-${o}`} label={o.split(' ')[0]} onRemove={() => setSelectedOwners(prev => { const n = new Set(prev); n.delete(o); return n; })} />
+              <FilterChip key={`owner-${o}`} label={o.split(' ')[0]} color="indigo" onRemove={() => setSelectedOwners(prev => { const n = new Set(prev); n.delete(o); return n; })} />
+            ))}
+            {[...selectedSources].map(s => (
+              <FilterChip key={`source-${s}`} label={s} color="indigo" onRemove={() => setSelectedSources(prev => { const n = new Set(prev); n.delete(s); return n; })} />
+            ))}
+            {[...selectedHealthTiers].map(t => (
+              <FilterChip
+                key={`health-${t}`}
+                label={HEALTH_TIER_LABELS[t]}
+                color={t === 'strong' ? 'green' : t === 'fair' ? 'amber' : 'red'}
+                onRemove={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.delete(t); return n; })}
+              />
             ))}
             {closeDateFilter.preset !== 'all' && (
-              <FilterChip label={closeDatePresetLabel[closeDateFilter.preset] ?? closeDateFilter.preset} onRemove={() => setCloseDateFilter({ preset: 'all' })} />
+              <FilterChip
+                color="purple"
+                label={
+                  closeDateFilter.preset === 'thisWeek'    ? 'This Week' :
+                  closeDateFilter.preset === 'thisMonth'   ? 'This Month' :
+                  closeDateFilter.preset === 'thisQuarter' ? 'This Quarter' :
+                  closeDateFilter.preset === 'overdue'     ? 'Overdue' :
+                  closeDateFilter.from && closeDateFilter.to ? `${closeDateFilter.from} – ${closeDateFilter.to}` :
+                  closeDateFilter.from ? `From ${closeDateFilter.from}` :
+                  closeDateFilter.to   ? `Until ${closeDateFilter.to}` : 'Custom'
+                }
+                onRemove={() => setCloseDateFilter({ preset: 'all' })}
+              />
             )}
             {(valueFilter.min !== null || valueFilter.max !== null) && (
               <FilterChip
-                label={valueFilter.min !== null && valueFilter.max !== null
-                  ? `$${(valueFilter.min/1000).toFixed(0)}K–$${(valueFilter.max/1000).toFixed(0)}K`
-                  : valueFilter.min !== null ? `≥$${(valueFilter.min/1000).toFixed(0)}K` : `≤$${(valueFilter.max!/1000).toFixed(0)}K`}
+                color="blue"
+                label={
+                  valueFilter.min !== null && valueFilter.max !== null
+                    ? `${fmtValK(valueFilter.min)} – ${fmtValK(valueFilter.max)}`
+                    : valueFilter.min !== null
+                      ? `> ${fmtValK(valueFilter.min)}`
+                      : `< ${fmtValK(valueFilter.max!)}`
+                }
                 onRemove={() => setValueFilter({ min: null, max: null })}
               />
             )}
-            {[...selectedSources].map(s => (
-              <FilterChip key={`source-${s}`} label={s} onRemove={() => setSelectedSources(prev => { const n = new Set(prev); n.delete(s); return n; })} />
-            ))}
-            {[...selectedHealthTiers].map(t => (
-              <FilterChip key={`health-${t}`} label={HEALTH_TIER_LABELS[t]} onRemove={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.delete(t); return n; })} />
-            ))}
             {(pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) && (
               <FilterChip
-                label={pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
-                  ? `${pipelineAgeFilter.min}–${pipelineAgeFilter.max} days`
-                  : pipelineAgeFilter.min !== null ? `≥${pipelineAgeFilter.min}d` : `≤${pipelineAgeFilter.max}d`}
+                color="orange"
+                label={
+                  pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
+                    ? `Idle ${pipelineAgeFilter.min}–${pipelineAgeFilter.max} days`
+                    : pipelineAgeFilter.min !== null
+                      ? `Idle ${pipelineAgeFilter.min}+ days`
+                      : `Active < ${pipelineAgeFilter.max} days`
+                }
                 onRemove={() => setPipelineAgeFilter({ min: null, max: null })}
               />
             )}
+            <button
+              onClick={clearAllFilters}
+              className="text-xs text-red-500 hover:text-red-700 font-medium ml-auto shrink-0"
+            >
+              Clear all
+            </button>
           </div>
         )}
 
@@ -2027,10 +2120,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <input type="number" min={0} placeholder="Max $" value={valueFilter.max ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
               </div>
             </div>
-            {/* Pipeline Age */}
+            {/* Activity Gap */}
             <div>
-              <p className="text-sm font-semibold text-gray-700 mb-1">Pipeline Age (days)</p>
-              <p className="text-xs text-gray-400 mb-2">Days since deal was created.</p>
+              <p className="text-sm font-semibold text-gray-700 mb-1">Activity Gap (days)</p>
+              <p className="text-xs text-gray-400 mb-2">Deals with no contact activity in the last N days.</p>
               <div className="flex items-center gap-2">
                 <input type="number" min={0} placeholder="Min" value={pipelineAgeFilter.min ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
                 <span className="text-gray-400">–</span>
