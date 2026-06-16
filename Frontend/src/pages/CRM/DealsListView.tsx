@@ -344,9 +344,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     catch { return 'comfortable'; }
   });
   useEffect(() => { localStorage.setItem('bmi_deals_density', density); }, [density]);
-  const cellPadding        = density === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
-  const textSizeSecondary  = density === 'compact' ? 'text-[11px]' : 'text-xs';
-  const avatarSize         = density === 'compact' ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-[11px]';
+  const effectiveDensity: Density = typeof window !== 'undefined' && window.innerWidth < 768 ? 'compact' : density;
+  const cellPadding        = effectiveDensity === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
+  const textSizeSecondary  = effectiveDensity === 'compact' ? 'text-[11px]' : 'text-xs';
+  const avatarSize         = effectiveDensity === 'compact' ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-[11px]';
 
   // ── Duplicate detection state ───────────────────────────────────────────────
   const [dismissedPairs, setDismissedPairs] = useState<Set<string>>(new Set());
@@ -1026,33 +1027,37 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const renderHeader = (key: ColumnKey): React.ReactNode => {
     const thBase = `text-left ${cellPadding} text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap`;
     const thSort = thBase + ' cursor-pointer hover:bg-gray-100';
+    // Responsive column visibility: P2=md+, P3=lg+, P4=xl+
+    const p2 = 'hidden md:table-cell';
+    const p3 = 'hidden lg:table-cell';
+    const p4 = 'hidden xl:table-cell';
     switch (key) {
       case 'dealName':
         return <th key="dealName" className={thSort} onClick={() => handleSort('deal')}><div className="flex items-center space-x-1"><span>Deal Name</span><SortIcon column="deal" /></div></th>;
       case 'account':
-        return <th key="account" className={thSort} onClick={() => handleSort('account')}><div className="flex items-center space-x-1"><span>Account</span><SortIcon column="account" /></div></th>;
+        return <th key="account" className={`${p3} ${thSort}`} onClick={() => handleSort('account')}><div className="flex items-center space-x-1"><span>Account</span><SortIcon column="account" /></div></th>;
       case 'owner':
-        return <th key="owner" className={thSort} onClick={() => handleSort('owner')}><div className="flex items-center space-x-1"><span>Owner</span><SortIcon column="owner" /></div></th>;
+        return <th key="owner" className={`${p2} ${thSort}`} onClick={() => handleSort('owner')}><div className="flex items-center space-x-1"><span>Owner</span><SortIcon column="owner" /></div></th>;
       case 'contact':
-        return <th key="contact" className={thSort} onClick={() => handleSort('contact')}><div className="flex items-center space-x-1"><span>Primary Contact</span><SortIcon column="contact" /></div></th>;
+        return <th key="contact" className={`${p3} ${thSort}`} onClick={() => handleSort('contact')}><div className="flex items-center space-x-1"><span>Primary Contact</span><SortIcon column="contact" /></div></th>;
       case 'value':
         return <th key="value" className={`${thSort} text-right`} onClick={() => handleSort('value')}><div className="flex items-center justify-end space-x-1"><span>Value</span><SortIcon column="value" /></div></th>;
       case 'stage':
-        return <th key="stage" className={thSort} onClick={() => handleSort('stage')}><div className="flex items-center space-x-1"><span>Stage</span><SortIcon column="stage" /></div></th>;
+        return <th key="stage" className={`${p2} ${thSort}`} onClick={() => handleSort('stage')}><div className="flex items-center space-x-1"><span>Stage</span><SortIcon column="stage" /></div></th>;
       case 'closeDate':
-        return <th key="closeDate" className={thSort} onClick={() => handleSort('closeDate')}><div className="flex items-center space-x-1"><span>Close Date</span><SortIcon column="closeDate" /></div></th>;
+        return <th key="closeDate" className={`${p2} ${thSort}`} onClick={() => handleSort('closeDate')}><div className="flex items-center space-x-1"><span>Close Date</span><SortIcon column="closeDate" /></div></th>;
       case 'lastActivity':
-        return <th key="lastActivity" className={thBase}>Last Activity</th>;
+        return <th key="lastActivity" className={`${p4} ${thBase}`}>Last Activity</th>;
       case 'nextStep':
-        return <th key="nextStep" className={thBase}>Next Step</th>;
+        return <th key="nextStep" className={`${p4} ${thBase}`}>Next Step</th>;
       case 'dealAge':
-        return <th key="dealAge" className={thSort} onClick={() => handleSort('dealAge')}><div className="flex items-center space-x-1"><span>Deal Age</span><SortIcon column="dealAge" /></div></th>;
+        return <th key="dealAge" className={`${p4} ${thSort}`} onClick={() => handleSort('dealAge')}><div className="flex items-center space-x-1"><span>Deal Age</span><SortIcon column="dealAge" /></div></th>;
       case 'probability':
-        return <th key="probability" className={thSort} onClick={() => handleSort('probability')}><div className="flex items-center space-x-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
+        return <th key="probability" className={`${p4} ${thSort}`} onClick={() => handleSort('probability')}><div className="flex items-center space-x-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
       case 'source':
-        return <th key="source" className={thSort} onClick={() => handleSort('source')}><div className="flex items-center space-x-1"><span>Source</span><SortIcon column="source" /></div></th>;
+        return <th key="source" className={`${p4} ${thSort}`} onClick={() => handleSort('source')}><div className="flex items-center space-x-1"><span>Source</span><SortIcon column="source" /></div></th>;
       case 'health':
-        return <th key="health" className={thSort} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><span>Health</span><SortIcon column="health" /></div></th>;
+        return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><span>Health</span><SortIcon column="health" /></div></th>;
       case 'actions':
         return <th key="actions" className={thBase}>Actions</th>;
       default:
@@ -1101,7 +1106,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       case 'account':
         return (
-          <td key="account" className={`${cellPadding} max-w-[200px]`}>
+          <td key="account" className={`hidden lg:table-cell ${cellPadding} max-w-[200px]`}>
             {deal.companyName ? (
               <div className="flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" />
@@ -1126,7 +1131,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="owner"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              `${cellPadding} cursor-text transition-colors`,
+              `hidden md:table-cell ${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'owner'); }}
@@ -1166,13 +1171,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         const { hasName, hasTitle, displayName, displayTitle, initials } = getContactDisplay(deal);
         if (!hasName) {
           return (
-            <td key="contact" className={`${cellPadding} text-sm`}>
+            <td key="contact" className={`hidden lg:table-cell ${cellPadding} text-sm`}>
               <span className="text-gray-400">—</span>
             </td>
           );
         }
         return (
-          <td key="contact" className={cellPadding}>
+          <td key="contact" className={`hidden lg:table-cell ${cellPadding}`}>
             <div className="flex items-start gap-2">
               <div className={`${avatarSize} rounded-full bg-violet-100 text-violet-700 font-bold flex items-center justify-center shrink-0 mt-0.5`}>
                 {initials}
@@ -1234,7 +1239,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="stage"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              `${cellPadding} cursor-text transition-colors`,
+              `hidden md:table-cell ${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'stage'); }}
@@ -1315,7 +1320,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="closeDate"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              `${cellPadding} cursor-text transition-colors`,
+              `hidden md:table-cell ${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'closeDate'); }}
@@ -1350,7 +1355,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       case 'lastActivity': {
         const stallReasons = isStalled(deal) ? getReasons(deal) : null;
         return (
-          <td key="lastActivity" className={cellPadding}>
+          <td key="lastActivity" className={`hidden xl:table-cell ${cellPadding}`}>
             <div className="flex items-center gap-2 flex-wrap">
               {deal.lastActivity ? (
                 <span className={`${textSizeSecondary} text-gray-500`}>{formatRelativeTime(deal.lastActivity, '')}</span>
@@ -1398,7 +1403,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="nextStep"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              `${cellPadding} max-w-[200px] cursor-text transition-colors`,
+              `hidden xl:table-cell ${cellPadding} max-w-[200px] cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'nextStep'); }}
@@ -1439,7 +1444,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             ? 'bg-amber-100 text-amber-700'
             : 'bg-red-100 text-red-700';
         return (
-          <td key="dealAge" className={cellPadding}>
+          <td key="dealAge" className={`hidden xl:table-cell ${cellPadding}`}>
             <span
               title="Days since deal was created (stage tracking not yet available)"
               className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full tabular-nums ${ageCls}`}
@@ -1465,7 +1470,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="probability"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              `${cellPadding} cursor-text transition-colors`,
+              `hidden xl:table-cell ${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
               isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
             ].join(' ')}
@@ -1494,7 +1499,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       case 'source':
         return (
-          <td key="source" className={cellPadding}>
+          <td key="source" className={`hidden xl:table-cell ${cellPadding}`}>
             {deal.source ? (
               <span className={`bg-gray-100 text-gray-500 ${textSizeSecondary} font-medium px-2 py-0.5 rounded-full`}>
                 {deal.source}
@@ -1509,7 +1514,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
         if (isClosed) {
           return (
-            <td key="health" className={cellPadding}>
+            <td key="health" className={`hidden md:table-cell ${cellPadding}`}>
               <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
                 deal.stage === 'closed-won'
                   ? 'bg-emerald-100 text-emerald-700'
@@ -1534,7 +1539,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             : 'bg-red-100 text-red-700';
 
         return (
-          <td key="health" className={cellPadding}>
+          <td key="health" className={`hidden md:table-cell ${cellPadding}`}>
             <div
               className="relative"
               onMouseEnter={() => setHoveredScore(deal.id)}
@@ -1696,12 +1701,213 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     }
   };
 
+  // Shared expanded panel — used by both desktop table row and mobile card
+  const renderExpandedPanel = (deal: Deal): React.ReactNode => {
+    const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
+    const expandedMerged = localEdits[deal.id] ? { ...deal, ...localEdits[deal.id] } : deal;
+    const expandedCardLite = toDealCardLite(expandedMerged);
+    const expandedCloseDays = expandedMerged.closeDate ? daysFromNow(expandedMerged.closeDate) : null;
+    const healthExpl = isClosed ? null : explainDealHealth(expandedCardLite, expandedCloseDays);
+    const { tier: healthTier } = scoreToHealthTier(deal.aiScore);
+    const accentClass = isClosed ? 'border-gray-300'
+      : healthTier === 'strong' ? 'border-green-400'
+      : healthTier === 'fair'   ? 'border-amber-400'
+      : 'border-red-400';
+    const pipelineDays = getDealAgeDays(deal.createdAt);
+    const pipelineDaysLabel = pipelineDays < 1 ? '<1d' : `${pipelineDays}d`;
+    const pipelineDaysCls = pipelineDays < 14 ? 'bg-gray-100 text-gray-600'
+      : pipelineDays < 30 ? 'bg-amber-100 text-amber-700'
+      : 'bg-red-100 text-red-700';
+    const dueInDays = deal.nextStepDueDate ? daysFromNow(deal.nextStepDueDate) : null;
+    const allSignals = healthExpl
+      ? [...healthExpl.risks, ...healthExpl.positives].slice(0, 4)
+      : [];
+
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {/* Action strip */}
+        <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-gray-100 flex-wrap">
+          {([
+            { label: 'Schedule Follow-up', icon: <CalendarPlus size={13} />, action: () => openScheduleFollowUp(deal) },
+            { label: 'Create Task',        icon: <CheckSquare size={13} />,   action: () => openCreateTask(deal) },
+            { label: 'Log Meeting',        icon: <ClipboardList size={13} />, action: () => openLogMeeting(deal) },
+            { label: 'Share',              icon: <Link2 size={13} />,         action: () => shareDeal(deal) },
+            { label: 'Add to Sequence',    icon: <Workflow size={13} />,      action: () => openAddSequence(deal) },
+          ] as const).map(({ label, icon, action }) => (
+            <button
+              key={label}
+              onClick={(e) => { e.stopPropagation(); action(); }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 4-zone body — stacks vertically on mobile, horizontal on md+ */}
+        <div className={`flex flex-col md:flex-row border-l-4 ${accentClass}`}>
+
+          {/* Zone 1 — People & Time */}
+          <div className="md:w-48 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] font-semibold text-indigo-700">{getInitials(deal.owner || '')}</span>
+              </div>
+              <span className="text-sm text-gray-700 truncate">
+                {deal.owner || <span className="text-gray-400">Unassigned</span>}
+              </span>
+            </div>
+            {(() => {
+              const { hasName, hasTitle, displayName, displayTitle, initials } = getContactDisplay(deal);
+              return (
+                <div className="mb-3">
+                  <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">
+                    Primary Contact
+                  </p>
+                  {hasName ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold flex items-center justify-center shrink-0">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate leading-snug">{displayName}</p>
+                        {hasTitle && (
+                          <p className="text-[11px] text-gray-400 truncate leading-snug">{displayTitle}</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-gray-50 border border-dashed border-gray-200">
+                      <UserX size={13} className="text-gray-300 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-400">No primary contact linked</p>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
+                          className="text-[11px] text-indigo-500 hover:text-indigo-700 hover:underline text-left"
+                        >
+                          Edit deal to add contact
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            <div className="text-xs text-gray-500 mb-3">
+              {deal.lastActivity
+                ? `Last contact: ${formatRelativeTime(deal.lastActivity, 'unknown')}`
+                : 'No activity'}
+            </div>
+            <span
+              title="Days since deal was created. Stage-level tracking coming soon."
+              className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${pipelineDaysCls}`}
+            >
+              {pipelineDaysLabel} in pipeline
+            </span>
+          </div>
+
+          {/* Zone 2 — What's Next */}
+          <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 p-4">
+            {!isClosed && (
+              <>
+                <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Next Step</div>
+                <div className="line-clamp-2 text-sm text-gray-700">
+                  {deal.nextStep?.trim()
+                    ? deal.nextStep
+                    : <span className="text-gray-400 italic">No next step defined</span>}
+                </div>
+                {dueInDays !== null && (
+                  <div className="mt-1">
+                    {dueInDays < 0
+                      ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded">Late</span>
+                      : dueInDays === 0
+                        ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-orange-100 text-orange-700 rounded">Today</span>
+                        : dueInDays <= 2
+                          ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">{dueInDays}d</span>
+                          : null}
+                  </div>
+                )}
+              </>
+            )}
+            <div className={`text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1${!isClosed ? ' mt-3' : ''}`}>Latest Note</div>
+            <div className="text-sm text-gray-400 italic">No notes yet</div>
+          </div>
+
+          {/* Zone 3 — AI Signals */}
+          <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 p-4">
+            <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">AI Signals</div>
+            {isClosed ? (
+              <div className="flex items-center gap-2">
+                {deal.stage === 'closed-won'
+                  ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
+                  : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
+              </div>
+            ) : allSignals.length > 0 ? (
+              <div className="space-y-1">
+                {allSignals.map(signal => (
+                  <div key={signal.id} className="flex items-start gap-2">
+                    {signal.sentiment === 'positive'
+                      ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                      : signal.impact === 'high'
+                        ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                        : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
+                    <span className="text-sm text-gray-700 leading-snug">{signal.label}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-400">Score based on deal activity and engagement</span>
+            )}
+          </div>
+
+          {/* Zone 4 — Quick Actions */}
+          <div className="md:w-44 flex-shrink-0 p-4">
+            <div className="space-y-0.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowCallModal(deal); }}
+                className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
+              >
+                <Phone className="h-4 w-4 flex-shrink-0" /><span>Call</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowEmailModal(deal); }}
+                className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
+              >
+                <Mail className="h-4 w-4 flex-shrink-0" /><span>Email</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddNote?.(deal.id); showBulkToast(`Add note for ${deal.dealName} — coming soon`); }}
+                className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
+              >
+                <StickyNote className="h-4 w-4 flex-shrink-0" /><span>Add Note</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
+                className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
+              >
+                <CalendarPlus className="h-4 w-4 flex-shrink-0" /><span>Schedule Follow-up</span>
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
+                className="flex items-center gap-2 w-full text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 rounded-lg transition-colors text-left"
+              >
+                <ExternalLink className="h-4 w-4 flex-shrink-0" /><span>Open Full Deal</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
 
       {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className={`grid gap-6 ${activePairCount > 0 ? 'grid-cols-7' : 'grid-cols-6'}`}>
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-4 sm:py-6">
+        <div className={`grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-3 ${activePairCount > 0 ? 'lg:grid-cols-7' : 'lg:grid-cols-6'}`}>
 
           {/* Card 1: Total Deals — clickable, active when no KPI filter */}
           <div
@@ -1718,7 +1924,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 : 'border-blue-200',
             ].join(' ')}
           >
-            <div className={`text-3xl text-blue-900 ${activeKpiFilter === null ? 'font-extrabold' : 'font-bold'}`}>
+            <div className={`text-xl sm:text-3xl text-blue-900 ${activeKpiFilter === null ? 'font-extrabold' : 'font-bold'}`}>
               {filteredDeals.length}
             </div>
             <div className="text-sm text-blue-700 font-medium mt-1">Total Deals</div>
@@ -1726,7 +1932,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* Card 2: Total Value — decorative only */}
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 cursor-default">
-            <div className="text-3xl font-bold text-green-900">{formatAmountUSD(totalValue)}</div>
+            <div className="text-xl sm:text-3xl font-bold text-green-900">{formatAmountUSD(totalValue)}</div>
             <div className="text-sm text-green-700 font-medium mt-1">Total Value</div>
           </div>
 
@@ -1735,7 +1941,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200 cursor-default"
             title="Win rate based on closed deals in the current period"
           >
-            <div className="text-3xl font-bold text-purple-900">{avgWinRate}%</div>
+            <div className="text-xl sm:text-3xl font-bold text-purple-900">{avgWinRate}%</div>
             <div className="text-sm text-purple-700 font-medium mt-1">Avg Win Rate</div>
           </div>
 
@@ -1762,7 +1968,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 tabIndex={-1}
               >×</button>
             )}
-            <div className={`text-3xl text-orange-900 ${activeKpiFilter === 'closingWeek' ? 'font-extrabold' : 'font-bold'}`}>
+            <div className={`text-xl sm:text-3xl text-orange-900 ${activeKpiFilter === 'closingWeek' ? 'font-extrabold' : 'font-bold'}`}>
               {kpiClosingCount}
             </div>
             <div className="text-sm text-orange-700 font-medium mt-1">Closing This Week</div>
@@ -1799,7 +2005,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 tabIndex={-1}
               >×</button>
             )}
-            <div className={`text-3xl text-red-900 ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-bold'}`}>
+            <div className={`text-xl sm:text-3xl text-red-900 ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-bold'}`}>
               {kpiStalledCount}
             </div>
             <div className="flex items-center gap-1.5 mt-1">
@@ -1820,7 +2026,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200 cursor-default"
             title="Average deal cycle based on closed deals"
           >
-            <div className="text-3xl font-bold text-gray-900">{avgDaysCycle}</div>
+            <div className="text-xl sm:text-3xl font-bold text-gray-900">{avgDaysCycle}</div>
             <div className="text-sm text-gray-700 font-medium mt-1">Days Avg Cycle</div>
           </div>
 
@@ -1835,7 +2041,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 'hover:shadow-md hover:scale-[1.01] border-amber-300',
               ].join(' ')}
             >
-              <div className="text-3xl font-bold text-amber-800">{activePairCount}</div>
+              <div className="text-xl sm:text-3xl font-bold text-amber-800">{activePairCount}</div>
               <div className="text-sm text-amber-700 font-medium mt-1">Duplicate<br />Pairs</div>
             </button>
           )}
@@ -2546,272 +2752,190 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       )}
 
-      {/* ── Table ─────────────────────────────────────────────────────────────── */}
-      <div className="px-8 py-6">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-[1300px]">
-            <thead className="bg-gray-50/80 border-b-2 border-gray-200">
-              <tr>
-                {/* Checkbox — always visible */}
-                <th className={`w-12 pl-3 ${density === 'compact' ? 'py-2' : 'py-3'}`}>
-                  <input
-                    ref={headerCheckboxRef}
-                    type="checkbox"
-                    checked={selectedDeals.length === sortedDeals.length && sortedDeals.length > 0}
-                    onChange={selectAllDeals}
-                    aria-label="Select all deals"
-                    className="rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1"
-                  />
-                </th>
-                {orderedVisible.map(key => renderHeader(key))}
-              </tr>
-            </thead>
+      {/* ── Table + Card List ────────────────────────────────────────────────── */}
+      <div className="py-3 sm:py-6">
 
-            <tbody className="divide-y divide-gray-100">
-              {sortedDeals.map((deal) => {
-                const isExpanded = expandedRows.includes(deal.id);
-                const isSelected = selectedDealSet.has(deal.id);
+        {/* Desktop table (md+) */}
+        <div className="hidden md:block px-4 md:px-8">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50/80 border-b-2 border-gray-200">
+                <tr>
+                  {/* Checkbox — always visible */}
+                  <th className={`w-12 pl-3 ${effectiveDensity === 'compact' ? 'py-2' : 'py-3'}`}>
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      checked={selectedDeals.length === sortedDeals.length && sortedDeals.length > 0}
+                      onChange={selectAllDeals}
+                      aria-label="Select all deals"
+                      className="rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1"
+                    />
+                  </th>
+                  {orderedVisible.map(key => renderHeader(key))}
+                </tr>
+              </thead>
 
-                // Pre-compute expanded panel data for all rows (< 200 rows, acceptable per PERF NOTE)
-                const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
-                const expandedMerged = localEdits[deal.id] ? { ...deal, ...localEdits[deal.id] } : deal;
-                const expandedCardLite = toDealCardLite(expandedMerged);
-                const expandedCloseDays = expandedMerged.closeDate ? daysFromNow(expandedMerged.closeDate) : null;
-                const healthExpl = isClosed ? null : explainDealHealth(expandedCardLite, expandedCloseDays);
-                const { tier: healthTier } = scoreToHealthTier(deal.aiScore);
-                const accentClass = isClosed ? 'border-gray-300'
-                  : healthTier === 'strong' ? 'border-green-400'
-                  : healthTier === 'fair'   ? 'border-amber-400'
-                  : 'border-red-400';
-                const pipelineDays = getDealAgeDays(deal.createdAt);
-                const pipelineDaysLabel = pipelineDays < 1 ? '<1d' : `${pipelineDays}d`;
-                const pipelineDaysCls = pipelineDays < 14 ? 'bg-gray-100 text-gray-600'
-                  : pipelineDays < 30 ? 'bg-amber-100 text-amber-700'
-                  : 'bg-red-100 text-red-700';
-                const dueInDays = deal.nextStepDueDate ? daysFromNow(deal.nextStepDueDate) : null;
-                const allSignals = healthExpl
-                  ? [...healthExpl.risks, ...healthExpl.positives].slice(0, 4)
-                  : [];
-
-                return (
-                  <React.Fragment key={deal.id}>
-                    <tr
-                      className={getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id)}
-                      onClick={() => toggleRowExpansion(deal.id)}
-                      onContextMenu={(e) => handleContextMenu(e, deal.id)}
-                      onMouseEnter={() => setHoveredRowId(deal.id)}
-                      onMouseLeave={() => setHoveredRowId(null)}
-                    >
-                      {/* Checkbox */}
-                      <td className={`pl-3 ${density === 'compact' ? 'py-2' : 'py-3'}`} onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => toggleDealSelection(deal.id, (e.nativeEvent as MouseEvent | KeyboardEvent).shiftKey)}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`Select ${deal.dealName}`}
-                          className="rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1"
-                        />
-                      </td>
-                      {orderedVisible.map(key => renderCell(key, deal, isExpanded))}
-                    </tr>
-
-                    {/* Expanded Panel — Deal Cockpit */}
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={visibleColCount} className="p-0 border-0">
-                          <div className="mx-3 mb-3 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden transition-opacity duration-150">
-                            {/* Action strip — workflow-first pill buttons */}
-                            <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-gray-100 flex-wrap">
-                              {([
-                                { label: 'Schedule Follow-up', icon: <CalendarPlus size={13} />, action: () => openScheduleFollowUp(deal) },
-                                { label: 'Create Task',        icon: <CheckSquare size={13} />,   action: () => openCreateTask(deal) },
-                                { label: 'Log Meeting',        icon: <ClipboardList size={13} />, action: () => openLogMeeting(deal) },
-                                { label: 'Share',              icon: <Link2 size={13} />,         action: () => shareDeal(deal) },
-                                { label: 'Add to Sequence',    icon: <Workflow size={13} />,      action: () => openAddSequence(deal) },
-                              ] as const).map(({ label, icon, action }) => (
-                                <button
-                                  key={label}
-                                  onClick={(e) => { e.stopPropagation(); action(); }}
-                                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
-                                >
-                                  {icon}
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                            <div className={`flex border-l-4 ${accentClass}`}>
-
-                              {/* Zone 1 — People & Time */}
-                              <div className="w-48 flex-shrink-0 border-r border-gray-100 p-4">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                                    <span className="text-[10px] font-semibold text-indigo-700">{getInitials(deal.owner || '')}</span>
-                                  </div>
-                                  <span className="text-sm text-gray-700 truncate">
-                                    {deal.owner || <span className="text-gray-400">Unassigned</span>}
-                                  </span>
-                                </div>
-                                {(() => {
-                                  const { hasName, hasTitle, displayName, displayTitle, initials } = getContactDisplay(deal);
-                                  return (
-                                    <div className="mb-3">
-                                      <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">
-                                        Primary Contact
-                                      </p>
-                                      {hasName ? (
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold flex items-center justify-center shrink-0">
-                                            {initials}
-                                          </div>
-                                          <div className="min-w-0">
-                                            <p className="text-sm font-medium text-gray-800 truncate leading-snug">{displayName}</p>
-                                            {hasTitle && (
-                                              <p className="text-[11px] text-gray-400 truncate leading-snug">{displayTitle}</p>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-gray-50 border border-dashed border-gray-200">
-                                          <UserX size={13} className="text-gray-300 shrink-0" />
-                                          <div className="min-w-0">
-                                            <p className="text-xs text-gray-400">No primary contact linked</p>
-                                            <button
-                                              onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
-                                              className="text-[11px] text-indigo-500 hover:text-indigo-700 hover:underline text-left"
-                                            >
-                                              Edit deal to add contact
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                                <div className="text-xs text-gray-500 mb-3">
-                                  {deal.lastActivity
-                                    ? `Last contact: ${formatRelativeTime(deal.lastActivity, 'unknown')}`
-                                    : 'No activity'}
-                                </div>
-                                <span
-                                  title="Days since deal was created. Stage-level tracking coming soon."
-                                  className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${pipelineDaysCls}`}
-                                >
-                                  {pipelineDaysLabel} in pipeline
-                                </span>
-                              </div>
-
-                              {/* Zone 2 — What's Next */}
-                              <div className="flex-1 border-r border-gray-100 p-4">
-                                {!isClosed && (
-                                  <>
-                                    <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Next Step</div>
-                                    <div className="line-clamp-2 text-sm text-gray-700">
-                                      {deal.nextStep?.trim()
-                                        ? deal.nextStep
-                                        : <span className="text-gray-400 italic">No next step defined</span>}
-                                    </div>
-                                    {dueInDays !== null && (
-                                      <div className="mt-1">
-                                        {dueInDays < 0
-                                          ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded">Late</span>
-                                          : dueInDays === 0
-                                            ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-orange-100 text-orange-700 rounded">Today</span>
-                                            : dueInDays <= 2
-                                              ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">{dueInDays}d</span>
-                                              : null}
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-                                <div className={`text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1${!isClosed ? ' mt-3' : ''}`}>Latest Note</div>
-                                <div className="text-sm text-gray-400 italic">No notes yet</div>
-                              </div>
-
-                              {/* Zone 3 — AI Signals */}
-                              <div className="flex-1 border-r border-gray-100 p-4">
-                                <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">AI Signals</div>
-                                {isClosed ? (
-                                  <div className="flex items-center gap-2">
-                                    {deal.stage === 'closed-won'
-                                      ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
-                                      : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
-                                  </div>
-                                ) : allSignals.length > 0 ? (
-                                  <div className="space-y-1">
-                                    {allSignals.map(signal => (
-                                      <div key={signal.id} className="flex items-start gap-2">
-                                        {signal.sentiment === 'positive'
-                                          ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
-                                          : signal.impact === 'high'
-                                            ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                                            : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
-                                        <span className="text-sm text-gray-700 leading-snug">{signal.label}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-400">Score based on deal activity and engagement</span>
-                                )}
-                              </div>
-
-                              {/* Zone 4 — Quick Actions */}
-                              <div className="w-44 flex-shrink-0 p-4">
-                                <div className="space-y-0.5">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setShowCallModal(deal); }}
-                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
-                                  >
-                                    <Phone className="h-4 w-4 flex-shrink-0" /><span>Call</span>
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setShowEmailModal(deal); }}
-                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
-                                  >
-                                    <Mail className="h-4 w-4 flex-shrink-0" /><span>Email</span>
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); onAddNote?.(deal.id); showBulkToast(`Add note for ${deal.dealName} — coming soon`); }}
-                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
-                                  >
-                                    <StickyNote className="h-4 w-4 flex-shrink-0" /><span>Add Note</span>
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
-                                    className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
-                                  >
-                                    <CalendarPlus className="h-4 w-4 flex-shrink-0" /><span>Schedule Follow-up</span>
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
-                                    className="flex items-center gap-2 w-full text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1.5 rounded-lg transition-colors text-left"
-                                  >
-                                    <ExternalLink className="h-4 w-4 flex-shrink-0" /><span>Open Full Deal</span>
-                                  </button>
-                                </div>
-                              </div>
-
-                            </div>
-                          </div>
+              <tbody className="divide-y divide-gray-100">
+                {sortedDeals.map((deal) => {
+                  const isExpanded = expandedRows.includes(deal.id);
+                  const isSelected = selectedDealSet.has(deal.id);
+                  return (
+                    <React.Fragment key={deal.id}>
+                      <tr
+                        className={getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id)}
+                        onClick={() => toggleRowExpansion(deal.id)}
+                        onContextMenu={(e) => handleContextMenu(e, deal.id)}
+                        onMouseEnter={() => setHoveredRowId(deal.id)}
+                        onMouseLeave={() => setHoveredRowId(null)}
+                      >
+                        {/* Checkbox */}
+                        <td className={`pl-3 ${effectiveDensity === 'compact' ? 'py-2' : 'py-3'}`} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => toggleDealSelection(deal.id, (e.nativeEvent as MouseEvent | KeyboardEvent).shiftKey)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Select ${deal.dealName}`}
+                            className="rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1"
+                          />
                         </td>
+                        {orderedVisible.map(key => renderCell(key, deal, isExpanded))}
                       </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
 
-          {sortedDeals.length === 0 && (
-            <div className="text-center py-16">
-              <Building2 className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
-              <p className="text-xs text-gray-400 mt-1">Try adjusting the stage, date, or value filters above.</p>
-            </div>
-          )}
+                      {/* Expanded Panel — Deal Cockpit */}
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={visibleColCount} className="p-0 border-0">
+                            <div className="mx-3 mb-3 transition-opacity duration-150">
+                              {renderExpandedPanel(deal)}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {sortedDeals.length === 0 && (
+              <div className="text-center py-16">
+                <Building2 className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
+                <p className="text-xs text-gray-400 mt-1">Try adjusting the stage, date, or value filters above.</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 text-center text-sm text-gray-600">
+        {/* Mobile card list (< md) */}
+        <div className="block md:hidden py-2 space-y-2">
+          {sortedDeals.length === 0 && (
+            <div className="text-center py-12 px-4">
+              <Building2 className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
+              <p className="text-xs text-gray-400 mt-1">Try adjusting your filters above.</p>
+            </div>
+          )}
+          {sortedDeals.map(deal => {
+            const isExpanded = expandedRows.includes(deal.id);
+            const isSelected = selectedDealSet.has(deal.id);
+            const stalled = isStalled(deal);
+            const stageStyle = getStageStyle(deal.stage);
+            const mobileCloseDays = deal.closeDate ? daysFromNow(deal.closeDate) : null;
+            const mobileCloseDateColor = mobileCloseDays === null ? 'text-gray-500'
+              : mobileCloseDays < 0  ? 'text-red-600 font-medium'
+              : mobileCloseDays <= 7 ? 'text-amber-600 font-medium'
+              : 'text-gray-500';
+            return (
+              <div
+                key={deal.id}
+                className={[
+                  'mx-3 rounded-2xl border transition-colors duration-100',
+                  isSelected
+                    ? 'border-blue-300 bg-blue-50'
+                    : isExpanded
+                      ? 'border-indigo-200 bg-indigo-50/20'
+                      : 'border-gray-200 bg-white',
+                ].join(' ')}
+              >
+                {/* Card main content */}
+                <div className="flex items-start gap-3 px-4 pt-4 pb-2">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => toggleDealSelection(deal.id, (e.nativeEvent as MouseEvent | KeyboardEvent).shiftKey)}
+                    onClick={e => e.stopPropagation()}
+                    aria-label={`Select ${deal.dealName}`}
+                    className="mt-1 shrink-0 rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                  />
+                  <div className="flex-1 min-w-0" onClick={() => toggleRowExpansion(deal.id)}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{deal.dealName}</p>
+                      {stalled && (
+                        <span className="inline-flex items-center gap-0.5 text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                          <PauseCircle size={10} /> Stalled
+                        </span>
+                      )}
+                    </div>
+                    {deal.companyName && (
+                      <p className="text-xs text-gray-500 truncate mt-0.5">{deal.companyName}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtValK(deal.amount)}</span>
+                      <span
+                        className="text-xs px-2 py-0.5 rounded-md font-medium shrink-0"
+                        style={{ backgroundColor: stageStyle.bg, color: stageStyle.text }}
+                      >
+                        {getStageName(deal.stage)}
+                      </span>
+                      {deal.closeDate && (
+                        <span className={`text-xs tabular-nums shrink-0 ${mobileCloseDateColor}`}>
+                          {formatDate(deal.closeDate)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={e => { e.stopPropagation(); handleContextMenu(e as React.MouseEvent, deal.id); }}
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg shrink-0 -mr-1 mt-0.5"
+                    aria-label="Deal actions"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                </div>
+                {/* Owner + expand toggle */}
+                <div
+                  className="flex items-center justify-between px-4 pb-3"
+                  onClick={() => toggleRowExpansion(deal.id)}
+                >
+                  {deal.owner ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-semibold text-indigo-700">{getInitials(deal.owner)}</span>
+                      </div>
+                      <span className="text-xs text-gray-500 truncate max-w-[100px]">{deal.owner.split(' ')[0]}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-400">Unassigned</span>
+                  )}
+                  <span className="text-gray-400 flex items-center gap-1 text-xs">
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </span>
+                </div>
+                {/* Expanded panel */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 px-3 pb-3 pt-0">
+                    {renderExpandedPanel(deal)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 sm:mt-4 text-center text-sm text-gray-600 px-4">
           Showing {sortedDeals.length} of {allDeals.length} deals
         </div>
       </div>
@@ -3470,11 +3594,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       <div
         role="toolbar"
         aria-label="Bulk actions"
-        className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-40 transition-all duration-200 ease-out
-          ${showBulkActions ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0 pointer-events-none'}`}
+        className={[
+          'fixed z-40 transition-all duration-200 ease-out',
+          'left-0 right-0 bottom-0',
+          'md:left-1/2 md:right-auto md:bottom-6 md:-translate-x-1/2',
+          showBulkActions ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none md:translate-y-4',
+        ].join(' ')}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-2">
+        <div className="bg-gray-900 text-white rounded-t-2xl md:rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-2 flex-wrap">
 
           {/* Selection count + Select all affordance */}
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -3527,8 +3655,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             )}
           </div>
 
-          {/* Reassign Owner */}
-          <div className="relative flex-shrink-0">
+          {/* Reassign Owner — hidden on mobile */}
+          <div className="hidden md:block relative flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'owner' ? null : 'owner'); }}
               className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
@@ -3564,8 +3692,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             )}
           </div>
 
-          {/* Add Tag */}
-          <div className="relative flex-shrink-0">
+          {/* Add Tag — hidden on mobile */}
+          <div className="hidden md:block relative flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'tag' ? null : 'tag'); setTagInput(''); }}
               className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
@@ -3619,7 +3747,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             )}
           </div>
 
-          {/* Export — immediate CSV download, no modal */}
+          {/* Export — hidden on mobile */}
           <button
             onClick={() => {
               const selectedList = allDeals.filter(d => selectedDealSet.has(d.id));
@@ -3650,14 +3778,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               const count = selectedDeals.length;
               showBulkToast(`Exported ${count} deal${count !== 1 ? 's' : ''}`);
             }}
-            className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5 flex-shrink-0"
+            className="hidden md:flex text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors items-center gap-1.5 flex-shrink-0"
           >
             <Download className="h-3.5 w-3.5" />
             Export
           </button>
 
-          {/* Archive */}
-          <div className="relative flex-shrink-0">
+          {/* Archive — hidden on mobile */}
+          <div className="hidden md:block relative flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); setOpenPopover(openPopover === 'archive' ? null : 'archive'); }}
               className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5"
