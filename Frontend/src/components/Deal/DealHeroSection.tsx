@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Edit, MoreVertical, Building2, User, Target, Sparkles,
+  Edit, Building2, Sparkles,
   Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown,
   ChevronDown, ChevronUp, DollarSign, AlertTriangle,
   Copy, GitMerge, Archive, FileDown, Share2, MoreHorizontal, Keyboard, X,
+  StickyNote, ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { MoreOptionsDropdown } from './DealModals';
 import { daysFromNowLabel, closeDateUrgencyClass } from '../../utils/dateUtils';
 import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 import { getUsers } from '../../utils/dealsApi';
@@ -24,6 +24,59 @@ const ORDERED_STAGES: Record<number, string> = {
   5: 'Closed Won',
   6: 'Closed Lost',
 };
+
+// Item 2: avatar gradient per stage
+const STAGE_AVATAR_GRADIENT: Record<string, string> = {
+  prospecting:  'from-blue-500 to-blue-600',
+  qualified:    'from-green-500 to-green-600',
+  proposal:     'from-orange-500 to-orange-600',
+  negotiation:  'from-purple-500 to-purple-600',
+  'closed-won': 'from-emerald-500 to-emerald-600',
+  'closed-lost':'from-red-500 to-red-600',
+};
+
+// Item 5: stage dot color (Tailwind class)
+const STAGE_DOT_COLOR: Record<string, string> = {
+  prospecting:  'bg-blue-500',
+  qualified:    'bg-green-500',
+  proposal:     'bg-orange-500',
+  negotiation:  'bg-purple-500',
+  'closed-won': 'bg-emerald-500',
+  'closed-lost':'bg-red-500',
+};
+
+// Inline CSS gradient per stage (avoids Tailwind JIT dynamic-class purge)
+const STAGE_GRADIENT_CSS: Record<string, string> = {
+  prospecting:  'linear-gradient(to bottom right, #3B82F6, #2563EB)',
+  qualified:    'linear-gradient(to bottom right, #22C55E, #16A34A)',
+  proposal:     'linear-gradient(to bottom right, #F97316, #EA580C)',
+  negotiation:  'linear-gradient(to bottom right, #A855F7, #9333EA)',
+  'closed-won': 'linear-gradient(to bottom right, #10B981, #059669)',
+  'closed-lost':'linear-gradient(to bottom right, #EF4444, #DC2626)',
+};
+
+// Hex dot color per stage (inline style, avoids Tailwind JIT purge)
+const STAGE_DOT_HEX: Record<string, string> = {
+  prospecting:  '#3B82F6',
+  qualified:    '#22C55E',
+  proposal:     '#F97316',
+  negotiation:  '#A855F7',
+  'closed-won': '#10B981',
+  'closed-lost':'#EF4444',
+};
+
+// Item 23: stage hex colors for pipeline strip
+const STAGE_HEX: Record<number, string> = {
+  1: '#3B82F6', 2: '#22C55E', 3: '#F97316', 4: '#A855F7', 5: '#10B981', 6: '#EF4444',
+};
+
+// Item 6: color-coded days away label (returns hex to avoid Tailwind JIT dynamic-class purge)
+function getDaysAwayDisplay(daysAway: number): { label: string; colorHex: string } {
+  if (daysAway < 0) return { label: `${Math.abs(daysAway)} days overdue`, colorHex: '#B91C1C' };
+  if (daysAway < 10) return { label: `${daysAway} days away`, colorHex: '#DC2626' };
+  if (daysAway <= 30) return { label: `${daysAway} days away`, colorHex: '#D97706' };
+  return { label: `${daysAway} days away`, colorHex: '#16A34A' };
+}
 
 // Action bar "..." items
 const ACTION_BAR_MORE_ITEMS = [
@@ -97,6 +150,8 @@ interface DealHeroSectionProps {
   onViewRevenue?: () => void;
   priorityAction?: PriorityAction | null;
   onViewAllActions?: () => void;
+  healthScoreFactors?: Array<{ category: string; score: number; stars: number }>;
+  daysSinceContact?: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -118,14 +173,24 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onViewRevenue,
   priorityAction,
   onViewAllActions,
+  healthScoreFactors,
+  daysSinceContact = 0,
 }) => {
   const navigate = useNavigate();
 
   // Priority action banner dismiss (session only)
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  // Item 10: health score row expand
+  const [showHealthFactors, setShowHealthFactors] = useState(false);
+
+  // Item 8: animate health bar on mount
+  const [healthBarWidth, setHealthBarWidth] = React.useState(0);
+  React.useEffect(() => {
+    requestAnimationFrame(() => setHealthBarWidth(deal.aiScore));
+  }, [deal.aiScore]);
+
   // Header more-options
-  const [showMoreActions, setShowMoreActions] = useState(false);
 
   // Owner tile
   const [showOwnerDropdown, setShowOwnerDropdown]   = useState(false);
@@ -300,28 +365,25 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     <div className="bg-white border-b border-gray-200 px-8 py-6">
       <div className="max-w-7xl mx-auto">
 
-        {/* Header Row */}
+        {/* Header Row — items 1, 2, 3 */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-start space-x-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+            {/* Item 2: stage-colored avatar (inline gradient avoids Tailwind JIT dynamic-class purge) */}
+            <div
+              className="w-16 h-16 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg flex-shrink-0"
+              style={{ background: STAGE_GRADIENT_CSS[deal.stage.toLowerCase()] || 'linear-gradient(to bottom right, #3B82F6, #2563EB)' }}
+            >
               {deal.companyName.substring(0, 2).toUpperCase()}
             </div>
-            <div>
-              <div className="flex items-center space-x-3 mb-2">
-                <h1 className="text-3xl font-bold text-gray-900">{deal.dealName}</h1>
-                <button onClick={onEdit} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                {/* Item 1: title clamped + ID badge */}
+                <h1 className="text-3xl font-bold text-gray-900 truncate max-w-[480px]">{deal.dealName}</h1>
+                <span className="text-[0.7rem] bg-gray-100 text-gray-500 rounded px-2 py-0.5 font-medium shrink-0">#{deal.id}</span>
+                {/* Edit pencil */}
+                <button onClick={onEdit} className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
                   <Edit className="h-5 w-5 text-gray-600" />
                 </button>
-                <div className="relative">
-                  <button onClick={() => setShowMoreActions(!showMoreActions)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <MoreVertical className="h-5 w-5 text-gray-600" />
-                  </button>
-                  <MoreOptionsDropdown
-                    isOpen={showMoreActions}
-                    onClose={() => setShowMoreActions(false)}
-                    onAction={(action) => { onMoreAction(action); setShowMoreActions(false); }}
-                  />
-                </div>
               </div>
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <Building2 className="h-4 w-4" />
@@ -333,10 +395,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           </div>
         </div>
 
-        {/* Key Metrics Grid */}
-        <div className="grid grid-cols-4 gap-6 mb-2">
-          {/* Value tile */}
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200">
+        {/* Key Metrics — flex so Value is wider (items 4, 5, 6) */}
+        <div className="flex gap-6 mb-2">
+          {/* Value tile — flex: 1.5, dominant hero metric (item 4) */}
+          <div
+            className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200"
+            style={{ flex: 1.5, borderLeft: '4px solid #3B82F6' }}
+          >
             <div className="flex items-center justify-between mb-1">
               <div className="text-sm font-medium text-blue-700">Value</div>
               {valueDelta !== 0 && (
@@ -347,7 +412,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                 </div>
               )}
             </div>
-            <div className="text-3xl font-bold text-blue-900">
+            <div className="text-4xl font-bold text-blue-900">
               {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
             </div>
             {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
@@ -378,25 +443,31 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             </button>
           </div>
 
-          {/* Stage tile */}
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border border-orange-200">
+          {/* Stage tile — item 5: dot replaces emoji */}
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-5 border border-orange-200" style={{ flex: 1 }}>
             <div className="text-sm font-medium text-orange-700 mb-1">Stage</div>
             <div className="flex items-center space-x-2">
-              <span className="text-2xl">{getStageEmoji(deal.stage)}</span>
+              <span
+                className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: STAGE_DOT_HEX[deal.stage.toLowerCase()] || '#6B7280' }}
+              />
               <span className="text-lg font-bold text-orange-900">{deal.stageName}</span>
             </div>
             <div className="text-xs text-orange-700 mt-1">Stage {deal.stageNumber} of {deal.totalStages}</div>
           </div>
 
-          {/* Close date tile */}
-          <div className={`rounded-xl p-5 border ${closeDateUrgencyClass(deal.closeDate)}`}>
+          {/* Close date tile — item 6: color-coded days away */}
+          <div className={`rounded-xl p-5 border ${closeDateUrgencyClass(deal.closeDate)}`} style={{ flex: 1 }}>
             <div className="text-sm font-medium mb-1 opacity-70">Close Date</div>
             <div className="text-lg font-bold">{deal.closeDate}</div>
-            <div className="text-xs mt-1 opacity-80">{daysFromNowLabel(deal.closeDate)}</div>
+            {(() => {
+              const { label, colorHex } = getDaysAwayDisplay(deal.daysAway);
+              return <div className="text-xs mt-1 font-semibold" style={{ color: colorHex }}>{label}</div>;
+            })()}
           </div>
 
           {/* Owner tile */}
-          <div className="relative bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200">
+          <div className="relative bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200" style={{ flex: 1 }}>
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-medium text-purple-700">Owner</div>
               {isOOO && (
@@ -490,36 +561,45 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           </div>
         )}
 
-        {/* Account & Contact Info */}
-        <div className="grid grid-cols-3 gap-4 mb-3">
-          <div className="flex items-center space-x-3 py-2.5 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/accounts/${deal.id}`)}>
-            <Building2 className="h-4 w-4 text-gray-500 flex-shrink-0" />
-            <div>
-              <div className="text-[11px] font-medium text-gray-500">Account</div>
-              <div className="text-sm font-semibold text-gray-900">{deal.accountName}</div>
-              <div className="text-[11px] text-gray-400">{deal.accountSize}, {deal.accountIndustry}</div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 py-2.5 px-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer" onClick={() => navigate(`/crm/contacts/${deal.id}`)}>
-            <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
-            <div>
-              <div className="text-[11px] font-medium text-gray-500">Contact</div>
-              <div className="text-sm font-semibold text-gray-900">{deal.contactName}</div>
-              <div className="text-[11px] text-gray-400">{deal.contactTitle}</div>
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 py-2.5 px-4 bg-gray-50 rounded-lg">
-            <Target className="h-4 w-4 text-gray-500 flex-shrink-0" />
-            <div>
-              <div className="text-[11px] font-medium text-gray-500">Source</div>
-              <div className="text-sm font-semibold text-gray-900">{deal.source}</div>
-              <div className="text-[11px] text-gray-400">Lead Gen → Lead → Deal</div>
-            </div>
+        {/* Item 23: Stage pipeline strip */}
+        <div className="mb-3">
+          <div className="flex items-center">
+            {Object.entries(ORDERED_STAGES).map(([numStr, stageName], idx) => {
+              const num = parseInt(numStr);
+              const isCompleted = num < deal.stageNumber;
+              const isCurrent = num === deal.stageNumber;
+              const isFuture = num > deal.stageNumber;
+              const color = STAGE_HEX[num];
+              return (
+                <React.Fragment key={num}>
+                  {idx > 0 && (
+                    <div className={`flex-1 h-px ${isCompleted || isCurrent ? 'bg-gray-400' : 'bg-gray-200'}`} />
+                  )}
+                  <div
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap flex-shrink-0"
+                    style={
+                      isCurrent
+                        ? { backgroundColor: color, color: '#fff' }
+                        : isCompleted
+                        ? { backgroundColor: '#9CA3AF', color: '#fff' }
+                        : { backgroundColor: '#F3F4F6', color: '#9CA3AF', border: '1px solid #E5E7EB' }
+                    }
+                  >
+                    {isCompleted && <span className="text-[10px]">✓</span>}
+                    {stageName}
+                  </div>
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
 
-        {/* AI Health Score */}
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 border border-purple-200 mb-4">
+        {/* Item 7: separator between KPI area and Account/Contact row */}
+        {/* AI Health Score — items 8, 9, 10 */}
+        <div
+          className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 border border-purple-200 mb-4 cursor-pointer select-none"
+          onClick={() => setShowHealthFactors(v => !v)}
+        >
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
               <Sparkles className="h-5 w-5 text-purple-600" />
@@ -527,22 +607,51 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             </div>
             <div className="flex items-center gap-3">
               {momentumResult && <DealMomentum result={momentumResult} />}
-              <div className={`text-3xl font-bold ${getHealthColor(deal.aiScore)}`}>{deal.aiScore}/100</div>
+              {/* Item 9: pulse when score ≥ 85 */}
+              <div
+                className={`text-3xl font-bold ${getHealthColor(deal.aiScore)} ${deal.aiScore >= 85 ? 'animate-[pulse_2s_ease-in-out_infinite]' : ''}`}
+              >
+                {deal.aiScore}/100
+              </div>
             </div>
           </div>
+          {/* Item 8: gradient bar clipped by fill width */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 bg-gray-200 rounded-full h-2.5">
-              <div className={`h-2.5 rounded-full transition-all duration-300 ${getHealthBarColor(deal.aiScore)}`} style={{ width: `${deal.aiScore}%` }} />
+            <div className="flex-1 h-2.5 rounded-full overflow-hidden relative bg-gray-200">
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{ background: 'linear-gradient(to right, #EF4444 0%, #EF4444 40%, #F59E0B 40%, #F59E0B 70%, #22C55E 70%, #22C55E 100%)' }}
+              />
+              <div
+                className="absolute inset-0 bg-gray-200 origin-right"
+                style={{ transform: `scaleX(${1 - healthBarWidth / 100})`, transition: 'transform 0.8s ease-in-out', transformOrigin: 'right center' }}
+              />
             </div>
             <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap flex-shrink-0">{deal.aiHealth}</span>
           </div>
+          {/* Item 10: inline factors panel */}
+          {showHealthFactors && healthScoreFactors && healthScoreFactors.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-purple-200 grid grid-cols-2 gap-2">
+              {healthScoreFactors.slice(0, 3).map((f, idx) => (
+                <div key={idx} className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5">
+                  <span className="text-[11px] text-gray-600">{f.category}</span>
+                  <span className={`text-[11px] font-bold ${getHealthColor(f.score)}`}>{f.score}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* ── Today's Priority Action banner ── */}
+        {/* ── Today's Priority Action banner — items 11, 12, 13 ── */}
         {priorityAction && !bannerDismissed && (
           <div
-            className="mb-4 bg-amber-50 rounded-lg border border-amber-200 shadow-sm overflow-hidden"
-            style={{ borderLeftWidth: 3, borderLeftColor: priorityAction.priority === 'high' ? '#F59E0B' : '#EAB308' }}
+            className="mb-4 bg-white rounded-lg shadow-sm overflow-hidden"
+            style={{
+              border: '1px solid #E5E7EB',
+              borderLeftWidth: '4px',
+              borderLeftStyle: 'solid',
+              borderLeftColor: daysSinceContact >= 7 ? '#EF4444' : '#F59E0B',
+            }}
           >
             <div className="flex items-center gap-3 px-4 py-3">
               {/* Icon */}
@@ -557,13 +666,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                 <span className="text-sm text-gray-600 truncate">{priorityAction.reason}</span>
               </div>
 
-              {/* CTA buttons */}
+              {/* Item 12: solid filled amber CTA buttons */}
               <div className="flex items-center gap-2 shrink-0">
                 {priorityAction.ctas.slice(0, 2).map(cta => (
                   <button
                     key={cta}
                     onClick={() => handleBannerCTA(cta)}
-                    className="px-3 py-1.5 text-xs font-medium bg-white text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap"
+                    className="px-3 py-1.5 text-xs font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors whitespace-nowrap"
                   >
                     {cta}
                   </button>
@@ -580,122 +689,145 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               </button>
             </div>
 
-            {/* View all link */}
+            {/* Item 13: "X Pending Actions →" with red dot */}
             <div className="px-4 pb-2.5 flex justify-end">
               <button
                 onClick={onViewAllActions}
-                className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
               >
-                View all {priorityAction.totalCount} actions ↓
+                {priorityAction.totalCount} Pending Actions →
+                <span className="w-2 h-2 bg-red-500 rounded-full inline-block flex-shrink-0" />
               </button>
             </div>
           </div>
         )}
 
-        {/* ── DESKTOP action bar (hidden on mobile) ── */}
-        <div className="hidden md:flex items-center gap-2.5">
-          {/* Email */}
-          <button onClick={onEmail} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
-            <Mail className="h-4 w-4" />
-            Email
-            <KbdBadge char="E" />
-          </button>
+        {/* ── Unified Action Toolbar ── */}
+        <div className="-mx-8 -mb-6 mt-4">
 
-          {/* Call */}
-          <button onClick={onCall} className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm">
-            <Phone className="h-4 w-4" />
-            Call
-            <KbdBadge char="C" />
-          </button>
+          {/* Desktop: single unified row */}
+          <div className="hidden md:flex items-center gap-1 px-6 py-2 border-t border-gray-200 overflow-x-auto">
 
-          {/* Meeting */}
-          <button onClick={onMeeting} className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium text-sm">
-            <CalendarDays className="h-4 w-4" />
-            Meeting
-            <KbdBadge char="M" />
-          </button>
-
-          {/* Proposal */}
-          <button onClick={onProposal} className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm">
-            <FileText className="h-4 w-4" />
-            Proposal
-            <KbdBadge char="P" />
-          </button>
-
-          <div className="flex-1" />
-
-          {/* Move to Next Stage — with tooltip */}
-          <div
-            className="relative"
-            onMouseEnter={() => setShowStageTooltip(true)}
-            onMouseLeave={() => setShowStageTooltip(false)}
-          >
-            <button
-              onClick={hasNextStage ? onMoveStage : undefined}
-              disabled={!hasNextStage}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium text-sm"
-            >
-              <TrendingUp className="h-4 w-4" />
-              Move to Next Stage
-              <KbdBadge char="S" />
+            {/* ── Communication group ── */}
+            <button onClick={onEmail} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <Mail className="h-4 w-4" />
+              Email
+              <KbdBadge char="E" />
             </button>
-            {showStageTooltip && nextStageName && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 shadow-xl pointer-events-none">
-                Move to: <span className="font-semibold">{nextStageName}</span>
-                <span className="text-gray-300"> (Stage {nextStageNum} of {deal.totalStages})</span>
-                {/* Arrow */}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900" />
-              </div>
-            )}
+            <button onClick={onCall} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <Phone className="h-4 w-4" />
+              Call
+              <KbdBadge char="C" />
+            </button>
+            <button onClick={onMeeting} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-gray-800 hover:bg-gray-900 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <CalendarDays className="h-4 w-4" />
+              Meeting
+              <KbdBadge char="M" />
+            </button>
+            <button onClick={onProposal} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <FileText className="h-4 w-4" />
+              Proposal
+              <KbdBadge char="P" />
+            </button>
+            <button onClick={() => onMoreAction('add-note')} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <StickyNote className="h-4 w-4" />
+              Note
+              <KbdBadge char="N" />
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-gray-300 mx-2 flex-shrink-0" />
+
+            {/* ── Pipeline group ── */}
+            <div
+              className="relative flex-shrink-0"
+              onMouseEnter={() => setShowStageTooltip(true)}
+              onMouseLeave={() => setShowStageTooltip(false)}
+            >
+              <button
+                onClick={hasNextStage ? onMoveStage : undefined}
+                disabled={!hasNextStage}
+                className="flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors whitespace-nowrap"
+              >
+                <ArrowRight className="h-4 w-4" />
+                Next Stage
+                <KbdBadge char="S" />
+              </button>
+              {showStageTooltip && nextStageName && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 shadow-xl pointer-events-none">
+                  Move to: <span className="font-semibold">{nextStageName}</span>
+                  <span className="text-gray-300"> (Stage {nextStageNum} of {deal.totalStages})</span>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900" />
+                </div>
+              )}
+            </div>
+            <button onClick={onUpdateAmount} className="flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium bg-gray-700 hover:bg-gray-800 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <DollarSign className="h-4 w-4" />
+              Amount
+              <KbdBadge char="U" />
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-gray-300 mx-2 flex-shrink-0" />
+
+            {/* ── Utility group ── */}
+            <div className="relative flex-shrink-0" ref={actionBarMoreRef}>
+              <button
+                onClick={() => setShowActionBarMore(v => !v)}
+                className="rounded-md px-2 py-1.5 text-gray-500 hover:bg-gray-100 transition-colors"
+                title="More actions"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {showActionBarMore && (
+                <div className="absolute left-0 top-full mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden py-1">
+                  {ACTION_BAR_MORE_ITEMS.map(item => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => { onMoreAction(item.id); setShowActionBarMore(false); }}
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+                      >
+                        <Icon className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onShowShortcuts}
+              className="hidden lg:flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors px-1 whitespace-nowrap flex-shrink-0"
+            >
+              <Keyboard className="h-3.5 w-3.5" />
+              Shortcuts
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-gray-300 mx-2 flex-shrink-0" />
+
+            {/* ── Won / Lost ── */}
+            <button
+              onClick={() => onMoreAction('mark-won')}
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline px-2 whitespace-nowrap flex-shrink-0 transition-colors"
+            >
+              ✓ Won
+            </button>
+            <button
+              onClick={() => onMoreAction('mark-lost')}
+              className="text-xs font-medium text-red-500 hover:text-red-600 hover:underline px-2 whitespace-nowrap flex-shrink-0 transition-colors"
+            >
+              ✗ Lost
+            </button>
+
           </div>
 
-          {/* Update Amount */}
-          <button onClick={onUpdateAmount} className="flex items-center gap-2 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium text-sm">
-            <DollarSign className="h-4 w-4" />
-            Update Amount
-            <KbdBadge char="U" />
-          </button>
-
-          {/* "..." action bar menu */}
-          <div className="relative" ref={actionBarMoreRef}>
-            <button
-              onClick={() => setShowActionBarMore(v => !v)}
-              className="p-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              title="More actions"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            {showActionBarMore && (
-              <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden py-1">
-                {ACTION_BAR_MORE_ITEMS.map(item => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => { onMoreAction(item.id); setShowActionBarMore(false); }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
-                    >
-                      <Icon className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ⌨ Shortcuts hint */}
-          <button
-            onClick={onShowShortcuts}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors px-1"
-          >
-            <Keyboard className="h-3.5 w-3.5" />
-            Shortcuts
-          </button>
         </div>
 
-        {/* ── MOBILE action row (visible only on mobile) ── */}
-        <div className="flex md:hidden items-center gap-2">
+        {/* ── Mobile action row ── */}
+        <div className="flex md:hidden items-center gap-2 mt-4">
           <button
             onClick={onEmail}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm"

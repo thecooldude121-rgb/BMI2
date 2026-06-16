@@ -155,7 +155,8 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
             </div>
           </div>
 
-          <div className="pt-2 border-t border-gray-200">
+          <hr className="border-gray-200" />
+          <div className="pt-2">
             <div className="flex items-start justify-between mb-1">
               <span className="text-xs font-medium text-gray-500">Risk Level</span>
               <div className="flex items-center gap-1.5">
@@ -166,11 +167,12 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
               </div>
             </div>
             <div className="text-[11px] text-gray-500">
-              {predictive.primaryRisk} · <span className="italic">{predictive.mitigation}</span>
+              {predictive.primaryRisk} · {predictive.mitigation}
             </div>
           </div>
 
-          <div className="pt-2 border-t border-gray-200">
+          <hr className="border-gray-200" />
+          <div className="pt-2">
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-xs font-medium text-gray-500">Churn Risk (if won)</span>
               <div className="flex items-center gap-1.5">
@@ -181,7 +183,8 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
             <div className="text-[11px] text-gray-400 text-right">{predictive.churnReason}</div>
           </div>
 
-          <div className="pt-2 border-t border-gray-200">
+          <hr className="border-gray-200" />
+          <div className="pt-2">
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-xs font-medium text-gray-500">Upsell Opportunity</span>
               <div className="flex items-center gap-1.5">
@@ -192,8 +195,8 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
             <div className="text-[11px] text-gray-500 text-right">{predictive.upsellPotential} · {predictive.upsellTiming}</div>
           </div>
 
-          <div className="bg-purple-50 rounded-lg p-2.5 border border-purple-200">
-            <div className="text-[11px] font-semibold text-purple-900 mb-0.5">🤖 AI Recommendation:</div>
+          <div className="bg-purple-50 rounded-lg p-3 border-l-4 border-purple-500">
+            <div className="text-[11px] font-semibold text-purple-900 mb-0.5">AI Recommendation:</div>
             <div className="text-[11px] text-purple-800">{predictive.recommendation}</div>
           </div>
         </div>

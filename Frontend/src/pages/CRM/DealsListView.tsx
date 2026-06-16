@@ -5,7 +5,10 @@ import {
   Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Building2, User, Sparkles, Mail, Phone, Eye, MoreHorizontal,
   CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical, Archive,
-  StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal,
+  StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX,
+  Pencil, ArrowLeftRight, UserCog, Zap, FileText,
+  CheckSquare, ClipboardList, Workflow, Link2,
+  AlignJustify, LayoutList,
 } from 'lucide-react';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
@@ -15,6 +18,9 @@ import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER } from '../../utils/d
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 import { AdvancedFilterBuilder } from '../../components/Deals/AdvancedFilterBuilder';
 import type { FilterCondition, Conjunction } from '../../components/Deals/AdvancedFilterBuilder';
+import { useStalledConfig } from '../../hooks/useStalledConfig';
+import { findDuplicatePairs } from '../../utils/duplicateDetection';
+import type { DuplicatePair, DuplicatableDeal } from '../../utils/duplicateDetection';
 
 // ── Advanced filter builder predicate ─────────────────────────────────────────
 // Evaluates a single FilterCondition against a deal. Returns true for incomplete
@@ -95,6 +101,47 @@ interface Deal {
   createdAt?: string;
 }
 
+function getRowClassName(isExpanded: boolean, isSelected: boolean, isHovered: boolean): string {
+  const base = 'transition-colors duration-100 cursor-pointer border-l-2';
+  if (isSelected) return `${base} bg-blue-50 border-l-blue-400`;
+  if (isExpanded) return `${base} bg-indigo-50/30 border-l-indigo-300`;
+  if (isHovered)  return `${base} bg-slate-50/60 border-l-indigo-200`;
+  return `${base} bg-white border-l-transparent`;
+}
+
+function MenuItem({
+  icon, label, onClick, danger = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+        danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      <span className={danger ? 'text-red-400' : 'text-gray-400 flex-shrink-0'}>{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+/** Derives safe, trim-validated contact display values from a Deal. */
+function getContactDisplay(deal: Deal) {
+  const name  = deal.contactName?.trim() ?? '';
+  const title = deal.contactTitle?.trim() ?? '';
+  const hasName  = name.length > 0;
+  const hasTitle = title.length > 0;
+  const initials = hasName
+    ? name.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+    : '?';
+  return { hasName, hasTitle, displayName: name, displayTitle: title, initials };
+}
+
 interface PipelineStage {
   id: string;
   name: string;
@@ -142,6 +189,26 @@ interface DealsListViewProps {
   setActiveKpiFilter: React.Dispatch<React.SetStateAction<'closingWeek' | 'stalled' | null>>;
 }
 
+const MERGE_FIELDS: Array<{ key: keyof DuplicatableDeal; label: string }> = [
+  { key: 'dealName',     label: 'Deal Name'  },
+  { key: 'companyName',  label: 'Account'    },
+  { key: 'amount',       label: 'Value'      },
+  { key: 'closeDate',    label: 'Close Date' },
+  { key: 'stage',        label: 'Stage'      },
+  { key: 'owner',        label: 'Owner'      },
+  { key: 'contactName',  label: 'Contact'    },
+  { key: 'nextStep',     label: 'Next Step'  },
+  { key: 'source',       label: 'Source'     },
+  { key: 'priority',     label: 'Priority'   },
+];
+
+const STUB_SEQUENCES = [
+  { id: 'new_lead',      name: 'New Lead Nurture',    steps: 5, description: 'Email + call sequence for new prospects' },
+  { id: 'proposal',      name: 'Proposal Follow-up',  steps: 3, description: 'Follow up after proposal is sent' },
+  { id: 'reengagement',  name: 'Re-engagement',       steps: 4, description: 'Win back stalled or cold deals' },
+  { id: 'closing',       name: 'Closing Sequence',    steps: 2, description: 'Final push for deals in negotiation' },
+] as const;
+
 // PERF NOTE: renderCell re-runs for all visible cells on each editValue keystroke.
 // For tables > 500 rows, extract each editable cell as React.memo component.
 // Current dataset is < 200 rows — acceptable without memoization.
@@ -159,6 +226,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   activeKpiFilter, setActiveKpiFilter,
 }) => {
   const navigate = useNavigate();
+  const { isStalled, getReasons, config: stalledConfig } = useStalledConfig();
 
   // NOTE: URL sync covers DealsListView (list mode) filters only.
   // KanbanPage-level filters (kanban/grid/calendar) are not URL-synced.
@@ -232,7 +300,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [showStageModal, setShowStageModal] = useState<string | null>(null);
   const [showActionDropdown, setShowActionDropdown] = useState<string | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState<Deal | null>(null);
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
   const [showHRMSModal, setShowHRMSModal] = useState<Deal | null>(null);
@@ -242,7 +309,51 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [bulkToast, setBulkToast] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  const [archivedDealIds, setArchivedDealIds] = useState<Set<string>>(new Set());
+  const [undoToast, setUndoToast] = useState<{ message: string; onUndo?: () => void; id: number } | null>(null);
+  const [deleteConfirmDeal, setDeleteConfirmDeal] = useState<Deal | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const lastSelectedIndex = useRef<number | null>(null);
+
+  // ── Workflow modal state ────────────────────────────────────────────────────
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
+  const [scheduleFollowUpDeal, setScheduleFollowUpDeal] = useState<Deal | null>(null);
+  const [createTaskDeal, setCreateTaskDeal] = useState<Deal | null>(null);
+  const [logMeetingDeal, setLogMeetingDeal] = useState<Deal | null>(null);
+  const [addSequenceDeal, setAddSequenceDeal] = useState<Deal | null>(null);
+
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpTime, setFollowUpTime] = useState('');
+  const [followUpNotes, setFollowUpNotes] = useState('');
+
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskPriority, setTaskPriority] = useState<'high' | 'medium' | 'low'>('medium');
+  const [taskAssignee, setTaskAssignee] = useState('');
+
+  const [meetingOutcome, setMeetingOutcome] = useState<'demo_completed' | 'no_show' | 'follow_up_needed' | 'closed' | ''>('');
+  const [meetingNotes, setMeetingNotes] = useState('');
+  const [meetingNextStep, setMeetingNextStep] = useState('');
+
+  const [selectedSequence, setSelectedSequence] = useState('');
+
+  // ── Density ─────────────────────────────────────────────────────────────────
+  type Density = 'comfortable' | 'compact';
+  const [density, setDensity] = useState<Density>(() => {
+    try { return (localStorage.getItem('bmi_deals_density') as Density) ?? 'comfortable'; }
+    catch { return 'comfortable'; }
+  });
+  useEffect(() => { localStorage.setItem('bmi_deals_density', density); }, [density]);
+  const cellPadding        = density === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
+  const textSizeSecondary  = density === 'compact' ? 'text-[11px]' : 'text-xs';
+  const avatarSize         = density === 'compact' ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-[11px]';
+
+  // ── Duplicate detection state ───────────────────────────────────────────────
+  const [dismissedPairs, setDismissedPairs] = useState<Set<string>>(new Set());
+  const [duplicateDrawerOpen, setDuplicateDrawerOpen] = useState(false);
+  const [mergeTargetPair, setMergeTargetPair] = useState<DuplicatePair | null>(null);
+  const [mergeSurvivor, setMergeSurvivor] = useState<'A' | 'B'>('A');
+  const [mergeFieldOverrides, setMergeFieldOverrides] = useState<Record<string, 'A' | 'B'>>({});
 
   const [editingCell, setEditingCell] = useState<{ dealId: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -252,7 +363,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const editInputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   const commitEditRef = useRef<() => Promise<void>>(async () => {});
 
-  const allDeals: Deal[] = stages.flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })));
+  const allDeals = useMemo(
+    () => stages
+      .flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })))
+      .filter(d => !archivedDealIds.has(d.id)),
+    [stages, archivedDealIds],
+  );
 
   const stageFilterOptions = useMemo(
     () => [...new Set(allDeals.map(d => d.stage).filter(Boolean))].sort(),
@@ -338,7 +454,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       return filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
     }
     if (activeKpiFilter === 'stalled') {
-      return filteredDeals.filter(d => d.daysSinceContact >= 5);
+      return filteredDeals.filter(d => isStalled(d));
     }
     return filteredDeals;
   }, [filteredDeals, activeKpiFilter]);
@@ -496,18 +612,51 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   };
 
   const handleBulkDelete = () => {
-    const count = selectedDeals.length;
-    onBulkAction?.('delete', [...selectedDeals]);
-    setSelectedDeals([]);
-    lastSelectedIndex.current = null;
-    setShowDeleteModal(false);
-    setBulkToast(`${count} deal${count !== 1 ? 's' : ''} deleted`);
-    setTimeout(() => setBulkToast(null), 2500);
+    setBulkDeleteConfirm(true);
   };
 
   const showBulkToast = (message: string) => {
     setBulkToast(message);
     setTimeout(() => setBulkToast(null), 2500);
+  };
+
+  const showUndoToast = (message: string, onUndo?: () => void) => {
+    const id = Date.now();
+    setUndoToast({ message, onUndo, id });
+    setTimeout(() => setUndoToast(prev => prev?.id === id ? null : prev), 5000);
+  };
+
+  const archiveDeal = (dealId: string, dealName: string) => {
+    setArchivedDealIds(prev => new Set([...prev, dealId]));
+    setContextMenuDeal(null);
+    showUndoToast(`"${dealName}" archived`, () => {
+      setArchivedDealIds(prev => { const next = new Set(prev); next.delete(dealId); return next; });
+    });
+  };
+
+  const shareDeal = (deal: Deal) => {
+    const url = `${window.location.origin}/crm/deals/${deal.id}`;
+    navigator.clipboard.writeText(url)
+      .then(() => showBulkToast('Deal link copied to clipboard'))
+      .catch(() => showBulkToast('Could not copy link — try again'));
+    setContextMenuDeal(null);
+  };
+
+  const openScheduleFollowUp = (deal: Deal) => {
+    setFollowUpDate(''); setFollowUpTime(''); setFollowUpNotes('');
+    setScheduleFollowUpDeal(deal);
+  };
+  const openCreateTask = (deal: Deal) => {
+    setTaskTitle(''); setTaskDueDate(''); setTaskPriority('medium'); setTaskAssignee(deal.owner ?? '');
+    setCreateTaskDeal(deal);
+  };
+  const openLogMeeting = (deal: Deal) => {
+    setMeetingOutcome(''); setMeetingNotes(''); setMeetingNextStep('');
+    setLogMeetingDeal(deal);
+  };
+  const openAddSequence = (deal: Deal) => {
+    setSelectedSequence('');
+    setAddSequenceDeal(deal);
   };
 
   const getDisplayValue = <K extends keyof Deal>(deal: Deal, key: K): Deal[K] =>
@@ -734,8 +883,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const avgWinRate = 67;
   // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
   const kpiClosingCount  = filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7)).length;
-  const kpiStalledCount  = filteredDeals.filter(d => d.daysSinceContact >= 5).length;
+  const kpiStalledCount  = filteredDeals.filter(d => isStalled(d)).length;
   const avgDaysCycle = 45;
+
+  const duplicatePairs = useMemo(() => {
+    const pairs = findDuplicatePairs(allDeals);
+    return pairs.filter(p => !dismissedPairs.has(p.pairKey));
+  }, [allDeals, dismissedPairs]);
+
+  const activePairCount = duplicatePairs.length;
 
   // Reset KPI shortcut when any dropdown filter changes to avoid phantom pills
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -868,7 +1024,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   };
 
   const renderHeader = (key: ColumnKey): React.ReactNode => {
-    const thBase = 'text-left px-4 py-3 text-xs font-semibold text-gray-700 uppercase tracking-wider';
+    const thBase = `text-left ${cellPadding} text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap`;
     const thSort = thBase + ' cursor-pointer hover:bg-gray-100';
     switch (key) {
       case 'dealName':
@@ -880,7 +1036,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       case 'contact':
         return <th key="contact" className={thSort} onClick={() => handleSort('contact')}><div className="flex items-center space-x-1"><span>Primary Contact</span><SortIcon column="contact" /></div></th>;
       case 'value':
-        return <th key="value" className={thSort} onClick={() => handleSort('value')}><div className="flex items-center space-x-1"><span>Value</span><SortIcon column="value" /></div></th>;
+        return <th key="value" className={`${thSort} text-right`} onClick={() => handleSort('value')}><div className="flex items-center justify-end space-x-1"><span>Value</span><SortIcon column="value" /></div></th>;
       case 'stage':
         return <th key="stage" className={thSort} onClick={() => handleSort('stage')}><div className="flex items-center space-x-1"><span>Stage</span><SortIcon column="stage" /></div></th>;
       case 'closeDate':
@@ -908,12 +1064,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     switch (key) {
       case 'dealName':
         return (
-          <td key="dealName" className="px-4 py-3 max-w-[260px]">
+          <td key="dealName" className={`${cellPadding} max-w-[260px]`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span
-                    className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 leading-snug"
+                    className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 leading-snug truncate"
                     onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
                   >
                     {deal.dealName}
@@ -945,11 +1101,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       case 'account':
         return (
-          <td key="account" className="px-4 py-3 max-w-[200px]">
+          <td key="account" className={`${cellPadding} max-w-[200px]`}>
             {deal.companyName ? (
               <div className="flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
-                <span className="text-sm text-gray-900 truncate">{deal.companyName}</span>
+                <Building2 className="h-3.5 w-3.5 text-gray-300 flex-shrink-0" />
+                <span className="text-sm text-gray-500 truncate">{deal.companyName}</span>
               </div>
             ) : (
               <span className="text-sm text-gray-400">—</span>
@@ -970,7 +1126,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="owner"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              'px-4 py-3 cursor-text transition-colors',
+              `${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'owner'); }}
@@ -992,10 +1148,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className={`${isSaving ? 'animate-pulse opacity-60' : ''}`}>
                 {displayOwner ? (
                   <div className="flex items-center gap-1.5">
-                    <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[10px] font-semibold text-indigo-700">{getInitials(displayOwner)}</span>
+                    <div className={`${avatarSize} rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0`}>
+                      <span className="font-semibold text-indigo-700">{getInitials(displayOwner)}</span>
                     </div>
-                    <span className="text-sm text-gray-700">{firstName}</span>
+                    <span className="text-sm text-gray-600 truncate max-w-[80px] block">{firstName}</span>
                   </div>
                 ) : (
                   <span className="text-sm text-gray-400">—</span>
@@ -1006,21 +1162,31 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         );
       }
 
-      case 'contact':
+      case 'contact': {
+        const { hasName, hasTitle, displayName, displayTitle, initials } = getContactDisplay(deal);
+        if (!hasName) {
+          return (
+            <td key="contact" className={`${cellPadding} text-sm`}>
+              <span className="text-gray-400">—</span>
+            </td>
+          );
+        }
         return (
-          <td key="contact" className="px-4 py-3">
-            {deal.contactName ? (
-              <div>
-                <div className="text-sm text-gray-900">{deal.contactName}</div>
-                {deal.contactTitle && (
-                  <div className="text-[11px] text-gray-400 truncate max-w-[160px]">{deal.contactTitle}</div>
+          <td key="contact" className={cellPadding}>
+            <div className="flex items-start gap-2">
+              <div className={`${avatarSize} rounded-full bg-violet-100 text-violet-700 font-bold flex items-center justify-center shrink-0 mt-0.5`}>
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-700 truncate">{displayName}</p>
+                {hasTitle && (
+                  <p className={`${textSizeSecondary} text-gray-500 truncate max-w-[160px]`}>{displayTitle}</p>
                 )}
               </div>
-            ) : (
-              <span className="text-sm text-gray-400">—</span>
-            )}
+            </div>
           </td>
         );
+      }
 
       case 'value': {
         const isEditing = editingCell?.dealId === deal.id && editingCell?.field === 'value';
@@ -1032,7 +1198,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="value"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              'px-4 py-3 cursor-text transition-colors',
+              `${cellPadding} text-right cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
               isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
             ].join(' ')}
@@ -1042,7 +1208,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <input
                 type="number"
                 min={0}
-                className="w-full bg-transparent text-indigo-600 font-bold text-lg outline-none border-none p-0"
+                className="w-full bg-transparent text-indigo-600 font-semibold text-sm outline-none border-none p-0 text-right tabular-nums"
                 value={editValue}
                 onChange={e => setEditValue(e.target.value)}
                 onBlur={commitEdit}
@@ -1050,10 +1216,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 autoFocus
               />
             ) : (
-              <div
-                className={`text-lg font-bold ${isSaving ? 'animate-pulse opacity-60' : ''}`}
-                style={{ color: '#667eea' }}
-              >
+              <div className={`text-sm font-semibold text-gray-900 tabular-nums ${isSaving ? 'animate-pulse opacity-60' : ''}`}>
                 {formatAmountUSD(displayAmount)}
               </div>
             )}
@@ -1071,7 +1234,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="stage"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              'px-4 py-3 cursor-text transition-colors',
+              `${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'stage'); }}
@@ -1099,7 +1262,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 >
                   {getStageName(displayStage)}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-gray-500 tabular-nums mt-1">
                   Stage {getStageProgress(displayStage)}
                 </div>
                 {hoveredStage === deal.id && (
@@ -1152,7 +1315,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="closeDate"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              'px-4 py-3 cursor-text transition-colors',
+              `${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'closeDate'); }}
@@ -1167,26 +1330,54 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onKeyDown={e => handleEditKeyDown(e, deal.id, 'closeDate')}
                 autoFocus
               />
-            ) : (
-              <div className={isSaving ? 'animate-pulse opacity-60' : ''}>
-                <div className="text-sm text-gray-900">{formatDate(displayDate)}</div>
-                <div className="text-xs text-gray-500">{daysFromNowLabel(displayDate)}</div>
-              </div>
-            )}
+            ) : (() => {
+              const closeDays = displayDate ? daysFromNow(displayDate) : null;
+              const closeDateColor = closeDays === null ? 'text-gray-400'
+                : closeDays < 0  ? 'text-red-600 font-medium'
+                : closeDays <= 7 ? 'text-amber-600 font-medium'
+                : 'text-gray-600';
+              return (
+                <div className={isSaving ? 'animate-pulse opacity-60' : ''}>
+                  <div className={`text-sm ${closeDateColor}`}>{formatDate(displayDate)}</div>
+                  <div className="text-xs text-gray-500">{daysFromNowLabel(displayDate)}</div>
+                </div>
+              );
+            })()}
           </td>
         );
       }
 
-      case 'lastActivity':
+      case 'lastActivity': {
+        const stallReasons = isStalled(deal) ? getReasons(deal) : null;
         return (
-          <td key="lastActivity" className="px-4 py-3">
-            {deal.lastActivity ? (
-              <span className="text-sm text-gray-400">{formatRelativeTime(deal.lastActivity, '')}</span>
-            ) : (
-              <span className="text-sm text-gray-300">No activity</span>
-            )}
+          <td key="lastActivity" className={cellPadding}>
+            <div className="flex items-center gap-2 flex-wrap">
+              {deal.lastActivity ? (
+                <span className={`${textSizeSecondary} text-gray-500`}>{formatRelativeTime(deal.lastActivity, '')}</span>
+              ) : (
+                <span className={`${textSizeSecondary} text-gray-500`}>No activity</span>
+              )}
+              {stallReasons && (
+                <div className="relative inline-block group/stall">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full cursor-default">
+                    <PauseCircle size={11} />
+                    Stalled
+                  </span>
+                  {stallReasons.length > 0 && (
+                    <div className="absolute bottom-full left-0 mb-2 z-50 hidden group-hover/stall:block w-max max-w-[220px] bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none">
+                      <p className="font-semibold mb-1 text-amber-300">Why stalled:</p>
+                      {stallReasons.map((r, i) => (
+                        <p key={i} className="text-gray-200">· {r}</p>
+                      ))}
+                      <div className="absolute top-full left-3 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </td>
         );
+      }
 
       case 'nextStep': {
         const isEditing       = editingCell?.dealId === deal.id && editingCell?.field === 'nextStep';
@@ -1207,7 +1398,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="nextStep"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              'px-4 py-3 max-w-[200px] cursor-text transition-colors',
+              `${cellPadding} max-w-[200px] cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
             ].join(' ')}
             onClick={(e) => { e.stopPropagation(); if (!isEditing) startEdit(deal.id, 'nextStep'); }}
@@ -1231,7 +1422,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     {urgencyBadge}
                   </div>
                 ) : (
-                  <span className="text-sm text-gray-300">—</span>
+                  <span className="text-sm text-gray-400">—</span>
                 )}
               </div>
             )}
@@ -1248,10 +1439,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             ? 'bg-amber-100 text-amber-700'
             : 'bg-red-100 text-red-700';
         return (
-          <td key="dealAge" className="px-4 py-3">
+          <td key="dealAge" className={cellPadding}>
             <span
               title="Days since deal was created (stage tracking not yet available)"
-              className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${ageCls}`}
+              className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full tabular-nums ${ageCls}`}
             >
               {ageLabel}
             </span>
@@ -1274,7 +1465,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             key="probability"
             data-cell-editing={isEditing ? 'true' : undefined}
             className={[
-              'px-4 py-3 cursor-text transition-colors',
+              `${cellPadding} cursor-text transition-colors`,
               isEditing ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-400' : 'hover:bg-indigo-50/30',
               isError   ? 'ring-1 ring-inset ring-red-400 bg-red-50/40' : '',
             ].join(' ')}
@@ -1303,13 +1494,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       case 'source':
         return (
-          <td key="source" className="px-4 py-3">
+          <td key="source" className={cellPadding}>
             {deal.source ? (
-              <span className="bg-gray-100 text-gray-500 text-[11px] font-medium px-2 py-0.5 rounded-full">
+              <span className={`bg-gray-100 text-gray-500 ${textSizeSecondary} font-medium px-2 py-0.5 rounded-full`}>
                 {deal.source}
               </span>
             ) : (
-              <span className="text-sm text-gray-300">—</span>
+              <span className="text-sm text-gray-400">—</span>
             )}
           </td>
         );
@@ -1318,7 +1509,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
         if (isClosed) {
           return (
-            <td key="health" className="px-4 py-3">
+            <td key="health" className={cellPadding}>
               <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
                 deal.stage === 'closed-won'
                   ? 'bg-emerald-100 text-emerald-700'
@@ -1343,7 +1534,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             : 'bg-red-100 text-red-700';
 
         return (
-          <td key="health" className="px-4 py-3">
+          <td key="health" className={cellPadding}>
             <div
               className="relative"
               onMouseEnter={() => setHoveredScore(deal.id)}
@@ -1430,47 +1621,72 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       case 'actions':
         return (
-          <td key="actions" className="px-4 py-3">
-            <div className="relative">
-              <button
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                onClick={(e) => { e.stopPropagation(); setShowActionDropdown(deal.id); }}
-              >
-                <MoreHorizontal className="h-4 w-4 text-gray-600" />
-              </button>
-              {showActionDropdown === deal.id && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
-                  <button onClick={() => navigate(`/crm/deals/${deal.id}/edit`)} className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    <Edit className="h-4 w-4" /><span>Edit Deal</span>
-                  </button>
-                  <button onClick={() => setShowStageModal(deal.id)} className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    <Target className="h-4 w-4" /><span>Change Stage</span>
-                  </button>
-                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    <User className="h-4 w-4" /><span>Change Owner</span>
-                  </button>
-                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    <Clock className="h-4 w-4" /><span>Log Activity</span>
-                  </button>
-                  <button onClick={() => setShowEmailModal(deal)} className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    <Mail className="h-4 w-4" /><span>Send Proposal</span>
-                  </button>
-                  <div className="border-t border-gray-200 my-1" />
-                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50">
-                    <CheckCircle2 className="h-4 w-4" /><span>Mark as Won</span>
-                  </button>
-                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
-                    <X className="h-4 w-4" /><span>Mark as Lost</span>
-                  </button>
-                  <div className="border-t border-gray-200 my-1" />
-                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    <Copy className="h-4 w-4" /><span>Clone Deal</span>
-                  </button>
-                  <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
-                    <Trash2 className="h-4 w-4" /><span>Delete Deal</span>
-                  </button>
-                </div>
-              )}
+          <td key="actions" className={cellPadding}>
+            <div className="flex items-center gap-1">
+              {/* Inline hover action buttons */}
+              <div className={`flex items-center gap-1 transition-opacity duration-150 ${hoveredRowId === deal.id ? 'opacity-100' : 'opacity-0'}`}>
+                <button
+                  title="Schedule Follow-up"
+                  onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <CalendarPlus size={14} />
+                </button>
+                <button
+                  title="Create Task"
+                  onClick={(e) => { e.stopPropagation(); openCreateTask(deal); }}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <CheckSquare size={14} />
+                </button>
+              </div>
+              {/* ··· dropdown */}
+              <div className="relative">
+                <button
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setShowActionDropdown(showActionDropdown === deal.id ? null : deal.id); }}
+                >
+                  <MoreHorizontal className="h-4 w-4 text-gray-600" />
+                </button>
+                {showActionDropdown === deal.id && (
+                  <div className="absolute right-0 mt-1 w-52 bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 pt-0.5 pb-0.5">Workflow</p>
+                    <div className="px-1.5 space-y-0.5">
+                      <MenuItem icon={<CalendarPlus size={13} />} label="Schedule Follow-up"
+                        onClick={() => { openScheduleFollowUp(deal); setShowActionDropdown(null); }} />
+                      <MenuItem icon={<CheckSquare size={13} />} label="Create Task"
+                        onClick={() => { openCreateTask(deal); setShowActionDropdown(null); }} />
+                      <MenuItem icon={<ClipboardList size={13} />} label="Log Meeting Outcome"
+                        onClick={() => { openLogMeeting(deal); setShowActionDropdown(null); }} />
+                    </div>
+                    <div className="mx-2 my-1 border-t border-gray-100" />
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 pb-0.5">Deal</p>
+                    <div className="px-1.5 space-y-0.5">
+                      <MenuItem icon={<Pencil size={13} />} label="Edit deal"
+                        onClick={() => { navigate(`/crm/deals/${deal.id}`); setShowActionDropdown(null); }} />
+                      <MenuItem icon={<ArrowLeftRight size={13} />} label="Change stage"
+                        onClick={() => { setShowStageModal(deal.id); setShowActionDropdown(null); }} />
+                      <MenuItem icon={<Copy size={13} />} label="Clone deal"
+                        onClick={() => { showBulkToast('Clone deal — coming soon'); setShowActionDropdown(null); }} />
+                    </div>
+                    <div className="mx-2 my-1 border-t border-gray-100" />
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 pb-0.5">Outreach</p>
+                    <div className="px-1.5 space-y-0.5">
+                      <MenuItem icon={<Workflow size={13} />} label="Add to Sequence"
+                        onClick={() => { openAddSequence(deal); setShowActionDropdown(null); }} />
+                      <MenuItem icon={<Link2 size={13} />} label="Share Deal"
+                        onClick={() => { shareDeal(deal); setShowActionDropdown(null); }} />
+                    </div>
+                    <div className="mx-2 my-1 border-t border-gray-100" />
+                    <div className="px-1.5 space-y-0.5">
+                      <MenuItem icon={<Archive size={13} />} label="Archive"
+                        onClick={() => { archiveDeal(deal.id, deal.dealName); setShowActionDropdown(null); }} />
+                      <MenuItem icon={<Trash2 size={13} />} label="Delete forever" danger
+                        onClick={() => { setDeleteConfirmDeal(deal); setShowActionDropdown(null); }} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </td>
         );
@@ -1485,7 +1701,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="grid grid-cols-6 gap-6">
+        <div className={`grid gap-6 ${activePairCount > 0 ? 'grid-cols-7' : 'grid-cols-6'}`}>
 
           {/* Card 1: Total Deals — clickable, active when no KPI filter */}
           <div
@@ -1556,6 +1772,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           <div
             role="button"
             tabIndex={0}
+            title={stalledConfig.enabled
+              ? `Deals stalled when: ${[
+                  stalledConfig.criteria.noActivity.enabled && `no activity ${stalledConfig.criteria.noActivity.threshold}d+`,
+                  stalledConfig.criteria.noNextStep.enabled && 'no next step set',
+                  stalledConfig.criteria.closeOverdue.enabled && 'close date passed',
+                  stalledConfig.criteria.dealAge.enabled && `deal age ${stalledConfig.criteria.dealAge.threshold}d+`,
+                ].filter(Boolean).join(', ')}. Click to filter.`
+              : 'Stall detection is disabled. Click to filter.'}
             onClick={() => setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
             onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
             className={[
@@ -1578,7 +1802,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className={`text-3xl text-red-900 ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-bold'}`}>
               {kpiStalledCount}
             </div>
-            <div className="text-sm text-red-700 font-medium mt-1">Stalled Deals</div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="text-sm text-red-700 font-medium">Stalled Deals</span>
+              <button
+                onClick={e => { e.stopPropagation(); navigate('/crm/settings'); }}
+                title="Configure stall rules in Settings → Pipeline Settings → Stalled Rules"
+                className="text-red-400 hover:text-red-600 transition-colors"
+                tabIndex={-1}
+              >
+                <Settings size={12} />
+              </button>
+            </div>
           </div>
 
           {/* Card 6: Days Avg Cycle — decorative only */}
@@ -1589,6 +1823,22 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className="text-3xl font-bold text-gray-900">{avgDaysCycle}</div>
             <div className="text-sm text-gray-700 font-medium mt-1">Days Avg Cycle</div>
           </div>
+
+          {/* Card 7: Duplicate Pairs — only shown when pairs exist */}
+          {activePairCount > 0 && (
+            <button
+              onClick={() => setDuplicateDrawerOpen(true)}
+              title="Potential duplicate deals detected — click to review"
+              className={[
+                'relative bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border',
+                'cursor-pointer select-none transition-all duration-150 text-left w-full',
+                'hover:shadow-md hover:scale-[1.01] border-amber-300',
+              ].join(' ')}
+            >
+              <div className="text-3xl font-bold text-amber-800">{activePairCount}</div>
+              <div className="text-sm text-amber-700 font-medium mt-1">Duplicate<br />Pairs</div>
+            </button>
+          )}
 
         </div>
       </div>
@@ -1685,7 +1935,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[9px] font-semibold text-indigo-700">{getInitials(o)}</span>
+                      <span className="text-[10px] font-semibold text-indigo-700">{getInitials(o)}</span>
                     </div>
                     <span className="text-sm text-gray-700">{o}</span>
                   </label>
@@ -1817,7 +2067,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     />
                   </div>
-                  <span className="text-gray-300 text-sm mt-3">–</span>
+                  <span className="text-gray-400 text-sm mt-3">–</span>
                   <div className="flex-1">
                     <label className="text-[10px] text-gray-400 block mb-0.5">Max $</label>
                     <input
@@ -1952,7 +2202,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     />
                   </div>
-                  <span className="text-gray-300 text-sm mt-3">–</span>
+                  <span className="text-gray-400 text-sm mt-3">–</span>
                   <div className="flex-1">
                     <label className="text-[10px] text-gray-400 block mb-0.5">Max days</label>
                     <input
@@ -1994,6 +2244,24 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* ── Column settings ── */}
           <div className="ml-auto flex items-center gap-2">
+
+            {/* Density toggle */}
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                title="Comfortable density"
+                onClick={() => setDensity('comfortable')}
+                className={`p-1.5 transition-colors ${density === 'comfortable' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+              >
+                <AlignJustify className="h-3.5 w-3.5" />
+              </button>
+              <button
+                title="Compact density"
+                onClick={() => setDensity('compact')}
+                className={`p-1.5 transition-colors ${density === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+              </button>
+            </div>
 
             {/* Column settings gear */}
             <div className="relative">
@@ -2282,17 +2550,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       <div className="px-8 py-6">
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[1300px]">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gray-50/80 border-b-2 border-gray-200">
               <tr>
                 {/* Checkbox — always visible */}
-                <th className="w-12 px-4 py-3">
+                <th className={`w-12 pl-3 ${density === 'compact' ? 'py-2' : 'py-3'}`}>
                   <input
                     ref={headerCheckboxRef}
                     type="checkbox"
                     checked={selectedDeals.length === sortedDeals.length && sortedDeals.length > 0}
                     onChange={selectAllDeals}
                     aria-label="Select all deals"
-                    className="rounded border-gray-300"
+                    className="rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1"
                   />
                 </th>
                 {orderedVisible.map(key => renderHeader(key))}
@@ -2328,23 +2596,21 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 return (
                   <React.Fragment key={deal.id}>
                     <tr
-                      className={`transition-colors cursor-pointer ${
-                        isSelected ? 'bg-blue-50' :
-                        isExpanded ? 'bg-indigo-50/30' :
-                        'hover:bg-gray-50/40'
-                      }`}
+                      className={getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id)}
                       onClick={() => toggleRowExpansion(deal.id)}
                       onContextMenu={(e) => handleContextMenu(e, deal.id)}
+                      onMouseEnter={() => setHoveredRowId(deal.id)}
+                      onMouseLeave={() => setHoveredRowId(null)}
                     >
                       {/* Checkbox */}
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <td className={`pl-3 ${density === 'compact' ? 'py-2' : 'py-3'}`} onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={(e) => toggleDealSelection(deal.id, (e.nativeEvent as MouseEvent | KeyboardEvent).shiftKey)}
                           onClick={(e) => e.stopPropagation()}
                           aria-label={`Select ${deal.dealName}`}
-                          className="rounded border-gray-300"
+                          className="rounded border-gray-300 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1"
                         />
                       </td>
                       {orderedVisible.map(key => renderCell(key, deal, isExpanded))}
@@ -2355,6 +2621,25 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       <tr>
                         <td colSpan={visibleColCount} className="p-0 border-0">
                           <div className="mx-3 mb-3 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden transition-opacity duration-150">
+                            {/* Action strip — workflow-first pill buttons */}
+                            <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-gray-100 flex-wrap">
+                              {([
+                                { label: 'Schedule Follow-up', icon: <CalendarPlus size={13} />, action: () => openScheduleFollowUp(deal) },
+                                { label: 'Create Task',        icon: <CheckSquare size={13} />,   action: () => openCreateTask(deal) },
+                                { label: 'Log Meeting',        icon: <ClipboardList size={13} />, action: () => openLogMeeting(deal) },
+                                { label: 'Share',              icon: <Link2 size={13} />,         action: () => shareDeal(deal) },
+                                { label: 'Add to Sequence',    icon: <Workflow size={13} />,      action: () => openAddSequence(deal) },
+                              ] as const).map(({ label, icon, action }) => (
+                                <button
+                                  key={label}
+                                  onClick={(e) => { e.stopPropagation(); action(); }}
+                                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+                                >
+                                  {icon}
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
                             <div className={`flex border-l-4 ${accentClass}`}>
 
                               {/* Zone 1 — People & Time */}
@@ -2367,23 +2652,42 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                                     {deal.owner || <span className="text-gray-400">Unassigned</span>}
                                   </span>
                                 </div>
-                                <div className="mb-3">
-                                  {deal.contactName ? (
-                                    <>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); navigate(`/crm/contacts/${deal.id}`); }}
-                                        className="text-sm font-medium text-indigo-600 hover:underline text-left leading-snug block"
-                                      >
-                                        {deal.contactName}
-                                      </button>
-                                      {deal.contactTitle && (
-                                        <div className="text-[11px] text-gray-400 leading-snug">{deal.contactTitle}</div>
+                                {(() => {
+                                  const { hasName, hasTitle, displayName, displayTitle, initials } = getContactDisplay(deal);
+                                  return (
+                                    <div className="mb-3">
+                                      <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">
+                                        Primary Contact
+                                      </p>
+                                      {hasName ? (
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold flex items-center justify-center shrink-0">
+                                            {initials}
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-800 truncate leading-snug">{displayName}</p>
+                                            {hasTitle && (
+                                              <p className="text-[11px] text-gray-400 truncate leading-snug">{displayTitle}</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-gray-50 border border-dashed border-gray-200">
+                                          <UserX size={13} className="text-gray-300 shrink-0" />
+                                          <div className="min-w-0">
+                                            <p className="text-xs text-gray-400">No primary contact linked</p>
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
+                                              className="text-[11px] text-indigo-500 hover:text-indigo-700 hover:underline text-left"
+                                            >
+                                              Edit deal to add contact
+                                            </button>
+                                          </div>
+                                        </div>
                                       )}
-                                    </>
-                                  ) : (
-                                    <span className="text-sm text-gray-400">No contact</span>
-                                  )}
-                                </div>
+                                    </div>
+                                  );
+                                })()}
                                 <div className="text-xs text-gray-500 mb-3">
                                   {deal.lastActivity
                                     ? `Last contact: ${formatRelativeTime(deal.lastActivity, 'unknown')}`
@@ -2473,7 +2777,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                                     <StickyNote className="h-4 w-4 flex-shrink-0" /><span>Add Note</span>
                                   </button>
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); onScheduleFollowUp?.(deal.id); showBulkToast(`Follow-up scheduled for ${deal.dealName}`); }}
+                                    onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
                                     className="flex items-center gap-2 w-full text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors text-left"
                                   >
                                     <CalendarPlus className="h-4 w-4 flex-shrink-0" /><span>Schedule Follow-up</span>
@@ -2513,27 +2817,311 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       </div>
 
       {/* ── Context Menu ──────────────────────────────────────────────────────── */}
-      {contextMenuDeal && (
-        <div
-          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
-          style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
-        >
-          <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            <Edit className="h-4 w-4" />
-            <span>Edit Deal</span>
-          </button>
-          <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            <Target className="h-4 w-4" />
-            <span>Change Stage</span>
-          </button>
-          <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-            <Copy className="h-4 w-4" />
-            <span>Clone Deal</span>
-          </button>
-          <button className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-700 hover:bg-red-50">
-            <Trash2 className="h-4 w-4" />
-            <span>Delete Deal</span>
-          </button>
+      {contextMenuDeal && (() => {
+        const ctxDeal = kpiFilteredDeals.find(d => d.id === contextMenuDeal);
+        if (!ctxDeal) return null;
+        return (
+          <div
+            className="fixed bg-white rounded-xl shadow-2xl border border-gray-200 py-2 z-50 w-56"
+            style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+          >
+            {/* Workflow — daily actions, top priority */}
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 pt-1 pb-0.5">Workflow</p>
+            <div className="px-2 space-y-0.5">
+              <MenuItem icon={<CalendarPlus size={14} />} label="Schedule Follow-up"
+                onClick={() => { openScheduleFollowUp(ctxDeal); setContextMenuDeal(null); }} />
+              <MenuItem icon={<CheckSquare size={14} />} label="Create Task"
+                onClick={() => { openCreateTask(ctxDeal); setContextMenuDeal(null); }} />
+              <MenuItem icon={<ClipboardList size={14} />} label="Log Meeting Outcome"
+                onClick={() => { openLogMeeting(ctxDeal); setContextMenuDeal(null); }} />
+            </div>
+            <div className="mx-2 my-1.5 border-t border-gray-100" />
+            {/* Deal management */}
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 pb-0.5">Deal</p>
+            <div className="px-2 space-y-0.5">
+              <MenuItem icon={<Pencil size={14} />} label="Edit deal"
+                onClick={() => { navigate(`/crm/deals/${ctxDeal.id}`); setContextMenuDeal(null); }} />
+              <MenuItem icon={<ArrowLeftRight size={14} />} label="Change stage"
+                onClick={() => { setShowStageModal(ctxDeal.id); setContextMenuDeal(null); }} />
+              <MenuItem icon={<UserCog size={14} />} label="Reassign owner"
+                onClick={() => { showBulkToast('Reassign owner — coming soon'); setContextMenuDeal(null); }} />
+              <MenuItem icon={<Copy size={14} />} label="Clone deal"
+                onClick={() => { showBulkToast('Clone deal — coming soon'); setContextMenuDeal(null); }} />
+            </div>
+            <div className="mx-2 my-1.5 border-t border-gray-100" />
+            {/* Outreach */}
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 pb-0.5">Outreach</p>
+            <div className="px-2 space-y-0.5">
+              <MenuItem icon={<Workflow size={14} />} label="Add to Sequence"
+                onClick={() => { openAddSequence(ctxDeal); setContextMenuDeal(null); }} />
+              <MenuItem icon={<FileText size={14} />} label="Send Proposal"
+                onClick={() => { showBulkToast('Send proposal — coming soon'); setContextMenuDeal(null); }} />
+              <MenuItem icon={<Link2 size={14} />} label="Share Deal"
+                onClick={() => shareDeal(ctxDeal)} />
+            </div>
+            <div className="mx-2 my-1.5 border-t border-gray-100" />
+            {/* Danger zone */}
+            <div className="px-2 space-y-0.5">
+              <MenuItem icon={<Archive size={14} />} label="Archive"
+                onClick={() => archiveDeal(ctxDeal.id, ctxDeal.dealName)} />
+              <MenuItem icon={<Trash2 size={14} />} label="Delete forever" danger
+                onClick={() => { setDeleteConfirmDeal(ctxDeal); setContextMenuDeal(null); }} />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Schedule Follow-up Modal ─────────────────────────────────────────── */}
+      {scheduleFollowUpDeal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setScheduleFollowUpDeal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <CalendarPlus size={18} className="text-indigo-600" />
+                <h3 className="text-base font-semibold text-gray-900">Schedule Follow-up</h3>
+              </div>
+              <button onClick={() => setScheduleFollowUpDeal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="bg-indigo-50 rounded-xl px-3 py-2 mb-4 text-sm">
+              <span className="font-medium text-indigo-800">{scheduleFollowUpDeal.dealName}</span>
+              {scheduleFollowUpDeal.contactName?.trim() && (
+                <span className="text-indigo-600 ml-2">· {scheduleFollowUpDeal.contactName}</span>
+              )}
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Date</label>
+                  <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Time</label>
+                  <input type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Notes (optional)</label>
+                <textarea value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)}
+                  placeholder="What to discuss, prep notes..."
+                  rows={3}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400 resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setScheduleFollowUpDeal(null)}
+                className="flex-1 text-sm font-medium border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                disabled={!followUpDate}
+                onClick={() => {
+                  const name = scheduleFollowUpDeal.dealName;
+                  setScheduleFollowUpDeal(null);
+                  showBulkToast(`Follow-up scheduled for "${name}"`);
+                }}
+                className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create Task Modal ─────────────────────────────────────────────────── */}
+      {createTaskDeal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setCreateTaskDeal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <CheckSquare size={18} className="text-indigo-600" />
+                <h3 className="text-base font-semibold text-gray-900">Create Task</h3>
+              </div>
+              <button onClick={() => setCreateTaskDeal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="bg-indigo-50 rounded-xl px-3 py-2 mb-4 text-sm">
+              <span className="font-medium text-indigo-800">{createTaskDeal.dealName}</span>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Task title</label>
+                <input type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)}
+                  placeholder="e.g. Send follow-up email, Prepare proposal..."
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Due date</label>
+                  <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Priority</label>
+                  <select value={taskPriority} onChange={e => setTaskPriority(e.target.value as 'high' | 'medium' | 'low')}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 bg-white">
+                    <option value="high">🔴 High</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="low">🟢 Low</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Assign to</label>
+                <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 bg-white">
+                  <option value="">Select owner...</option>
+                  {ownerFilterOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setCreateTaskDeal(null)}
+                className="flex-1 text-sm font-medium border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                disabled={!taskTitle.trim()}
+                onClick={() => {
+                  const name = createTaskDeal.dealName;
+                  setCreateTaskDeal(null);
+                  showBulkToast(`Task created for "${name}"`);
+                }}
+                className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                Create task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Log Meeting Outcome Modal ─────────────────────────────────────────── */}
+      {logMeetingDeal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setLogMeetingDeal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <ClipboardList size={18} className="text-indigo-600" />
+                <h3 className="text-base font-semibold text-gray-900">Log Meeting Outcome</h3>
+              </div>
+              <button onClick={() => setLogMeetingDeal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="bg-indigo-50 rounded-xl px-3 py-2 mb-4 text-sm">
+              <span className="font-medium text-indigo-800">{logMeetingDeal.dealName}</span>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-2 block">Meeting outcome</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'demo_completed',  label: '✅ Demo completed',  color: 'green' },
+                    { value: 'follow_up_needed', label: '🔄 Follow-up needed', color: 'amber' },
+                    { value: 'no_show',          label: '❌ No-show',          color: 'red'   },
+                    { value: 'closed',           label: '🏆 Deal closed',      color: 'green' },
+                  ] as const).map(({ value, label, color }) => (
+                    <button key={value}
+                      onClick={() => setMeetingOutcome(value)}
+                      className={`text-xs font-medium px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                        meetingOutcome === value
+                          ? color === 'green' ? 'bg-green-100 border-green-300 text-green-800'
+                            : color === 'amber' ? 'bg-amber-100 border-amber-300 text-amber-800'
+                            : 'bg-red-100 border-red-300 text-red-800'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                      }`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Meeting notes</label>
+                <textarea value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)}
+                  placeholder="What was discussed, key objections, decisions made..."
+                  rows={3}
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400 resize-none" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Next step</label>
+                <input type="text" value={meetingNextStep} onChange={e => setMeetingNextStep(e.target.value)}
+                  placeholder="e.g. Send revised proposal by Friday..."
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setLogMeetingDeal(null)}
+                className="flex-1 text-sm font-medium border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                disabled={!meetingOutcome}
+                onClick={() => {
+                  const name = logMeetingDeal.dealName;
+                  setLogMeetingDeal(null);
+                  showBulkToast(`Meeting outcome logged for "${name}"`);
+                }}
+                className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                Log outcome
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add to Sequence Modal ─────────────────────────────────────────────── */}
+      {addSequenceDeal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setAddSequenceDeal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Workflow size={18} className="text-indigo-600" />
+                <h3 className="text-base font-semibold text-gray-900">Add to Sequence</h3>
+              </div>
+              <button onClick={() => setAddSequenceDeal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="bg-indigo-50 rounded-xl px-3 py-2 mb-4 text-sm">
+              <span className="font-medium text-indigo-800">{addSequenceDeal.dealName}</span>
+            </div>
+            <div className="space-y-2 mb-5">
+              {STUB_SEQUENCES.map(seq => (
+                <button key={seq.id}
+                  onClick={() => setSelectedSequence(seq.id)}
+                  className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+                    selectedSequence === seq.id
+                      ? 'bg-indigo-50 border-indigo-300'
+                      : 'bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm font-medium ${selectedSequence === seq.id ? 'text-indigo-800' : 'text-gray-800'}`}>
+                      {seq.name}
+                    </span>
+                    <span className="text-xs text-gray-400">{seq.steps} steps</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{seq.description}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setAddSequenceDeal(null)}
+                className="flex-1 text-sm font-medium border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                disabled={!selectedSequence}
+                onClick={() => {
+                  const seq = STUB_SEQUENCES.find(s => s.id === selectedSequence);
+                  setAddSequenceDeal(null);
+                  showBulkToast(`Added "${addSequenceDeal.dealName}" to "${seq?.name}"`);
+                }}
+                className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                Add to sequence
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2578,38 +3166,138 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       )}
 
-      {/* ── Delete Confirmation Modal ─────────────────────────────────────────── */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Delete {selectedDeals.length} Deals?
-                </h3>
+      {/* ── Per-Deal Delete Confirmation Modal ───────────────────────────────── */}
+      {deleteConfirmDeal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+            <div className="px-6 py-5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900">Delete this deal?</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">This action cannot be undone.</p>
+                </div>
               </div>
             </div>
-            <div className="px-6 py-4">
-              <p className="text-sm text-gray-600">This action cannot be undone.</p>
+            <div className="px-6 py-4 space-y-2">
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1 text-sm">
+                <p className="font-medium text-gray-900">{deleteConfirmDeal.dealName}</p>
+                <p className="text-gray-500">{deleteConfirmDeal.accountName} · ${deleteConfirmDeal.amount.toLocaleString()}</p>
+                <p className="text-gray-500">{deleteConfirmDeal.stage} · {deleteConfirmDeal.owner}</p>
+              </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
               <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                onClick={() => {
+                  archiveDeal(deleteConfirmDeal.id, deleteConfirmDeal.dealName);
+                  setDeleteConfirmDeal(null);
+                }}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                Archive instead
               </button>
-              <button
-                onClick={handleBulkDelete}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Delete
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDeleteConfirmDeal(null)}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    onBulkAction?.('delete', [deleteConfirmDeal.id]);
+                    setDeleteConfirmDeal(null);
+                    showBulkToast(`"${deleteConfirmDeal.dealName}" deleted`);
+                  }}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                >
+                  Delete forever
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Bulk Delete Confirmation Modal ────────────────────────────────────── */}
+      {bulkDeleteConfirm && (() => {
+        const targets = kpiFilteredDeals.filter(d => selectedDeals.includes(d.id));
+        const count = targets.length;
+        const preview = targets.slice(0, 5);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+              <div className="px-6 py-5 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                    <Trash2 className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Delete {count} deal{count !== 1 ? 's' : ''}?</h3>
+                    <p className="text-sm text-gray-500 mt-0.5">This action cannot be undone.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 py-4">
+                <ul className="space-y-1">
+                  {preview.map(d => (
+                    <li key={d.id} className="text-sm text-gray-700 flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                      <span className="font-medium truncate">{d.dealName}</span>
+                      <span className="text-gray-400 shrink-0">${d.amount.toLocaleString()}</span>
+                    </li>
+                  ))}
+                  {count > 5 && (
+                    <li className="text-sm text-gray-400 pl-3.5">…and {count - 5} more</li>
+                  )}
+                </ul>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                <button
+                  onClick={() => {
+                    const ids = [...selectedDeals];
+                    const names = targets.map(d => d.dealName);
+                    setArchivedDealIds(prev => new Set([...prev, ...ids]));
+                    setBulkDeleteConfirm(false);
+                    setSelectedDeals([]);
+                    lastSelectedIndex.current = null;
+                    showUndoToast(`${count} deal${count !== 1 ? 's' : ''} archived`, () => {
+                      setArchivedDealIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
+                    });
+                    void names;
+                  }}
+                  className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Archive instead
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBulkDeleteConfirm(false)}
+                    className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const ids = [...selectedDeals];
+                      onBulkAction?.('delete', ids);
+                      setBulkDeleteConfirm(false);
+                      setSelectedDeals([]);
+                      lastSelectedIndex.current = null;
+                      showBulkToast(`${count} deal${count !== 1 ? 's' : ''} deleted`);
+                    }}
+                    className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                  >
+                    Delete forever
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Email Composer Modal ──────────────────────────────────────────────── */}
       {showEmailModal && (
@@ -2994,12 +3682,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   </button>
                   <button
                     onClick={() => {
-                      const count = selectedDeals.length;
-                      onBulkAction?.('archive', [...selectedDeals]);
+                      const ids = [...selectedDeals];
+                      const count = ids.length;
+                      setArchivedDealIds(prev => new Set([...prev, ...ids]));
                       setOpenPopover(null);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`${count} deal${count !== 1 ? 's' : ''} archived`);
+                      showUndoToast(`${count} deal${count !== 1 ? 's' : ''} archived`, () => {
+                        setArchivedDealIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
+                      });
                     }}
                     className="px-3 py-1.5 text-sm bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors"
                   >
@@ -3012,7 +3703,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* Delete */}
           <button
-            onClick={() => setShowDeleteModal(true)}
+            onClick={() => setBulkDeleteConfirm(true)}
             className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1.5 flex-shrink-0 text-red-300 hover:text-white"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -3032,11 +3723,365 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       </div>
 
+      {/* ── Duplicate Review Drawer ──────────────────────────────────────────── */}
+      {duplicateDrawerOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setDuplicateDrawerOpen(false)}>
+          <div
+            className="absolute inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Duplicate Review</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {activePairCount} potential pair{activePairCount !== 1 ? 's' : ''} detected
+                </p>
+              </div>
+              <button onClick={() => setDuplicateDrawerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Pair list */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {duplicatePairs.length === 0 ? (
+                <div className="text-center py-16">
+                  <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-600">No duplicates remaining</p>
+                  <p className="text-xs text-gray-400 mt-1">All pairs have been reviewed or dismissed.</p>
+                </div>
+              ) : (
+                duplicatePairs.map(pair => (
+                  <div
+                    key={pair.pairKey}
+                    className={`rounded-2xl border p-4 ${
+                      pair.confidence === 'HIGH'
+                        ? 'border-amber-300 bg-amber-50/40'
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    {/* Confidence badge + dismiss */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                        pair.confidence === 'HIGH'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {pair.confidence === 'HIGH' ? '⚠ High confidence match' : '~ Possible match'}
+                      </span>
+                      <button
+                        onClick={() => setDismissedPairs(prev => new Set([...prev, pair.pairKey]))}
+                        className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+                      >
+                        Not a duplicate
+                      </button>
+                    </div>
+
+                    {/* Side-by-side deal cards */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      {[pair.dealA, pair.dealB].map(deal => (
+                        <div key={deal.id} className="bg-white rounded-xl border border-gray-200 p-3">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{deal.dealName}</p>
+                          <p className="text-xs text-gray-400 truncate mt-0.5">
+                            {deal.companyName || deal.accountName || '—'}
+                          </p>
+                          <div className="mt-2 space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Value</span>
+                              <span className="text-gray-700 font-medium">
+                                {deal.amount ? formatAmountUSD(deal.amount) : '—'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Stage</span>
+                              <span className="text-gray-700">{deal.stage || '—'}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Close</span>
+                              <span className="text-gray-700">{deal.closeDate || '—'}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-400">Owner</span>
+                              <span className="text-gray-700 truncate ml-2">{deal.owner || '—'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Signal pills */}
+                    <div className="flex items-center gap-2 flex-wrap mb-3">
+                      <span className="text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+                        Same account
+                      </span>
+                      {pair.signals.map(sig => (
+                        <span key={sig} className="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                          {sig === 'dealNameSimilar' ? 'Similar name'
+                            : sig === 'valueSimilar' ? 'Similar value'
+                            : 'Close dates near'}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Merge CTA */}
+                    <button
+                      onClick={() => {
+                        setMergeTargetPair(pair);
+                        setMergeSurvivor('A');
+                        setMergeFieldOverrides({});
+                      }}
+                      className="w-full text-sm font-medium bg-indigo-600 text-white py-2 rounded-xl hover:bg-indigo-700 transition-colors"
+                    >
+                      Review &amp; Merge
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Merge Modal ───────────────────────────────────────────────────────── */}
+      {mergeTargetPair && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setMergeTargetPair(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Merge Deals</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Pick the surviving deal. Click any field to override per-field.
+                </p>
+              </div>
+              <button onClick={() => setMergeTargetPair(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Survivor header row */}
+            <div className="grid grid-cols-[160px_1fr_1fr] border-b border-gray-100 shrink-0">
+              <div className="px-4 py-3 flex items-center">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Field</span>
+              </div>
+              {([mergeTargetPair.dealA, mergeTargetPair.dealB] as const).map((deal, idx) => {
+                const side = idx === 0 ? 'A' : 'B' as 'A' | 'B';
+                const isWinner = mergeSurvivor === side;
+                return (
+                  <button
+                    key={deal.id}
+                    onClick={() => { setMergeSurvivor(side); setMergeFieldOverrides({}); }}
+                    className={`px-4 py-3 text-left transition-colors border-l border-gray-100 ${
+                      isWinner ? 'bg-indigo-50' : 'bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <p className={`text-xs font-semibold ${isWinner ? 'text-indigo-700' : 'text-gray-400'}`}>
+                      Deal {side} {isWinner ? '· Survivor ✓' : '· Will be archived'}
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 truncate mt-0.5">{deal.dealName}</p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Field rows — scrollable */}
+            <div className="flex-1 overflow-y-auto">
+              {MERGE_FIELDS.filter(f => {
+                const valA = String(mergeTargetPair.dealA[f.key] ?? '').trim();
+                const valB = String(mergeTargetPair.dealB[f.key] ?? '').trim();
+                return valA.length > 0 || valB.length > 0;
+              }).map(field => {
+                const rawA = mergeTargetPair.dealA[field.key];
+                const rawB = mergeTargetPair.dealB[field.key];
+                const valA = rawA != null ? String(rawA) : '';
+                const valB = rawB != null ? String(rawB) : '';
+                const isDifferent = valA.trim() !== valB.trim();
+                const effectiveSide = (mergeFieldOverrides[field.key as string] ?? mergeSurvivor) as 'A' | 'B';
+                const isOverridden = !!mergeFieldOverrides[field.key as string];
+
+                const display = (v: string) =>
+                  field.key === 'amount' && v
+                    ? formatAmountUSD(Number(v))
+                    : v || '—';
+
+                return (
+                  <div
+                    key={field.key as string}
+                    className={`grid grid-cols-[160px_1fr_1fr] border-b border-gray-50 ${
+                      isDifferent ? '' : 'opacity-60'
+                    }`}
+                  >
+                    <div className="px-4 py-2.5 flex items-center gap-1.5">
+                      <span className="text-xs text-gray-500 font-medium">{field.label}</span>
+                      {isOverridden && (
+                        <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                          override
+                        </span>
+                      )}
+                    </div>
+
+                    {([mergeTargetPair.dealA, mergeTargetPair.dealB] as const).map((deal, idx) => {
+                      const side = (idx === 0 ? 'A' : 'B') as 'A' | 'B';
+                      const val = idx === 0 ? valA : valB;
+                      const isSelected = effectiveSide === side;
+
+                      return (
+                        <button
+                          key={deal.id}
+                          disabled={!isDifferent}
+                          onClick={() => {
+                            if (!isDifferent) return;
+                            setMergeFieldOverrides(prev => {
+                              const next = { ...prev };
+                              if (next[field.key as string] === side) {
+                                delete next[field.key as string];
+                              } else {
+                                next[field.key as string] = side;
+                              }
+                              return next;
+                            });
+                          }}
+                          className={`px-4 py-2.5 text-left text-sm border-l border-gray-100 transition-colors ${
+                            isSelected && isDifferent
+                              ? 'bg-indigo-50 font-medium text-indigo-900'
+                              : 'text-gray-600'
+                          } ${isDifferent && !isSelected ? 'hover:bg-gray-50 cursor-pointer' : ''} ${
+                            !isDifferent ? 'cursor-default' : ''
+                          }`}
+                        >
+                          <span className="truncate block">{display(val)}</span>
+                          {isSelected && isDifferent && (
+                            <span className="text-[10px] text-indigo-500 font-medium">✓ will be kept</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 shrink-0">
+              <button
+                onClick={() => { setMergeTargetPair(null); setMergeFieldOverrides({}); }}
+                className="text-sm font-medium text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-gray-400">
+                  Deal {mergeSurvivor === 'A' ? 'B' : 'A'} will be archived
+                </p>
+                <button
+                  onClick={() => {
+                    if (!mergeTargetPair) return;
+
+                    const survivor = mergeSurvivor === 'A' ? mergeTargetPair.dealA : mergeTargetPair.dealB;
+                    const loser    = mergeSurvivor === 'A' ? mergeTargetPair.dealB : mergeTargetPair.dealA;
+
+                    // Capture values before state mutations (needed for undo closure)
+                    const pairKey      = mergeTargetPair.pairKey;
+                    const survivorId   = survivor.id;
+                    const loserId      = loser.id;
+                    const survivorName = survivor.dealName;
+
+                    // Build field override payload
+                    const overrides: Record<string, unknown> = {};
+                    Object.entries(mergeFieldOverrides).forEach(([k, side]) => {
+                      const src = side === 'A' ? mergeTargetPair.dealA : mergeTargetPair.dealB;
+                      overrides[k] = (src as Record<string, unknown>)[k];
+                    });
+                    const overrideKeys = Object.keys(overrides);
+
+                    // Apply field overrides to survivor's localEdits
+                    if (overrideKeys.length > 0) {
+                      setLocalEdits(prev => ({
+                        ...prev,
+                        [survivorId]: { ...prev[survivorId], ...(overrides as Partial<Deal>) },
+                      }));
+                    }
+
+                    // Archive loser
+                    setArchivedDealIds(prev => new Set([...prev, loserId]));
+
+                    // Dismiss this pair
+                    setDismissedPairs(prev => new Set([...prev, pairKey]));
+
+                    // Close modal
+                    setMergeTargetPair(null);
+                    setMergeFieldOverrides({});
+
+                    // Undo — reverses all three effects
+                    showUndoToast(`Merged into "${survivorName}"`, () => {
+                      setArchivedDealIds(prev => {
+                        const next = new Set(prev);
+                        next.delete(loserId);
+                        return next;
+                      });
+                      if (overrideKeys.length > 0) {
+                        setLocalEdits(prev => {
+                          const next = { ...prev };
+                          if (next[survivorId]) {
+                            const cleaned = { ...next[survivorId] } as Record<string, unknown>;
+                            overrideKeys.forEach(k => delete cleaned[k]);
+                            if (Object.keys(cleaned).length === 0) delete next[survivorId];
+                            else next[survivorId] = cleaned as Partial<Deal>;
+                          }
+                          return next;
+                        });
+                      }
+                      setDismissedPairs(prev => {
+                        const next = new Set(prev);
+                        next.delete(pairKey);
+                        return next;
+                      });
+                    });
+                  }}
+                  className="text-sm font-medium bg-indigo-600 text-white px-5 py-2 rounded-xl hover:bg-indigo-700 transition-colors"
+                >
+                  Merge &amp; Archive loser
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Bulk Action Toast ─────────────────────────────────────────────────── */}
       {bulkToast && (
         <div className="fixed top-5 right-5 z-50 bg-gray-800 text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
           {bulkToast}
+        </div>
+      )}
+
+      {/* ── Undo Toast (archive actions) ─────────────────────────────────────── */}
+      {undoToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-4 py-3 rounded-xl shadow-xl flex items-center gap-3">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+          <span>{undoToast.message}</span>
+          {undoToast.onUndo && (
+            <button
+              onClick={() => { undoToast.onUndo?.(); setUndoToast(null); }}
+              className="ml-1 text-blue-400 hover:text-blue-300 font-semibold underline underline-offset-2 transition-colors"
+            >
+              Undo
+            </button>
+          )}
+          <button
+            onClick={() => setUndoToast(null)}
+            className="ml-1 text-gray-400 hover:text-white transition-colors"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
     </div>

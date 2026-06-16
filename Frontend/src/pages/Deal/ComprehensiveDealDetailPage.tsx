@@ -4,7 +4,7 @@ import { getDeal, updateDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
-import { ChevronRight, X, Keyboard } from 'lucide-react';
+import { ChevronRight, X, Keyboard, MoreVertical } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
 import { DealDetailsPanel } from '../../components/Deal/DealDetailsPanel';
@@ -22,7 +22,8 @@ import {
   AddContactModal,
   EmailComposerModal,
   CallLogModal,
-  MeetingSchedulerModal
+  MeetingSchedulerModal,
+  MoreOptionsDropdown
 } from '../../components/Deal/DealModals';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -36,7 +37,6 @@ const TABS = [
   { id: 'ai-insights', label: 'AI Insights' },
   { id: 'people',      label: 'People' },
   { id: 'timeline',    label: 'Timeline' },
-  { id: 'deal-info',   label: 'Deal Info' },
   { id: 'files-notes', label: 'Files & Notes' },
 ] as const;
 
@@ -55,6 +55,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showCallLog, setShowCallLog] = useState(false);
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showTopMoreActions, setShowTopMoreActions] = useState(false);
   const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
   const [expandedBattleCard, setExpandedBattleCard] = useState<string | null>(null);
   const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
@@ -66,7 +67,6 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const aiInsightsRef  = useRef<HTMLDivElement>(null);
   const peopleRef      = useRef<HTMLDivElement>(null);
   const timelineRef    = useRef<HTMLDivElement>(null);
-  const dealInfoRef    = useRef<HTMLDivElement>(null);
   const filesNotesRef  = useRef<HTMLDivElement>(null);
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
@@ -320,7 +320,6 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       'ai-insights': aiInsightsRef,
       'people':      peopleRef,
       'timeline':    timelineRef,
-      'deal-info':   dealInfoRef,
       'files-notes': filesNotesRef,
     };
     setTimeout(() => {
@@ -334,7 +333,6 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       ['ai-insights', aiInsightsRef],
       ['people',      peopleRef],
       ['timeline',    timelineRef],
-      ['deal-info',   dealInfoRef],
       ['files-notes', filesNotesRef],
     ];
     const observer = new IntersectionObserver(
@@ -968,12 +966,27 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <span className="text-gray-300">/</span>
             <h1 className="text-lg font-semibold text-gray-900 truncate">{deal.dealName}</h1>
           </div>
-          <button
-            onClick={() => navigate(`/crm/deals/${id}/edit`)}
-            className="shrink-0 px-4 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            Edit
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(`/crm/deals/${id}/edit`)}
+              className="shrink-0 px-4 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Edit
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowTopMoreActions(!showTopMoreActions)}
+                className="w-9 h-9 flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
+              >
+                <MoreVertical className="h-5 w-5 text-gray-600" />
+              </button>
+              <MoreOptionsDropdown
+                isOpen={showTopMoreActions}
+                onClose={() => setShowTopMoreActions(false)}
+                onAction={(action) => { handleMoreAction(action); setShowTopMoreActions(false); }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1013,30 +1026,82 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             aiInsightsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }, 50);
         }}
+        healthScoreFactors={aiIntelligenceData.scoreBreakdown}
+        daysSinceContact={5}
       />
 
-      {/* Sticky Tab Navigation */}
-      <div className="sticky top-[7rem] z-40 bg-white border-b border-gray-200 -mx-6 px-8">
-        <div className="flex overflow-x-auto scrollbar-none">
-          {TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabClick(tab.id)}
-              className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Sticky Tab Navigation — items 16, 17, 18 */}
+      {(() => {
+        const STAGE_TAB_COLOR: Record<string, string> = {
+          prospecting: '#3B82F6',
+          qualified: '#22C55E',
+          proposal: '#F97316',
+          negotiation: '#A855F7',
+          'closed-won': '#10B981',
+          'closed-lost': '#EF4444',
+        };
+        const activeColor = STAGE_TAB_COLOR[deal.stage] || '#3B82F6';
+        const hasDecisionMaker = contacts.some((c: any) => c.role === 'Decision Maker' && c.status !== 'pending');
+        const tabCounts: Record<string, number | null> = {
+          'overview':    null,
+          'ai-insights': null,
+          'people':      contacts.length,
+          'timeline':    activities.length,
+          'files-notes': notes.length,
+        };
+        return (
+          <div className="sticky top-[7rem] z-40 bg-white border-b border-gray-200 -mx-6 px-8">
+            <div className="flex overflow-x-auto scrollbar-none">
+              {TABS.map(tab => {
+                const isActive = activeTab === tab.id;
+                const count = tabCounts[tab.id];
+                const showOrangeDot = tab.id === 'people' && !hasDecisionMaker;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabClick(tab.id)}
+                    className={`relative px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-[3px] -mb-px ${
+                      isActive
+                        ? 'text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                    style={isActive ? { borderBottomColor: activeColor } : {}}
+                  >
+                    {tab.label}
+                    {count !== null && (
+                      <span className="ml-1.5 bg-gray-100 text-gray-600 text-xs rounded-full px-1.5">
+                        {count}
+                      </span>
+                    )}
+                    {showOrangeDot && (
+                      <span className="absolute top-2 right-1 w-1.5 h-1.5 bg-orange-500 rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Main Content */}
       <div className="max-w-[1920px] mx-auto px-0 pt-2 pb-8">
         <div ref={overviewRef} aria-hidden="true" />
+
+        {/* Deal Info — shown at top of Overview section */}
+        <DealDetailsPanel
+          deal={deal}
+          stageHistory={stageHistory}
+          competitors={accountData.competitors}
+          expandedBattleCard={expandedBattleCard}
+          isAdmin={isAdmin}
+          battleCardRef={battleCardRef}
+          revenueSchedule={activeRevenueSchedule}
+          onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
+          revenueTimelineRef={revenueTimelineRef}
+          onDealUpdated={(updates) => setDeal((prev: any) => ({ ...prev, ...updates }))}
+        />
+
         <div className="flex items-start gap-6">
           {/* Left Column */}
           <div className="flex-1 min-w-0 space-y-3">
@@ -1091,21 +1156,6 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
               />
             </div>
 
-            {/* Deal Info */}
-            <div ref={dealInfoRef}>
-              <DealDetailsPanel
-                deal={deal}
-                stageHistory={stageHistory}
-                competitors={accountData.competitors}
-                expandedBattleCard={expandedBattleCard}
-                isAdmin={isAdmin}
-                battleCardRef={battleCardRef}
-                revenueSchedule={activeRevenueSchedule}
-                onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
-                revenueTimelineRef={revenueTimelineRef}
-              />
-            </div>
-
             {/* Files & Notes */}
             <div ref={filesNotesRef}>
               <DealNotesFiles notes={notes} files={files} />
@@ -1115,8 +1165,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <DealDataAttribution dataSources={sidebarData.dataSources} />
           </div>
 
-          {/* Right Sidebar — sticky throughout full page scroll */}
-          <div className="w-[380px] shrink-0 sticky top-[120px] max-h-[calc(100vh-140px)] overflow-y-auto space-y-3">
+          {/* Right Sidebar — sticky, fills viewport height below top bar (item 24) */}
+          <div className="w-[380px] shrink-0 sticky top-20 max-h-[calc(100vh-80px)] overflow-y-auto space-y-3">
             <DealHealthScorePanel formData={healthFormData} subtitle="Based on current deal completeness" />
             <DealRightSidebar {...sidebarData} />
           </div>

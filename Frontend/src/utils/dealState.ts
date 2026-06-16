@@ -198,6 +198,7 @@ export function resolveDealState(
   deal: DealCard,
   closeDaysLeft: number | null,
   isClosed: boolean,
+  stalledOverride?: boolean,
 ): ResolvedDealState {
   const isHighValue = deal.amount >= HIGH_VALUE_AMOUNT;
 
@@ -229,7 +230,9 @@ export function resolveDealState(
   // ── Rule 2: Stalled ──────────────────────────────────────────────────────
   // No contact for 7+ days (momentum lost) or explicitly health=stalled.
   // Amber — needs a nudge but isn't catastrophically late.
-  const isStalled = deal.daysSinceContact >= STALLED_DAYS || deal.health === 'stalled';
+  const isStalled = stalledOverride !== undefined
+    ? stalledOverride
+    : (deal.daysSinceContact >= STALLED_DAYS || deal.health === 'stalled');
   if (isStalled) {
     return {
       primary:     'stalled',

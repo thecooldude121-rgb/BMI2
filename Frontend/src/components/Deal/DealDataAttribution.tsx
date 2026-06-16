@@ -64,20 +64,6 @@ export const DealDataAttribution: React.FC<DealDataAttributionProps> = ({ dataSo
       {isOpen && (
         <div className="px-6 pb-6 pt-4 border-t border-gray-100 space-y-4">
 
-          {/* Source Journey */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 border-2 border-blue-200">
-            <div className="flex items-center gap-2 mb-2">
-              <Target className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-bold text-blue-900">🎯 Source Journey</span>
-            </div>
-            <div className="text-sm text-blue-800 font-medium">
-              Lead Gen (Apollo.io) → Lead → Deal
-            </div>
-            <div className="text-xs text-blue-700 mt-1">
-              Full attribution tracking from discovery to close
-            </div>
-          </div>
-
           {/* Created from */}
           <div>
             <div className="text-sm font-semibold text-gray-700 mb-2">Deal created from:</div>

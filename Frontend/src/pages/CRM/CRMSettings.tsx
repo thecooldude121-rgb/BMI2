@@ -29,6 +29,7 @@ import PipelineSettings from './CRMSettings/PipelineSettings';
 import DealStages from './CRMSettings/DealStages';
 import StageProbabilities from './CRMSettings/StageProbabilities';
 import WinReasons from './CRMSettings/WinReasons';
+import StalledDealRules from './CRMSettings/StalledDealRules';
 import CustomFieldsAll from './CRMSettings/CustomFieldsAll';
 import LeadsCustomFields from './CRMSettings/LeadsCustomFields';
 import ContactsCustomFields from './CRMSettings/ContactsCustomFields';
@@ -138,7 +139,8 @@ const CRMSettings: React.FC = () => {
         { id: 'pipeline-all', label: 'All Pipeline Settings' },
         { id: 'deal-stages', label: 'Deal Stages' },
         { id: 'probabilities', label: 'Probabilities' },
-        { id: 'win-reasons', label: 'Win Reasons' }
+        { id: 'win-reasons', label: 'Win Reasons' },
+        { id: 'stalled-rules', label: 'Stalled Rules' }
       ]
     },
     {
@@ -228,6 +230,8 @@ const CRMSettings: React.FC = () => {
         return <StageProbabilities />;
       case 'win-reasons':
         return <WinReasons />;
+      case 'stalled-rules':
+        return <StalledDealRules />;
       case 'custom-fields-all':
         return <CustomFieldsAll />;
       case 'leads-fields':

@@ -109,6 +109,8 @@ export interface DealKanbanCardProps {
   onQuickEmail: (e: React.MouseEvent, id: string) => void;
   onQuickActivity: (e: React.MouseEvent, id: string) => void;
   formatCurrency: (amount: number) => string;
+  /** When provided, overrides the internal stall detection in resolveDealState. */
+  stalledOverride?: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -174,6 +176,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
   onQuickEmail,
   onQuickActivity,
   formatCurrency,
+  stalledOverride,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -186,7 +189,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
     : null;
 
   // ── Resolve the canonical deal state ──────────────────────────────────────
-  const state  = resolveDealState(deal, closeDaysLeft, isClosed);
+  const state  = resolveDealState(deal, closeDaysLeft, isClosed, stalledOverride);
   const tokens = STATE_TOKENS[state.primary];
 
   // ── Health explanation — computed once, used in score button + popover ────

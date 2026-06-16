@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchDeals } from '../../utils/dealsApi';
+import { useStalledConfig } from '../../hooks/useStalledConfig';
 import {
   formatDisplayDate,
   formatRelativeTime,
@@ -110,6 +111,7 @@ const DealsKanbanPage: React.FC = () => {
   const navigate = useNavigate();
   const { deals: contextDeals } = useData();
   const { user } = useAuth();
+  const { isStalled } = useStalledConfig();
   // Stable counter incremented only when a real data-mutating action occurs
   // (deal added, deleted, stage-changed). Using contextDeals.length directly
   // caused refetch races during drag-and-drop because length can momentarily
@@ -1871,6 +1873,7 @@ const DealsKanbanPage: React.FC = () => {
                                 showScoreTooltip={showScoreTooltip === deal.id}
                                 inspectionMode={inspectionMode}
                                 inspectionBadge={inspectionMode ? getInspectionBadge(deal) : null}
+                                stalledOverride={isStalled(deal)}
                                 onCardClick={handleCardClick}
                                 onContextMenu={handleContextMenu}
                                 onHRMSClick={handleHRMSBadgeClick}

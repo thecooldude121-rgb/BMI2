@@ -60,12 +60,12 @@ function getWeekLabel(bucketIdx: number): string {
   return `${fmt(startMs)}–${fmt(endMs)}`;
 }
 
-/** Maps an activity count to a heat-intensity colour. */
+/** Maps an activity count to a GitHub-style heat-intensity colour. */
 function heatmapSquareColor(count: number): string {
-  if (count === 0) return '#F3F4F6';
-  if (count === 1) return '#BFDBFE';
-  if (count === 2) return '#60A5FA';
-  return '#2563EB';
+  if (count === 0) return '#F3F4F6'; // bg-gray-100
+  if (count === 1) return '#DBEAFE'; // bg-blue-100
+  if (count <= 3)  return '#93C5FD'; // bg-blue-300
+  return '#2563EB';                   // bg-blue-600
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
