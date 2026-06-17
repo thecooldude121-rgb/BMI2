@@ -61,13 +61,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const isAdmin = true; // hardcoded until role-based access is wired
-  const battleCardRef = useRef<HTMLDivElement>(null);
+  const battleCardRef      = useRef<HTMLDivElement>(null);
   const revenueTimelineRef = useRef<HTMLDivElement>(null);
-  const overviewRef    = useRef<HTMLDivElement>(null);
-  const aiInsightsRef  = useRef<HTMLDivElement>(null);
-  const peopleRef      = useRef<HTMLDivElement>(null);
-  const timelineRef    = useRef<HTMLDivElement>(null);
-  const filesNotesRef  = useRef<HTMLDivElement>(null);
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
   const [loading, setLoading] = useState(true);
@@ -114,6 +109,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     dealType: '',
     stakeholders: [] as any[],
     dealValueHistory: [] as DealValueHistoryEntry[],
+    salesDriveFolder: '',
+    agreementUrl: '',
+    accountModuleSetup: '',
+    clientDiscovers: '',
+    discoveryDate: '',
   });
 
   useEffect(() => {
@@ -191,6 +191,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           dealType: data.deal_type || '',
           stakeholders: Array.isArray(data.stakeholders) ? data.stakeholders : [],
           dealValueHistory: Array.isArray(data.value_history) ? data.value_history : [],
+          salesDriveFolder: data.sales_drive_folder || '',
+          agreementUrl: data.agreement_url || '',
+          accountModuleSetup: data.account_module_setup || '',
+          clientDiscovers: data.client_discovers || '',
+          discoveryDate: data.discovery_date ? data.discovery_date.split('T')[0] : '',
         });
       })
       .catch((err) => setFetchError(err.message ?? 'Failed to load deal'))
@@ -265,9 +270,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const activeRevenueSchedule = savedRevenueSchedule ?? seedRevenueSchedule;
 
   const handleViewRevenue = () => {
-    setTimeout(() => {
-      revenueTimelineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    setActiveTab('overview');
   };
 
   // Silently persist computed momentum_score to the DB
@@ -312,45 +315,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
-    if (tabId === 'overview') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    const refMap: Record<string, React.RefObject<HTMLDivElement>> = {
-      'ai-insights': aiInsightsRef,
-      'people':      peopleRef,
-      'timeline':    timelineRef,
-      'files-notes': filesNotesRef,
-    };
-    setTimeout(() => {
-      refMap[tabId]?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // Scrollspy — update activeTab as the user scrolls
-  useEffect(() => {
-    const sectionRefs: [string, React.RefObject<HTMLDivElement>][] = [
-      ['ai-insights', aiInsightsRef],
-      ['people',      peopleRef],
-      ['timeline',    timelineRef],
-      ['files-notes', filesNotesRef],
-    ];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const match = sectionRefs.find(([, ref]) => ref.current === entry.target);
-            if (match) setActiveTab(match[0]);
-          }
-        }
-      },
-      { rootMargin: '-10% 0px -85% 0px', threshold: 0 },
-    );
-    sectionRefs.forEach(([, ref]) => {
-      if (ref.current) observer.observe(ref.current);
-    });
-    return () => observer.disconnect();
-  }, []);
 
   const aiIntelligenceData = {
     winProbability: deal.probability || 67,
@@ -911,9 +877,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const handleViewBattleCard = (competitor: string) => {
     setExpandedBattleCard(competitor.toLowerCase());
-    setTimeout(() => {
-      battleCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
+    setActiveTab('overview');
   };
 
   const handleViewAccount = () => {
@@ -1021,11 +985,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             totalCount: actions.length,
           };
         })()}
-        onViewAllActions={() => {
-          setTimeout(() => {
-            aiInsightsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 50);
-        }}
+        onViewAllActions={() => handleTabClick('ai-insights')}
         healthScoreFactors={aiIntelligenceData.scoreBreakdown}
         daysSinceContact={5}
       />
@@ -1084,30 +1044,29 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         );
       })()}
 
-      {/* Main Content */}
+      {/* Main Content — tab pages */}
       <div className="max-w-[1920px] mx-auto px-0 pt-2 pb-8">
-        <div ref={overviewRef} aria-hidden="true" />
 
-        {/* Deal Info — shown at top of Overview section */}
-        <DealDetailsPanel
-          deal={deal}
-          stageHistory={stageHistory}
-          competitors={accountData.competitors}
-          expandedBattleCard={expandedBattleCard}
-          isAdmin={isAdmin}
-          battleCardRef={battleCardRef}
-          revenueSchedule={activeRevenueSchedule}
-          onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
-          revenueTimelineRef={revenueTimelineRef}
-          onDealUpdated={(updates) => setDeal((prev: any) => ({ ...prev, ...updates }))}
-        />
+        {/* ── Overview ── */}
+        {activeTab === 'overview' && (
+          <DealDetailsPanel
+            deal={deal}
+            stageHistory={stageHistory}
+            competitors={accountData.competitors}
+            expandedBattleCard={expandedBattleCard}
+            isAdmin={isAdmin}
+            battleCardRef={battleCardRef}
+            revenueSchedule={activeRevenueSchedule}
+            onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
+            revenueTimelineRef={revenueTimelineRef}
+            onDealUpdated={(updates) => setDeal((prev: any) => ({ ...prev, ...updates }))}
+          />
+        )}
 
-        <div className="flex items-start gap-6">
-          {/* Left Column */}
-          <div className="flex-1 min-w-0 space-y-3">
-
-            {/* AI Insights */}
-            <div ref={aiInsightsRef}>
+        {/* ── AI Insights — two-column with right sidebar ── */}
+        {activeTab === 'ai-insights' && (
+          <div className="flex items-start gap-6">
+            <div className="flex-1 min-w-0">
               <AIDealIntelligence
                 {...aiIntelligenceData}
                 winProbAI={aiIntelligenceData.winProbAI}
@@ -1119,58 +1078,59 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                 onViewBattleCard={handleViewBattleCard}
               />
             </div>
-
-            {/* People */}
-            <div ref={peopleRef} className="space-y-6">
-              <DealAccountContacts
-                account={accountData}
-                contacts={contacts}
-                hrmsConnection={hrmsConnection}
-                dataQuality={{ accuracy: sidebarData.dataSources.accuracy, lastEnriched: sidebarData.dataSources.lastEnriched }}
-                onViewAccount={handleViewAccount}
-                onAddToHRMS={handleAddToHRMS}
-                onFindCEO={() => setShowFindCEO(true)}
-                onRequestIntro={handleRequestIntro}
-                onAddContact={(role) => {
-                  setPreSelectedContactRole(role || '');
-                  setShowAddContact(true);
-                }}
-                onEmail={handleSendEmail}
-                onCall={() => setShowCallLog(true)}
-              />
-              <BuyingCommitteeMap
-                contacts={contacts}
-                onAddContact={(role) => {
-                  setPreSelectedContactRole(role || '');
-                  setShowAddContact(true);
-                }}
-              />
+            <div className="w-[380px] shrink-0 sticky top-20 max-h-[calc(100vh-80px)] overflow-y-auto scrollbar-none space-y-3">
+              <DealHealthScorePanel formData={healthFormData} subtitle="Based on current deal completeness" />
+              <DealRightSidebar {...sidebarData} />
             </div>
+          </div>
+        )}
 
-            {/* Timeline */}
-            <div ref={timelineRef}>
-              <DealActivityTimeline
-                activities={activities}
-                daysSinceLastContact={5}
-                contacts={contacts.map(c => ({ id: c.id, name: c.name }))}
-              />
-            </div>
+        {/* ── People ── */}
+        {activeTab === 'people' && (
+          <div className="space-y-6">
+            <DealAccountContacts
+              account={accountData}
+              contacts={contacts}
+              hrmsConnection={hrmsConnection}
+              dataQuality={{ accuracy: sidebarData.dataSources.accuracy, lastEnriched: sidebarData.dataSources.lastEnriched }}
+              onViewAccount={handleViewAccount}
+              onAddToHRMS={handleAddToHRMS}
+              onFindCEO={() => setShowFindCEO(true)}
+              onRequestIntro={handleRequestIntro}
+              onAddContact={(role) => {
+                setPreSelectedContactRole(role || '');
+                setShowAddContact(true);
+              }}
+              onEmail={handleSendEmail}
+              onCall={() => setShowCallLog(true)}
+            />
+            <BuyingCommitteeMap
+              contacts={contacts}
+              onAddContact={(role) => {
+                setPreSelectedContactRole(role || '');
+                setShowAddContact(true);
+              }}
+            />
+          </div>
+        )}
 
-            {/* Files & Notes */}
-            <div ref={filesNotesRef}>
-              <DealNotesFiles notes={notes} files={files} />
-            </div>
+        {/* ── Timeline ── */}
+        {activeTab === 'timeline' && (
+          <DealActivityTimeline
+            activities={activities}
+            daysSinceLastContact={5}
+            contacts={contacts.map(c => ({ id: c.id, name: c.name }))}
+          />
+        )}
 
-            {/* Data Attribution — collapsible, persists in localStorage */}
+        {/* ── Files & Notes ── */}
+        {activeTab === 'files-notes' && (
+          <div className="space-y-6">
+            <DealNotesFiles notes={notes} files={files} />
             <DealDataAttribution dataSources={sidebarData.dataSources} />
           </div>
+        )}
 
-          {/* Right Sidebar — sticky, fills viewport height below top bar (item 24) */}
-          <div className="w-[380px] shrink-0 sticky top-20 max-h-[calc(100vh-80px)] overflow-y-auto space-y-3">
-            <DealHealthScorePanel formData={healthFormData} subtitle="Based on current deal completeness" />
-            <DealRightSidebar {...sidebarData} />
-          </div>
-        </div>
       </div>
 
       {/* Modals */}

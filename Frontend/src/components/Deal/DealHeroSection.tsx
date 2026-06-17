@@ -3,7 +3,7 @@ import {
   Edit, Building2, Sparkles,
   Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown,
   ChevronDown, ChevronUp, DollarSign, AlertTriangle,
-  Copy, GitMerge, Archive, FileDown, Share2, MoreHorizontal, Keyboard, X,
+  MoreHorizontal, X,
   StickyNote, ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -78,14 +78,6 @@ function getDaysAwayDisplay(daysAway: number): { label: string; colorHex: string
   return { label: `${daysAway} days away`, colorHex: '#16A34A' };
 }
 
-// Action bar "..." items
-const ACTION_BAR_MORE_ITEMS = [
-  { id: 'clone',      icon: Copy,     label: 'Clone Deal'      },
-  { id: 'merge',      icon: GitMerge, label: 'Merge Deal'      },
-  { id: 'archive',    icon: Archive,  label: 'Archive Deal'    },
-  { id: 'export-pdf', icon: FileDown, label: 'Export PDF'      },
-  { id: 'share',      icon: Share2,   label: 'Share Deal Link' },
-];
 
 // ── Keyboard shortcut badge ───────────────────────────────────────────────────
 
@@ -200,8 +192,6 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   const ownerDropdownRef = useRef<HTMLDivElement>(null);
 
   // Action bar "..." dropdown
-  const [showActionBarMore, setShowActionBarMore] = useState(false);
-  const actionBarMoreRef = useRef<HTMLDivElement>(null);
 
   // Move-stage tooltip
   const [showStageTooltip, setShowStageTooltip] = useState(false);
@@ -222,16 +212,6 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showOwnerDropdown]);
 
-  useEffect(() => {
-    if (!showActionBarMore) return;
-    const handler = (e: MouseEvent) => {
-      if (actionBarMoreRef.current && !actionBarMoreRef.current.contains(e.target as Node)) {
-        setShowActionBarMore(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [showActionBarMore]);
 
   // ── Owner helpers ──────────────────────────────────────────────────────────
 
@@ -767,60 +747,6 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               <KbdBadge char="U" />
             </button>
 
-            {/* Divider */}
-            <div className="w-px h-6 bg-gray-300 mx-2 flex-shrink-0" />
-
-            {/* ── Utility group ── */}
-            <div className="relative flex-shrink-0" ref={actionBarMoreRef}>
-              <button
-                onClick={() => setShowActionBarMore(v => !v)}
-                className="rounded-md px-2 py-1.5 text-gray-500 hover:bg-gray-100 transition-colors"
-                title="More actions"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-              {showActionBarMore && (
-                <div className="absolute left-0 top-full mt-1.5 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden py-1">
-                  {ACTION_BAR_MORE_ITEMS.map(item => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => { onMoreAction(item.id); setShowActionBarMore(false); }}
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
-                      >
-                        <Icon className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <button
-              onClick={onShowShortcuts}
-              className="hidden lg:flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors px-1 whitespace-nowrap flex-shrink-0"
-            >
-              <Keyboard className="h-3.5 w-3.5" />
-              Shortcuts
-            </button>
-
-            {/* Divider */}
-            <div className="w-px h-6 bg-gray-300 mx-2 flex-shrink-0" />
-
-            {/* ── Won / Lost ── */}
-            <button
-              onClick={() => onMoreAction('mark-won')}
-              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline px-2 whitespace-nowrap flex-shrink-0 transition-colors"
-            >
-              ✓ Won
-            </button>
-            <button
-              onClick={() => onMoreAction('mark-lost')}
-              className="text-xs font-medium text-red-500 hover:text-red-600 hover:underline px-2 whitespace-nowrap flex-shrink-0 transition-colors"
-            >
-              ✗ Lost
-            </button>
 
           </div>
 
