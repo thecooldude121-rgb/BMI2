@@ -1,36 +1,84 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Upload, Search, Target, Users, Star, TrendingUp,
-  ChevronDown, MoreVertical, CheckCircle, Mail, Phone, Eye,
-  UserPlus, Archive, RotateCcw, Bot, Link as LinkIcon
+  Plus, Upload, Search, ChevronDown, MoreVertical, CheckCircle, Mail, Phone, Eye,
+  UserPlus, Link as LinkIcon, X
 } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
+import type { Lead } from '../../types/lead';
 
-interface Lead {
-  id: string;
-  name: string;
-  company: string;
-  position: string;
-  email: string;
-  phone: string;
-  source: string;
-  sourceIcon: string;
-  sourceDetail?: string;
-  aiScore: number;
-  status: 'new' | 'contacted' | 'qualified' | 'lost';
-  aiInsight?: string;
-  addedDate: string;
-  lastContact: string;
-  nextAction?: string;
-  lostReason?: string;
-  lostDate?: string;
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const getLeadName = (lead: Lead) =>
+  lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
+
+const getLeadScore = (lead: Lead) => lead.ai_score ?? lead.score;
+
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return 'Never';
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+};
+
+const getScoreColor = (score: number) => {
+  if (score >= 80) return 'text-green-800 bg-green-100 border-green-200';
+  if (score >= 60) return 'text-green-700 bg-green-50 border-green-200';
+  return 'text-orange-700 bg-orange-50 border-orange-200';
+};
+
+const getStatusBadge = (status: string) => {
+  const colors: Record<string, string> = {
+    new: 'bg-blue-500 text-white',
+    contacted: 'bg-orange-500 text-white',
+    qualified: 'bg-green-500 text-white',
+    lost: 'bg-red-500 text-white',
+    working: 'bg-orange-400 text-white',
+    nurturing: 'bg-purple-500 text-white',
+    unqualified: 'bg-gray-400 text-white',
+    converted: 'bg-teal-500 text-white',
+  };
+  return colors[status] || 'bg-gray-500 text-white';
+};
+
+const getSourceInfo = (source?: string) => {
+  const s = (source || '').toLowerCase();
+  if (s.includes('lead gen') || s.includes('apollo') || s.includes('zoom'))
+    return { icon: '🎯', color: 'text-blue-600 bg-blue-50' };
+  if (s.includes('hrms') || s.includes('recruit'))
+    return { icon: '🏢', color: 'text-yellow-600 bg-yellow-50' };
+  if (s.includes('website') || s.includes('web') || s.includes('form'))
+    return { icon: '🌐', color: 'text-green-600 bg-green-50' };
+  if (s.includes('manual') || s.includes('trade') || s.includes('conference') || s.includes('referral'))
+    return { icon: '✍️', color: 'text-gray-600 bg-gray-50' };
+  return { icon: '📋', color: 'text-gray-600 bg-gray-50' };
+};
+
+const getStarRating = (score: number) => '⭐'.repeat(Math.min(5, Math.round((score / 100) * 5)));
+
+const SORT_OPTIONS = [
+  { value: 'score-high', label: 'Score (High to Low)' },
+  { value: 'score-low', label: 'Score (Low to High)' },
+  { value: 'name', label: 'Name (A-Z)' },
+  { value: 'date-new', label: 'Date (Newest)' },
+];
+
+const KANBAN_COLUMNS: Array<{ id: Lead['status']; label: string; headerColor: string }> = [
+  { id: 'new', label: 'New', headerColor: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { id: 'contacted', label: 'Contacted', headerColor: 'bg-orange-100 text-orange-800 border-orange-200' },
+  { id: 'qualified', label: 'Qualified', headerColor: 'bg-green-100 text-green-800 border-green-200' },
+  { id: 'lost', label: 'Lost', headerColor: 'bg-red-100 text-red-800 border-red-200' },
+];
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { leads: contextLeads } = useLeads();
+  const { leads: contextLeads, fetchLeads, loading, updateLead, deleteLead } = useLeads();
 
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -38,230 +86,85 @@ const LeadsPage: React.FC = () => {
   const [scoreFilter, setScoreFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('score-high');
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showSourceDropdown, setShowSourceDropdown] = useState(false);
-  const [showScoreDropdown, setShowScoreDropdown] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBulkAssignDropdown, setShowBulkAssignDropdown] = useState(false);
   const [showBulkStatusDropdown, setShowBulkStatusDropdown] = useState(false);
   const [selectedLeadForAction, setSelectedLeadForAction] = useState<Lead | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'kanban'>('list');
-  const [pageLimit, setPageLimit] = useState(20);
   const [displayedLeadsCount, setDisplayedLeadsCount] = useState(20);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  // Mock data for demonstration - 45 total leads
-  const mockLeads: Lead[] = [
-    {
-      id: '1',
-      name: 'John Smith',
-      company: 'Acme Corp',
-      position: 'VP Sales',
-      email: 'john@acme.com',
-      phone: '+1 555-0123',
-      source: '🎯 Lead Gen',
-      sourceIcon: '🎯',
-      sourceDetail: 'Apollo.io',
-      aiScore: 85,
-      status: 'new',
-      aiInsight: '🤖 High potential - Similar to past wins',
-      addedDate: 'Nov 15, 2025',
-      lastContact: 'Never'
-    },
-    {
-      id: '2',
-      name: 'Sarah Lee',
-      company: 'TechStart Inc',
-      position: 'CFO',
-      email: 'sarah@techstart.com',
-      phone: '+1 555-0456',
-      source: '🏢 HRMS',
-      sourceIcon: '🏢',
-      sourceDetail: 'Recruitment',
-      aiScore: 92,
-      status: 'new',
-      aiInsight: '🤖 Excellent fit - Recruited from this company',
-      addedDate: 'Nov 14, 2025',
-      lastContact: 'Never'
-    },
-    {
-      id: '3',
-      name: 'Mike Chen',
-      company: 'BigCo Enterprise',
-      position: 'Director',
-      email: 'mike@bigco.com',
-      phone: '+1 555-0789',
-      source: '✍️ Manual',
-      sourceIcon: '✍️',
-      sourceDetail: 'Trade Show',
-      aiScore: 67,
-      status: 'contacted',
-      lastContact: 'Nov 14 (Email sent)',
-      nextAction: 'Follow up call (Due: Nov 16)',
-      addedDate: 'Nov 12, 2025'
-    },
-    {
-      id: '4',
-      name: 'Lisa Wong',
-      company: 'StartCo',
-      position: 'CEO',
-      email: 'lisa@startco.com',
-      phone: '+1 555-0321',
-      source: '🌐 Website',
-      sourceIcon: '🌐',
-      sourceDetail: 'Contact Form',
-      aiScore: 74,
-      status: 'qualified',
-      aiInsight: '🤖 Ready to convert - High engagement',
-      lastContact: 'Nov 13 (Called, 20 mins)',
-      nextAction: 'Send proposal (Due: Nov 15)',
-      addedDate: 'Nov 10, 2025'
-    },
-    {
-      id: '5',
-      name: 'David Kumar',
-      company: 'InnovateLabs',
-      position: 'CTO',
-      email: 'david@innovatelabs.com',
-      phone: '+1 555-0654',
-      source: '🎯 Lead Gen',
-      sourceIcon: '🎯',
-      sourceDetail: 'Apollo.io',
-      aiScore: 58,
-      status: 'lost',
-      lostReason: 'Budget constraints',
-      lostDate: 'Nov 10, 2025',
-      addedDate: 'Nov 5, 2025',
-      lastContact: 'Nov 8 (Call)'
-    },
-    // Additional leads to reach 45 total (12 new today, 8 hot leads 80+, 25 imported this week)
-    { id: '6', name: 'Amanda Rodriguez', company: 'CloudTech Solutions', position: 'CTO', email: 'amanda@cloudtech.com', phone: '+1 555-1001', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 88, status: 'new', aiInsight: '🤖 Strong technical fit - Cloud infrastructure expert', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '7', name: 'Robert Chang', company: 'FinanceHub', position: 'CFO', email: 'robert@financehub.com', phone: '+1 555-1002', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 91, status: 'new', aiInsight: '🤖 Perfect match - Financial services background', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '8', name: 'Jennifer Liu', company: 'DataCorp', position: 'VP Engineering', email: 'jennifer@datacorp.com', phone: '+1 555-1003', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 83, status: 'new', aiInsight: '🤖 High potential - Data analytics focus', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '9', name: 'Michael Torres', company: 'RetailMax', position: 'Director of IT', email: 'michael@retailmax.com', phone: '+1 555-1004', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 79, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '10', name: 'Patricia Kim', company: 'HealthPlus', position: 'COO', email: 'patricia@healthplus.com', phone: '+1 555-1005', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 86, status: 'new', aiInsight: '🤖 Healthcare vertical leader', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '11', name: 'James Wilson', company: 'TechVentures', position: 'CEO', email: 'james@techventures.com', phone: '+1 555-1006', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Conference', aiScore: 72, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '12', name: 'Linda Martinez', company: 'SmartSystems', position: 'VP Sales', email: 'linda@smartsystems.com', phone: '+1 555-1007', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 81, status: 'new', aiInsight: '🤖 Enterprise sales expert', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '13', name: 'Thomas Anderson', company: 'GlobalTech', position: 'CIO', email: 'thomas@globaltech.com', phone: '+1 555-1008', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 77, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '14', name: 'Susan Davis', company: 'InnovateCo', position: 'Director Product', email: 'susan@innovateco.com', phone: '+1 555-1009', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 84, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '15', name: 'Daniel Brown', company: 'FutureSoft', position: 'VP Technology', email: 'daniel@futuresoft.com', phone: '+1 555-1010', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 68, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '16', name: 'Maria Garcia', company: 'EcoSolutions', position: 'CEO', email: 'maria@ecosolutions.com', phone: '+1 555-1011', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 75, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '17', name: 'Kevin Johnson', company: 'AutomationX', position: 'CTO', email: 'kevin@automationx.com', phone: '+1 555-1012', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Trade Show', aiScore: 70, status: 'new', addedDate: 'Nov 15, 2025', lastContact: 'Never' },
-    { id: '18', name: 'Nancy White', company: 'SecurityFirst', position: 'VP Security', email: 'nancy@securityfirst.com', phone: '+1 555-1013', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 82, status: 'contacted', lastContact: 'Nov 14 (Email)', nextAction: 'Demo call (Due: Nov 18)', addedDate: 'Nov 13, 2025' },
-    { id: '19', name: 'Christopher Lee', company: 'MediaGroup', position: 'Director Digital', email: 'chris@mediagroup.com', phone: '+1 555-1014', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 65, status: 'contacted', lastContact: 'Nov 13 (Called)', nextAction: 'Follow up (Due: Nov 17)', addedDate: 'Nov 12, 2025' },
-    { id: '20', name: 'Barbara Taylor', company: 'LogiTrans', position: 'COO', email: 'barbara@logitrans.com', phone: '+1 555-1015', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 71, status: 'contacted', lastContact: 'Nov 12 (Email)', nextAction: 'Schedule meeting (Due: Nov 16)', addedDate: 'Nov 11, 2025' },
-    { id: '21', name: 'Matthew Harris', company: 'BioMed Research', position: 'CEO', email: 'matthew@biomed.com', phone: '+1 555-1016', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 73, status: 'qualified', aiInsight: '🤖 Ready for proposal', lastContact: 'Nov 11 (Meeting, 45 mins)', nextAction: 'Send contract (Due: Nov 16)', addedDate: 'Nov 10, 2025' },
-    { id: '22', name: 'Elizabeth Clark', company: 'ManufacturingPro', position: 'VP Operations', email: 'elizabeth@mfgpro.com', phone: '+1 555-1017', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Referral', aiScore: 76, status: 'qualified', lastContact: 'Nov 10 (Called)', nextAction: 'Final review (Due: Nov 15)', addedDate: 'Nov 9, 2025' },
-    { id: '23', name: 'Joseph Walker', company: 'EduTech Solutions', position: 'CTO', email: 'joseph@edutech.com', phone: '+1 555-1018', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 69, status: 'contacted', lastContact: 'Nov 14 (Email)', addedDate: 'Nov 13, 2025' },
-    { id: '24', name: 'Margaret Hall', company: 'ConsultPro', position: 'Managing Partner', email: 'margaret@consultpro.com', phone: '+1 555-1019', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 78, status: 'qualified', lastContact: 'Nov 12 (Meeting)', nextAction: 'Proposal review (Due: Nov 16)', addedDate: 'Nov 11, 2025' },
-    { id: '25', name: 'Steven Young', company: 'NetworkSys', position: 'Director Infrastructure', email: 'steven@networksys.com', phone: '+1 555-1020', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 64, status: 'contacted', lastContact: 'Nov 13 (Called)', addedDate: 'Nov 12, 2025' },
-    { id: '26', name: 'Dorothy King', company: 'PaymentHub', position: 'CFO', email: 'dorothy@paymenthub.com', phone: '+1 555-1021', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 80, status: 'qualified', lastContact: 'Nov 11 (Meeting)', addedDate: 'Nov 10, 2025' },
-    { id: '27', name: 'Paul Wright', company: 'DevOps Inc', position: 'VP Engineering', email: 'paul@devops.com', phone: '+1 555-1022', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Conference', aiScore: 72, status: 'contacted', lastContact: 'Nov 12 (Email)', addedDate: 'Nov 11, 2025' },
-    { id: '28', name: 'Carol Green', company: 'MarketingMax', position: 'CMO', email: 'carol@marketingmax.com', phone: '+1 555-1023', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 66, status: 'contacted', lastContact: 'Nov 13 (Email)', addedDate: 'Nov 12, 2025' },
-    { id: '29', name: 'George Adams', company: 'SupplyChain Solutions', position: 'COO', email: 'george@supplysolutions.com', phone: '+1 555-1024', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 75, status: 'contacted', lastContact: 'Nov 14 (Called)', addedDate: 'Nov 13, 2025' },
-    { id: '30', name: 'Sandra Baker', company: 'AnalyticsPro', position: 'Director BI', email: 'sandra@analyticspro.com', phone: '+1 555-1025', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 68, status: 'contacted', lastContact: 'Nov 12 (Email)', addedDate: 'Nov 11, 2025' },
-    { id: '31', name: 'Kenneth Nelson', company: 'EnterpriseTech', position: 'CEO', email: 'kenneth@enterprisetech.com', phone: '+1 555-1026', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 71, status: 'contacted', lastContact: 'Nov 13 (Called)', addedDate: 'Nov 12, 2025' },
-    { id: '32', name: 'Helen Carter', company: 'CloudStorage Inc', position: 'CTO', email: 'helen@cloudstorage.com', phone: '+1 555-1027', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 73, status: 'contacted', lastContact: 'Nov 14 (Email)', addedDate: 'Nov 13, 2025' },
-    { id: '33', name: 'Brian Mitchell', company: 'SaaSVentures', position: 'VP Product', email: 'brian@saasventures.com', phone: '+1 555-1028', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Referral', aiScore: 67, status: 'contacted', lastContact: 'Nov 13 (Called)', addedDate: 'Nov 12, 2025' },
-    { id: '34', name: 'Lisa Roberts', company: 'MobileTech', position: 'Director Mobile', email: 'lisa.r@mobiletech.com', phone: '+1 555-1029', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 70, status: 'contacted', lastContact: 'Nov 12 (Email)', addedDate: 'Nov 11, 2025' },
-    { id: '35', name: 'Edward Turner', company: 'APIServices', position: 'CTO', email: 'edward@apiservices.com', phone: '+1 555-1030', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 74, status: 'contacted', lastContact: 'Nov 13 (Called)', addedDate: 'Nov 12, 2025' },
-    { id: '36', name: 'Michelle Phillips', company: 'DataWarehouse Co', position: 'VP Data', email: 'michelle@datawarehouse.com', phone: '+1 555-1031', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 69, status: 'contacted', lastContact: 'Nov 14 (Email)', addedDate: 'Nov 13, 2025' },
-    { id: '37', name: 'Donald Campbell', company: 'AILabs', position: 'CEO', email: 'donald@ailabs.com', phone: '+1 555-1032', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Conference', aiScore: 72, status: 'contacted', lastContact: 'Nov 12 (Email)', addedDate: 'Nov 11, 2025' },
-    { id: '38', name: 'Ashley Parker', company: 'CyberDefense', position: 'CISO', email: 'ashley@cyberdefense.com', phone: '+1 555-1033', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 76, status: 'contacted', lastContact: 'Nov 13 (Called)', addedDate: 'Nov 12, 2025' },
-    { id: '39', name: 'Joshua Evans', company: 'BlockchainCo', position: 'CTO', email: 'joshua@blockchainco.com', phone: '+1 555-1034', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 68, status: 'contacted', lastContact: 'Nov 12 (Email)', addedDate: 'Nov 11, 2025' },
-    { id: '40', name: 'Kimberly Edwards', company: 'MLSystems', position: 'VP Research', email: 'kimberly@mlsystems.com', phone: '+1 555-1035', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 71, status: 'contacted', lastContact: 'Nov 13 (Email)', addedDate: 'Nov 12, 2025' },
-    { id: '41', name: 'Ryan Collins', company: 'IoTSolutions', position: 'Director IoT', email: 'ryan@iotsolutions.com', phone: '+1 555-1036', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Trade Show', aiScore: 65, status: 'lost', lostReason: 'Chose competitor', lostDate: 'Nov 12, 2025', addedDate: 'Nov 1, 2025', lastContact: 'Nov 10 (Call)' },
-    { id: '42', name: 'Stephanie Stewart', company: 'GreenEnergy Tech', position: 'CEO', email: 'stephanie@greenenergy.com', phone: '+1 555-1037', source: '🏢 HRMS', sourceIcon: '🏢', sourceDetail: 'Recruitment', aiScore: 63, status: 'lost', lostReason: 'Not interested', lostDate: 'Nov 11, 2025', addedDate: 'Oct 28, 2025', lastContact: 'Nov 9 (Email)' },
-    { id: '43', name: 'Jason Morris', company: 'RoboticsSys', position: 'CTO', email: 'jason@roboticssys.com', phone: '+1 555-1038', source: '🌐 Website', sourceIcon: '🌐', sourceDetail: 'Contact Form', aiScore: 61, status: 'lost', lostReason: 'Timeline too long', lostDate: 'Nov 9, 2025', addedDate: 'Oct 25, 2025', lastContact: 'Nov 7 (Call)' },
-    { id: '44', name: 'Angela Rogers', company: 'VRExperience', position: 'VP Product', email: 'angela@vrexperience.com', phone: '+1 555-1039', source: '🎯 Lead Gen', sourceIcon: '🎯', sourceDetail: 'Apollo.io', aiScore: 59, status: 'lost', lostReason: 'Budget constraints', lostDate: 'Nov 8, 2025', addedDate: 'Oct 22, 2025', lastContact: 'Nov 5 (Email)' },
-    { id: '45', name: 'Nicholas Reed', company: 'ARTech Inc', position: 'Director Innovation', email: 'nicholas@artech.com', phone: '+1 555-1040', source: '✍️ Manual', sourceIcon: '✍️', sourceDetail: 'Referral', aiScore: 60, status: 'lost', lostReason: 'Internal solution chosen', lostDate: 'Nov 7, 2025', addedDate: 'Oct 20, 2025', lastContact: 'Nov 4 (Call)' }
-  ];
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
 
-  const [leads, setLeads] = useState<Lead[]>(mockLeads);
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
-  // Stats calculations
+  // ── Stats ────────────────────────────────────────────────────────────────
+
+  const today = new Date().toDateString();
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+
   const stats = {
-    total: leads.length,
-    newToday: leads.filter(l => l.addedDate.includes('Nov 15')).length,
-    hot: leads.filter(l => l.aiScore >= 80).length,
-    importedThisWeek: leads.filter(l =>
-      new Date(l.addedDate).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000
-    ).length
+    total: contextLeads.length,
+    newToday: contextLeads.filter(l => new Date(l.created_at).toDateString() === today).length,
+    hot: contextLeads.filter(l => getLeadScore(l) >= 80).length,
+    importedThisWeek: contextLeads.filter(l => {
+      const src = (l.source || '').toLowerCase();
+      return new Date(l.created_at) >= weekStart &&
+        (src.includes('lead gen') || src.includes('hrms') || src.includes('apollo'));
+    }).length,
   };
 
-  // Filter leads
-  const filteredLeads = leads.filter(lead => {
+  // ── Filtering & sorting ───────────────────────────────────────────────────
+
+  const filteredLeads = contextLeads.filter(lead => {
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-    const matchesSource = sourceFilter === 'all' || lead.source.includes(sourceFilter);
+    const matchesSource = sourceFilter === 'all' ||
+      (lead.source || '').toLowerCase().includes(sourceFilter.toLowerCase());
+    const score = getLeadScore(lead);
     const matchesScore =
       scoreFilter === 'all' ||
-      (scoreFilter === '80-100' && lead.aiScore >= 80) ||
-      (scoreFilter === '60-79' && lead.aiScore >= 60 && lead.aiScore < 80) ||
-      (scoreFilter === 'below-60' && lead.aiScore < 60);
+      (scoreFilter === '80-100' && score >= 80) ||
+      (scoreFilter === '60-79' && score >= 60 && score < 80) ||
+      (scoreFilter === 'below-60' && score < 60);
+    const name = getLeadName(lead).toLowerCase();
     const matchesSearch = searchQuery === '' ||
-      lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase());
-
+      name.includes(searchQuery.toLowerCase()) ||
+      (lead.company || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (lead.email || '').toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSource && matchesScore && matchesSearch;
   });
 
-  // Sort leads
   const sortedLeads = [...filteredLeads].sort((a, b) => {
-    if (sortBy === 'score-high') return b.aiScore - a.aiScore;
-    if (sortBy === 'score-low') return a.aiScore - b.aiScore;
-    if (sortBy === 'name') return a.name.localeCompare(b.name);
-    if (sortBy === 'date-new') return new Date(b.addedDate).getTime() - new Date(a.addedDate).getTime();
+    if (sortBy === 'score-high') return getLeadScore(b) - getLeadScore(a);
+    if (sortBy === 'score-low') return getLeadScore(a) - getLeadScore(b);
+    if (sortBy === 'name') return getLeadName(a).localeCompare(getLeadName(b));
+    if (sortBy === 'date-new') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     return 0;
   });
 
+  const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label ?? 'Score (High to Low)';
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+
   const handleSelectAll = () => {
-    if (selectedLeads.length === sortedLeads.length) {
-      setSelectedLeads([]);
-    } else {
-      setSelectedLeads(sortedLeads.map(l => l.id));
-    }
+    setSelectedLeads(selectedLeads.length === sortedLeads.length ? [] : sortedLeads.map(l => l.id));
   };
 
   const handleSelectLead = (id: string) => {
-    setSelectedLeads(prev =>
-      prev.includes(id) ? prev.filter(lid => lid !== id) : [...prev, id]
-    );
+    setSelectedLeads(prev => prev.includes(id) ? prev.filter(lid => lid !== id) : [...prev, id]);
   };
 
-  const getStarRating = (score: number) => {
-    const stars = Math.round((score / 100) * 5);
-    return '⭐'.repeat(stars);
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-800 bg-green-100 border-green-200';
-    if (score >= 60) return 'text-green-700 bg-green-50 border-green-200';
-    return 'text-orange-700 bg-orange-50 border-orange-200';
-  };
-
-  const getStatusBadge = (status: string) => {
-    const colors = {
-      new: 'bg-blue-500 text-white',
-      contacted: 'bg-orange-500 text-white',
-      qualified: 'bg-green-500 text-white',
-      lost: 'bg-red-500 text-white'
-    };
-    return colors[status as keyof typeof colors] || 'bg-gray-500 text-white';
-  };
-
-  const getSourceIcon = (source: string) => {
-    if (source.includes('Lead Gen')) return { icon: '🎯', color: 'text-blue-600 bg-blue-50' };
-    if (source.includes('HRMS')) return { icon: '🏢', color: 'text-yellow-600 bg-yellow-50' };
-    if (source.includes('Manual')) return { icon: '✍️', color: 'text-gray-600 bg-gray-50' };
-    if (source.includes('Website')) return { icon: '🌐', color: 'text-green-600 bg-green-50' };
-    return { icon: '📋', color: 'text-gray-600 bg-gray-50' };
-  };
-
-  // Handler functions for interactions
   const handleContactLead = (lead: Lead) => {
     setSelectedLeadForAction(lead);
     setShowContactModal(true);
@@ -280,44 +183,44 @@ const LeadsPage: React.FC = () => {
   };
 
   const handleArchiveLead = (leadId: string) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: 'lost' as const } : l));
-    alert('Lead archived');
+    updateLead(leadId, { status: 'lost' as Lead['status'] });
+    showToast('Lead archived');
   };
 
   const handleReactivateLead = (leadId: string) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status: 'new' as const } : l));
-    alert('Lead reactivated');
+    updateLead(leadId, { status: 'new' as Lead['status'] });
+    showToast('Lead reactivated');
   };
 
   const handleBulkDelete = () => {
-    if (window.confirm(`Delete ${selectedLeads.length} leads?`)) {
-      setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
-      setSelectedLeads([]);
-      setShowDeleteModal(false);
-    }
+    const count = selectedLeads.length;
+    selectedLeads.forEach(id => deleteLead(id));
+    setSelectedLeads([]);
+    setConfirmDelete(false);
+    showToast(`${count} lead(s) deleted`);
   };
 
   const handleBulkAssign = (teamMember: string) => {
-    alert(`Assigned ${selectedLeads.length} leads to ${teamMember}`);
+    showToast(`Assigned ${selectedLeads.length} leads to ${teamMember}`);
     setShowBulkAssignDropdown(false);
     setSelectedLeads([]);
   };
 
   const handleBulkStatusChange = (newStatus: string) => {
-    setLeads(prev => prev.map(l =>
-      selectedLeads.includes(l.id) ? { ...l, status: newStatus as any } : l
-    ));
+    selectedLeads.forEach(id => updateLead(id, { status: newStatus as Lead['status'] }));
+    showToast(`Changed status for ${selectedLeads.length} leads to ${newStatus}`);
     setShowBulkStatusDropdown(false);
     setSelectedLeads([]);
-    alert(`Changed status for ${selectedLeads.length} leads to ${newStatus}`);
   };
 
   const handleExport = () => {
+    const leads = contextLeads.filter(l => selectedLeads.includes(l.id));
     const csvContent = [
       ['Name', 'Company', 'Email', 'Phone', 'Status', 'Score'],
-      ...leads.filter(l => selectedLeads.includes(l.id)).map(l => [
-        l.name, l.company, l.email, l.phone, l.status, l.aiScore.toString()
-      ])
+      ...leads.map(l => [
+        getLeadName(l), l.company || '', l.email || '', l.phone || '',
+        l.status, String(getLeadScore(l)),
+      ]),
     ].map(row => row.join(',')).join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -329,21 +232,164 @@ const LeadsPage: React.FC = () => {
     setSelectedLeads([]);
   };
 
-  const handleLoadMore = () => {
-    setDisplayedLeadsCount(prev => Math.min(prev + 20, sortedLeads.length));
-  };
-
-  const handleViewLeadDetail = (leadId: string) => {
-    navigate(`/crm/leads/${leadId}`);
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const { draggableId, destination } = result;
+    updateLead(draggableId, { status: destination.droppableId as Lead['status'] });
   };
 
   const teamMembers = ['John Doe', 'Jane Smith', 'Mike Johnson', 'Sarah Williams'];
+
+  // ── Action buttons per status ─────────────────────────────────────────────
+
+  const renderRowActions = (lead: Lead) => {
+    const commonView = (
+      <button
+        onClick={() => navigate(`/crm/leads/${lead.id}`)}
+        className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 font-medium"
+      >
+        View
+      </button>
+    );
+    const convertBtn = (
+      <button
+        onClick={() => handleConvertToContact(lead)}
+        className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium"
+      >
+        Convert to Contact
+      </button>
+    );
+
+    if (lead.status === 'new') return (
+      <>
+        <button onClick={() => handleContactLead(lead)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium">Contact</button>
+        {convertBtn}
+        {commonView}
+      </>
+    );
+    if (lead.status === 'contacted') return (
+      <>
+        <button onClick={() => handleContactLead(lead)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium">Follow Up</button>
+        {convertBtn}
+        {commonView}
+      </>
+    );
+    if (lead.status === 'qualified') return <>{convertBtn}{commonView}</>;
+    if (lead.status === 'lost') return (
+      <>
+        <button onClick={() => handleArchiveLead(lead.id)} className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-medium">Archive</button>
+        <button onClick={() => handleReactivateLead(lead.id)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium">Reactivate</button>
+        {commonView}
+      </>
+    );
+    return commonView;
+  };
+
+  // ── Kanban mini-card ──────────────────────────────────────────────────────
+
+  const renderKanbanCard = (lead: Lead, index: number) => (
+    <Draggable key={lead.id} draggableId={lead.id} index={index}>
+      {(provided, snapshot) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.draggableProps}
+          {...provided.dragHandleProps}
+          className={`bg-white rounded-lg border border-gray-200 p-3 mb-2 shadow-sm cursor-grab transition-shadow ${
+            snapshot.isDragging ? 'shadow-lg border-blue-300' : 'hover:shadow-md'
+          }`}
+          onClick={() => navigate(`/crm/leads/${lead.id}`)}
+        >
+          <div className="flex items-start justify-between mb-1.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{getLeadName(lead)}</p>
+              <p className="text-xs text-gray-500 truncate">{lead.company}</p>
+            </div>
+            <span className={`ml-2 text-xs font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${getScoreColor(getLeadScore(lead))}`}>
+              {getLeadScore(lead)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-400 truncate">{lead.position || '—'}</span>
+            <span className="text-sm">{getSourceInfo(lead.source).icon}</span>
+          </div>
+        </div>
+      )}
+    </Draggable>
+  );
+
+  // ── Grid card ─────────────────────────────────────────────────────────────
+
+  const renderGridCard = (lead: Lead) => {
+    const score = getLeadScore(lead);
+    const src = getSourceInfo(lead.source);
+    return (
+      <div key={lead.id} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-gray-900 truncate text-sm">{getLeadName(lead)}</h3>
+            <p className="text-xs text-gray-500 truncate">{lead.position || '—'}</p>
+            <p className="text-xs font-medium text-gray-700 truncate">{lead.company || '—'}</p>
+          </div>
+          <span className={`ml-2 text-base font-bold px-2 py-0.5 rounded-lg border-2 flex-shrink-0 ${getScoreColor(score)}`}>
+            {score}
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mb-2 truncate">{lead.email || '—'}</p>
+        <div className="flex items-center justify-between mt-auto">
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusBadge(lead.status)}`}>
+            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+          </span>
+          <div className="flex items-center space-x-1">
+            <span className={`text-sm p-1 rounded ${src.color}`}>{src.icon}</span>
+            <button
+              onClick={() => navigate(`/crm/leads/${lead.id}`)}
+              className="p-1 hover:bg-gray-100 rounded"
+              title="View details"
+            >
+              <Eye className="h-3.5 w-3.5 text-gray-500" />
+            </button>
+            <button
+              onClick={() => handleConvertToContact(lead)}
+              className="p-1 hover:bg-gray-100 rounded"
+              title="Convert to contact"
+            >
+              <UserPlus className="h-3.5 w-3.5 text-gray-500" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-50">
       <CRMNavigation />
 
-      {/* Header Section */}
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-[60] bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2">
+          <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+          <span className="text-sm">{toast}</span>
+          <button onClick={() => setToast(null)} className="ml-1">
+            <X className="h-4 w-4 opacity-60 hover:opacity-100" />
+          </button>
+        </div>
+      )}
+
+      {/* Confirm bulk delete */}
+      <ConfirmationModal
+        isOpen={confirmDelete}
+        title="Delete Leads"
+        message={`Are you sure you want to delete ${selectedLeads.length} lead(s)? This action cannot be undone.`}
+        confirmLabel="Delete"
+        type="danger"
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
+      {/* Header */}
       <div className="bg-white border-b border-gray-200 px-8 py-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
@@ -382,29 +428,24 @@ const LeadsPage: React.FC = () => {
       {/* Stats Bar */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="grid grid-cols-4 gap-6">
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <div className="text-4xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-600 font-medium mt-1">Total Leads</div>
-          </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <div className="text-4xl font-bold text-gray-900">{stats.newToday}</div>
-            <div className="text-sm text-gray-600 font-medium mt-1">New Today</div>
-          </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <div className="text-4xl font-bold text-gray-900">{stats.hot}</div>
-            <div className="text-sm text-gray-600 font-medium mt-1">Hot Leads</div>
-          </div>
-          <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <div className="text-4xl font-bold text-gray-900">{stats.importedThisWeek}</div>
-            <div className="text-sm text-gray-600 font-medium mt-1">Imported This Wk</div>
-          </div>
+          {[
+            { label: 'Total Leads', value: stats.total },
+            { label: 'New Today', value: stats.newToday },
+            { label: 'Hot Leads', value: stats.hot },
+            { label: 'Imported This Wk', value: stats.importedThisWeek },
+          ].map(stat => (
+            <div key={stat.label} className="bg-white rounded-lg p-5 border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
+              <div className="text-4xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-sm text-gray-600 font-medium mt-1">{stat.label}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Filter & Search Bar */}
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="space-y-4">
-          {/* Filter Chips */}
+          {/* Status filter */}
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium text-gray-700">Status:</span>
             <div className="flex items-center space-x-2">
@@ -413,9 +454,7 @@ const LeadsPage: React.FC = () => {
                   key={status}
                   onClick={() => setStatusFilter(status)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    statusFilter === status
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    statusFilter === status ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
@@ -424,6 +463,7 @@ const LeadsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Source filter */}
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium text-gray-700">Source:</span>
             <div className="flex items-center space-x-2">
@@ -432,9 +472,7 @@ const LeadsPage: React.FC = () => {
                   key={source}
                   onClick={() => setSourceFilter(source === 'all' ? 'all' : source)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    sourceFilter === (source === 'all' ? 'all' : source)
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    sourceFilter === (source === 'all' ? 'all' : source) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {source}
@@ -443,6 +481,7 @@ const LeadsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Score filter */}
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium text-gray-700">Score:</span>
             <div className="flex items-center space-x-2">
@@ -450,15 +489,13 @@ const LeadsPage: React.FC = () => {
                 { value: 'all', label: 'All' },
                 { value: '80-100', label: '80-100' },
                 { value: '60-79', label: '60-79' },
-                { value: 'below-60', label: 'Below 60' }
+                { value: 'below-60', label: 'Below 60' },
               ].map(score => (
                 <button
                   key={score.value}
                   onClick={() => setScoreFilter(score.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    scoreFilter === score.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    scoreFilter === score.value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {score.label}
@@ -467,7 +504,7 @@ const LeadsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Search Bar */}
+          {/* Search + sort + view toggle */}
           <div className="flex items-center justify-between pt-4 border-t border-gray-200">
             <div className="flex items-center space-x-4 flex-1">
               <span className="text-sm font-medium text-gray-700">Search:</span>
@@ -477,35 +514,28 @@ const LeadsPage: React.FC = () => {
                   type="text"
                   placeholder="Search by name, company, email..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Sort dropdown */}
               <div className="relative">
                 <button
                   onClick={() => setShowSortDropdown(!showSortDropdown)}
                   className="flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
                 >
-                  <span>Sort: Score (High to Low)</span>
+                  <span>Sort: {currentSortLabel}</span>
                   <ChevronDown className="h-4 w-4 ml-2" />
                 </button>
                 {showSortDropdown && (
                   <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                    {[
-                      { value: 'score-high', label: 'Score (High to Low)' },
-                      { value: 'score-low', label: 'Score (Low to High)' },
-                      { value: 'name', label: 'Name (A-Z)' },
-                      { value: 'date-new', label: 'Date (Newest)' }
-                    ].map(option => (
+                    {SORT_OPTIONS.map(option => (
                       <button
                         key={option.value}
-                        onClick={() => {
-                          setSortBy(option.value);
-                          setShowSortDropdown(false);
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+                        onClick={() => { setSortBy(option.value); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${sortBy === option.value ? 'font-semibold text-blue-600' : ''}`}
                       >
                         {option.label}
                       </button>
@@ -513,289 +543,291 @@ const LeadsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* View mode toggle */}
               <div className="flex items-center space-x-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    viewMode === 'list' ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-600 hover:bg-white'
-                  }`}
-                >
-                  📋 List
-                </button>
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    viewMode === 'grid' ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-600 hover:bg-white'
-                  }`}
-                >
-                  🔲 Grid
-                </button>
-                <button
-                  onClick={() => setViewMode('kanban')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    viewMode === 'kanban' ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-600 hover:bg-white'
-                  }`}
-                >
-                  📊 Kanban
-                </button>
+                {(['list', 'grid', 'kanban'] as const).map(mode => {
+                  const labels: Record<typeof mode, string> = { list: '📋 List', grid: '🔲 Grid', kanban: '📊 Kanban' };
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => setViewMode(mode)}
+                      className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                        viewMode === mode ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-600 hover:bg-white'
+                      }`}
+                    >
+                      {labels[mode]}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Leads Table */}
-      <div className="px-8 py-6">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="w-12 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selectedLeads.length === sortedLeads.length && sortedLeads.length > 0}
-                    onChange={handleSelectAll}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300"
-                  />
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                  Name/Company
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                  Source
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                  AI Score
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {sortedLeads.slice(0, displayedLeadsCount).map((lead) => (
-                <tr key={lead.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedLeads.includes(lead.id)}
-                      onChange={() => handleSelectLead(lead.id)}
-                      className="h-4 w-4 text-blue-600 rounded border-gray-300"
-                    />
-                  </td>
-                  <td className="px-4 py-5">
-                    <div className="space-y-1">
-                      <div className="font-bold text-base text-gray-900">{lead.name}</div>
-                      <div className="text-sm text-gray-700 font-medium">{lead.company}</div>
-                      <div className="text-xs text-gray-600">{lead.position}</div>
-                      <div className="text-xs text-gray-600">{lead.email}</div>
-                      <div className="text-xs text-gray-600">{lead.phone}</div>
-                      {lead.aiInsight && (
-                        <div className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded mt-2 inline-block border border-purple-200">
-                          {lead.aiInsight}
-                        </div>
-                      )}
-                      <div className="text-xs text-gray-500 mt-2">
-                        Added: {lead.addedDate} | Last contact: {lead.lastContact}
-                      </div>
-                      {lead.nextAction && (
-                        <div className="text-xs text-gray-500">Next: {lead.nextAction}</div>
-                      )}
-                      {lead.lostReason && (
-                        <div className="text-xs text-red-600 mt-2 bg-red-50 px-2 py-1 rounded inline-block">
-                          Lost reason: {lead.lostReason}
-                          <br />
-                          Lost date: {lead.lostDate}
-                        </div>
-                      )}
-                      <div className="flex items-center space-x-2 mt-3">
-                        {lead.status === 'new' && (
-                          <>
-                            <button
-                              onClick={() => handleContactLead(lead)}
-                              className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
-                            >
-                              Contact
-                            </button>
-                            <button
-                              onClick={() => handleConvertToContact(lead)}
-                              className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium"
-                            >
-                              Convert to Contact
-                            </button>
-                            <button
-                              onClick={() => handleViewLeadDetail(lead.id)}
-                              className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 font-medium"
-                            >
-                              View
-                            </button>
-                          </>
-                        )}
-                        {lead.status === 'contacted' && (
-                          <>
-                            <button
-                              onClick={() => handleContactLead(lead)}
-                              className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
-                            >
-                              Follow Up
-                            </button>
-                            <button
-                              onClick={() => handleConvertToContact(lead)}
-                              className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium"
-                            >
-                              Convert to Contact
-                            </button>
-                            <button
-                              onClick={() => handleViewLeadDetail(lead.id)}
-                              className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 font-medium"
-                            >
-                              View
-                            </button>
-                          </>
-                        )}
-                        {lead.status === 'qualified' && (
-                          <>
-                            <button
-                              onClick={() => handleConvertToContact(lead)}
-                              className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium"
-                            >
-                              Convert to Contact
-                            </button>
-                            <button
-                              onClick={() => handleViewLeadDetail(lead.id)}
-                              className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 font-medium"
-                            >
-                              View
-                            </button>
-                          </>
-                        )}
-                        {lead.status === 'lost' && (
-                          <>
-                            <button
-                              onClick={() => handleArchiveLead(lead.id)}
-                              className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-medium"
-                            >
-                              Archive
-                            </button>
-                            <button
-                              onClick={() => handleReactivateLead(lead.id)}
-                              className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
-                            >
-                              Reactivate
-                            </button>
-                            <button
-                              onClick={() => handleViewLeadDetail(lead.id)}
-                              className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 font-medium"
-                            >
-                              View
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-5">
-                    <div className="flex items-center space-x-2">
-                      <div className={`p-2 rounded-lg ${getSourceIcon(lead.source).color}`}>
-                        <span className="text-lg">{getSourceIcon(lead.source).icon}</span>
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-gray-900">{lead.source}</div>
-                        {lead.sourceDetail && (
-                          <div className="text-xs text-gray-500">{lead.sourceDetail}</div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-5">
-                    <div className="flex flex-col items-center space-y-1">
-                      <div className={`text-3xl font-bold px-3 py-1 rounded-lg border-2 ${getScoreColor(lead.aiScore)}`}>
-                        {lead.aiScore}
-                      </div>
-                      <div className="text-base">{getStarRating(lead.aiScore)}</div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-5">
-                    <span className={`inline-flex px-4 py-2 rounded-lg text-xs font-bold ${getStatusBadge(lead.status)}`}>
-                      {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowActionsMenu(showActionsMenu === lead.id ? null : lead.id)}
-                        className="p-2 hover:bg-gray-100 rounded-lg"
-                      >
-                        <MoreVertical className="h-4 w-4 text-gray-600" />
-                      </button>
-                      {showActionsMenu === lead.id && (
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                          <button
-                            onClick={() => navigate(`/crm/leads/${lead.id}`)}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </button>
-                          <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center">
-                            <Mail className="h-4 w-4 mr-2" />
-                            Send Email
-                          </button>
-                          <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center">
-                            <Phone className="h-4 w-4 mr-2" />
-                            Call
-                          </button>
-                          <button
-                            onClick={() => navigate('/crm/contacts/new')}
-                            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                          >
-                            <UserPlus className="h-4 w-4 mr-2" />
-                            Convert to Contact
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
+      {viewMode === 'list' && (
+        <div className="px-8 py-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <>
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="w-12 px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedLeads.length === sortedLeads.length && sortedLeads.length > 0}
+                          onChange={handleSelectAll}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                        />
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name / Company</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Source</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">AI Score</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {sortedLeads.slice(0, displayedLeadsCount).map(lead => {
+                      const score = getLeadScore(lead);
+                      const src = getSourceInfo(lead.source);
+                      return (
+                        <tr key={lead.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedLeads.includes(lead.id)}
+                              onChange={() => handleSelectLead(lead.id)}
+                              className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                            />
+                          </td>
+                          <td className="px-4 py-5">
+                            <div className="space-y-1">
+                              <div className="font-bold text-base text-gray-900">{getLeadName(lead)}</div>
+                              <div className="text-sm text-gray-700 font-medium">{lead.company || '—'}</div>
+                              <div className="text-xs text-gray-600">{lead.position || '—'}</div>
+                              <div className="text-xs text-gray-600">{lead.email || '—'}</div>
+                              <div className="text-xs text-gray-600">{lead.phone || '—'}</div>
+                              {lead.quick_notes && (
+                                <div className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded mt-2 inline-block border border-purple-200">
+                                  🤖 {lead.quick_notes}
+                                </div>
+                              )}
+                              <div className="text-xs text-gray-500 mt-2">
+                                Added: {formatDate(lead.created_at)} | Last contact: {formatDate(lead.last_contact_date)}
+                              </div>
+                              {lead.next_follow_up_date && (
+                                <div className="text-xs text-gray-500">
+                                  Next follow-up: {formatDate(lead.next_follow_up_date)}
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-2 mt-3">
+                                {renderRowActions(lead)}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-5">
+                            <div className="flex items-center space-x-2">
+                              <div className={`p-2 rounded-lg ${src.color}`}>
+                                <span className="text-lg">{src.icon}</span>
+                              </div>
+                              <div>
+                                <div className="text-sm font-semibold text-gray-900">{lead.source || '—'}</div>
+                                {lead.source_detail && (
+                                  <div className="text-xs text-gray-500">{lead.source_detail}</div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-5">
+                            <div className="flex flex-col items-center space-y-1">
+                              <div className={`text-3xl font-bold px-3 py-1 rounded-lg border-2 ${getScoreColor(score)}`}>
+                                {score}
+                              </div>
+                              <div className="text-base">{getStarRating(score)}</div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-5">
+                            <span className={`inline-flex px-4 py-2 rounded-lg text-xs font-bold ${getStatusBadge(lead.status)}`}>
+                              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            <div className="relative">
+                              <button
+                                onClick={() => setShowActionsMenu(showActionsMenu === lead.id ? null : lead.id)}
+                                className="p-2 hover:bg-gray-100 rounded-lg"
+                              >
+                                <MoreVertical className="h-4 w-4 text-gray-600" />
+                              </button>
+                              {showActionsMenu === lead.id && (
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                  <button
+                                    onClick={() => { navigate(`/crm/leads/${lead.id}`); setShowActionsMenu(null); }}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Details
+                                  </button>
+                                  <button
+                                    onClick={() => { handleContactLead(lead); setShowActionsMenu(null); }}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
+                                  >
+                                    <Mail className="h-4 w-4 mr-2" />
+                                    Send Email
+                                  </button>
+                                  <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center">
+                                    <Phone className="h-4 w-4 mr-2" />
+                                    Call
+                                  </button>
+                                  <button
+                                    onClick={() => { navigate('/crm/contacts/new'); setShowActionsMenu(null); }}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
+                                  >
+                                    <UserPlus className="h-4 w-4 mr-2" />
+                                    Convert to Contact
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
 
-        {/* Load More / Pagination */}
-        <div className="mt-6 text-center">
-          <div className="text-sm text-gray-600 mb-4">
-            Showing {Math.min(displayedLeadsCount, sortedLeads.length)} of {sortedLeads.length} leads
-          </div>
-          {displayedLeadsCount < sortedLeads.length && (
-            <button
-              onClick={handleLoadMore}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-            >
-              Load More...
-            </button>
+                {sortedLeads.length === 0 && (
+                  <div className="py-16 text-center text-gray-500">
+                    <p className="text-lg font-medium">No leads found</p>
+                    <p className="text-sm mt-1">Try adjusting your filters or add a new lead.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Pagination */}
+              <div className="mt-6 text-center">
+                <div className="text-sm text-gray-600 mb-4">
+                  Showing {Math.min(displayedLeadsCount, sortedLeads.length)} of {sortedLeads.length} leads
+                </div>
+                {displayedLeadsCount < sortedLeads.length && (
+                  <button
+                    onClick={() => setDisplayedLeadsCount(prev => Math.min(prev + 20, sortedLeads.length))}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Load More…
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
-      </div>
+      )}
 
-      {/* Bulk Actions Bar */}
+      {/* ── GRID VIEW ─────────────────────────────────────────────────────── */}
+      {viewMode === 'grid' && (
+        <div className="px-8 py-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {sortedLeads.slice(0, displayedLeadsCount).map(renderGridCard)}
+              </div>
+              {sortedLeads.length === 0 && (
+                <div className="py-16 text-center text-gray-500">
+                  <p className="text-lg font-medium">No leads found</p>
+                  <p className="text-sm mt-1">Try adjusting your filters or add a new lead.</p>
+                </div>
+              )}
+              <div className="mt-6 text-center">
+                <div className="text-sm text-gray-600 mb-4">
+                  Showing {Math.min(displayedLeadsCount, sortedLeads.length)} of {sortedLeads.length} leads
+                </div>
+                {displayedLeadsCount < sortedLeads.length && (
+                  <button
+                    onClick={() => setDisplayedLeadsCount(prev => Math.min(prev + 20, sortedLeads.length))}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  >
+                    Load More…
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── KANBAN VIEW ───────────────────────────────────────────────────── */}
+      {viewMode === 'kanban' && (
+        <div className="px-8 py-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+            </div>
+          ) : (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <div className="grid grid-cols-4 gap-4">
+                {KANBAN_COLUMNS.map(col => {
+                  const colLeads = sortedLeads.filter(l => l.status === col.id);
+                  return (
+                    <div key={col.id} className="flex flex-col">
+                      <div className={`flex items-center justify-between px-3 py-2 rounded-t-lg border ${col.headerColor} mb-0`}>
+                        <span className="text-sm font-semibold">{col.label}</span>
+                        <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full">
+                          {colLeads.length}
+                        </span>
+                      </div>
+                      <Droppable droppableId={col.id}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            className={`flex-1 min-h-[200px] p-2 rounded-b-lg border border-t-0 border-gray-200 transition-colors ${
+                              snapshot.isDraggingOver ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'
+                            }`}
+                          >
+                            {colLeads.map((lead, index) => renderKanbanCard(lead, index))}
+                            {provided.placeholder}
+                            {colLeads.length === 0 && !snapshot.isDraggingOver && (
+                              <p className="text-xs text-gray-400 text-center py-6">Drop leads here</p>
+                            )}
+                          </div>
+                        )}
+                      </Droppable>
+                    </div>
+                  );
+                })}
+              </div>
+            </DragDropContext>
+          )}
+        </div>
+      )}
+
+      {/* ── BULK ACTIONS BAR ──────────────────────────────────────────────── */}
       {selectedLeads.length > 0 && (
         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl border border-gray-200 px-6 py-4 z-50">
           <div className="flex items-center space-x-4">
             <span className="text-sm font-semibold text-gray-900">
-              {selectedLeads.length} lead{selectedLeads.length > 1 ? 's' : ''} selected
+              {selectedLeads.length} lead{selectedLeads.length !== 1 ? 's' : ''} selected
             </span>
 
-            {/* Assign Dropdown */}
+            {/* Assign dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowBulkAssignDropdown(!showBulkAssignDropdown)}
                 className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
               >
-                Assign to...
+                Assign to…
                 <ChevronDown className="h-4 w-4 ml-2" />
               </button>
               {showBulkAssignDropdown && (
@@ -813,7 +845,7 @@ const LeadsPage: React.FC = () => {
               )}
             </div>
 
-            {/* Status Change Dropdown */}
+            {/* Status change dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowBulkStatusDropdown(!showBulkStatusDropdown)}
@@ -844,7 +876,7 @@ const LeadsPage: React.FC = () => {
               Export
             </button>
             <button
-              onClick={handleBulkDelete}
+              onClick={() => setConfirmDelete(true)}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
             >
               Delete
@@ -853,31 +885,24 @@ const LeadsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Contact Modal */}
+      {/* Contact modal */}
       {showContactModal && selectedLeadForAction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Contact {selectedLeadForAction.name}</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Contact {getLeadName(selectedLeadForAction)}</h3>
             <div className="space-y-3">
               <button className="w-full flex items-center px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
                 <Mail className="h-5 w-5 mr-3 text-blue-600" />
                 <div>
                   <div className="font-medium">Send Email</div>
-                  <div className="text-sm text-gray-600">{selectedLeadForAction.email}</div>
+                  <div className="text-sm text-gray-600">{selectedLeadForAction.email || '—'}</div>
                 </div>
               </button>
               <button className="w-full flex items-center px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
                 <Phone className="h-5 w-5 mr-3 text-green-600" />
                 <div>
                   <div className="font-medium">Call</div>
-                  <div className="text-sm text-gray-600">{selectedLeadForAction.phone}</div>
-                </div>
-              </button>
-              <button className="w-full flex items-center px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
-                <Users className="h-5 w-5 mr-3 text-purple-600" />
-                <div>
-                  <div className="font-medium">Schedule Meeting</div>
-                  <div className="text-sm text-gray-600">Open calendar</div>
+                  <div className="text-sm text-gray-600">{selectedLeadForAction.phone || '—'}</div>
                 </div>
               </button>
             </div>
@@ -891,13 +916,14 @@ const LeadsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Convert to Contact Modal */}
+      {/* Convert to Contact modal */}
       {showConvertModal && selectedLeadForAction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Convert to Contact</h3>
             <p className="text-gray-600 mb-6">
-              Convert <strong>{selectedLeadForAction.name}</strong> from {selectedLeadForAction.company} to a contact?
+              Convert <strong>{getLeadName(selectedLeadForAction)}</strong> from{' '}
+              {selectedLeadForAction.company || 'their company'} to a contact?
             </p>
             <div className="flex space-x-3">
               <button

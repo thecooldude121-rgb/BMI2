@@ -48,8 +48,8 @@ export function mapRowToLead(row: any): Lead {
     created_at: row.created_at || new Date().toISOString(),
     updated_at: row.updated_at || new Date().toISOString(),
     created_by: row.created_by || '',
-    // Fields not yet in the DB schema — safe defaults
-    status:         'new',
+    // status maps from the DB 'stage' column; fall back to 'new' if missing
+    status:         (row.stage || 'new') as Lead['status'],
     temperature:    'cold',
     estimated_value: 0,
     probability:    0,
@@ -119,10 +119,16 @@ export async function createLeadViaAPI(lead: Partial<Lead>): Promise<Lead | null
 
 export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Promise<Lead | null> {
   try {
+    // Translate frontend field names → DB column names (status → stage)
+    const payload: Record<string, any> = { ...updates };
+    if ('status' in payload) {
+      payload.stage = payload.status;
+      delete payload.status;
+    }
     const res = await fetch(`${API_BASE}/leads/${id}`, {
       method:  'PUT',
       headers: getAuthHeaders(),
-      body:    JSON.stringify(updates),
+      body:    JSON.stringify(payload),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.message || 'Failed to update lead');

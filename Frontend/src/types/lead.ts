@@ -1,4 +1,4 @@
-export type LeadStatus = 'new' | 'working' | 'nurturing' | 'qualified' | 'unqualified' | 'converted' | 'lost';
+export type LeadStatus = 'new' | 'contacted' | 'working' | 'nurturing' | 'qualified' | 'unqualified' | 'converted' | 'lost';
 export type LeadTemperature = 'hot' | 'warm' | 'cold' | 'frozen';
 export type LeadGrade = 'A' | 'B' | 'C' | 'D' | 'F';
 export type ActivityType = 'call' | 'email' | 'meeting' | 'task' | 'note' | 'sms' | 'whatsapp' | 'linkedin' | 'demo' | 'proposal' | 'document' | 'visit';
