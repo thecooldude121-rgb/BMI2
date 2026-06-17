@@ -8,7 +8,7 @@ import {
   StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX,
   Pencil, ArrowLeftRight, UserCog, Zap, FileText,
   CheckSquare, ClipboardList, Workflow, Link2,
-  AlignJustify, LayoutList,
+  AlignJustify, LayoutList, Columns2, ListFilter,
 } from 'lucide-react';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
@@ -982,7 +982,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const HEALTH_TIER_LABELS: Record<HealthTierFilter, string> = {
     strong: 'Healthy',
-    fair:   'Watch',
+    fair:   'Needs Attention',
     weak:   'At Risk',
   };
 
@@ -1051,13 +1051,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       case 'nextStep':
         return <th key="nextStep" className={`${p4} ${thBase}`}>Next Step</th>;
       case 'dealAge':
-        return <th key="dealAge" className={`${p4} ${thSort}`} onClick={() => handleSort('dealAge')}><div className="flex items-center space-x-1"><span>Deal Age</span><SortIcon column="dealAge" /></div></th>;
+        return <th key="dealAge" className={`${p4} ${thSort}`} onClick={() => handleSort('dealAge')}><div className="flex items-center space-x-1"><span>Time in Pipeline</span><SortIcon column="dealAge" /></div></th>;
       case 'probability':
         return <th key="probability" className={`${p4} ${thSort}`} onClick={() => handleSort('probability')}><div className="flex items-center space-x-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
       case 'source':
         return <th key="source" className={`${p4} ${thSort}`} onClick={() => handleSort('source')}><div className="flex items-center space-x-1"><span>Source</span><SortIcon column="source" /></div></th>;
       case 'health':
-        return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><span>Health</span><SortIcon column="health" /></div></th>;
+        return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><div className="flex flex-col"><span>WIN SCORE</span><span className="text-[10px] font-normal text-gray-400 normal-case tracking-normal">AI probability</span></div><SortIcon column="health" /></div></th>;
       case 'actions':
         return <th key="actions" className={thBase}>Actions</th>;
       default:
@@ -1084,9 +1084,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded cursor-pointer hover:opacity-80"
                       style={{ backgroundColor: '#fff3cd', border: '1px solid #f59e0b', color: '#92400e' }}
                       onClick={(e) => { e.stopPropagation(); setShowHRMSModal(deal); }}
-                      title="HRMS-connected deal"
+                      title="Connected to HR System — click to view integration"
                     >
-                      HRMS
+                      HR System <ExternalLink size={8} className="inline" />
                     </span>
                   )}
                 </div>
@@ -1633,16 +1633,18 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <button
                   title="Schedule Follow-up"
                   onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                 >
                   <CalendarPlus size={14} />
+                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Follow-up</span>
                 </button>
                 <button
                   title="Create Task"
                   onClick={(e) => { e.stopPropagation(); openCreateTask(deal); }}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                 >
                   <CheckSquare size={14} />
+                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Task</span>
                 </button>
               </div>
               {/* ··· dropdown */}
@@ -1661,7 +1663,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         onClick={() => { openScheduleFollowUp(deal); setShowActionDropdown(null); }} />
                       <MenuItem icon={<CheckSquare size={13} />} label="Create Task"
                         onClick={() => { openCreateTask(deal); setShowActionDropdown(null); }} />
-                      <MenuItem icon={<ClipboardList size={13} />} label="Log Meeting Outcome"
+                      <MenuItem icon={<ClipboardList size={13} />} label="Log Activity"
                         onClick={() => { openLogMeeting(deal); setShowActionDropdown(null); }} />
                     </div>
                     <div className="mx-2 my-1 border-t border-gray-100" />
@@ -1679,7 +1681,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     <div className="px-1.5 space-y-0.5">
                       <MenuItem icon={<Workflow size={13} />} label="Add to Sequence"
                         onClick={() => { openAddSequence(deal); setShowActionDropdown(null); }} />
-                      <MenuItem icon={<Link2 size={13} />} label="Share Deal"
+                      <MenuItem icon={<Link2 size={13} />} label="Copy Deal Link"
                         onClick={() => { shareDeal(deal); setShowActionDropdown(null); }} />
                     </div>
                     <div className="mx-2 my-1 border-t border-gray-100" />
@@ -1730,8 +1732,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           {([
             { label: 'Schedule Follow-up', icon: <CalendarPlus size={13} />, action: () => openScheduleFollowUp(deal) },
             { label: 'Create Task',        icon: <CheckSquare size={13} />,   action: () => openCreateTask(deal) },
-            { label: 'Log Meeting',        icon: <ClipboardList size={13} />, action: () => openLogMeeting(deal) },
-            { label: 'Share',              icon: <Link2 size={13} />,         action: () => shareDeal(deal) },
+            { label: 'Log Activity',       icon: <ClipboardList size={13} />, action: () => openLogMeeting(deal) },
+            { label: 'Copy Link',          icon: <Link2 size={13} />,         action: () => shareDeal(deal) },
             { label: 'Add to Sequence',    icon: <Workflow size={13} />,      action: () => openAddSequence(deal) },
           ] as const).map(({ label, icon, action }) => (
             <button
@@ -1836,7 +1838,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* Zone 3 — AI Signals */}
           <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 p-4">
-            <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">AI Signals</div>
+            <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Win Score Signals</div>
             {isClosed ? (
               <div className="flex items-center gap-2">
                 {deal.stage === 'closed-won'
@@ -1927,7 +1929,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className={`text-xl sm:text-3xl text-blue-900 ${activeKpiFilter === null ? 'font-extrabold' : 'font-bold'}`}>
               {filteredDeals.length}
             </div>
-            <div className="text-sm text-blue-700 font-medium mt-1">Total Deals</div>
+            <div
+              className="text-sm text-blue-700 font-medium mt-1"
+              title={hasActiveFilters ? 'Count reflects current filters — clear filters to see all deals' : undefined}
+            >
+              {hasActiveFilters ? 'Deals Shown' : 'Total Deals'}
+            </div>
           </div>
 
           {/* Card 2: Total Value — decorative only */}
@@ -2027,7 +2034,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             title="Average deal cycle based on closed deals"
           >
             <div className="text-xl sm:text-3xl font-bold text-gray-900">{avgDaysCycle}</div>
-            <div className="text-sm text-gray-700 font-medium mt-1">Days Avg Cycle</div>
+            <div className="text-sm text-gray-700 font-medium mt-1">Avg Days to Close</div>
           </div>
 
           {/* Card 7: Duplicate Pairs — only shown when pairs exist */}
@@ -2042,7 +2049,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               ].join(' ')}
             >
               <div className="text-xl sm:text-3xl font-bold text-amber-800">{activePairCount}</div>
-              <div className="text-sm text-amber-700 font-medium mt-1">Duplicate<br />Pairs</div>
+              <div className="text-sm text-amber-700 font-medium mt-1">Duplicates<br />to Review</div>
             </button>
           )}
 
@@ -2349,7 +2356,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <div className="flex gap-2">
                   {([
                     { tier: 'strong' as HealthTierFilter, label: 'Healthy', dot: 'bg-green-500', activeClass: 'bg-green-100 text-green-700 border-green-300' },
-                    { tier: 'fair'   as HealthTierFilter, label: 'Watch',   dot: 'bg-amber-500', activeClass: 'bg-amber-100 text-amber-700 border-amber-300' },
+                    { tier: 'fair'   as HealthTierFilter, label: 'Needs Attention', dot: 'bg-amber-500', activeClass: 'bg-amber-100 text-amber-700 border-amber-300' },
                     { tier: 'weak'   as HealthTierFilter, label: 'At Risk', dot: 'bg-red-500',   activeClass: 'bg-red-100   text-red-700   border-red-300'   },
                   ]).map(({ tier, label, dot, activeClass }) => (
                     <button
@@ -2384,7 +2391,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              Activity Gap
+              No Contact (Days)
               {(pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) && (
                 <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
               )}
@@ -2393,8 +2400,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             {openFilter === 'pipelineAge' && (
               <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
                 <p className="text-[11px] text-gray-500 font-medium mb-1">
-                  Activity Gap (days)
-                  <span title="Deals with no contact activity in the last N days" className="ml-1 cursor-help text-gray-400">ⓘ</span>
+                  No Contact (Days)
+                  <span title="Days since this deal's last recorded contact or activity" className="ml-1 cursor-help text-gray-400">ⓘ</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
@@ -2442,10 +2449,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
             }`}
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <ListFilter className="h-3.5 w-3.5" />
             {advancedConditions.length > 0
-              ? `${advancedConditions.length} condition${advancedConditions.length !== 1 ? 's' : ''}`
-              : 'Build filter'}
+              ? `${advancedConditions.length} active rule${advancedConditions.length !== 1 ? 's' : ''}`
+              : 'More filters'}
           </button>
 
           {/* ── Column settings ── */}
@@ -2456,27 +2463,30 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <button
                 title="Comfortable density"
                 onClick={() => setDensity('comfortable')}
-                className={`p-1.5 transition-colors ${density === 'comfortable' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                className={`px-2 py-1.5 flex items-center gap-1 transition-colors ${density === 'comfortable' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
               >
                 <AlignJustify className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium hidden sm:inline">Comfortable</span>
               </button>
               <button
                 title="Compact density"
                 onClick={() => setDensity('compact')}
-                className={`p-1.5 transition-colors ${density === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                className={`px-2 py-1.5 flex items-center gap-1 transition-colors ${density === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
               >
                 <LayoutList className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium hidden sm:inline">Compact</span>
               </button>
             </div>
 
-            {/* Column settings gear */}
+            {/* Column settings */}
             <div className="relative">
               <button
-                className="flex items-center px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-200"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-200"
                 onClick={(e) => { e.stopPropagation(); setShowColumnSettings(v => !v); }}
-                title="Column settings"
+                title="Show/hide columns"
               >
-                <Settings className="h-4 w-4" />
+                <Columns2 className="h-4 w-4" />
+                <span className="text-xs font-medium hidden sm:inline">Columns</span>
               </button>
               {showColumnSettings && (
                 <div
@@ -2588,10 +2598,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 color="orange"
                 label={
                   pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
-                    ? `Idle ${pipelineAgeFilter.min}–${pipelineAgeFilter.max} days`
+                    ? `Silent ${pipelineAgeFilter.min}–${pipelineAgeFilter.max} days`
                     : pipelineAgeFilter.min !== null
-                      ? `Idle ${pipelineAgeFilter.min}+ days`
-                      : `Active < ${pipelineAgeFilter.max} days`
+                      ? `Silent ${pipelineAgeFilter.min}+ days`
+                      : `Contact < ${pipelineAgeFilter.max} days`
                 }
                 onRemove={() => setPipelineAgeFilter({ min: null, max: null })}
               />
@@ -2599,7 +2609,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             {advancedConditions.length > 0 && (
               <FilterChip
                 color="purple"
-                label={`⚙ ${advancedConditions.length} condition${advancedConditions.length !== 1 ? 's' : ''}`}
+                label={`⚙ ${advancedConditions.length} active rule${advancedConditions.length !== 1 ? 's' : ''}`}
                 onRemove={() => setAdvancedConditions([])}
               />
             )}
@@ -2688,11 +2698,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 ))}
               </div>
             </div>
-            {/* Health */}
+            {/* Win Score */}
             <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Health</p>
+              <p className="text-sm font-semibold text-gray-700 mb-2">Win Score</p>
               <div className="space-y-2">
-                {([['strong','Healthy','bg-green-400'],['fair','Watch','bg-amber-400'],['weak','At Risk','bg-red-400']] as [HealthTierFilter,string,string][]).map(([tier,label,dot]) => (
+                {([['strong','Healthy','bg-green-400'],['fair','Needs Attention','bg-amber-400'],['weak','At Risk','bg-red-400']] as [HealthTierFilter,string,string][]).map(([tier,label,dot]) => (
                   <label key={tier} className="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" checked={selectedHealthTiers.has(tier)} onChange={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.has(tier) ? n.delete(tier) : n.add(tier); return n; })} className="rounded border-gray-300 text-indigo-600" />
                     <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
@@ -2728,10 +2738,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <input type="number" min={0} placeholder="Max $" value={valueFilter.max ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
               </div>
             </div>
-            {/* Activity Gap */}
+            {/* No Contact (Days) */}
             <div>
-              <p className="text-sm font-semibold text-gray-700 mb-1">Activity Gap (days)</p>
-              <p className="text-xs text-gray-400 mb-2">Deals with no contact activity in the last N days.</p>
+              <p className="text-sm font-semibold text-gray-700 mb-1">No Contact (Days)</p>
+              <p className="text-xs text-gray-400 mb-2">Days since this deal's last recorded contact or activity.</p>
               <div className="flex items-center gap-2">
                 <input type="number" min={0} placeholder="Min" value={pipelineAgeFilter.min ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
                 <span className="text-gray-400">–</span>
@@ -2956,7 +2966,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => { openScheduleFollowUp(ctxDeal); setContextMenuDeal(null); }} />
               <MenuItem icon={<CheckSquare size={14} />} label="Create Task"
                 onClick={() => { openCreateTask(ctxDeal); setContextMenuDeal(null); }} />
-              <MenuItem icon={<ClipboardList size={14} />} label="Log Meeting Outcome"
+              <MenuItem icon={<ClipboardList size={14} />} label="Log Activity"
                 onClick={() => { openLogMeeting(ctxDeal); setContextMenuDeal(null); }} />
             </div>
             <div className="mx-2 my-1.5 border-t border-gray-100" />
@@ -2980,7 +2990,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => { openAddSequence(ctxDeal); setContextMenuDeal(null); }} />
               <MenuItem icon={<FileText size={14} />} label="Send Proposal"
                 onClick={() => { showBulkToast('Send proposal — coming soon'); setContextMenuDeal(null); }} />
-              <MenuItem icon={<Link2 size={14} />} label="Share Deal"
+              <MenuItem icon={<Link2 size={14} />} label="Copy Deal Link"
                 onClick={() => shareDeal(ctxDeal)} />
             </div>
             <div className="mx-2 my-1.5 border-t border-gray-100" />
@@ -3122,7 +3132,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       )}
 
-      {/* ── Log Meeting Outcome Modal ─────────────────────────────────────────── */}
+      {/* ── Log Activity Modal ────────────────────────────────────────────────── */}
       {logMeetingDeal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => setLogMeetingDeal(null)}>
@@ -3130,7 +3140,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <ClipboardList size={18} className="text-indigo-600" />
-                <h3 className="text-base font-semibold text-gray-900">Log Meeting Outcome</h3>
+                <h3 className="text-base font-semibold text-gray-900">Log Activity</h3>
               </div>
               <button onClick={() => setLogMeetingDeal(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
             </div>

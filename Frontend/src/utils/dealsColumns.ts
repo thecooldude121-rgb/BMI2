@@ -17,7 +17,7 @@ export const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'closeDate',    label: 'Close Date'      },
   { key: 'lastActivity', label: 'Last Activity'   },
   { key: 'nextStep',     label: 'Next Step'       },
-  { key: 'dealAge',      label: 'Deal Age'        },
+  { key: 'dealAge',      label: 'Time in Pipeline' },
   { key: 'probability',  label: 'Probability'     },
   { key: 'source',       label: 'Source'          },
   { key: 'health',       label: 'Health'          },
