@@ -70,6 +70,8 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       source, priority, tags, product, contract_term, payment_terms,
       attachment_metadata, win_prob_override_reason, win_prob_ai,
       is_test,
+      sales_drive_folder, agreement_url, account_module_setup, client_discovers,
+      discovery_date,
     } = req.body;
 
     const dealName = (name || title || '').trim();
@@ -93,9 +95,11 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           next_step_status, notes, company_name,
           contact_name, contact_email, contact_title, stakeholders, competitors,
           source, priority, tags, product, contract_term, payment_terms,
-          attachment_metadata, win_prob_override_reason, win_prob_ai, is_test)
+          attachment_metadata, win_prob_override_reason, win_prob_ai, is_test,
+          sales_drive_folder, agreement_url, account_module_setup, client_discovers,
+          discovery_date)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44)
        RETURNING *`,
       [
         id, dealName, title || dealName, lead_id, value,
@@ -116,6 +120,9 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         win_prob_override_reason ?? null,
         win_prob_ai ?? null,
         is_test === true || is_test === 'true' ? true : false,
+        sales_drive_folder ?? null, agreement_url ?? null,
+        account_module_setup ?? null, client_discovers ?? null,
+        discovery_date ?? null,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -124,7 +131,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;

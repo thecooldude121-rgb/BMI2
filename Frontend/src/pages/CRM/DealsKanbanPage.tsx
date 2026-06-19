@@ -65,7 +65,7 @@ import {
   type SavedView,
   type UserSavedView,
 } from '../../utils/dealViews';
-import { type ColumnKey, DEFAULT_COLUMN_ORDER } from '../../utils/dealsColumns';
+import { type ColumnKey, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 import ManagerInspectionBar from '../../components/Deal/ManagerInspectionBar';
 import {
@@ -313,6 +313,48 @@ const DealsKanbanPage: React.FC = () => {
               } catch { return 0; }
             })(),
             createdAt: d.created_at || '',
+            // Mock data — replace with backend values when stakeholder API is available
+            ...(() => {
+              const hash = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+              const bucket = hash % 10;
+              // Distribution: 0-3 (40%) strong, 4-6 (30%) fair, 7-8 (20%) weak, 9 (10%) very strong
+              if (bucket <= 3) return { stakeholderCount: 2, hasChampion: true,  lastMeetingDaysAgo: 8  };
+              if (bucket <= 6) return { stakeholderCount: 1, hasChampion: false, lastMeetingDaysAgo: 20 };
+              if (bucket <= 8) return { stakeholderCount: 0, hasChampion: false, lastMeetingDaysAgo: null };
+              return               { stakeholderCount: 3, hasChampion: true,  lastMeetingDaysAgo: 3  };
+            })(),
+            // Mock competitor data — replace with backend deal_competitors join table when available
+            ...(() => {
+              const hash2 = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+              const bucket2 = (hash2 * 7 + 3) % 20;
+              if (bucket2 <= 6)  return { primaryCompetitor: 'Salesforce',         secondaryCompetitors: ['HubSpot'] };
+              if (bucket2 <= 10) return { primaryCompetitor: 'HubSpot',            secondaryCompetitors: [] };
+              if (bucket2 <= 13) return { primaryCompetitor: 'Microsoft Dynamics', secondaryCompetitors: ['Oracle', 'SAP'] };
+              if (bucket2 <= 16) return { primaryCompetitor: 'Zoho',               secondaryCompetitors: ['Pipedrive'] };
+              return { primaryCompetitor: undefined, secondaryCompetitors: undefined };
+            })(),
+            // Some deals intentionally have missing data for pipeline hygiene demo purposes
+            ...(() => {
+              const h = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+              const b = (h * 11 + 7) % 25;
+              if (b === 0) return { owner: 'Unassigned', nextStep: '' };    // missing owner + next step
+              if (b === 1) return { closeDate: '' };                         // missing close date
+              if (b === 2) return { contactName: '', nextStep: '' };         // missing contact and next step
+              if (b === 3) return { closeDate: '2025-09-30' };              // overdue ghost
+              if (b === 4) return { owner: 'Unassigned' };                  // missing owner only
+              return {};
+            })(),
+            // Mock multi-currency — replace with backend currency field when available
+            ...(() => {
+              const hash3 = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
+              const bucket3 = (hash3 * 3 + 5) % 20;
+              const usdValue = parseFloat(d.value) || 0;
+              if (bucket3 <= 7)  return {};  // ~40% USD (no override)
+              if (bucket3 <= 11) return { currency: 'EUR', amount: Math.round(usdValue * 0.92), baseAmountUsd: usdValue };  // ~20% EUR
+              if (bucket3 <= 14) return { currency: 'GBP', amount: Math.round(usdValue * 0.79), baseAmountUsd: usdValue };  // ~15% GBP
+              if (bucket3 <= 16) return { currency: 'INR', amount: Math.round(usdValue * 83.12), baseAmountUsd: usdValue }; // ~10% INR
+              return { currency: 'SGD', amount: Math.round(usdValue * 1.34), baseAmountUsd: usdValue };                     // ~15% SGD
+            })(),
           }));
         // Hard invariant: deduplicate by id before committing to state.
         const seen = new Set<string>();
@@ -350,7 +392,7 @@ const DealsKanbanPage: React.FC = () => {
 
   // Column state lifted from DealsListView so saved views can capture them
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
-    () => new Set(DEFAULT_COLUMN_ORDER)
+    () => new Set(DEFAULT_VISIBLE_COLUMNS)
   );
   const [columnOrder, setColumnOrder] = useState<ColumnKey[]>([...DEFAULT_COLUMN_ORDER]);
   const [activeKpiFilter, setActiveKpiFilter] = useState<'closingWeek' | 'stalled' | null>(null);
@@ -1207,7 +1249,7 @@ const DealsKanbanPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ── Row 1: sticky at top-0 — tabs · AI signals · actions ───────────────── */}
-      <div className="sticky top-14 z-20 bg-white border-b border-gray-100 -mx-6 -mt-4 lg:-mt-6">
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 -mx-6 -mt-4 lg:-mt-6">
         <div className="flex items-center h-[52px] px-6 gap-0 overflow-x-auto scrollbar-none">
 
           {/* ── View tabs ──────────────────────────────────────────────── */}
@@ -1461,7 +1503,7 @@ const DealsKanbanPage: React.FC = () => {
 
       {/* ── Row 2: sticky at top-[52px] — Filter · Sort · view icons ─────────────
           Sticks immediately below Row 1 when scrolling.                         */}
-      <div className="sticky top-[108px] z-10 bg-white border-b border-gray-200 -mx-6">
+      <div className="sticky top-[52px] z-10 bg-white border-b border-gray-200 -mx-6">
         <div className="flex items-center gap-1.5 px-6 py-2">
 
           {(() => {
@@ -1741,6 +1783,7 @@ const DealsKanbanPage: React.FC = () => {
           onFieldUpdate={async (dealId, field, value) => {
             console.log('[FieldUpdate]', dealId, field, value);
           }}
+          currentUser="Sarah Chen"
           onAddNote={(dealId) => console.log('[onAddNote]', dealId)}
           onScheduleFollowUp={(dealId) => console.log('[onScheduleFollowUp]', dealId)}
           visibleColumns={visibleColumns}

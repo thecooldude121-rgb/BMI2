@@ -1446,7 +1446,7 @@ const DocumentDetailPage: React.FC = () => {
           </div>
 
           <div className="w-[35%] space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-[120px]">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-16">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Details</h2>
 
               <div className="space-y-4">

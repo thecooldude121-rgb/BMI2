@@ -8,19 +8,28 @@ import {
   StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX,
   Pencil, ArrowLeftRight, UserCog, Zap, FileText,
   CheckSquare, ClipboardList, Workflow, Link2,
-  AlignJustify, LayoutList, Columns2, ListFilter,
+  AlignJustify, LayoutList, Columns2, ListFilter, Swords, AlertCircle, Search,
 } from 'lucide-react';
-import { formatAmountUSD } from '../../utils/currencyUtils';
+import {
+  formatAmountUSD, formatAmountCompact,
+  SUPPORTED_REPORTING_CURRENCIES, type SupportedCurrency, CURRENCY_SYMBOLS,
+  getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency,
+} from '../../utils/currencyUtils';
 import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
-import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER } from '../../utils/dealsColumns';
+import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 import { AdvancedFilterBuilder } from '../../components/Deals/AdvancedFilterBuilder';
 import type { FilterCondition, Conjunction } from '../../components/Deals/AdvancedFilterBuilder';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
+import { getNextBestAction } from '../../utils/dealNextBestAction';
+import { getRelationshipRisk } from '../../utils/relationshipRisk';
+import { getDealVelocity } from '../../utils/dealVelocity';
 import { findDuplicatePairs } from '../../utils/duplicateDetection';
 import type { DuplicatePair, DuplicatableDeal } from '../../utils/duplicateDetection';
+import { getDealDataQuality } from '../../utils/dealDataQuality';
+import type { DataQualityIssue } from '../../utils/dealDataQuality';
 
 // ── Advanced filter builder predicate ─────────────────────────────────────────
 // Evaluates a single FilterCondition against a deal. Returns true for incomplete
@@ -99,12 +108,23 @@ interface Deal {
   nextStep?: string;
   nextStepDueDate?: string;
   createdAt?: string;
+  // Relationship Risk fields — mock data until stakeholder API is available
+  stakeholderCount?: number;
+  hasChampion?: boolean;
+  lastMeetingDaysAgo?: number | null;
+  // Competitor tracking — mock data until deal_competitors join table is available
+  primaryCompetitor?: string;
+  secondaryCompetitors?: string[];
+  // Multi-currency — native deal currency + pre-computed USD equivalent for reporting
+  currency?: string;
+  baseAmountUsd?: number;
 }
 
-function getRowClassName(isExpanded: boolean, isSelected: boolean, isHovered: boolean): string {
+function getRowClassName(isExpanded: boolean, isSelected: boolean, isHovered: boolean, isActiveRow = false): string {
   const base = 'transition-colors duration-100 cursor-pointer border-l-2';
   if (isSelected) return `${base} bg-blue-50 border-l-blue-400`;
   if (isExpanded) return `${base} bg-indigo-50/30 border-l-indigo-300`;
+  if (isActiveRow) return `${base} bg-indigo-50/50 border-l-indigo-400 ring-1 ring-inset ring-indigo-200`;
   if (isHovered)  return `${base} bg-slate-50/60 border-l-indigo-200`;
   return `${base} bg-white border-l-transparent`;
 }
@@ -187,6 +207,7 @@ interface DealsListViewProps {
   setColumnOrder: React.Dispatch<React.SetStateAction<ColumnKey[]>>;
   activeKpiFilter: 'closingWeek' | 'stalled' | null;
   setActiveKpiFilter: React.Dispatch<React.SetStateAction<'closingWeek' | 'stalled' | null>>;
+  currentUser?: string;
 }
 
 const MERGE_FIELDS: Array<{ key: keyof DuplicatableDeal; label: string }> = [
@@ -209,6 +230,11 @@ const STUB_SEQUENCES = [
   { id: 'closing',       name: 'Closing Sequence',    steps: 2, description: 'Final push for deals in negotiation' },
 ] as const;
 
+const KNOWN_COMPETITORS = [
+  'Salesforce', 'HubSpot', 'Microsoft Dynamics', 'Oracle',
+  'Zoho', 'Pipedrive', 'Monday CRM', 'SAP',
+] as const;
+
 // PERF NOTE: renderCell re-runs for all visible cells on each editValue keystroke.
 // For tables > 500 rows, extract each editable cell as React.memo component.
 // Current dataset is < 200 rows — acceptable without memoization.
@@ -224,6 +250,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   externalFilters, onFiltersChange,
   visibleColumns, setVisibleColumns, columnOrder, setColumnOrder,
   activeKpiFilter, setActiveKpiFilter,
+  currentUser = '',
 }) => {
   const navigate = useNavigate();
   const { isStalled, getReasons, config: stalledConfig } = useStalledConfig();
@@ -268,6 +295,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     const max = searchParams.get('pipelineAgeMax');
     return { min: min ? parseInt(min) : null, max: max ? parseInt(max) : null };
   });
+  const [selectedCompetitors, setSelectedCompetitors] = useState<Set<string>>(() => {
+    const p = searchParams.get('competitors');
+    return p ? new Set(p.split(',').filter(Boolean)) : new Set();
+  });
   const [openFilter, setOpenFilter] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
@@ -289,7 +320,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const [sortBy, setSortBy] = useState<
     'deal' | 'account' | 'value' | 'stage' | 'closeDate' | 'health'
-    | 'owner' | 'contact' | 'probability' | 'dealAge' | 'source'
+    | 'owner' | 'contact' | 'probability' | 'dealAge' | 'source' | 'competitor'
   >('closeDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
@@ -336,6 +367,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [meetingNextStep, setMeetingNextStep] = useState('');
 
   const [selectedSequence, setSelectedSequence] = useState('');
+  const [competitorPopoverDealId, setCompetitorPopoverDealId] = useState<string | null>(null);
+  const [customCompetitorInput, setCustomCompetitorInput] = useState('');
 
   // ── Density ─────────────────────────────────────────────────────────────────
   type Density = 'comfortable' | 'compact';
@@ -345,6 +378,24 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   });
   useEffect(() => { localStorage.setItem('bmi_deals_density', density); }, [density]);
   const effectiveDensity: Density = typeof window !== 'undefined' && window.innerWidth < 768 ? 'compact' : density;
+
+  const [reportingCurrency, setReportingCurrency] = useState<SupportedCurrency>(() => {
+    try { return (localStorage.getItem('bmi_deals_reporting_currency') as SupportedCurrency) ?? 'USD'; }
+    catch { return 'USD'; }
+  });
+  useEffect(() => { localStorage.setItem('bmi_deals_reporting_currency', reportingCurrency); }, [reportingCurrency]);
+
+  const [showIssuesOnly, setShowIssuesOnly] = useState(false);
+  const [dealSearchTerm, setDealSearchTerm] = useState('');
+  const [debouncedDealSearch, setDebouncedDealSearch] = useState('');
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
+  const [expandedPanelTabs, setExpandedPanelTabs] = useState<Record<string, 'intelligence' | 'context'>>({});
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedDealSearch(dealSearchTerm.trim().toLowerCase()), 200);
+    return () => clearTimeout(t);
+  }, [dealSearchTerm]);
+
   const cellPadding        = effectiveDensity === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
   const textSizeSecondary  = effectiveDensity === 'compact' ? 'text-[11px]' : 'text-xs';
   const avatarSize         = effectiveDensity === 'compact' ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-[11px]';
@@ -386,6 +437,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     [allDeals]
   );
 
+  const availableCompetitors = useMemo(() => {
+    const all = new Set<string>();
+    allDeals.forEach(d => {
+      if (d.primaryCompetitor) all.add(d.primaryCompetitor);
+      (d.secondaryCompetitors ?? []).forEach(c => all.add(c));
+    });
+    return [...all].sort();
+  }, [allDeals]);
+
   const selectedDealSet = useMemo(() => new Set(selectedDeals), [selectedDeals]);
 
   const filteredDeals = useMemo(() => {
@@ -417,9 +477,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         }
       }
 
-      // Value
-      if (valueFilter.min !== null && deal.amount < valueFilter.min) return false;
-      if (valueFilter.max !== null && deal.amount > valueFilter.max) return false;
+      // Value — compare against reporting currency amount
+      const repAmt = getReportingAmount(deal, reportingCurrency);
+      if (valueFilter.min !== null && repAmt < valueFilter.min) return false;
+      if (valueFilter.max !== null && repAmt > valueFilter.max) return false;
 
       // Source
       if (selectedSources.size > 0 && !selectedSources.has(deal.source)) return false;
@@ -437,6 +498,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         if (pipelineAgeFilter.max !== null && idleDays > pipelineAgeFilter.max) return false;
       }
 
+      // Competitor filter (primary OR secondary match)
+      if (selectedCompetitors.size > 0) {
+        const allComps = [
+          ...(deal.primaryCompetitor ? [deal.primaryCompetitor] : []),
+          ...(deal.secondaryCompetitors ?? []),
+        ];
+        if (!allComps.some(c => selectedCompetitors.has(c))) return false;
+      }
+
       // Advanced filter builder conditions (additive AND with quick filters)
       if (advancedConditions.length > 0) {
         const results = advancedConditions.map(c => evaluateCondition(deal, c));
@@ -446,19 +516,27 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         if (!passes) return false;
       }
 
+      // Deal search (debounced, matches name / company / contact)
+      if (debouncedDealSearch) {
+        const q = debouncedDealSearch;
+        const matches =
+          deal.dealName?.toLowerCase().includes(q) ||
+          deal.companyName?.toLowerCase().includes(q) ||
+          deal.contactName?.toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+
       return true;
     });
-  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, advancedConditions, advancedConjunction]);
+  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, selectedCompetitors, advancedConditions, advancedConjunction, reportingCurrency, debouncedDealSearch]);
 
   const kpiFilteredDeals = useMemo(() => {
-    if (activeKpiFilter === 'closingWeek') {
-      return filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
-    }
-    if (activeKpiFilter === 'stalled') {
-      return filteredDeals.filter(d => isStalled(d));
-    }
-    return filteredDeals;
-  }, [filteredDeals, activeKpiFilter]);
+    let result = filteredDeals;
+    if (activeKpiFilter === 'closingWeek') result = result.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
+    else if (activeKpiFilter === 'stalled') result = result.filter(d => isStalled(d));
+    if (showIssuesOnly) result = result.filter(d => !getDealDataQuality(d).isClean);
+    return result;
+  }, [filteredDeals, activeKpiFilter, showIssuesOnly]);
 
   const sortedDeals = [...kpiFilteredDeals].sort((a, b) => {
     let comparison = 0;
@@ -470,7 +548,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         comparison = (a.companyName || '').localeCompare(b.companyName || '');
         break;
       case 'value':
-        comparison = a.amount - b.amount;
+        comparison = getReportingAmount(a, reportingCurrency) - getReportingAmount(b, reportingCurrency);
         break;
       case 'stage': {
         const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
@@ -502,6 +580,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       }
       case 'source':
         comparison = (a.source || '').localeCompare(b.source || '');
+        break;
+      case 'competitor':
+        comparison = (a.primaryCompetitor ?? 'zzz').localeCompare(b.primaryCompetitor ?? 'zzz');
         break;
     }
     return sortOrder === 'asc' ? comparison : -comparison;
@@ -825,7 +906,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const resetColumns = () => {
     setColumnOrder([...DEFAULT_COLUMN_ORDER]);
-    setVisibleColumns(new Set(DEFAULT_COLUMN_ORDER));
+    setVisibleColumns(new Set(DEFAULT_VISIBLE_COLUMNS));
   };
 
   useEffect(() => {
@@ -834,6 +915,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       setShowActionDropdown(null);
       setShowColumnSettings(false);
       setOpenPopover(null);
+      setCompetitorPopoverDealId(null);
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -847,17 +929,63 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (editingCell) { setEditingCell(null); setEditValue(''); return; }
-      if (openPopover) { setOpenPopover(null); return; }
-      if (selectedDeals.length > 0) {
-        setSelectedDeals([]);
-        lastSelectedIndex.current = null;
+      // Guard: don't intercept when an input, textarea, or select has focus
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      const isInputFocused = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+      if (e.key === 'Escape') {
+        if (editingCell) { setEditingCell(null); setEditValue(''); return; }
+        if (openPopover) { setOpenPopover(null); return; }
+        if (expandedRows.length > 0) { setExpandedRows([]); return; }
+        if (activeRowIndex !== null) { setActiveRowIndex(null); return; }
+        if (selectedDeals.length > 0) { setSelectedDeals([]); lastSelectedIndex.current = null; }
+        return;
+      }
+
+      if (isInputFocused) return;
+
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveRowIndex(prev => {
+          const next = prev === null ? 0 : Math.min(prev + 1, sortedDeals.length - 1);
+          const el = document.getElementById(`deal-row-${sortedDeals[next]?.id}`);
+          el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          return next;
+        });
+        return;
+      }
+      if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveRowIndex(prev => {
+          const next = prev === null ? sortedDeals.length - 1 : Math.max(prev - 1, 0);
+          const el = document.getElementById(`deal-row-${sortedDeals[next]?.id}`);
+          el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          return next;
+        });
+        return;
+      }
+      if (e.key === 'Enter' && activeRowIndex !== null) {
+        e.preventDefault();
+        const deal = sortedDeals[activeRowIndex];
+        if (deal) toggleRowExpansion(deal.id);
+        return;
+      }
+      if (e.key === 'e' && activeRowIndex !== null) {
+        e.preventDefault();
+        const deal = sortedDeals[activeRowIndex];
+        if (deal) startEdit(deal.id, 'owner');
+        return;
+      }
+      if (e.key === 'x' && activeRowIndex !== null) {
+        e.preventDefault();
+        const deal = sortedDeals[activeRowIndex];
+        if (deal) toggleDealSelection(deal.id);
+        return;
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [editingCell, openPopover, selectedDeals]);
+  }, [editingCell, openPopover, selectedDeals, sortedDeals, activeRowIndex, expandedRows]);
 
   useEffect(() => {
     if (!editingCell) return;
@@ -880,12 +1008,49 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [openFilter]);
 
-  const totalValue = sortedDeals.reduce((sum, deal) => sum + deal.amount, 0);
-  const avgWinRate = 67;
+  const totalValue = useMemo(
+    () => sortedDeals.reduce((sum, deal) => sum + getReportingAmount(deal, reportingCurrency), 0),
+    [sortedDeals, reportingCurrency],
+  );
+  const computedWinRate = useMemo(() => {
+    const closed = allDeals.filter(d => d.stage === 'closed-won' || d.stage === 'closed-lost');
+    if (closed.length === 0) return null;
+    return Math.round((closed.filter(d => d.stage === 'closed-won').length / closed.length) * 100);
+  }, [allDeals]);
+
   // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
   const kpiClosingCount  = filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7)).length;
   const kpiStalledCount  = filteredDeals.filter(d => isStalled(d)).length;
-  const avgDaysCycle = 45;
+
+  const computedAvgDaysToClose = useMemo(() => {
+    const closedWon = filteredDeals.filter(d => d.stage === 'closed-won' && d.createdAt && d.closeDate);
+    if (closedWon.length === 0) return null;
+    const total = closedWon.reduce((sum, d) => {
+      const ms = new Date(d.closeDate).getTime() - new Date(d.createdAt!).getTime();
+      return sum + Math.max(0, Math.round(ms / 86_400_000));
+    }, 0);
+    return Math.round(total / closedWon.length);
+  }, [filteredDeals]);
+
+  const weightedForecast = useMemo(() =>
+    filteredDeals
+      .filter(d => d.stage !== 'closed-won' && d.stage !== 'closed-lost')
+      .reduce((sum, d) => sum + getReportingAmount(d, reportingCurrency) * (d.aiScore / 100), 0),
+    [filteredDeals, reportingCurrency],
+  );
+
+  const PIPELINE_STAGES = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'] as const;
+  const stageSummary = useMemo(() => {
+    const byStage: Record<string, { count: number; value: number }> = {};
+    for (const s of PIPELINE_STAGES) byStage[s] = { count: 0, value: 0 };
+    for (const d of filteredDeals) {
+      if (byStage[d.stage]) {
+        byStage[d.stage].count++;
+        byStage[d.stage].value += getReportingAmount(d, reportingCurrency);
+      }
+    }
+    return PIPELINE_STAGES.map(s => ({ stage: s, ...byStage[s] }));
+  }, [filteredDeals, reportingCurrency]);
 
   const duplicatePairs = useMemo(() => {
     const pairs = findDuplicatePairs(allDeals);
@@ -894,9 +1059,21 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const activePairCount = duplicatePairs.length;
 
+  // DQ summary — counts from filteredDeals so it respects quick filters but NOT showIssuesOnly
+  const dqSummary = useMemo(() => {
+    let errors = 0;
+    let warnings = 0;
+    for (const d of filteredDeals) {
+      const dq = getDealDataQuality(d);
+      if (dq.hasErrors) errors++;
+      else if (dq.hasWarnings) warnings++;
+    }
+    return { errors, warnings, total: errors + warnings };
+  }, [filteredDeals]);
+
   // Reset KPI shortcut when any dropdown filter changes to avoid phantom pills
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setActiveKpiFilter(null); }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, advancedConditions]);
+  useEffect(() => { setActiveKpiFilter(null); }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, selectedCompetitors, advancedConditions]);
 
   commitEditRef.current = commitEdit;
 
@@ -917,9 +1094,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     set('healthTiers',     selectedHealthTiers.size > 0 ? [...selectedHealthTiers].join(',') : null);
     set('pipelineAgeMin',  pipelineAgeFilter.min !== null ? String(pipelineAgeFilter.min) : null);
     set('pipelineAgeMax',  pipelineAgeFilter.max !== null ? String(pipelineAgeFilter.max) : null);
+    set('competitors',     selectedCompetitors.size > 0 ? [...selectedCompetitors].join(',') : null);
     setSearchParams(params, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter]);
+  }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, selectedCompetitors]);
 
   // ── URL sync: advanced filter builder ─────────────────────────────────────
   useEffect(() => {
@@ -962,7 +1140,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     setSelectedSources(new Set());
     setSelectedHealthTiers(new Set());
     setPipelineAgeFilter({ min: null, max: null });
+    setSelectedCompetitors(new Set());
     setAdvancedConditions([]);
+    setShowIssuesOnly(false);
+    setDealSearchTerm('');
   };
 
   const hasActiveFilters =
@@ -971,14 +1152,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     valueFilter.min !== null || valueFilter.max !== null ||
     selectedSources.size > 0 || selectedHealthTiers.size > 0 ||
     pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ||
-    advancedConditions.length > 0;
+    selectedCompetitors.size > 0 ||
+    advancedConditions.length > 0 ||
+    showIssuesOnly ||
+    debouncedDealSearch !== '';
 
   const activeFilterCount =
     selectedStages.size + selectedOwners.size + selectedSources.size + selectedHealthTiers.size +
+    selectedCompetitors.size +
     (closeDateFilter.preset !== 'all' ? 1 : 0) +
     (valueFilter.min !== null || valueFilter.max !== null ? 1 : 0) +
     (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ? 1 : 0) +
-    advancedConditions.length;
+    advancedConditions.length +
+    (debouncedDealSearch ? 1 : 0);
 
   const HEALTH_TIER_LABELS: Record<HealthTierFilter, string> = {
     strong: 'Healthy',
@@ -994,7 +1180,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const FilterChip = ({
     label, color = 'indigo', onRemove,
-  }: { label: string; color?: 'indigo' | 'green' | 'amber' | 'red' | 'purple' | 'blue' | 'orange'; onRemove: () => void }) => {
+  }: { label: string; color?: 'indigo' | 'green' | 'amber' | 'red' | 'purple' | 'blue' | 'orange' | 'teal'; onRemove: () => void }) => {
     const colorMap = {
       indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
       green:  'bg-green-50  text-green-700  border-green-200',
@@ -1003,6 +1189,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       purple: 'bg-purple-50 text-purple-700 border-purple-200',
       blue:   'bg-blue-50   text-blue-700   border-blue-200',
       orange: 'bg-orange-50 text-orange-700 border-orange-200',
+      teal:   'bg-teal-50   text-teal-700   border-teal-200',
     };
     return (
       <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full border ${colorMap[color]}`}>
@@ -1012,7 +1199,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     );
   };
 
-  const fmtValK = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`;
+  const fmtValK = (v: number) => {
+    const sym = CURRENCY_SYMBOLS[reportingCurrency] ?? '$';
+    return v >= 1000 ? `${sym}${(v / 1000).toFixed(0)}K` : `${sym}${Math.round(v)}`;
+  };
 
   const showBulkActions = selectedDeals.length > 0;
   const orderedVisible = columnOrder.filter(k => visibleColumns.has(k));
@@ -1058,6 +1248,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         return <th key="source" className={`${p4} ${thSort}`} onClick={() => handleSort('source')}><div className="flex items-center space-x-1"><span>Source</span><SortIcon column="source" /></div></th>;
       case 'health':
         return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><div className="flex flex-col"><span>WIN SCORE</span><span className="text-[10px] font-normal text-gray-400 normal-case tracking-normal">AI probability</span></div><SortIcon column="health" /></div></th>;
+      case 'relationship':
+        return <th key="relationship" className={`${p2} ${thBase}`}>Relationship</th>;
+      case 'competitor':
+        return (
+          <th key="competitor" className={`${p2} ${thSort}`} onClick={() => handleSort('competitor')}>
+            <div className="flex items-center space-x-1">
+              <span>Competitor</span>
+              <SortIcon column="competitor" />
+            </div>
+          </th>
+        );
       case 'actions':
         return <th key="actions" className={thBase}>Actions</th>;
       default:
@@ -1090,6 +1291,53 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     </span>
                   )}
                 </div>
+                {/* getNextBestAction() is a pure synchronous function — safe to call inline in render.
+                    For >500 deals, memoize per deal.id using useMemo. */}
+                {(() => {
+                  const nba = getNextBestAction(deal);
+                  if (nba.urgency === 'low') return null;
+                  return (
+                    <p className={`text-[11px] mt-0.5 truncate leading-tight flex items-center gap-1 ${nba.urgency === 'high' ? 'text-red-600' : 'text-amber-600'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${nba.urgency === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                      {nba.shortLabel}
+                    </p>
+                  );
+                })()}
+                {/* Pipeline Hygiene dot — only shown for deals with issues */}
+                {(() => {
+                  const dq = getDealDataQuality(deal);
+                  if (dq.isClean) return null;
+                  const errorCount = dq.issues.filter(i => i.severity === 'error').length;
+                  const dotBg = dq.hasErrors ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700';
+                  const dotFill = dq.hasErrors ? 'bg-red-500' : 'bg-amber-400';
+                  const label = dq.hasErrors
+                    ? `${errorCount} error${errorCount !== 1 ? 's' : ''}`
+                    : `${dq.issues.length} warning${dq.issues.length !== 1 ? 's' : ''}`;
+                  return (
+                    <div className="relative group/dq-dot mt-0.5 inline-block">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md border ${dotBg}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotFill}`} />
+                        {label}
+                      </span>
+                      {/* Hover tooltip */}
+                      <div className="absolute bottom-full left-0 mb-2 z-50 hidden group-hover/dq-dot:block w-64 bg-gray-900 text-white text-xs rounded-xl px-4 py-3 shadow-xl pointer-events-none">
+                        <p className="font-semibold text-gray-200 mb-2">Pipeline Hygiene Issues</p>
+                        {dq.issues.map((issue, i) => (
+                          <div key={i} className="flex items-start gap-1.5 mb-1">
+                            <span className={issue.severity === 'error' ? 'text-red-400' : 'text-amber-400'}>
+                              {issue.severity === 'error' ? '✗' : '⚠'}
+                            </span>
+                            <span className={issue.severity === 'error' ? 'text-gray-200' : 'text-gray-300'}>
+                              {issue.message}
+                            </span>
+                          </div>
+                        ))}
+                        <p className="text-gray-500 mt-1.5 text-[10px]">Expand row to fix issues</p>
+                        <div className="absolute top-full left-3 border-4 border-transparent border-t-gray-900" />
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleRowExpansion(deal.id); }}
@@ -1221,8 +1469,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 autoFocus
               />
             ) : (
-              <div className={`text-sm font-semibold text-gray-900 tabular-nums ${isSaving ? 'animate-pulse opacity-60' : ''}`}>
-                {formatAmountUSD(displayAmount)}
+              <div className={`${isSaving ? 'animate-pulse opacity-60' : ''}`}>
+                <div className="text-sm font-semibold text-gray-900 tabular-nums">
+                  {formatAmountCompact(displayAmount, deal.currency ?? 'USD')}
+                </div>
+                {(deal.currency ?? 'USD') !== reportingCurrency && (
+                  <div className="text-[10px] text-gray-400 tabular-nums leading-tight">
+                    ~{formatAmountCompact(getReportingAmount(deal, reportingCurrency), reportingCurrency)} {reportingCurrency}
+                  </div>
+                )}
               </div>
             )}
           </td>
@@ -1270,6 +1525,55 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <div className="text-xs text-gray-500 tabular-nums mt-1">
                   Stage {getStageProgress(displayStage)}
                 </div>
+                {/* Velocity chip — pace vs close-date budget */}
+                {(() => {
+                  const vel = getDealVelocity(deal);
+                  if (!vel) return null;
+                  const chipStyle = vel.rating === 'ahead'
+                    ? 'bg-green-100 text-green-700 border-green-300'
+                    : vel.rating === 'on-track'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : vel.rating === 'new'
+                    ? 'bg-gray-100 text-gray-500 border-gray-200'
+                    : 'bg-red-50 text-red-700 border-red-200';
+                  const arrow = vel.rating === 'ahead' ? '↑'
+                    : vel.rating === 'on-track' ? '→'
+                    : vel.rating === 'new' ? '–'
+                    : '↓';
+                  return (
+                    <div className="group/vel-chip relative inline-block mt-1">
+                      <div className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border cursor-default ${chipStyle}`}>
+                        <span>{arrow}</span>
+                        <span>{vel.label}</span>
+                      </div>
+                      <div className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 w-52
+                                      opacity-0 group-hover/vel-chip:opacity-100 transition-opacity duration-150">
+                        <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 shadow-xl">
+                          <p className="font-semibold mb-1.5">Deal Velocity</p>
+                          <div className="space-y-1">
+                            <div className="flex justify-between gap-4">
+                              <span className="text-gray-300">Stage progress</span>
+                              <span className="font-medium">{Math.round(vel.stageProgress * 100)}%</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                              <span className="text-gray-300">Time used</span>
+                              <span className="font-medium">{Math.round(vel.timeConsumed * 100)}%</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                              <span className="text-gray-300">Velocity ratio</span>
+                              <span className="font-medium">{vel.velocityRatio.toFixed(2)}x</span>
+                            </div>
+                            <div className="mt-1.5 pt-1.5 border-t border-gray-700 text-gray-300 text-[10px]">
+                              {vel.daysInPipeline}d in pipeline · {vel.totalBudgetDays}d budget
+                            </div>
+                          </div>
+                        </div>
+                        <div className="w-0 h-0 mx-3 border-l-4 border-r-4 border-t-4
+                                        border-l-transparent border-r-transparent border-t-gray-900" />
+                      </div>
+                    </div>
+                  );
+                })()}
                 {hoveredStage === deal.id && (
                   <div className="absolute left-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50">
                     <div className="text-sm font-semibold text-gray-900 mb-3">Deal Progress:</div>
@@ -1624,6 +1928,206 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         );
       }
 
+      case 'relationship': {
+        const relRisk = getRelationshipRisk(deal);
+        const relTierConfig = {
+          strong: { pill: 'text-green-700 bg-green-50 border-green-200', label: 'Strong' },
+          fair:   { pill: 'text-amber-700 bg-amber-50 border-amber-200', label: 'Fair'   },
+          weak:   { pill: 'text-red-700 bg-red-50 border-red-200',       label: 'Weak'   },
+        };
+        const relCfg = relTierConfig[relRisk.tier];
+        return (
+          <td key="relationship" className={`hidden md:table-cell ${cellPadding}`}>
+            <div className="relative group/rel-cell inline-block">
+              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${relCfg.pill}`}>
+                ◈ {relCfg.label}
+              </span>
+              {/* Hover tooltip with named signal breakdown */}
+              <div className="absolute bottom-full left-0 mb-2 z-50 hidden group-hover/rel-cell:block w-64 bg-gray-900 text-white text-xs rounded-xl px-4 py-3 shadow-xl pointer-events-none">
+                <p className="font-semibold text-gray-200 mb-2">Relationship: {relCfg.label}</p>
+                {relRisk.signals.map((sig, i) => (
+                  <div key={i} className="flex items-start gap-1.5 mb-1">
+                    <span className={sig.passed ? 'text-green-400' : 'text-red-400'}>
+                      {sig.passed ? '✓' : '✗'}
+                    </span>
+                    <span className={sig.passed ? 'text-gray-300' : 'text-gray-100'}>{sig.detail ?? sig.label}</span>
+                  </div>
+                ))}
+                <p className="text-indigo-300 mt-2 border-t border-gray-700 pt-2 leading-snug">
+                  → {relRisk.actionSuggestion}
+                </p>
+                <div className="absolute top-full left-4 border-4 border-transparent border-t-gray-900" />
+              </div>
+            </div>
+          </td>
+        );
+      }
+
+      case 'competitor': {
+        const effectiveForComp = localEdits[deal.id] ? { ...deal, ...localEdits[deal.id] } : deal;
+        const primary = effectiveForComp.primaryCompetitor;
+        const secondaries = effectiveForComp.secondaryCompetitors ?? [];
+        const isOpen = competitorPopoverDealId === deal.id;
+        return (
+          <td key="competitor" className={`hidden md:table-cell ${cellPadding} relative`} onClick={e => e.stopPropagation()}>
+            <div className="relative group/comp">
+              {/* Trigger button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); setCompetitorPopoverDealId(isOpen ? null : deal.id); setCustomCompetitorInput(''); }}
+                className="flex items-center gap-1"
+              >
+                {primary ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 whitespace-nowrap">
+                      <Swords size={10} className="shrink-0" />
+                      {primary}
+                    </span>
+                    {secondaries.length > 0 && (
+                      <span className="text-xs text-gray-400 font-medium shrink-0">+{secondaries.length}</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-gray-300 text-sm hover:text-gray-400">—</span>
+                )}
+              </button>
+
+              {/* Hover tooltip — only when not editing */}
+              {primary && !isOpen && (
+                <div className="pointer-events-none absolute bottom-full left-0 mb-2 z-50 opacity-0 group-hover/comp:opacity-100 transition-opacity duration-150 w-52">
+                  <div className="bg-gray-900 text-white text-xs rounded-xl px-3 py-2.5 shadow-xl">
+                    <p className="font-semibold text-gray-300 mb-1.5">Competitors</p>
+                    <div className="space-y-1">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-teal-400 text-[10px] font-bold uppercase tracking-wide w-14 shrink-0">Primary</span>
+                        <span>{primary}</span>
+                      </div>
+                      {secondaries.map((s, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <span className="text-gray-500 text-[10px] font-bold uppercase tracking-wide w-14 shrink-0">Also</span>
+                          <span className="text-gray-300">{s}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="w-0 h-0 mx-3 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-gray-900" />
+                </div>
+              )}
+
+              {/* Inline edit popover */}
+              {isOpen && (
+                <div
+                  className="absolute top-full left-0 mt-1 z-50 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl p-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Competitors</p>
+
+                  <div className="mb-3">
+                    <label className="text-xs text-gray-500 mb-1 block">Primary competitor</label>
+                    <select
+                      value={effectiveForComp.primaryCompetitor ?? ''}
+                      onChange={e => {
+                        const val = e.target.value || undefined;
+                        setLocalEdits(prev => ({
+                          ...prev,
+                          [deal.id]: { ...prev[deal.id], primaryCompetitor: val },
+                        }));
+                        onFieldUpdate?.(deal.id, 'primaryCompetitor', val ?? null);
+                      }}
+                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white outline-none focus:border-indigo-400"
+                    >
+                      <option value="">None</option>
+                      {KNOWN_COMPETITORS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="text-xs text-gray-500 mb-1.5 block">Also competing against</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {KNOWN_COMPETITORS.filter(c => c !== effectiveForComp.primaryCompetitor).map(c => {
+                        const isSel = secondaries.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            onClick={() => {
+                              const next = isSel ? secondaries.filter(x => x !== c) : [...secondaries, c];
+                              setLocalEdits(prev => ({
+                                ...prev,
+                                [deal.id]: { ...prev[deal.id], secondaryCompetitors: next },
+                              }));
+                              onFieldUpdate?.(deal.id, 'secondaryCompetitors', next);
+                            }}
+                            className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                              isSel
+                                ? 'bg-teal-50 text-teal-700 border-teal-300'
+                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="text-xs text-gray-500 mb-1 block">Add unlisted competitor</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customCompetitorInput}
+                        onChange={e => setCustomCompetitorInput(e.target.value)}
+                        placeholder="Type name…"
+                        className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-400"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && customCompetitorInput.trim()) {
+                            const val = customCompetitorInput.trim();
+                            if (!secondaries.includes(val)) {
+                              const next = [...secondaries, val];
+                              setLocalEdits(prev => ({
+                                ...prev,
+                                [deal.id]: { ...prev[deal.id], secondaryCompetitors: next },
+                              }));
+                              onFieldUpdate?.(deal.id, 'secondaryCompetitors', next);
+                            }
+                            setCustomCompetitorInput('');
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (customCompetitorInput.trim()) {
+                            const val = customCompetitorInput.trim();
+                            if (!secondaries.includes(val)) {
+                              const next = [...secondaries, val];
+                              setLocalEdits(prev => ({
+                                ...prev,
+                                [deal.id]: { ...prev[deal.id], secondaryCompetitors: next },
+                              }));
+                              onFieldUpdate?.(deal.id, 'secondaryCompetitors', next);
+                            }
+                            setCustomCompetitorInput('');
+                          }
+                        }}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setCompetitorPopoverDealId(null)}
+                    className="w-full text-xs text-gray-400 hover:text-gray-600 text-center mt-1"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+          </td>
+        );
+      }
+
       case 'actions':
         return (
           <td key="actions" className={cellPadding}>
@@ -1631,20 +2135,28 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               {/* Inline hover action buttons */}
               <div className={`flex items-center gap-1 transition-opacity duration-150 ${hoveredRowId === deal.id ? 'opacity-100' : 'opacity-0'}`}>
                 <button
+                  title="Log Activity"
+                  onClick={(e) => { e.stopPropagation(); openLogMeeting(deal); }}
+                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <ClipboardList size={14} />
+                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Log</span>
+                </button>
+                <button
+                  title="Open Deal"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
+                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <ExternalLink size={14} />
+                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Open</span>
+                </button>
+                <button
                   title="Schedule Follow-up"
                   onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
                   className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
                 >
                   <CalendarPlus size={14} />
                   <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Follow-up</span>
-                </button>
-                <button
-                  title="Create Task"
-                  onClick={(e) => { e.stopPropagation(); openCreateTask(deal); }}
-                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                >
-                  <CheckSquare size={14} />
-                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Task</span>
                 </button>
               </div>
               {/* ··· dropdown */}
@@ -1836,32 +2348,237 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className="text-sm text-gray-400 italic">No notes yet</div>
           </div>
 
-          {/* Zone 3 — AI Signals */}
-          <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 p-4">
-            <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Win Score Signals</div>
-            {isClosed ? (
-              <div className="flex items-center gap-2">
-                {deal.stage === 'closed-won'
-                  ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
-                  : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
+          {/* Zone 3 — Intelligence & Context (tabbed) */}
+          {(() => {
+            const panelTab = expandedPanelTabs[deal.id] ?? 'intelligence';
+            const setPanelTab = (t: 'intelligence' | 'context') =>
+              setExpandedPanelTabs(prev => ({ ...prev, [deal.id]: t }));
+            const dq = getDealDataQuality(expandedMerged);
+            const hasContextIssues = !dq.isClean;
+
+            return (
+              <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col">
+                {/* Tab switcher */}
+                <div className="flex border-b border-gray-100 px-4 pt-3 gap-1">
+                  {(['intelligence', 'context'] as const).map(t => (
+                    <button
+                      key={t}
+                      onClick={e => { e.stopPropagation(); setPanelTab(t); }}
+                      className={[
+                        'px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors capitalize relative',
+                        panelTab === t
+                          ? 'bg-white border border-b-white border-gray-200 text-indigo-700 -mb-px z-10'
+                          : 'text-gray-400 hover:text-gray-600',
+                      ].join(' ')}
+                    >
+                      {t === 'intelligence' ? 'Intelligence' : 'Context'}
+                      {t === 'context' && hasContextIssues && panelTab !== 'context' && (
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content */}
+                <div className="flex-1 p-4 overflow-y-auto">
+                  {panelTab === 'intelligence' ? (
+                    <>
+                      {/* Next Best Action */}
+                      {(() => {
+                        const nba = getNextBestAction(deal);
+                        const urgencyBg = nba.urgency === 'high'
+                          ? 'bg-red-50 border-red-200 text-red-800'
+                          : nba.urgency === 'medium'
+                          ? 'bg-amber-50 border-amber-200 text-amber-800'
+                          : 'bg-gray-50 border-gray-200 text-gray-600';
+                        const urgencyDot = nba.urgency === 'high'
+                          ? 'bg-red-500'
+                          : nba.urgency === 'medium'
+                          ? 'bg-amber-400'
+                          : 'bg-green-400';
+                        return (
+                          <div className="mb-3">
+                            <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">NEXT BEST ACTION</p>
+                            <div className={`flex items-start gap-2 px-3 py-2.5 rounded-xl border text-sm ${urgencyBg}`}>
+                              <span className={`w-2 h-2 rounded-full shrink-0 mt-1 ${urgencyDot}`} />
+                              <p className="leading-snug">{nba.text}</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {/* Deal Velocity */}
+                      {(() => {
+                        const vel = getDealVelocity(deal);
+                        if (!vel) return null;
+                        const velColor = vel.rating === 'ahead'
+                          ? { bar: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50 border-green-200' }
+                          : vel.rating === 'on-track'
+                          ? { bar: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' }
+                          : vel.rating === 'new'
+                          ? { bar: 'bg-gray-400', text: 'text-gray-500', bg: 'bg-gray-50 border-gray-200' }
+                          : { bar: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50 border-red-200' };
+                        const stageBarWidth = `${Math.min(100, Math.round(vel.stageProgress * 100))}%`;
+                        const timeBarWidth  = `${Math.min(100, Math.round(vel.timeConsumed * 100))}%`;
+                        return (
+                          <div className="mb-3">
+                            <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">DEAL VELOCITY</p>
+                            <div className={`rounded-xl border px-3 py-2.5 ${velColor.bg}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-xs font-semibold ${velColor.text}`}>
+                                  {vel.rating === 'ahead' ? '↑ Ahead of pace' : vel.rating === 'on-track' ? '→ On Track' : vel.rating === 'new' ? '– New Deal' : '↓ Slipping behind'}
+                                </span>
+                                <span className="text-[10px] text-gray-500 tabular-nums">{vel.daysInPipeline}d / {vel.totalBudgetDays}d</span>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div>
+                                  <div className="flex justify-between text-[10px] text-gray-500 mb-0.5"><span>Stage progress</span><span className="tabular-nums">{Math.round(vel.stageProgress * 100)}%</span></div>
+                                  <div className="h-1.5 bg-white/60 rounded-full overflow-hidden"><div className={`h-full rounded-full ${velColor.bar}`} style={{ width: stageBarWidth }} /></div>
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-[10px] text-gray-500 mb-0.5"><span>Time consumed</span><span className="tabular-nums">{Math.round(Math.min(vel.timeConsumed, 1) * 100)}%</span></div>
+                                  <div className="h-1.5 bg-white/60 rounded-full overflow-hidden"><div className="h-full rounded-full bg-gray-400" style={{ width: timeBarWidth }} /></div>
+                                </div>
+                              </div>
+                              <p className="text-[10px] text-gray-500 mt-2 tabular-nums">Velocity ratio: {vel.velocityRatio.toFixed(2)}x</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {/* Win Score Signals */}
+                      <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Win Score Signals</div>
+                      {isClosed ? (
+                        <div className="flex items-center gap-2">
+                          {deal.stage === 'closed-won'
+                            ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
+                            : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
+                        </div>
+                      ) : allSignals.length > 0 ? (
+                        <div className="space-y-1">
+                          {allSignals.map(signal => (
+                            <div key={signal.id} className="flex items-start gap-2">
+                              {signal.sentiment === 'positive'
+                                ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
+                                : signal.impact === 'high'
+                                  ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                                  : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
+                              <span className="text-sm text-gray-700 leading-snug">{signal.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">Score based on deal activity and engagement</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Relationship Health */}
+                      {(() => {
+                        const relRisk = getRelationshipRisk(deal);
+                        const relTierColor = {
+                          strong: 'text-green-700 bg-green-50 border-green-200',
+                          fair:   'text-amber-700 bg-amber-50 border-amber-200',
+                          weak:   'text-red-700 bg-red-50 border-red-200',
+                        }[relRisk.tier];
+                        const relTierLabel = relRisk.tier.charAt(0).toUpperCase() + relRisk.tier.slice(1);
+                        return (
+                          <div className="mb-3">
+                            <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">RELATIONSHIP HEALTH</p>
+                            <div className={`rounded-xl border px-3 py-2.5 ${relTierColor}`}>
+                              <span className="text-xs font-semibold block mb-2">◈ {relTierLabel}</span>
+                              <div className="space-y-1">
+                                {relRisk.signals.map((sig, i) => (
+                                  <div key={i} className="flex items-start gap-1.5 text-xs">
+                                    <span className={`shrink-0 font-bold ${sig.passed ? 'text-green-600' : 'text-red-600'}`}>{sig.passed ? '✓' : '✗'}</span>
+                                    <span className={sig.passed ? 'opacity-70' : 'font-medium'}>{sig.detail ?? sig.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-xs mt-2 pt-2 border-t border-current border-opacity-20 opacity-80 leading-snug">→ {relRisk.actionSuggestion}</p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {/* Competitor Intel */}
+                      {(() => {
+                        const primary = deal.primaryCompetitor;
+                        const secondaries = deal.secondaryCompetitors ?? [];
+                        const hasAny = !!primary || secondaries.length > 0;
+                        return (
+                          <div className="mb-3">
+                            <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">COMPETITOR INTEL</p>
+                            {!hasAny ? (
+                              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-dashed border-gray-200">
+                                <Swords size={13} className="text-gray-300 shrink-0" />
+                                <div>
+                                  <p className="text-xs text-gray-400">No competitors tracked</p>
+                                  <button onClick={e => { e.stopPropagation(); setCompetitorPopoverDealId(deal.id); }} className="text-[11px] text-indigo-500 hover:text-indigo-700 hover:underline">Add competitor</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="px-3 py-2.5 rounded-xl bg-teal-50 border border-teal-200">
+                                {primary && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wide w-14 shrink-0">Primary</span>
+                                    <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-teal-100 text-teal-800 border border-teal-300"><Swords size={10} />{primary}</span>
+                                  </div>
+                                )}
+                                {secondaries.length > 0 && (
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-[10px] font-bold text-teal-600 uppercase tracking-wide w-14 shrink-0 pt-1">Also</span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {secondaries.map((s, i) => (
+                                        <span key={i} className="text-xs text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full">{s}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                <button onClick={e => { e.stopPropagation(); setCompetitorPopoverDealId(deal.id); }} className="text-[11px] text-teal-600 hover:text-teal-800 hover:underline mt-2 block">Edit competitors</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      {/* Pipeline Hygiene */}
+                      {(() => {
+                        if (dq.isClean) return (
+                          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 border border-green-200">
+                            <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                            <span className="text-xs text-green-700 font-medium">No data quality issues found</span>
+                          </div>
+                        );
+                        const panelBg = dq.hasErrors ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200';
+                        const assignTarget = currentUser || availableOwners[0] || '';
+                        return (
+                          <div className="mb-3">
+                            <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-1.5">PIPELINE HYGIENE</p>
+                            <div className={`rounded-xl border px-3 py-2.5 ${panelBg}`}>
+                              <div className="space-y-2">
+                                {dq.issues.map((issue: DataQualityIssue, i: number) => (
+                                  <div key={i} className="flex items-start justify-between gap-2">
+                                    <div className="flex items-start gap-1.5 min-w-0">
+                                      <span className={`text-xs font-bold shrink-0 mt-0.5 ${issue.severity === 'error' ? 'text-red-500' : 'text-amber-500'}`}>{issue.severity === 'error' ? '✗' : '⚠'}</span>
+                                      <span className={`text-xs leading-snug ${issue.severity === 'error' ? 'text-red-800' : 'text-amber-800'}`}>{issue.message}</span>
+                                    </div>
+                                    {issue.canAutoFix && issue.type === 'missing_owner' && assignTarget ? (
+                                      <button onClick={e => { e.stopPropagation(); setLocalEdits(prev => ({ ...prev, [expandedMerged.id]: { ...prev[expandedMerged.id], owner: assignTarget } })); onFieldUpdate?.(expandedMerged.id, 'owner', assignTarget); }} className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 whitespace-nowrap shrink-0 underline">Assign to me</button>
+                                    ) : issue.fixField && issue.fixField !== 'contact' ? (
+                                      <button onClick={e => { e.stopPropagation(); startEdit(expandedMerged.id, issue.fixField!); }} className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 whitespace-nowrap shrink-0 underline">Fix →</button>
+                                    ) : issue.fixField === 'contact' ? (
+                                      <button onClick={e => { e.stopPropagation(); navigate(`/crm/deals/${expandedMerged.id}`); }} className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 whitespace-nowrap shrink-0 underline">Open deal →</button>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
               </div>
-            ) : allSignals.length > 0 ? (
-              <div className="space-y-1">
-                {allSignals.map(signal => (
-                  <div key={signal.id} className="flex items-start gap-2">
-                    {signal.sentiment === 'positive'
-                      ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0 mt-0.5" />
-                      : signal.impact === 'high'
-                        ? <AlertTriangle className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                        : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />}
-                    <span className="text-sm text-gray-700 leading-snug">{signal.label}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <span className="text-xs text-gray-400">Score based on deal activity and engagement</span>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Zone 4 — Quick Actions */}
           <div className="md:w-44 flex-shrink-0 p-4">
@@ -1909,7 +2626,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-4 sm:py-6">
-        <div className={`grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-3 ${activePairCount > 0 ? 'lg:grid-cols-7' : 'lg:grid-cols-6'}`}>
+        <div className={`grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-3 ${activePairCount > 0 ? 'lg:grid-cols-8' : 'lg:grid-cols-7'}`}>
 
           {/* Card 1: Total Deals — clickable, active when no KPI filter */}
           <div
@@ -1940,15 +2657,22 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           {/* Card 2: Total Value — decorative only */}
           <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 cursor-default">
             <div className="text-xl sm:text-3xl font-bold text-green-900">{formatAmountUSD(totalValue)}</div>
-            <div className="text-sm text-green-700 font-medium mt-1">Total Value</div>
+            <div
+              className="text-sm text-green-700 font-medium mt-1"
+              title={`Values converted to ${reportingCurrency} · Indicative rates, ${RATES_SNAPSHOT_DATE}`}
+            >
+              Total Value ({reportingCurrency})
+            </div>
           </div>
 
-          {/* Card 3: Avg Win Rate — decorative only */}
+          {/* Card 3: Avg Win Rate — computed from allDeals closed-won / total closed */}
           <div
             className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200 cursor-default"
-            title="Win rate based on closed deals in the current period"
+            title="Win rate computed from all closed deals (won ÷ total closed)"
           >
-            <div className="text-xl sm:text-3xl font-bold text-purple-900">{avgWinRate}%</div>
+            <div className="text-xl sm:text-3xl font-bold text-purple-900">
+              {computedWinRate !== null ? `${computedWinRate}%` : '—'}
+            </div>
             <div className="text-sm text-purple-700 font-medium mt-1">Avg Win Rate</div>
           </div>
 
@@ -2028,16 +2752,29 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             </div>
           </div>
 
-          {/* Card 6: Days Avg Cycle — decorative only */}
+          {/* Card 6: Avg Days to Close — computed from closed-won deals in filteredDeals */}
           <div
             className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200 cursor-default"
-            title="Average deal cycle based on closed deals"
+            title="Average days from creation to close, based on closed-won deals in current filter"
           >
-            <div className="text-xl sm:text-3xl font-bold text-gray-900">{avgDaysCycle}</div>
+            <div className="text-xl sm:text-3xl font-bold text-gray-900">
+              {computedAvgDaysToClose !== null ? computedAvgDaysToClose : '—'}
+            </div>
             <div className="text-sm text-gray-700 font-medium mt-1">Avg Days to Close</div>
           </div>
 
-          {/* Card 7: Duplicate Pairs — only shown when pairs exist */}
+          {/* Card 7: Weighted Forecast — Σ value × probability for active deals */}
+          <div
+            className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200 cursor-default"
+            title={`Weighted pipeline: sum of deal value × win probability for all active deals in current filter · ${reportingCurrency}`}
+          >
+            <div className="text-xl sm:text-3xl font-bold text-violet-900">
+              {formatAmountUSD(weightedForecast)}
+            </div>
+            <div className="text-sm text-violet-700 font-medium mt-1">Weighted Forecast</div>
+          </div>
+
+          {/* Card 8: Duplicate Pairs — only shown when pairs exist */}
           {activePairCount > 0 && (
             <button
               onClick={() => setDuplicateDrawerOpen(true)}
@@ -2055,6 +2792,56 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
         </div>
       </div>
+
+      {/* ── Stage Pipeline Bar ────────────────────────────────────────────────── */}
+      {filteredDeals.length > 0 && (() => {
+        const stageConfig: Record<string, { label: string; bar: string; active: string; text: string }> = {
+          'prospecting':  { label: 'Prospecting',  bar: 'bg-slate-400',   active: 'bg-slate-600',   text: 'text-slate-700' },
+          'qualified':    { label: 'Qualified',    bar: 'bg-blue-400',    active: 'bg-blue-600',    text: 'text-blue-700' },
+          'proposal':     { label: 'Proposal',     bar: 'bg-indigo-500',  active: 'bg-indigo-700',  text: 'text-indigo-700' },
+          'negotiation':  { label: 'Negotiation',  bar: 'bg-purple-500',  active: 'bg-purple-700',  text: 'text-purple-700' },
+          'closed-won':   { label: 'Won',          bar: 'bg-green-500',   active: 'bg-green-700',   text: 'text-green-700' },
+          'closed-lost':  { label: 'Lost',         bar: 'bg-red-400',     active: 'bg-red-600',     text: 'text-red-700' },
+        };
+        const maxCount = Math.max(...stageSummary.map(s => s.count), 1);
+        return (
+          <div className="bg-white border-b border-gray-100 px-4 sm:px-8 py-3">
+            <div className="flex items-end gap-1 sm:gap-2 h-14">
+              {stageSummary.map(({ stage, count, value }) => {
+                const cfg = stageConfig[stage];
+                const isActive = selectedStages.has(stage);
+                const heightPct = Math.max(8, Math.round((count / maxCount) * 100));
+                return (
+                  <button
+                    key={stage}
+                    onClick={() => setSelectedStages(prev => {
+                      const n = new Set(prev);
+                      n.has(stage) ? n.delete(stage) : n.add(stage);
+                      return n;
+                    })}
+                    title={`${cfg.label}: ${count} deal${count !== 1 ? 's' : ''} · ${fmtValK(value)}`}
+                    className={[
+                      'flex-1 flex flex-col items-center gap-0.5 rounded-t group transition-all duration-150',
+                      isActive ? 'opacity-100' : 'opacity-70 hover:opacity-90',
+                    ].join(' ')}
+                  >
+                    <span className={`text-[10px] font-semibold tabular-nums ${cfg.text} opacity-0 group-hover:opacity-100 transition-opacity`}>
+                      {count > 0 ? count : ''}
+                    </span>
+                    <div
+                      className={`w-full rounded-t-sm transition-all duration-200 ${isActive ? cfg.active : cfg.bar} ${isActive ? 'ring-2 ring-offset-1 ring-current' : ''}`}
+                      style={{ height: `${heightPct}%` }}
+                    />
+                    <span className={`text-[9px] font-medium hidden sm:block truncate w-full text-center ${isActive ? cfg.text : 'text-gray-400'}`}>
+                      {cfg.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Filter Bar ────────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100" ref={filterBarRef}>
@@ -2082,6 +2869,29 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
         {/* Desktop: full filter row */}
         <div className="hidden md:flex items-center gap-2 flex-wrap px-4 py-3">
+
+          {/* ── Deal Search ── */}
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={dealSearchTerm}
+              onChange={e => setDealSearchTerm(e.target.value)}
+              placeholder="Search deals…"
+              className={`pl-8 pr-7 py-1.5 text-sm border rounded-lg bg-white transition-all duration-200 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 ${
+                dealSearchTerm ? 'w-56 border-indigo-300 text-indigo-700' : 'w-44 border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            />
+            {dealSearchTerm && (
+              <button
+                onClick={() => setDealSearchTerm('')}
+                className="absolute right-2 text-gray-400 hover:text-gray-600 leading-none"
+                tabIndex={-1}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
           {/* ── Stage ── */}
           <div className="relative">
@@ -2244,12 +3054,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             {openFilter === 'value' && (
               <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[220px]">
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {([
-                    { label: '< $10K',       min: null,   max: 10000  },
-                    { label: '$10K – $50K',  min: 10000,  max: 50000  },
-                    { label: '$50K – $200K', min: 50000,  max: 200000 },
-                    { label: '> $200K',      min: 200000, max: null   },
-                  ] as const).map((preset) => {
+                  {((): { label: string; min: number | null; max: number | null }[] => {
+                    const sym = CURRENCY_SYMBOLS[reportingCurrency] ?? '$';
+                    return [
+                      { label: `< ${sym}10K`,                 min: null,   max: 10000  },
+                      { label: `${sym}10K – ${sym}50K`,        min: 10000,  max: 50000  },
+                      { label: `${sym}50K – ${sym}200K`,       min: 50000,  max: 200000 },
+                      { label: `> ${sym}200K`,                 min: 200000, max: null   },
+                    ];
+                  })().map((preset) => {
                     const isActive = valueFilter.min === preset.min && valueFilter.max === preset.max;
                     return (
                       <button
@@ -2270,7 +3083,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <div className="text-xs text-gray-400 mb-1.5">Custom range</div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 block mb-0.5">Min $</label>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Min {CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}</label>
                     <input
                       type="number"
                       min={0}
@@ -2282,7 +3095,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   </div>
                   <span className="text-gray-400 text-sm mt-3">–</span>
                   <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 block mb-0.5">Max $</label>
+                    <label className="text-[10px] text-gray-400 block mb-0.5">Max {CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}</label>
                     <input
                       type="number"
                       min={0}
@@ -2381,6 +3194,42 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             )}
           </div>
 
+          {/* ── Competitor ── */}
+          <div className="relative">
+            <button
+              onClick={() => setOpenFilter(openFilter === 'competitor' ? null : 'competitor')}
+              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                selectedCompetitors.size > 0
+                  ? 'bg-teal-50 border-teal-300 text-teal-700 font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              Competitor
+              {selectedCompetitors.size > 0 && (
+                <span className="ml-0.5 bg-teal-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
+                  {selectedCompetitors.size}
+                </span>
+              )}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'competitor' ? 'rotate-180' : ''}`} />
+            </button>
+            {openFilter === 'competitor' && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
+                {availableCompetitors.map(c => (
+                  <label key={c} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedCompetitors.has(c)}
+                      onChange={() => setSelectedCompetitors(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n; })}
+                      className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    />
+                    <span className="text-sm text-gray-700">{c}</span>
+                  </label>
+                ))}
+                {availableCompetitors.length === 0 && <p className="text-xs text-gray-400 px-1">No competitors tracked yet</p>}
+              </div>
+            )}
+          </div>
+
           {/* ── Activity Gap ── */}
           <div className="relative">
             <button
@@ -2455,8 +3304,48 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               : 'More filters'}
           </button>
 
+          {/* ── Pipeline Hygiene badge ── */}
+          {dqSummary.total > 0 && (
+            <button
+              onClick={() => setShowIssuesOnly(prev => !prev)}
+              title={`${dqSummary.errors} data error${dqSummary.errors !== 1 ? 's' : ''}, ${dqSummary.warnings} warning${dqSummary.warnings !== 1 ? 's' : ''} — click to filter`}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+                showIssuesOnly
+                  ? 'bg-red-50 border-red-300 text-red-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-red-200 hover:text-red-600'
+              }`}
+            >
+              <AlertCircle size={13} className={showIssuesOnly ? 'text-red-500' : 'text-gray-400'} />
+              {dqSummary.errors > 0 && (
+                <span className={`font-bold ${showIssuesOnly ? 'text-red-700' : 'text-red-500'}`}>
+                  {dqSummary.errors} error{dqSummary.errors !== 1 ? 's' : ''}
+                </span>
+              )}
+              {dqSummary.warnings > 0 && (
+                <span className={showIssuesOnly ? 'text-amber-700' : 'text-amber-500'}>
+                  {dqSummary.errors > 0 ? ', ' : ''}{dqSummary.warnings} warning{dqSummary.warnings !== 1 ? 's' : ''}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* ── Column settings ── */}
           <div className="ml-auto flex items-center gap-2">
+
+            {/* Reporting currency selector */}
+            <div className="relative flex items-center">
+              <select
+                value={reportingCurrency}
+                onChange={e => setReportingCurrency(e.target.value as SupportedCurrency)}
+                className="text-xs border border-gray-200 rounded-lg pl-2 pr-6 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer appearance-none"
+                title={`Report values in ${reportingCurrency} · Indicative rates, ${RATES_SNAPSHOT_DATE}`}
+              >
+                {SUPPORTED_REPORTING_CURRENCIES.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <ChevronDown className="h-3 w-3 text-gray-400 absolute right-1.5 pointer-events-none" />
+            </div>
 
             {/* Density toggle */}
             <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
@@ -2613,6 +3502,20 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onRemove={() => setAdvancedConditions([])}
               />
             )}
+            {[...selectedCompetitors].map(c => (
+              <FilterChip
+                key={`competitor-${c}`}
+                label={c}
+                color="teal"
+                onRemove={() => setSelectedCompetitors(prev => { const n = new Set(prev); n.delete(c); return n; })}
+              />
+            ))}
+            {showIssuesOnly && (
+              <FilterChip label="⚠ Has issues" color="red" onRemove={() => setShowIssuesOnly(false)} />
+            )}
+            {debouncedDealSearch && (
+              <FilterChip label={`"${debouncedDealSearch}"`} color="indigo" onRemove={() => setDealSearchTerm('')} />
+            )}
             <button
               onClick={clearAllFilters}
               className="text-xs text-red-500 hover:text-red-700 font-medium ml-auto shrink-0"
@@ -2733,9 +3636,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div>
               <p className="text-sm font-semibold text-gray-700 mb-2">Value range</p>
               <div className="flex items-center gap-2">
-                <input type="number" min={0} placeholder="Min $" value={valueFilter.min ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, min: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                <input type="number" min={0} placeholder={`Min ${CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}`} value={valueFilter.min ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, min: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
                 <span className="text-gray-400">–</span>
-                <input type="number" min={0} placeholder="Max $" value={valueFilter.max ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                <input type="number" min={0} placeholder={`Max ${CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}`} value={valueFilter.max ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
               </div>
             </div>
             {/* No Contact (Days) */}
@@ -2748,6 +3651,20 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <input type="number" min={0} placeholder="Max" value={pipelineAgeFilter.max ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
               </div>
             </div>
+            {/* Competitor */}
+            {availableCompetitors.length > 0 && (
+              <div>
+                <p className="text-sm font-semibold text-gray-700 mb-2">Competitor</p>
+                <div className="space-y-2">
+                  {availableCompetitors.map(c => (
+                    <label key={c} className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={selectedCompetitors.has(c)} onChange={() => setSelectedCompetitors(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n; })} className="rounded border-gray-300 text-teal-600" />
+                      <span className="text-sm text-gray-700">{c}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-3">
             {hasActiveFilters && (
@@ -2787,14 +3704,16 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {sortedDeals.map((deal) => {
+                {sortedDeals.map((deal, rowIdx) => {
                   const isExpanded = expandedRows.includes(deal.id);
                   const isSelected = selectedDealSet.has(deal.id);
+                  const isActiveRow = activeRowIndex === rowIdx;
                   return (
                     <React.Fragment key={deal.id}>
                       <tr
-                        className={getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id)}
-                        onClick={() => toggleRowExpansion(deal.id)}
+                        id={`deal-row-${deal.id}`}
+                        className={getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id, isActiveRow)}
+                        onClick={() => { setActiveRowIndex(rowIdx); toggleRowExpansion(deal.id); }}
                         onContextMenu={(e) => handleContextMenu(e, deal.id)}
                         onMouseEnter={() => setHoveredRowId(deal.id)}
                         onMouseLeave={() => setHoveredRowId(null)}
@@ -2830,10 +3749,41 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             </table>
 
             {sortedDeals.length === 0 && (
-              <div className="text-center py-16">
-                <Building2 className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
-                <p className="text-xs text-gray-400 mt-1">Try adjusting the stage, date, or value filters above.</p>
+              <div className="text-center py-16 px-8">
+                {allDeals.length === 0 ? (
+                  <>
+                    <BarChart3 className="h-10 w-10 text-indigo-200 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-gray-700 mb-1">Your pipeline is empty</p>
+                    <p className="text-xs text-gray-400 mb-4">Start by adding your first deal to track opportunities and forecast revenue.</p>
+                    <button
+                      onClick={() => navigate('/crm/deals/new')}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      <Zap size={14} />
+                      Add First Deal
+                    </button>
+                  </>
+                ) : showIssuesOnly ? (
+                  <>
+                    <CheckCircle2 className="h-10 w-10 text-green-400 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-gray-700 mb-1">All deals are clean</p>
+                    <p className="text-xs text-gray-400">No data quality issues found in the current filter. Great work!</p>
+                    <button onClick={() => setShowIssuesOnly(false)} className="mt-3 text-xs text-indigo-600 hover:underline">Clear filter</button>
+                  </>
+                ) : (
+                  <>
+                    <ListFilter className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-gray-500 mb-1">No deals match your filters</p>
+                    <p className="text-xs text-gray-400 mb-3">
+                      {hasActiveFilters ? 'Try relaxing some filters or clearing them all.' : 'Try adjusting the stage, date, or value filters above.'}
+                    </p>
+                    {hasActiveFilters && (
+                      <button onClick={clearAllFilters} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
+                        Clear all filters
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -2843,9 +3793,23 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         <div className="block md:hidden py-2 space-y-2">
           {sortedDeals.length === 0 && (
             <div className="text-center py-12 px-4">
-              <Building2 className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
-              <p className="text-xs text-gray-400 mt-1">Try adjusting your filters above.</p>
+              {showIssuesOnly ? (
+                <>
+                  <CheckCircle2 className="h-8 w-8 text-green-400 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-gray-700 mb-1">All deals are clean</p>
+                  <p className="text-xs text-gray-400 mb-2">No data quality issues found.</p>
+                  <button onClick={() => setShowIssuesOnly(false)} className="text-xs text-indigo-600 hover:underline">Clear filter</button>
+                </>
+              ) : (
+                <>
+                  <Building2 className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-gray-500">No deals match your filters</p>
+                  <p className="text-xs text-gray-400 mt-1">Try adjusting your filters above.</p>
+                  {hasActiveFilters && (
+                    <button onClick={clearAllFilters} className="mt-2 text-xs text-indigo-600 hover:underline">Clear all</button>
+                  )}
+                </>
+              )}
             </div>
           )}
           {sortedDeals.map(deal => {
@@ -2892,8 +3856,21 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     {deal.companyName && (
                       <p className="text-xs text-gray-500 truncate mt-0.5">{deal.companyName}</p>
                     )}
+                    {(() => {
+                      const nba = getNextBestAction(deal);
+                      if (nba.urgency === 'low') return null;
+                      return (
+                        <p className={`text-[11px] mt-1 flex items-center gap-1 ${nba.urgency === 'high' ? 'text-red-600' : 'text-amber-600'}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${nba.urgency === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                          {nba.shortLabel}
+                        </p>
+                      );
+                    })()}
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmtValK(deal.amount)}</span>
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums">{formatAmountCompact(deal.amount, deal.currency ?? 'USD')}</span>
+                      {(deal.currency ?? 'USD') !== reportingCurrency && (
+                        <span className="text-[10px] text-gray-400 tabular-nums">~{formatAmountCompact(getReportingAmount(deal, reportingCurrency), reportingCurrency)} {reportingCurrency}</span>
+                      )}
                       <span
                         className="text-xs px-2 py-0.5 rounded-md font-medium shrink-0"
                         style={{ backgroundColor: stageStyle.bg, color: stageStyle.text }}
@@ -3762,18 +4739,22 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             onClick={() => {
               const selectedList = allDeals.filter(d => selectedDealSet.has(d.id));
               const today = new Date().toISOString().slice(0, 10);
-              const headers = ['Deal Name', 'Account', 'Owner', 'Contact', 'Value', 'Stage', 'Close Date', 'Health Score', 'Source', 'Deal Age (days)'];
+              const headers = ['Deal Name', 'Account', 'Owner', 'Contact', 'Value (Native)', 'Currency', 'Value (USD)', 'Stage', 'Close Date', 'Health Score', 'Source', 'Deal Age (days)', 'Competitor (Primary)', 'Competitors (Secondary)'];
               const rows = selectedList.map(d => [
                 d.dealName,
                 d.companyName || d.accountName || '',
                 d.owner || '',
                 d.contactName || '',
                 d.amount.toString(),
+                d.currency ?? 'USD',
+                (d.baseAmountUsd ?? convertToBaseCurrency(d.amount, d.currency ?? 'USD')).toFixed(2),
                 d.stage,
                 d.closeDate || '',
                 d.aiScore.toString(),
                 d.source || '',
                 getDealAgeDays(d.createdAt).toString(),
+                d.primaryCompetitor ?? '',
+                (d.secondaryCompetitors ?? []).join(', '),
               ]);
               const csv = [headers, ...rows]
                 .map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
@@ -3928,7 +4909,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                             <div className="flex justify-between text-xs">
                               <span className="text-gray-400">Value</span>
                               <span className="text-gray-700 font-medium">
-                                {deal.amount ? formatAmountUSD(deal.amount) : '—'}
+                                {deal.amount ? formatAmountCompact(deal.amount, deal.currency ?? 'USD') : '—'}
                               </span>
                             </div>
                             <div className="flex justify-between text-xs">

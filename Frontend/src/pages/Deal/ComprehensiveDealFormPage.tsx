@@ -29,6 +29,7 @@ import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
 import { getSuggestedDealValue, valueMatchesSuggestion, PriceResult } from '../../utils/productPricingEngine';
 import { DealFormAttachments } from '../../components/Deal/DealForm/DealFormAttachments';
+import { DealFormCommercialDocs } from '../../components/Deal/DealForm/DealFormCommercialDocs';
 import { AttachedFile } from '../../config/attachments';
 import { MobileHealthScoreBar } from '../../components/Deal/DealForm/MobileHealthScoreBar';
 import { MobileDealPreview } from '../../components/Deal/DealForm/MobileDealPreview';
@@ -73,7 +74,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     description: '',
     nextSteps: '',
     closeDateOverrideReason: '',
-    sourceJourney: null as { type: 'lead' | 'contact' | 'account'; name: string; id: string } | null
+    sourceJourney: null as { type: 'lead' | 'contact' | 'account'; name: string; id: string } | null,
+    salesDriveFolder: '',
+    agreementUrl: '',
+    accountModuleSetup: '',
+    clientDiscovers: '',
+    discoveryDate: '',
   });
 
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
@@ -761,6 +767,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       // .trim() prevents whitespace-only strings from reaching the backend
       description: formData.description?.trim() || undefined,
       next_step: formData.nextSteps?.trim() || undefined,
+      sales_drive_folder: formData.salesDriveFolder?.trim() || undefined,
+      agreement_url: formData.agreementUrl?.trim() || undefined,
+      account_module_setup: formData.accountModuleSetup?.trim() || undefined,
+      client_discovers: formData.clientDiscovers?.trim() || undefined,
+      discovery_date: formData.discoveryDate || undefined,
     };
   };
 
@@ -949,8 +960,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 -mt-4 lg:-mt-6">
-      {/* sticky top-14 = sticks at 56px (TopBar h-14) from viewport; negative margins cancel outer p-4/p-6 so header spans edge-to-edge */}
-      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-4 lg:-mx-6 px-4 lg:px-8 py-2 lg:py-1.5 shadow-sm">
+      <div className="sticky top-0 z-50 bg-white border-b border-gray-200 -mx-4 lg:-mx-6 px-4 lg:px-8 py-2 lg:py-1.5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div className="flex items-center space-x-3">
             <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">
@@ -1152,6 +1162,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             />
 
             <DealFormDescription
+              formData={formData}
+              onChange={handleFieldChange}
+            />
+
+            <DealFormCommercialDocs
               formData={formData}
               onChange={handleFieldChange}
             />

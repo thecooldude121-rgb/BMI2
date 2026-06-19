@@ -63,6 +63,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const isAdmin = true; // hardcoded until role-based access is wired
   const battleCardRef      = useRef<HTMLDivElement>(null);
   const revenueTimelineRef = useRef<HTMLDivElement>(null);
+  const heroRef            = useRef<HTMLDivElement>(null);
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
   const [loading, setLoading] = useState(true);
@@ -315,7 +316,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const hero = heroRef.current;
+    const heroBottom = hero ? hero.offsetTop + hero.offsetHeight : 0;
+    window.scrollTo({ top: heroBottom, behavior: 'instant' });
   };
 
   const aiIntelligenceData = {
@@ -917,8 +920,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 -mt-6">
-      {/* sticky top-14 sticks at 56px (TopBar h-14) from viewport; -mt-6 on parent cancels main's p-6 padding */}
-      <div className="sticky top-14 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-3 shadow-sm">
+      <div className="sticky top-0 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3 min-w-0">
             <button
@@ -955,6 +957,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       </div>
 
       {/* Hero Section */}
+      <div ref={heroRef}>
       <DealHeroSection
         deal={{ ...deal, aiScore: healthResult.score, aiHealth: healthResult.label }}
         onEdit={() => navigate(`/crm/deals/${id}/edit`)}
@@ -989,6 +992,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         healthScoreFactors={aiIntelligenceData.scoreBreakdown}
         daysSinceContact={5}
       />
+      </div>
 
       {/* Sticky Tab Navigation — items 16, 17, 18 */}
       {(() => {
@@ -1010,7 +1014,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           'files-notes': notes.length,
         };
         return (
-          <div className="sticky top-[7rem] z-40 bg-white border-b border-gray-200 -mx-6 px-8">
+          <div className="sticky top-14 z-40 bg-white border-b border-gray-200 -mx-6 px-8">
             <div className="flex overflow-x-auto scrollbar-none">
               {TABS.map(tab => {
                 const isActive = activeTab === tab.id;

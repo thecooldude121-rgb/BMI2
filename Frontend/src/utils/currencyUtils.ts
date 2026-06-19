@@ -193,3 +193,80 @@ export const RATES_SNAPSHOT_DATE = 'Jun 2026 (approximate)';
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+// ─── Multi-Currency Reporting ─────────────────────────────────────────────────
+
+/** The 8 currencies selectable as the reporting currency in the deals list view. */
+export const SUPPORTED_REPORTING_CURRENCIES = [
+  'USD', 'EUR', 'GBP', 'JPY', 'INR', 'CAD', 'AUD', 'SGD',
+] as const;
+
+export type SupportedCurrency = (typeof SUPPORTED_REPORTING_CURRENCIES)[number];
+
+/** Quick symbol lookup for the 8 reporting currencies. */
+export const CURRENCY_SYMBOLS: Record<SupportedCurrency, string> = {
+  USD: '$', EUR: '€', GBP: '£', JPY: '¥', INR: '₹', CAD: 'C$', AUD: 'A$', SGD: 'S$',
+};
+
+/** Minimum deal shape needed by getReportingAmount. */
+export interface DealForCurrency {
+  amount: number;
+  currency?: string;
+  baseAmountUsd?: number;
+}
+
+/**
+ * Returns the deal value converted to the reporting currency.
+ * Prefers the stored baseAmountUsd (pre-computed USD equivalent) over live conversion.
+ */
+export const getReportingAmount = (deal: DealForCurrency, reportingCurrency: SupportedCurrency): number => {
+  const usdAmount = deal.baseAmountUsd != null && deal.baseAmountUsd > 0
+    ? deal.baseAmountUsd
+    : convertToBaseCurrency(deal.amount, deal.currency ?? 'USD');
+  if (reportingCurrency === 'USD') return usdAmount;
+  return convertFromBaseCurrency(usdAmount, reportingCurrency);
+};
+
+/**
+ * Converts a native-currency amount directly to the reporting currency.
+ */
+export const convertToReportingCurrency = (
+  nativeAmount: number,
+  nativeCurrency: string,
+  reportingCurrency: SupportedCurrency,
+): number => {
+  const usdAmount = convertToBaseCurrency(nativeAmount, nativeCurrency);
+  if (reportingCurrency === 'USD') return usdAmount;
+  return convertFromBaseCurrency(usdAmount, reportingCurrency);
+};
+
+/**
+ * Full-precision format with 0 decimal places — for table display in tight spaces.
+ * Distinct from formatCurrency which always shows 2 decimal places.
+ *
+ * @example formatAmount(50000, 'USD') → '$50,000'
+ * @example formatAmount(3200000, 'JPY') → '¥3,200,000'
+ */
+export const formatAmount = (amount: number, currencyCode: string): string => {
+  if (isNaN(amount)) return formatAmount(0, currencyCode);
+  try {
+    return new Intl.NumberFormat(getCurrency(currencyCode).locale, {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    const cfg = getCurrency(currencyCode);
+    const formatted = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.round(amount));
+    return cfg.symbolPosition === 'prefix'
+      ? `${cfg.symbol}${formatted}`
+      : `${formatted} ${cfg.symbol}`;
+  }
+};
+
+/** Compact K/M/B format — same as formatCurrencyCompact, under the spec name. */
+export const formatAmountCompact = formatCurrencyCompact;

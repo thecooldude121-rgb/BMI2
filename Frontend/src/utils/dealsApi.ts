@@ -93,6 +93,11 @@ export interface DealPayload {
   payment_terms?: string;
   value_change_reason?: string;
   momentum_score?: string;
+  sales_drive_folder?: string;
+  agreement_url?: string;
+  account_module_setup?: string;
+  client_discovers?: string;
+  discovery_date?: string;
 }
 
 export async function createDeal(payload: DealPayload): Promise<{ success: boolean; data: any }> {
