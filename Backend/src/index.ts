@@ -45,6 +45,16 @@ const runMigrations = async () => {
     ALTER TABLE deals
       ADD COLUMN IF NOT EXISTS attachment_metadata JSONB DEFAULT '[]'
   `);
+  // Migration 007: extend lead_views with saved-view metadata fields
+  await pool.query(`
+    ALTER TABLE lead_views
+      ADD COLUMN IF NOT EXISTS is_pinned    BOOLEAN     NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS view_order   INTEGER     NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS visibility   VARCHAR(20) NOT NULL DEFAULT 'private',
+      ADD COLUMN IF NOT EXISTS search_query TEXT        NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS view_mode    VARCHAR(10) NOT NULL DEFAULT 'list',
+      ADD COLUMN IF NOT EXISTS icon         VARCHAR(50) NOT NULL DEFAULT 'list'
+  `);
 };
 
 const start = async () => {

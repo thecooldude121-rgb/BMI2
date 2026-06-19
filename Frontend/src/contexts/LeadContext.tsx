@@ -1,12 +1,34 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-// Supabase removed — all lead data now comes from the Express backend
-// which connects directly to PostgreSQL (bmi_crm database in pgAdmin 4).
+// All data comes from the Express backend → PostgreSQL (bmi_crm in pgAdmin 4).
 import {
   fetchLeadsFromAPI,
   fetchLeadByIdFromAPI,
   createLeadViaAPI,
   updateLeadViaAPI,
   deleteLeadViaAPI,
+  fetchActivitiesFromAPI,
+  createActivityViaAPI,
+  updateActivityViaAPI,
+  fetchNotesFromAPI,
+  createNoteViaAPI,
+  updateNoteViaAPI,
+  deleteNoteViaAPI,
+  fetchTasksFromAPI,
+  createTaskViaAPI,
+  updateTaskViaAPI,
+  fetchEmailsFromAPI,
+  logEmailViaAPI,
+  fetchCallsFromAPI,
+  logCallViaAPI,
+  fetchMeetingsFromAPI,
+  scheduleMeetingViaAPI,
+  fetchTagsFromAPI,
+  createTagViaAPI,
+  fetchViewsFromAPI,
+  createViewViaAPI,
+  updateViewViaAPI,
+  deleteViewViaAPI,
+  enrichLeadViaAPI,
 } from '../utils/leadsApi';
 import { useAuth } from './AuthContext';
 import {
@@ -177,54 +199,82 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     }
   };
 
-  // ── Activity / Note / Task / Email / Call / Meeting / Insight ────────────
-  // These tables (lead_activities, lead_notes, lead_tasks, lead_emails,
-  // lead_calls, lead_meetings, lead_ai_insights) do not exist in the current
-  // PostgreSQL schema (migrate.ts). They were Supabase-only.
-  // All stubs return empty/null — no network calls, no errors.
-  // Add the corresponding tables + backend routes when those features are built.
-  const getLeadActivities  = async (_leadId: string): Promise<LeadActivity[]>  => [];
-  const createActivity     = async (_a: Partial<LeadActivity>): Promise<LeadActivity | null>  => null;
-  const updateActivity     = async (_id: string, _u: Partial<LeadActivity>): Promise<boolean> => false;
+  // ── Activities ────────────────────────────────────────────────────────────
+  const getLeadActivities = (leadId: string) => fetchActivitiesFromAPI(leadId);
 
-  const getLeadNotes  = async (_leadId: string): Promise<LeadNote[]>  => [];
-  const createNote    = async (_n: Partial<LeadNote>): Promise<LeadNote | null>  => null;
-  const updateNote    = async (_id: string, _u: Partial<LeadNote>): Promise<boolean>  => false;
-  const deleteNote    = async (_id: string): Promise<boolean>  => false;
+  const createActivity = async (activity: Partial<LeadActivity>): Promise<LeadActivity | null> => {
+    if (!activity.lead_id) return null;
+    return createActivityViaAPI(activity.lead_id, activity);
+  };
 
-  const getLeadTasks  = async (_leadId: string): Promise<LeadTask[]>  => [];
-  const createTask    = async (_t: Partial<LeadTask>): Promise<LeadTask | null>  => null;
-  const updateTask    = async (_id: string, _u: Partial<LeadTask>): Promise<boolean>  => false;
+  const updateActivity = async (id: string, updates: Partial<LeadActivity>): Promise<boolean> => {
+    if (!updates.lead_id) return false;
+    return updateActivityViaAPI(updates.lead_id, id, updates);
+  };
 
-  const getLeadEmails = async (_leadId: string): Promise<LeadEmail[]>  => [];
-  const sendEmail     = async (_e: Partial<LeadEmail>): Promise<LeadEmail | null>  => null;
+  // ── Notes ─────────────────────────────────────────────────────────────────
+  const getLeadNotes = (leadId: string) => fetchNotesFromAPI(leadId);
 
-  const getLeadCalls  = async (_leadId: string): Promise<LeadCall[]>   => [];
-  const logCall       = async (_c: Partial<LeadCall>): Promise<LeadCall | null>   => null;
+  const createNote = async (note: Partial<LeadNote>): Promise<LeadNote | null> => {
+    if (!note.lead_id) return null;
+    return createNoteViaAPI(note.lead_id, note);
+  };
 
-  const getLeadMeetings   = async (_leadId: string): Promise<LeadMeeting[]>    => [];
-  const scheduleMeeting   = async (_m: Partial<LeadMeeting>): Promise<LeadMeeting | null> => null;
+  const updateNote = async (id: string, updates: Partial<LeadNote>): Promise<boolean> => {
+    if (!updates.lead_id) return false;
+    return updateNoteViaAPI(updates.lead_id, id, updates);
+  };
 
-  const getLeadInsights   = async (_leadId: string): Promise<LeadAIInsight[]>  => [];
+  const deleteNote = async (id: string, leadId?: string): Promise<boolean> => {
+    if (!leadId) return false;
+    return deleteNoteViaAPI(leadId, id);
+  };
+
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+  const getLeadTasks = (leadId: string) => fetchTasksFromAPI(leadId);
+
+  const createTask = async (task: Partial<LeadTask>): Promise<LeadTask | null> => {
+    if (!task.lead_id) return null;
+    return createTaskViaAPI(task.lead_id, task);
+  };
+
+  const updateTask = async (id: string, updates: Partial<LeadTask>): Promise<boolean> => {
+    if (!updates.lead_id) return false;
+    return updateTaskViaAPI(updates.lead_id, id, updates);
+  };
+
+  // ── Emails ────────────────────────────────────────────────────────────────
+  const getLeadEmails = (leadId: string) => fetchEmailsFromAPI(leadId);
+
+  const sendEmail = async (email: Partial<LeadEmail>): Promise<LeadEmail | null> => {
+    if (!email.lead_id) return null;
+    return logEmailViaAPI(email.lead_id, { ...email, direction: 'outbound', sent_at: new Date().toISOString() });
+  };
+
+  // ── Calls ─────────────────────────────────────────────────────────────────
+  const getLeadCalls = (leadId: string) => fetchCallsFromAPI(leadId);
+
+  const logCall = async (call: Partial<LeadCall>): Promise<LeadCall | null> => {
+    if (!call.lead_id) return null;
+    return logCallViaAPI(call.lead_id, call);
+  };
+
+  // ── Meetings ──────────────────────────────────────────────────────────────
+  const getLeadMeetings = (leadId: string) => fetchMeetingsFromAPI(leadId);
+
+  const scheduleMeeting = async (meeting: Partial<LeadMeeting>): Promise<LeadMeeting | null> => {
+    if (!meeting.lead_id) return null;
+    return scheduleMeetingViaAPI(meeting.lead_id, meeting);
+  };
+
+  // ── AI Insights (no DB table yet — interface stubs) ───────────────────────
+  const getLeadInsights    = async (_leadId: string): Promise<LeadAIInsight[]> => [];
   const acknowledgeInsight = async (_id: string): Promise<boolean> => false;
   const dismissInsight     = async (_id: string): Promise<boolean> => false;
 
+  // ── Enrichment ────────────────────────────────────────────────────────────
   const enrichLead = async (request: LeadEnrichmentRequest): Promise<LeadEnrichmentResponse | null> => {
-    return {
-      person_data: {
-        full_name: 'John Doe',
-        position: 'CEO',
-        seniority: 'Executive',
-        department: 'Leadership'
-      },
-      company_data: {
-        name: 'Acme Corp',
-        industry: 'Technology',
-        size: '100-500',
-        revenue: 50000000
-      },
-      confidence: 0.95
-    };
+    return enrichLeadViaAPI(request.lead_id);
   };
 
   const calculateLeadScore = (lead: Lead): number => {
@@ -289,16 +339,28 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     }
   };
 
-  // Views are not in the PostgreSQL schema yet — stubs keep the interface intact
-  const fetchViews  = async () => { setViews([]); };
-  const createView  = async (_v: Partial<LeadView>): Promise<LeadView | null> => null;
-  const updateView  = async (id: string, updates: Partial<LeadView>): Promise<boolean> => {
-    setViews(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
-    return true;
+  // ── Views ─────────────────────────────────────────────────────────────────
+  const fetchViews = useCallback(async () => {
+    const data = await fetchViewsFromAPI();
+    setViews(data);
+  }, []);
+
+  const createView = async (view: Partial<LeadView>): Promise<LeadView | null> => {
+    const created = await createViewViaAPI(view);
+    if (created) setViews(prev => [...prev, created]);
+    return created;
   };
-  const deleteView  = async (id: string): Promise<boolean> => {
-    setViews(prev => prev.filter(v => v.id !== id));
-    return true;
+
+  const updateView = async (id: string, updates: Partial<LeadView>): Promise<boolean> => {
+    const ok = await updateViewViaAPI(id, updates);
+    if (ok) setViews(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
+    return ok;
+  };
+
+  const deleteView = async (id: string): Promise<boolean> => {
+    const ok = await deleteViewViaAPI(id);
+    if (ok) setViews(prev => prev.filter(v => v.id !== id));
+    return ok;
   };
 
   const applyView = (view: LeadView) => {
@@ -306,10 +368,20 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     applyFilters(view.filters);
   };
 
-  // lead_pipelines, tags, lead_duplicates don't exist in the DB schema yet — stubs
-  const fetchPipelines  = async () => { setPipelines([]); };
-  const fetchTags       = async () => { setTags([]); };
-  const createTag       = async (_t: Partial<Tag>): Promise<Tag | null> => null;
+  // ── Tags ──────────────────────────────────────────────────────────────────
+  const fetchTags = async () => {
+    const data = await fetchTagsFromAPI();
+    setTags(data);
+  };
+
+  const createTag = async (tag: Partial<Tag>): Promise<Tag | null> => {
+    const created = await createTagViaAPI(tag);
+    if (created) setTags(prev => [...prev, created]);
+    return created;
+  };
+
+  // Pipelines have no DB table yet — stub keeps the interface intact
+  const fetchPipelines = async () => { setPipelines([]); };
   const convertLead     = async (_leadId: string, createDeal: boolean): Promise<{ contactId?: string; dealId?: string } | null> =>
     ({ contactId: undefined, dealId: createDeal ? undefined : undefined });
   const detectDuplicates = async (_leadId: string): Promise<any[]> => [];

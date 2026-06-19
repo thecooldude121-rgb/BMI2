@@ -290,6 +290,13 @@ export interface LeadView {
   created_by: string;
   created_at: string;
   updated_at: string;
+  // Added migration 007
+  is_pinned:    boolean;
+  view_order:   number;
+  visibility:   'private' | 'team' | 'organization';
+  search_query: string;
+  view_mode:    'list' | 'grid' | 'kanban';
+  icon:         string;
 }
 
 export interface LeadAIInsight {
