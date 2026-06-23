@@ -1,21 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Plus, Upload, Search, ChevronDown, MoreVertical, CheckCircle, Mail, Phone, Eye,
+  Plus, Upload, Search, ChevronDown, CheckCircle, Mail, Phone, Eye,
   UserPlus, Link as LinkIcon, X, BookmarkCheck,
-  Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2,
+  Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal,
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
 import { useLeadsPageState } from '../../hooks/useLeadsPageState';
-import type { SortOption } from '../../hooks/useLeadsPageState';
+import { SORT_OPTIONS } from '../../utils/leadSorting';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import SavedViewsBar from '../../components/Leads/SavedViewsBar';
 import SavedViewModal from '../../components/Leads/SavedViewModal';
 import KpiCard from '../../components/Leads/KpiCard';
+import LeadTableRow from '../../components/Leads/LeadTableRow';
+import FilterChipBar from '../../components/Leads/FilterChipBar';
+import AdvancedFilterDrawer from '../../components/Leads/AdvancedFilterDrawer';
+import BulkActionBar from '../../components/Leads/BulkActionBar';
+import type { FollowUpType } from '../../components/Leads/BulkActionBar';
+import QuickAddLeadModal from '../../components/Leads/QuickAddLeadModal';
+import type { AdvancedFilter, FilterGroup } from '../../types/leadFilter';
 import type { Lead } from '../../types/lead';
+import type { ModalId } from '../../hooks/useLeadsPageState';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,14 +72,17 @@ const getSourceInfo = (source?: string) => {
   return { icon: '📋', color: 'text-gray-600 bg-gray-50' };
 };
 
-const getStarRating = (score: number) => '⭐'.repeat(Math.min(5, Math.round((score / 100) * 5)));
 
-const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
-  { value: 'score_high_low', label: 'Score (High to Low)' },
-  { value: 'score_low_high', label: 'Score (Low to High)' },
-  { value: 'name_az',        label: 'Name (A-Z)' },
-  { value: 'date_newest',    label: 'Date (Newest)' },
-];
+
+// Modals not yet implemented — show a toast instead of opening a stub modal
+const STUB_MODALS = new Set<ModalId>(['assignOwner', 'addTag', 'enrichLead', 'mergeDuplicate', 'editLead']);
+const STUB_LABELS: Partial<Record<ModalId, string>> = {
+  assignOwner:    'Assign owner',
+  addTag:         'Add tag',
+  enrichLead:     'Lead enrichment',
+  mergeDuplicate: 'Merge duplicate',
+  editLead:       'Edit lead',
+};
 
 const KANBAN_COLUMNS: Array<{ id: Lead['status']; label: string; headerColor: string }> = [
   { id: 'new',       label: 'New',       headerColor: 'bg-blue-100 text-blue-800 border-blue-200' },
@@ -79,8 +90,6 @@ const KANBAN_COLUMNS: Array<{ id: Lead['status']; label: string; headerColor: st
   { id: 'qualified', label: 'Qualified', headerColor: 'bg-green-100 text-green-800 border-green-200' },
   { id: 'lost',      label: 'Lost',      headerColor: 'bg-red-100 text-red-800 border-red-200' },
 ];
-
-const TEAM_MEMBERS = ['John Doe', 'Jane Smith', 'Mike Johnson', 'Sarah Williams'];
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -91,10 +100,10 @@ const LeadsPage: React.FC = () => {
   const {
     viewMode, setViewMode,
     searchQuery, setSearchQuery,
-    sortBy, setSortBy, sortLabel,
+    sortBy, setSortBy, sortLabel, sortExplanation,
     displayedCount, loadMore,
     filterState, setFilterStatus, setFilterSource, setFilterScore,
-    selectedLeadIds, toggleLeadSelection, selectAllLeads, clearSelection, isSelected,
+    selectedLeadIds, toggleLeadSelection, selectAllLeads, setSelection, clearSelection, isSelected,
     activeLead,
     activeModal, openModal, closeModal, isModalOpen,
     toast, showToast, clearToast,
@@ -102,10 +111,12 @@ const LeadsPage: React.FC = () => {
     paginatedLeads,
     kpiMetrics,
     // Insight selectors
-    overdueLeads, duplicateRiskLeads, readyToConvertLeads,
-    slaBreachedLeads, newUnworkedLeads, sourceQualityThisWeek,
-    newUnworkedDelta, readyToConvertDelta,
+    overdueLeads, duplicateRiskLeads, untouchedLeads,
+    slaBreachedLeads, slaBreachCounts, leadSLAMap, newUnworkedLeads, sourceQualityThisWeek,
+    newUnworkedDelta,
     activeInsight, setActiveInsight,
+    // Advanced filters
+    advancedFilter, hasActiveAdvancedFilter, setAdvancedFilter, clearAdvancedFilter,
     // Saved views
     savedViews, activeViewId, activeViewLabel,
     setActiveView, clearActiveView,
@@ -117,12 +128,71 @@ const LeadsPage: React.FC = () => {
     duplicateRiskLeads.map(l => l.email?.split('@')[1]).filter(Boolean)
   ).size;
 
+  // ── Row risk id sets (zero hook changes) ──────────────────────────────────
+  const duplicateRiskIdSet = React.useMemo(
+    () => new Set(duplicateRiskLeads.map(l => l.id)),
+    [duplicateRiskLeads],
+  );
+  const overdueIdSet = React.useMemo(
+    () => new Set(overdueLeads.map(l => l.id)),
+    [overdueLeads],
+  );
+  const untouchedIdSet = React.useMemo(
+    () => new Set(untouchedLeads.map(l => l.id)),
+    [untouchedLeads],
+  );
+
+  // ── Advanced filter handlers ──────────────────────────────────────────────
+  const handleRemoveCondition = (groupId: string, conditionId: string) => {
+    const updated: AdvancedFilter = {
+      groups: advancedFilter.groups.map((g: FilterGroup) =>
+        g.id !== groupId ? g : { ...g, conditions: g.conditions.filter(c => c.id !== conditionId) }
+      ).filter((g: FilterGroup) => g.conditions.length > 0),
+    };
+    setAdvancedFilter(updated);
+  };
+
+  const handleRemoveGroup = (groupId: string) => {
+    setAdvancedFilter({
+      groups: advancedFilter.groups.filter((g: FilterGroup) => g.id !== groupId),
+    });
+  };
+
+  // ── Quick Add + split-button state ───────────────────────────────────────
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const h = (e: MouseEvent) => {
+      if (!addMenuRef.current?.contains(e.target as Node)) setAddMenuOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [addMenuOpen]);
+
   // ── Local state for edit modal ────────────────────────────────────────────
   const [editingViewId, setEditingViewId] = useState<string | null>(null);
   const editingView = savedViews.find(v => v.id === editingViewId) ?? null;
   const isUserViewActive = activeViewId !== null && !activeViewId.startsWith('preset_');
 
+  // ── Bulk selection computed values ────────────────────────────────────────
+  const isPageFullySelected = React.useMemo(
+    () => paginatedLeads.length > 0 && paginatedLeads.every(l => selectedLeadIds.includes(l.id)),
+    [paginatedLeads, selectedLeadIds],
+  );
+  const areAllFiltered =
+    selectedLeadIds.length === sortedLeads.length && sortedLeads.length > 0;
+
+  const selectedLeads = React.useMemo(
+    () => contextLeads.filter(l => selectedLeadIds.includes(l.id)),
+    [contextLeads, selectedLeadIds],
+  );
+
   // ── Handlers ─────────────────────────────────────────────────────────────
+
+  // ── Single-lead modal actions (triggered from row ⋯ menu) ─────────────────
 
   const confirmConvert = () => {
     if (activeLead) {
@@ -131,53 +201,80 @@ const LeadsPage: React.FC = () => {
     }
   };
 
-  const handleArchiveLead = (leadId: string) => {
-    updateLead(leadId, { status: 'lost' as Lead['status'] });
-    showToast('Lead archived');
+  const handleSingleDelete = () => {
+    if (activeLead) {
+      deleteLead(activeLead.id);
+      closeModal();
+      showToast('Lead deleted', 'success');
+    }
   };
 
-  const handleReactivateLead = (leadId: string) => {
-    updateLead(leadId, { status: 'new' as Lead['status'] });
-    showToast('Lead reactivated');
+  const handleSingleArchive = () => {
+    if (activeLead) {
+      updateLead(activeLead.id, { status: 'lost' as Lead['status'] });
+      closeModal();
+      showToast('Lead archived', 'success');
+    }
   };
 
-  const handleBulkDelete = () => {
-    const count = selectedLeadIds.length;
-    selectedLeadIds.forEach(id => deleteLead(id));
-    clearSelection();
-    closeModal();
-    showToast(`${count} lead(s) deleted`);
-  };
+  // ── Bulk action handlers (delegated from BulkActionBar) ───────────────────
 
-  const handleBulkAssign = (teamMember: string) => {
-    showToast(`Assigned ${selectedLeadIds.length} leads to ${teamMember}`);
-    closeModal();
-    clearSelection();
-  };
-
-  const handleBulkStatusChange = (newStatus: string) => {
-    selectedLeadIds.forEach(id => updateLead(id, { status: newStatus as Lead['status'] }));
-    showToast(`Changed status for ${selectedLeadIds.length} leads to ${newStatus}`);
-    closeModal();
+  const handleBulkChangeStatus = (status: Lead['status']) => {
+    const n = selectedLeadIds.length;
+    selectedLeadIds.forEach(id => updateLead(id, { status }));
+    showToast(`${n} lead${n !== 1 ? 's' : ''} → ${status}`, 'success');
     clearSelection();
   };
 
-  const handleExport = () => {
-    const leads = contextLeads.filter(l => selectedLeadIds.includes(l.id));
+  const handleBulkSetFollowUp = (date: string, _type: FollowUpType) => {
+    // _type is UI-only; only date is persisted to next_follow_up_date
+    const n = selectedLeadIds.length;
+    selectedLeadIds.forEach(id => updateLead(id, { next_follow_up_date: date }));
+    showToast(`Follow-up set for ${n} lead${n !== 1 ? 's' : ''}`, 'success');
+    clearSelection();
+  };
+
+  const handleBulkExport = () => {
     const csvContent = [
       ['Name', 'Company', 'Email', 'Phone', 'Status', 'Score'],
-      ...leads.map(l => [
+      ...selectedLeads.map(l => [
         getLeadName(l), l.company || '', l.email || '', l.phone || '',
         l.status, String(getLeadScore(l)),
       ]),
     ].map(row => row.join(',')).join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
+    const url = window.URL.createObjectURL(new Blob([csvContent], { type: 'text/csv' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = 'leads-export.csv';
     a.click();
+    showToast(`${selectedLeads.length} lead${selectedLeads.length !== 1 ? 's' : ''} exported`, 'success');
+    // Intentionally do NOT clear selection — user may want to take another action
+  };
+
+  const handleBulkConvert = (ids: string[]) => {
+    ids.forEach(id => updateLead(id, { status: 'converted' as Lead['status'] }));
+    showToast(`${ids.length} lead${ids.length !== 1 ? 's' : ''} converted`, 'success');
+    clearSelection();
+  };
+
+  const handleBulkArchive = () => {
+    const n = selectedLeadIds.length;
+    selectedLeadIds.forEach(id => updateLead(id, { status: 'lost' as Lead['status'] }));
+    showToast(`${n} lead${n !== 1 ? 's' : ''} archived`, 'success');
+    clearSelection();
+  };
+
+  const handleBulkDisqualify = () => {
+    const n = selectedLeadIds.length;
+    selectedLeadIds.forEach(id => updateLead(id, { status: 'unqualified' as Lead['status'] }));
+    showToast(`${n} lead${n !== 1 ? 's' : ''} marked disqualified`, 'success');
+    clearSelection();
+  };
+
+  const handleBulkDelete = () => {
+    const n = selectedLeadIds.length;
+    selectedLeadIds.forEach(id => deleteLead(id));
+    showToast(`${n} lead${n !== 1 ? 's' : ''} deleted`, 'success');
     clearSelection();
   };
 
@@ -185,51 +282,6 @@ const LeadsPage: React.FC = () => {
     if (!result.destination) return;
     const { draggableId, destination } = result;
     updateLead(draggableId, { status: destination.droppableId as Lead['status'] });
-  };
-
-  // ── Action buttons per status ─────────────────────────────────────────────
-
-  const renderRowActions = (lead: Lead) => {
-    const commonView = (
-      <button
-        onClick={() => navigate(`/crm/leads/${lead.id}`)}
-        className="px-3 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 font-medium"
-      >
-        View
-      </button>
-    );
-    const convertBtn = (
-      <button
-        onClick={() => openModal('convertLead', lead)}
-        className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 font-medium"
-      >
-        Convert to Contact
-      </button>
-    );
-
-    if (lead.status === 'new') return (
-      <>
-        <button onClick={() => openModal('contactLead', lead)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium">Contact</button>
-        {convertBtn}
-        {commonView}
-      </>
-    );
-    if (lead.status === 'contacted') return (
-      <>
-        <button onClick={() => openModal('contactLead', lead)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium">Follow Up</button>
-        {convertBtn}
-        {commonView}
-      </>
-    );
-    if (lead.status === 'qualified') return <>{convertBtn}{commonView}</>;
-    if (lead.status === 'lost') return (
-      <>
-        <button onClick={() => handleArchiveLead(lead.id)} className="px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 font-medium">Archive</button>
-        <button onClick={() => handleReactivateLead(lead.id)} className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium">Reactivate</button>
-        {commonView}
-      </>
-    );
-    return commonView;
   };
 
   // ── Kanban mini-card ──────────────────────────────────────────────────────
@@ -325,14 +377,25 @@ const LeadsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Confirm bulk delete */}
+      {/* Single-lead delete (from row ⋯ menu) */}
       <ConfirmationModal
         isOpen={isModalOpen('confirmDelete')}
-        title="Delete Leads"
-        message={`Are you sure you want to delete ${selectedLeadIds.length} lead(s)? This action cannot be undone.`}
+        title="Delete Lead"
+        message={activeLead ? `Permanently delete ${[activeLead.first_name, activeLead.last_name].filter(Boolean).join(' ') || 'this lead'}? This cannot be undone.` : ''}
         confirmLabel="Delete"
         type="danger"
-        onConfirm={handleBulkDelete}
+        onConfirm={handleSingleDelete}
+        onCancel={closeModal}
+      />
+
+      {/* Single-lead archive (from row ⋯ menu) */}
+      <ConfirmationModal
+        isOpen={isModalOpen('confirmArchive')}
+        title="Archive Lead"
+        message={activeLead ? `Archive ${[activeLead.first_name, activeLead.last_name].filter(Boolean).join(' ') || 'this lead'}? Their status will be set to "Lost".` : ''}
+        confirmLabel="Archive"
+        type="warning"
+        onConfirm={handleSingleArchive}
         onCancel={closeModal}
       />
 
@@ -347,13 +410,48 @@ const LeadsPage: React.FC = () => {
             <p className="text-sm text-gray-600 mt-1">Manage and qualify incoming leads</p>
           </div>
           <div className="flex items-center space-x-3">
-            <button
-              onClick={() => navigate('/crm/leads/new')}
-              className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Lead
-            </button>
+            {/* Split-button: Quick Add (primary) + dropdown for Full Form / Import CSV */}
+            <div ref={addMenuRef} className="relative">
+              <div className="flex items-center rounded-lg overflow-hidden shadow-sm">
+                <button
+                  onClick={() => setQuickAddOpen(true)}
+                  className="flex items-center px-5 py-2.5 bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm font-semibold"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Quick Add
+                </button>
+                <button
+                  onClick={() => setAddMenuOpen(o => !o)}
+                  aria-label="More lead creation options"
+                  aria-expanded={addMenuOpen}
+                  aria-haspopup="menu"
+                  className="px-2 py-2.5 bg-blue-700 text-white hover:bg-blue-800 transition-colors border-l border-blue-500"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+              {addMenuOpen && (
+                <div role="menu" className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-30 py-1">
+                  <button
+                    role="menuitem"
+                    onClick={() => { setAddMenuOpen(false); navigate('/crm/leads/new'); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <UserPlus className="h-4 w-4 text-gray-400" />
+                    Full Form
+                  </button>
+                  <div className="my-1 border-t border-gray-100" />
+                  <button
+                    role="menuitem"
+                    onClick={() => { setAddMenuOpen(false); navigate('/crm/leads/import'); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4 text-gray-400" />
+                    Import CSV
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => navigate('/crm/leads/integrations')}
               className="flex items-center px-5 py-2.5 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-semibold text-gray-700"
@@ -401,16 +499,16 @@ const LeadsPage: React.FC = () => {
             value={slaBreachedLeads.length}
             subtitle={
               slaBreachedLeads.length > 0
-                ? `${slaBreachedLeads.filter(l => l.source === 'Website').length} web · ${slaBreachedLeads.filter(l => l.source !== 'Website').length} outbound`
-                : 'No SLA breaches'
+                ? `${slaBreachCounts.firstResponse} first-response · ${slaBreachCounts.followUp} follow-up · ${slaBreachCounts.stale} stale`
+                : 'No SLA breaches across all tracks'
             }
             warning={slaBreachedLeads.length > 0 && slaBreachedLeads.length <= 5}
             danger={slaBreachedLeads.length > 5}
             neutral={slaBreachedLeads.length === 0}
             icon={<AlertTriangle size={18} />}
-            badge="4h / 24h SLA"
-            onClick={() => setFilterStatus('new')}
-            isActive={filterState.status === 'new'}
+            badge="Multi-track SLA"
+            onClick={() => setActiveInsight(activeInsight === 'slaBreach' ? null : 'slaBreach')}
+            isActive={activeInsight === 'slaBreach'}
           />
 
           {/* 3 — New Unworked */}
@@ -432,21 +530,22 @@ const LeadsPage: React.FC = () => {
             isActive={activeInsight === 'untouched'}
           />
 
-          {/* 4 — Ready to Convert */}
+          {/* 4 — Action Required (NBA) */}
           <KpiCard
-            title="Ready to Convert"
-            value={readyToConvertLeads.length}
+            title="Action Required"
+            value={kpiMetrics.urgentNbaCount + kpiMetrics.highNbaCount}
             subtitle={
-              readyToConvertLeads.length > 0
-                ? 'Qualified · score ≥ 60'
-                : 'No leads ready yet'
+              kpiMetrics.urgentNbaCount + kpiMetrics.highNbaCount > 0
+                ? `${kpiMetrics.urgentNbaCount} urgent · ${kpiMetrics.highNbaCount} high priority`
+                : 'No urgent actions pending'
             }
-            delta={readyToConvertDelta}
-            deltaLabel="vs last week"
-            neutral={readyToConvertLeads.length === 0}
+            danger={kpiMetrics.urgentNbaCount > 0}
+            warning={kpiMetrics.urgentNbaCount === 0 && kpiMetrics.highNbaCount > 0}
+            neutral={kpiMetrics.urgentNbaCount + kpiMetrics.highNbaCount === 0}
+            badge="NBA"
             icon={<TrendingUp size={18} />}
-            onClick={() => setActiveInsight(activeInsight === 'readyToConvert' ? null : 'readyToConvert')}
-            isActive={activeInsight === 'readyToConvert'}
+            onClick={() => setActiveInsight(activeInsight === 'nbaAction' ? null : 'nbaAction')}
+            isActive={activeInsight === 'nbaAction'}
           />
 
           {/* 5 — Duplicate Risk */}
@@ -624,6 +723,24 @@ const LeadsPage: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Advanced filters button */}
+              <button
+                onClick={() => openModal('advancedFilters')}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
+                  hasActiveAdvancedFilter
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-300 hover:bg-gray-50 text-gray-700'
+                }`}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {hasActiveAdvancedFilter && (
+                  <span className="ml-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                    {advancedFilter.groups.reduce((s, g) => s + g.conditions.length, 0)}
+                  </span>
+                )}
+              </button>
+
               {/* Sort dropdown */}
               <div className="relative">
                 <button
@@ -634,16 +751,34 @@ const LeadsPage: React.FC = () => {
                   <ChevronDown className="h-4 w-4 ml-2" />
                 </button>
                 {isModalOpen('sortDropdown') && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                    {SORT_OPTIONS.map(option => (
-                      <button
-                        key={option.value}
-                        onClick={() => { setSortBy(option.value); closeModal(); }}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${sortBy === option.value ? 'font-semibold text-blue-600' : ''}`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+                    {(['smart', 'score', 'time', 'pipeline'] as const).map(group => {
+                      const groupLabels: Record<string, string> = {
+                        smart:    'Smart Rankings',
+                        score:    'By Score',
+                        time:     'By Time',
+                        pipeline: 'By Pipeline',
+                      };
+                      const options = SORT_OPTIONS.filter(o => o.group === group);
+                      return (
+                        <div key={group}>
+                          <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                            {groupLabels[group]}
+                          </div>
+                          {options.map(option => (
+                            <button
+                              key={option.mode}
+                              onClick={() => { setSortBy(option.mode); closeModal(); }}
+                              className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
+                                sortBy === option.mode ? 'font-semibold text-blue-600 bg-blue-50' : ''
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -670,6 +805,26 @@ const LeadsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ── Advanced filter chips ─────────────────────────────────────────── */}
+      {hasActiveAdvancedFilter && (
+        <div className="bg-white border-b border-gray-200 px-8 py-2">
+          <FilterChipBar
+            advancedFilter={advancedFilter}
+            onRemoveCondition={handleRemoveCondition}
+            onRemoveGroup={handleRemoveGroup}
+            onClearAll={clearAdvancedFilter}
+            onOpenDrawer={() => openModal('advancedFilters')}
+          />
+        </div>
+      )}
+
+      {/* ── Sort explainability ───────────────────────────────────────────── */}
+      {sortExplanation && (
+        <div className="px-8 pt-3">
+          <p className="text-xs text-gray-400 italic">Sorted by: {sortExplanation}</p>
+        </div>
+      )}
+
       {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <div className="px-8 py-6">
@@ -679,136 +834,63 @@ const LeadsPage: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <table className="w-full">
+              <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+                <table className="min-w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="w-12 px-4 py-3">
                         <input
                           type="checkbox"
-                          checked={selectedLeadIds.length === sortedLeads.length && sortedLeads.length > 0}
-                          onChange={selectAllLeads}
+                          ref={el => {
+                            if (!el) return;
+                            const someSelected = paginatedLeads.some(l => selectedLeadIds.includes(l.id));
+                            el.indeterminate = someSelected && !isPageFullySelected;
+                            el.checked = isPageFullySelected;
+                          }}
+                          onChange={() => {
+                            if (isPageFullySelected) {
+                              clearSelection();
+                            } else {
+                              setSelection(paginatedLeads.map(l => l.id));
+                            }
+                          }}
+                          aria-label={isPageFullySelected ? 'Deselect all on this page' : 'Select all on this page'}
                           className="h-4 w-4 text-blue-600 rounded border-gray-300"
                         />
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Name / Company</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Source</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">AI Score</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
+                      <th className="w-72 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Identity</th>
+                      <th className="w-48 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qualification</th>
+                      <th className="w-44 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Engagement</th>
+                      <th className="w-56 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urgency</th>
+                      <th className="w-44 px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {paginatedLeads.map(lead => {
-                      const score = getLeadScore(lead);
-                      const src = getSourceInfo(lead.source);
-                      return (
-                        <tr key={lead.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-4">
-                            <input
-                              type="checkbox"
-                              checked={isSelected(lead.id)}
-                              onChange={() => toggleLeadSelection(lead.id)}
-                              className="h-4 w-4 text-blue-600 rounded border-gray-300"
-                            />
-                          </td>
-                          <td className="px-4 py-5">
-                            <div className="space-y-1">
-                              <div className="font-bold text-base text-gray-900">{getLeadName(lead)}</div>
-                              <div className="text-sm text-gray-700 font-medium">{lead.company || '—'}</div>
-                              <div className="text-xs text-gray-600">{lead.position || '—'}</div>
-                              <div className="text-xs text-gray-600">{lead.email || '—'}</div>
-                              <div className="text-xs text-gray-600">{lead.phone || '—'}</div>
-                              {lead.quick_notes && (
-                                <div className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded mt-2 inline-block border border-purple-200">
-                                  🤖 {lead.quick_notes}
-                                </div>
-                              )}
-                              <div className="text-xs text-gray-500 mt-2">
-                                Added: {formatDate(lead.created_at)} | Last contact: {formatDate(lead.last_contact_date)}
-                              </div>
-                              {lead.next_follow_up_date && (
-                                <div className="text-xs text-gray-500">
-                                  Next follow-up: {formatDate(lead.next_follow_up_date)}
-                                </div>
-                              )}
-                              <div className="flex items-center space-x-2 mt-3">
-                                {renderRowActions(lead)}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-5">
-                            <div className="flex items-center space-x-2">
-                              <div className={`p-2 rounded-lg ${src.color}`}>
-                                <span className="text-lg">{src.icon}</span>
-                              </div>
-                              <div>
-                                <div className="text-sm font-semibold text-gray-900">{lead.source || '—'}</div>
-                                {lead.source_detail && (
-                                  <div className="text-xs text-gray-500">{lead.source_detail}</div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-5">
-                            <div className="flex flex-col items-center space-y-1">
-                              <div className={`text-3xl font-bold px-3 py-1 rounded-lg border-2 ${getScoreColor(score)}`}>
-                                {score}
-                              </div>
-                              <div className="text-base">{getStarRating(score)}</div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-5">
-                            <span className={`inline-flex px-4 py-2 rounded-lg text-xs font-bold ${getStatusBadge(lead.status)}`}>
-                              {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4">
-                            <div className="relative">
-                              <button
-                                onClick={() =>
-                                  isModalOpen('actionsMenu') && activeLead?.id === lead.id
-                                    ? closeModal()
-                                    : openModal('actionsMenu', lead)
-                                }
-                                className="p-2 hover:bg-gray-100 rounded-lg"
-                              >
-                                <MoreVertical className="h-4 w-4 text-gray-600" />
-                              </button>
-                              {isModalOpen('actionsMenu') && activeLead?.id === lead.id && (
-                                <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                                  <button
-                                    onClick={() => { navigate(`/crm/leads/${lead.id}`); closeModal(); }}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Details
-                                  </button>
-                                  <button
-                                    onClick={() => openModal('contactLead', lead)}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                                  >
-                                    <Mail className="h-4 w-4 mr-2" />
-                                    Send Email
-                                  </button>
-                                  <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center">
-                                    <Phone className="h-4 w-4 mr-2" />
-                                    Call
-                                  </button>
-                                  <button
-                                    onClick={() => { navigate('/crm/contacts/new'); closeModal(); }}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                                  >
-                                    <UserPlus className="h-4 w-4 mr-2" />
-                                    Convert to Contact
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedLeads.map(lead => (
+                      <LeadTableRow
+                        key={lead.id}
+                        lead={lead}
+                        isSelected={isSelected(lead.id)}
+                        onToggleSelect={toggleLeadSelection}
+                        onNavigate={id => navigate(`/crm/leads/${id}`)}
+                        onGoTo={navigate}
+                        onOpenModal={(modal, l) => {
+                          if (STUB_MODALS.has(modal)) {
+                            showToast(`${STUB_LABELS[modal] ?? modal} — coming soon`, 'info');
+                            return;
+                          }
+                          openModal(modal, l);
+                        }}
+                        onUpdateStatus={(id, status) => {
+                          updateLead(id, { status });
+                          showToast(`Lead marked as ${status}`, 'success');
+                        }}
+                        isDuplicateRisk={duplicateRiskIdSet.has(lead.id)}
+                        isOverdue={overdueIdSet.has(lead.id)}
+                        isUntouched={untouchedIdSet.has(lead.id)}
+                        slaResult={leadSLAMap.get(lead.id)}
+                      />
+                    ))}
                   </tbody>
                 </table>
 
@@ -923,74 +1005,23 @@ const LeadsPage: React.FC = () => {
 
       {/* ── BULK ACTIONS BAR ──────────────────────────────────────────────── */}
       {selectedLeadIds.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl border border-gray-200 px-6 py-4 z-50">
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-semibold text-gray-900">
-              {selectedLeadIds.length} lead{selectedLeadIds.length !== 1 ? 's' : ''} selected
-            </span>
-
-            {/* Assign dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => isModalOpen('bulkAssign') ? closeModal() : openModal('bulkAssign')}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-              >
-                Assign to…
-                <ChevronDown className="h-4 w-4 ml-2" />
-              </button>
-              {isModalOpen('bulkAssign') && (
-                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg">
-                  {TEAM_MEMBERS.map(member => (
-                    <button
-                      key={member}
-                      onClick={() => handleBulkAssign(member)}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      {member}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Status change dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => isModalOpen('bulkStatus') ? closeModal() : openModal('bulkStatus')}
-                className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-              >
-                Change Status
-                <ChevronDown className="h-4 w-4 ml-2" />
-              </button>
-              {isModalOpen('bulkStatus') && (
-                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg">
-                  {['new', 'contacted', 'qualified', 'lost'].map(status => (
-                    <button
-                      key={status}
-                      onClick={() => handleBulkStatusChange(status)}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={handleExport}
-              className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
-            >
-              Export
-            </button>
-            <button
-              onClick={() => openModal('confirmDelete')}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
+        <BulkActionBar
+          selectedIds={selectedLeadIds}
+          selectedLeads={selectedLeads}
+          totalFiltered={sortedLeads.length}
+          isPageFullySelected={isPageFullySelected}
+          areAllFiltered={areAllFiltered}
+          onSelectAllFiltered={selectAllLeads}
+          onClearSelection={clearSelection}
+          onChangeStatus={handleBulkChangeStatus}
+          onSetFollowUp={handleBulkSetFollowUp}
+          onExport={handleBulkExport}
+          onConvert={handleBulkConvert}
+          onArchive={handleBulkArchive}
+          onDisqualify={handleBulkDisqualify}
+          onDelete={handleBulkDelete}
+          onToast={(msg, type) => showToast(msg, type)}
+        />
       )}
 
       {/* Contact modal */}
@@ -1087,6 +1118,27 @@ const LeadsPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Advanced Filter Drawer ────────────────────────────────────────── */}
+      <AdvancedFilterDrawer
+        open={isModalOpen('advancedFilters')}
+        advancedFilter={advancedFilter}
+        leads={contextLeads}
+        onChange={setAdvancedFilter}
+        onClose={closeModal}
+      />
+
+      {/* ── Quick Add Modal ───────────────────────────────────────────────── */}
+      {quickAddOpen && (
+        <QuickAddLeadModal
+          onClose={() => setQuickAddOpen(false)}
+          onSuccess={lead => {
+            setQuickAddOpen(false);
+            const name = lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Lead';
+            showToast(`${name} added`, 'success');
+          }}
+        />
       )}
     </div>
   );

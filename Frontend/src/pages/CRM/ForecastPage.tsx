@@ -488,7 +488,7 @@ const ForecastPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 -mt-6 px-8 py-3">
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 -mx-6 px-8 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BarChart3 className="h-4 w-4 text-gray-400 flex-shrink-0" />

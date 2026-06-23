@@ -41,6 +41,8 @@ import MeetingsPage from './MeetingsPage';
 import MeetingDetailPage from './MeetingDetailPage';
 import MeetingTranscriptViewer from './MeetingTranscriptViewer';
 import { TeamPerformancePage } from '../Team';
+import AssignmentRulesPage from './AssignmentRulesPage';
+import SLAConfigPage from './SLAConfigPage';
 
 const CRMModule = () => {
   return (
@@ -92,6 +94,8 @@ const CRMModule = () => {
           <Route path="/team" element={<TeamPerformancePage />} />
           <Route path="/team/:memberId" element={<TeamPerformancePage />} />
           <Route path="/settings" element={<CRMSettings />} />
+          <Route path="/settings/assignment-rules" element={<AssignmentRulesPage />} />
+          <Route path="/settings/sla-config" element={<SLAConfigPage />} />
         </Routes>
       </div>
     </AccountsProvider>

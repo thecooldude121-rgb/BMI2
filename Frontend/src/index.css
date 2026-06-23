@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 5.2 — WCAG 2.1 AA focus ring */
+*:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 8.5 — Tabular numbers for data columns */
+.font-tabular { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+
+/* 3.2 — Bulk bar slide-in animation */
+@keyframes slide-in-bottom {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slide-in-bottom { animation: slide-in-bottom 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
 @layer utilities {
   .scrollbar-none {
     scrollbar-width: none;

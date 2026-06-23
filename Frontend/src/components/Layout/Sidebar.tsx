@@ -5,7 +5,7 @@ import {
   Activity, FileText, BarChart3, Target, Calendar, UserCheck,
   Plug, Settings, Trophy, ChevronDown, ChevronRight,
   Building2, Phone, Video, CheckSquare, PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen, Bookmark, Clock, PauseCircle
 } from 'lucide-react';
 
 interface NavItem {
@@ -28,6 +28,14 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
       { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
       { name: 'Accounts',  href: '/accounts',      icon: Building },
       { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
+      {
+        name: 'Pinned Views', icon: Bookmark,
+        children: [
+          { name: 'My Open Deals',       href: '/crm/deals?owner=me',           icon: DollarSign },
+          { name: 'Closing This Week',   href: '/crm/deals?closeDate=thisWeek', icon: Clock },
+          { name: 'Stalled',             href: '/crm/deals?stalled=true',       icon: PauseCircle },
+        ],
+      },
       { name: 'Forecast',  href: '/crm/forecast',  icon: BarChart3 },
       {
         name: 'Activities', icon: Activity,

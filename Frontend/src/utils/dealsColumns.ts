@@ -3,7 +3,7 @@
 
 export type ColumnKey =
   | 'dealName' | 'account' | 'owner' | 'contact'
-  | 'value' | 'stage' | 'closeDate' | 'lastActivity'
+  | 'value' | 'stage' | 'closeDate' | 'lastActivity' | 'lastContact'
   | 'nextStep' | 'dealAge' | 'probability' | 'source'
   | 'health' | 'relationship' | 'competitor' | 'actions';
 
@@ -16,6 +16,7 @@ export const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'stage',        label: 'Stage'           },
   { key: 'closeDate',    label: 'Close Date'      },
   { key: 'lastActivity', label: 'Last Activity'   },
+  { key: 'lastContact',  label: 'Last Contact'    },
   { key: 'nextStep',     label: 'Next Step'       },
   { key: 'dealAge',      label: 'Time in Pipeline' },
   { key: 'probability',  label: 'Probability'     },
@@ -31,7 +32,7 @@ export const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
 // but is excluded from DEFAULT_VISIBLE_COLUMNS so it is hidden by default.
 export const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   'dealName', 'account', 'owner', 'contact',
-  'value', 'stage', 'closeDate', 'lastActivity',
+  'value', 'stage', 'closeDate', 'lastActivity', 'lastContact',
   'nextStep', 'dealAge', 'probability', 'source',
   'health', 'relationship', 'competitor', 'actions',
 ];
@@ -39,7 +40,7 @@ export const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
 // Columns visible on first load and after "Reset to default".
 // Relationship is hidden by default — managers opt in via the column picker.
 export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = DEFAULT_COLUMN_ORDER.filter(
-  k => k !== 'relationship' && k !== 'competitor'
+  k => k !== 'relationship' && k !== 'competitor' && k !== 'lastActivity'
 );
 
 // ── Filter state types (shared between DealsListView and DealsKanbanPage) ─────

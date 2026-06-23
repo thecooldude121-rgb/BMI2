@@ -98,6 +98,17 @@ export interface DealPayload {
   account_module_setup?: string;
   client_discovers?: string;
   discovery_date?: string;
+  platform_fee?: number | null;
+  custom_fee?: number | null;
+  license_fee?: number | null;
+  onboarding_fee?: number | null;
+  white_labelling_fee?: number | null;
+  exchange_rate?: number | null;
+  nr_margin?: number | null;
+  start_date?: string | null;
+  contract_end_date?: string | null;
+  country?: string | null;
+  account_industry?: string | null;
 }
 
 export async function createDeal(payload: DealPayload): Promise<{ success: boolean; data: any }> {

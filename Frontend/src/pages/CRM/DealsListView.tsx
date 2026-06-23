@@ -118,6 +118,7 @@ interface Deal {
   // Multi-currency — native deal currency + pre-computed USD equivalent for reporting
   currency?: string;
   baseAmountUsd?: number;
+  contactPhone?: string;
 }
 
 function getRowClassName(isExpanded: boolean, isSelected: boolean, isHovered: boolean, isActiveRow = false): string {
@@ -125,7 +126,7 @@ function getRowClassName(isExpanded: boolean, isSelected: boolean, isHovered: bo
   if (isSelected) return `${base} bg-blue-50 border-l-blue-400`;
   if (isExpanded) return `${base} bg-indigo-50/30 border-l-indigo-300`;
   if (isActiveRow) return `${base} bg-indigo-50/50 border-l-indigo-400 ring-1 ring-inset ring-indigo-200`;
-  if (isHovered)  return `${base} bg-slate-50/60 border-l-indigo-200`;
+  if (isHovered)  return `${base} bg-[#F5F7FF] border-l-indigo-200`;
   return `${base} bg-white border-l-transparent`;
 }
 
@@ -208,6 +209,10 @@ interface DealsListViewProps {
   activeKpiFilter: 'closingWeek' | 'stalled' | null;
   setActiveKpiFilter: React.Dispatch<React.SetStateAction<'closingWeek' | 'stalled' | null>>;
   currentUser?: string;
+  totalPipelineDeals?: number;
+  density?: 'standard' | 'compact';
+  openDQDrawer?: boolean;
+  onDQDrawerClose?: () => void;
 }
 
 const MERGE_FIELDS: Array<{ key: keyof DuplicatableDeal; label: string }> = [
@@ -251,6 +256,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   visibleColumns, setVisibleColumns, columnOrder, setColumnOrder,
   activeKpiFilter, setActiveKpiFilter,
   currentUser = '',
+  totalPipelineDeals,
+  density: densityProp,
+  openDQDrawer: openDQDrawerProp,
+  onDQDrawerClose,
 }) => {
   const navigate = useNavigate();
   const { isStalled, getReasons, config: stalledConfig } = useStalledConfig();
@@ -335,6 +344,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
   const [showHRMSModal, setShowHRMSModal] = useState<Deal | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [showDealNameFilter, setShowDealNameFilter] = useState(false);
+  const columnPickerRef = useRef<HTMLTableCellElement>(null);
   const dragKey = useRef<ColumnKey | null>(null);
   const [openPopover, setOpenPopover] = useState<'stage' | 'owner' | 'tag' | 'archive' | null>(null);
   const [bulkToast, setBulkToast] = useState<string | null>(null);
@@ -345,6 +356,18 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [deleteConfirmDeal, setDeleteConfirmDeal] = useState<Deal | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const lastSelectedIndex = useRef<number | null>(null);
+
+  // ── Dynamic table height: measure the sticky KPI+Stage section so the table fills exactly ──
+  const kpiSectionRef = useRef<HTMLDivElement>(null);
+  const [kpiSectionHeight, setKpiSectionHeight] = useState(220);
+  useEffect(() => {
+    const el = kpiSectionRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setKpiSectionHeight(el.offsetHeight));
+    ro.observe(el);
+    setKpiSectionHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
 
   // ── Workflow modal state ────────────────────────────────────────────────────
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
@@ -377,7 +400,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     catch { return 'comfortable'; }
   });
   useEffect(() => { localStorage.setItem('bmi_deals_density', density); }, [density]);
-  const effectiveDensity: Density = typeof window !== 'undefined' && window.innerWidth < 768 ? 'compact' : density;
+  const effectiveDensity: Density =
+    typeof window !== 'undefined' && window.innerWidth < 768
+      ? 'compact'
+      : densityProp === 'compact' ? 'compact'
+      : densityProp === 'standard' ? 'comfortable'
+      : density;
 
   const [reportingCurrency, setReportingCurrency] = useState<SupportedCurrency>(() => {
     try { return (localStorage.getItem('bmi_deals_reporting_currency') as SupportedCurrency) ?? 'USD'; }
@@ -389,12 +417,16 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [dealSearchTerm, setDealSearchTerm] = useState('');
   const [debouncedDealSearch, setDebouncedDealSearch] = useState('');
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
-  const [expandedPanelTabs, setExpandedPanelTabs] = useState<Record<string, 'intelligence' | 'context'>>({});
+  const [expandedPanelTabs, setExpandedPanelTabs] = useState<Record<string, 'intelligence' | 'context' | 'timeline'>>({});
+  const [rowsPerPage, setRowsPerPage] = useState<25 | 50 | 100>(25);
+  const [currentPage, setCurrentPage] = useState(0);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedDealSearch(dealSearchTerm.trim().toLowerCase()), 200);
     return () => clearTimeout(t);
   }, [dealSearchTerm]);
+
+  useEffect(() => { setCurrentPage(0); }, [debouncedDealSearch, rowsPerPage]);
 
   const cellPadding        = effectiveDensity === 'compact' ? 'px-3 py-2' : 'px-4 py-3';
   const textSizeSecondary  = effectiveDensity === 'compact' ? 'text-[11px]' : 'text-xs';
@@ -403,6 +435,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   // ── Duplicate detection state ───────────────────────────────────────────────
   const [dismissedPairs, setDismissedPairs] = useState<Set<string>>(new Set());
   const [duplicateDrawerOpen, setDuplicateDrawerOpen] = useState(false);
+  const [showDQDrawer, setShowDQDrawer] = useState(false);
+  useEffect(() => {
+    if (openDQDrawerProp) {
+      setShowDQDrawer(true);
+      onDQDrawerClose?.();
+    }
+  }, [openDQDrawerProp]); // eslint-disable-line react-hooks/exhaustive-deps
   const [mergeTargetPair, setMergeTargetPair] = useState<DuplicatePair | null>(null);
   const [mergeSurvivor, setMergeSurvivor] = useState<'A' | 'B'>('A');
   const [mergeFieldOverrides, setMergeFieldOverrides] = useState<Record<string, 'A' | 'B'>>({});
@@ -587,6 +626,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     }
     return sortOrder === 'asc' ? comparison : -comparison;
   });
+
+  const totalPages = Math.ceil(sortedDeals.length / rowsPerPage);
+  const pagedDeals = sortedDeals.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
 
   const formatDate = formatCloseDate;
 
@@ -1008,6 +1050,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [openFilter]);
 
+  useEffect(() => {
+    if (!showColumnSettings) return;
+    const handler = (e: MouseEvent) => {
+      if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) {
+        setShowColumnSettings(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showColumnSettings]);
+
   const totalValue = useMemo(
     () => sortedDeals.reduce((sum, deal) => sum + getReportingAmount(deal, reportingCurrency), 0),
     [sortedDeals, reportingCurrency],
@@ -1215,52 +1268,75 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   };
 
   const renderHeader = (key: ColumnKey): React.ReactNode => {
-    const thBase = `text-left ${cellPadding} text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap`;
-    const thSort = thBase + ' cursor-pointer hover:bg-gray-100';
+    const thBase = `text-left ${cellPadding} text-xs font-semibold text-gray-700 whitespace-nowrap border-l border-gray-200`;
+    const thSort = thBase + ' cursor-pointer hover:bg-gray-50 select-none';
     // Responsive column visibility: P2=md+, P3=lg+, P4=xl+
     const p2 = 'hidden md:table-cell';
     const p3 = 'hidden lg:table-cell';
     const p4 = 'hidden xl:table-cell';
     switch (key) {
       case 'dealName':
-        return <th key="dealName" className={thSort} onClick={() => handleSort('deal')}><div className="flex items-center space-x-1"><span>Deal Name</span><SortIcon column="deal" /></div></th>;
+        return (
+          <th key="dealName" className={thSort} onClick={() => handleSort('deal')}>
+            <div className="flex items-center gap-2">
+              <span>Deal Name</span>
+              <button
+                onClick={e => { e.stopPropagation(); setShowDealNameFilter(v => !v); }}
+                className="flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded px-1.5 py-0.5 leading-none transition-colors"
+              >
+                All <ChevronDown size={10} className="mt-px" />
+              </button>
+              <SortIcon column="deal" />
+            </div>
+          </th>
+        );
       case 'account':
-        return <th key="account" className={`${p3} ${thSort}`} onClick={() => handleSort('account')}><div className="flex items-center space-x-1"><span>Account</span><SortIcon column="account" /></div></th>;
+        return <th key="account" className={`${p3} ${thSort}`} onClick={() => handleSort('account')}><div className="flex items-center gap-1"><span>Account Name</span><SortIcon column="account" /></div></th>;
       case 'owner':
-        return <th key="owner" className={`${p2} ${thSort}`} onClick={() => handleSort('owner')}><div className="flex items-center space-x-1"><span>Owner</span><SortIcon column="owner" /></div></th>;
+        return <th key="owner" className={`${p2} ${thSort}`} onClick={() => handleSort('owner')}><div className="flex items-center gap-1"><span>Owner</span><SortIcon column="owner" /></div></th>;
       case 'contact':
-        return <th key="contact" className={`${p3} ${thSort}`} onClick={() => handleSort('contact')}><div className="flex items-center space-x-1"><span>Primary Contact</span><SortIcon column="contact" /></div></th>;
+        return <th key="contact" className={`${p3} ${thSort}`} onClick={() => handleSort('contact')}><div className="flex items-center gap-1"><span>Primary Contact</span><SortIcon column="contact" /></div></th>;
       case 'value':
-        return <th key="value" className={`${thSort} text-right`} onClick={() => handleSort('value')}><div className="flex items-center justify-end space-x-1"><span>Value</span><SortIcon column="value" /></div></th>;
+        return <th key="value" className={`${thSort} text-right`} onClick={() => handleSort('value')}><div className="flex items-center justify-end gap-1"><span>Amount</span><SortIcon column="value" /></div></th>;
       case 'stage':
-        return <th key="stage" className={`${p2} ${thSort}`} onClick={() => handleSort('stage')}><div className="flex items-center space-x-1"><span>Stage</span><SortIcon column="stage" /></div></th>;
+        return <th key="stage" className={`${p2} ${thSort}`} onClick={() => handleSort('stage')}><div className="flex items-center gap-1"><span>Stage</span><SortIcon column="stage" /></div></th>;
       case 'closeDate':
-        return <th key="closeDate" className={`${p2} ${thSort}`} onClick={() => handleSort('closeDate')}><div className="flex items-center space-x-1"><span>Close Date</span><SortIcon column="closeDate" /></div></th>;
+        return (
+          <th key="closeDate" className={`${p2} ${thSort}`} onClick={() => handleSort('closeDate')}>
+            <div className="flex items-center gap-1">
+              <span>Closing</span>
+              <span className="text-gray-400 text-[11px] font-normal">*</span>
+              <SortIcon column="closeDate" />
+            </div>
+          </th>
+        );
       case 'lastActivity':
         return <th key="lastActivity" className={`${p4} ${thBase}`}>Last Activity</th>;
+      case 'lastContact':
+        return <th key="lastContact" className={`${p4} ${thSort}`} onClick={() => handleSort('lastActivity')}><div className="flex items-center gap-1"><span>Last Contact</span><SortIcon column="lastActivity" /></div></th>;
       case 'nextStep':
         return <th key="nextStep" className={`${p4} ${thBase}`}>Next Step</th>;
       case 'dealAge':
-        return <th key="dealAge" className={`${p4} ${thSort}`} onClick={() => handleSort('dealAge')}><div className="flex items-center space-x-1"><span>Time in Pipeline</span><SortIcon column="dealAge" /></div></th>;
+        return <th key="dealAge" className={`${p4} ${thSort}`} onClick={() => handleSort('dealAge')}><div className="flex items-center gap-1"><span>Pipeline</span><SortIcon column="dealAge" /></div></th>;
       case 'probability':
-        return <th key="probability" className={`${p4} ${thSort}`} onClick={() => handleSort('probability')}><div className="flex items-center space-x-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
+        return <th key="probability" className={`${p4} ${thSort}`} onClick={() => handleSort('probability')}><div className="flex items-center gap-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
       case 'source':
-        return <th key="source" className={`${p4} ${thSort}`} onClick={() => handleSort('source')}><div className="flex items-center space-x-1"><span>Source</span><SortIcon column="source" /></div></th>;
+        return <th key="source" className={`${p4} ${thSort}`} onClick={() => handleSort('source')}><div className="flex items-center gap-1"><span>Source</span><SortIcon column="source" /></div></th>;
       case 'health':
-        return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center space-x-1"><div className="flex flex-col"><span>WIN SCORE</span><span className="text-[10px] font-normal text-gray-400 normal-case tracking-normal">AI probability</span></div><SortIcon column="health" /></div></th>;
+        return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center gap-1"><span>Win Score</span><SortIcon column="health" /></div></th>;
       case 'relationship':
         return <th key="relationship" className={`${p2} ${thBase}`}>Relationship</th>;
       case 'competitor':
         return (
           <th key="competitor" className={`${p2} ${thSort}`} onClick={() => handleSort('competitor')}>
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center gap-1">
               <span>Competitor</span>
               <SortIcon column="competitor" />
             </div>
           </th>
         );
       case 'actions':
-        return <th key="actions" className={thBase}>Actions</th>;
+        return <th key="actions" className={`${thBase} text-center`}>Actions</th>;
       default:
         return null;
     }
@@ -1270,12 +1346,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     switch (key) {
       case 'dealName':
         return (
-          <td key="dealName" className={`${cellPadding} max-w-[260px]`}>
+          <td key="dealName" className={`${cellPadding} min-w-[240px] max-w-[280px]`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  {isStalled(deal) && (
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 align-middle" aria-label="Stalled" />
+                  )}
                   <span
-                    className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 leading-snug truncate"
+                    className="font-semibold text-gray-900 cursor-pointer hover:text-blue-600 leading-snug line-clamp-2"
                     onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
                   >
                     {deal.dealName}
@@ -1342,6 +1421,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <button
                 onClick={(e) => { e.stopPropagation(); toggleRowExpansion(deal.id); }}
                 className="flex-shrink-0 p-0.5 hover:bg-gray-100 rounded mt-0.5"
+                aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
                 title={isExpanded ? 'Collapse' : 'Expand row'}
               >
                 {isExpanded
@@ -1688,6 +1768,28 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         );
       }
 
+      case 'lastContact': {
+        const dsc = deal.daysSinceContact ?? 999;
+        const dayBadgeCls = dsc <= 7   ? 'bg-green-100 text-green-700 border-green-200'
+          : dsc <= 14  ? 'bg-amber-100 text-amber-700 border-amber-200'
+          : dsc <= 30  ? 'bg-orange-100 text-orange-700 border-orange-200'
+          : 'bg-red-100 text-red-700 border-red-200';
+        return (
+          <td key="lastContact" className={`hidden lg:table-cell ${cellPadding}`}>
+            {deal.lastActivity ? (
+              <div className="flex items-center gap-1.5">
+                <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${dayBadgeCls} tabular-nums`}>
+                  {dsc <= 999 ? `${dsc}d` : '—'}
+                </span>
+                {dsc > 30 && <AlertCircle size={11} className="text-red-400 shrink-0" title="Overdue — last contact over 30 days ago" />}
+              </div>
+            ) : (
+              <span className="text-xs text-gray-400">Never</span>
+            )}
+          </td>
+        );
+      }
+
       case 'nextStep': {
         const isEditing       = editingCell?.dealId === deal.id && editingCell?.field === 'nextStep';
         const isSaving        = savingCell?.dealId  === deal.id && savingCell?.field  === 'nextStep';
@@ -1854,6 +1956,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 <span>·</span>
                 <span>{healthExpl.tierLabel}</span>
               </div>
+              {/* 5-point sparkline trend */}
+              {(() => {
+                const s = deal.aiScore;
+                const pts = [Math.max(0,s-15), Math.max(0,s-8), Math.max(0,s-4), Math.max(0,s+2), s];
+                const minP = Math.min(...pts), maxP = Math.max(...pts, minP+1);
+                const toY = (v: number) => 12 - Math.round(((v - minP) / (maxP - minP)) * 10);
+                return (
+                  <svg width="32" height="12" viewBox="0 0 32 12" className="inline-block ml-1" aria-hidden="true">
+                    <polyline points={pts.map((v, i) => `${i * 8},${toY(v)}`).join(' ')} fill="none" stroke={barColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="32" cy={toY(s)} r="2" fill={barColor} />
+                  </svg>
+                );
+              })()}
               <div className="mt-1.5 h-1 bg-gray-100 rounded-full w-20 overflow-hidden">
                 <div
                   className="h-1 rounded-full"
@@ -1918,9 +2033,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       </div>
                     </div>
                   )}
-                  <p className="text-[9px] text-gray-400 mt-2 pt-2 border-t border-gray-100 leading-snug">
-                    Score reflects AI-estimated win probability based on engagement, close date, next-step discipline, and deal attributes.
-                  </p>
+                  <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                    <Sparkles className="h-3 w-3 text-indigo-400 shrink-0" />
+                    <p className="text-[9px] text-indigo-400 font-medium">Powered by BMI AI</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -2135,6 +2251,33 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               {/* Inline hover action buttons */}
               <div className={`flex items-center gap-1 transition-opacity duration-150 ${hoveredRowId === deal.id ? 'opacity-100' : 'opacity-0'}`}>
                 <button
+                  aria-label="Send email"
+                  title="Send Email"
+                  onClick={(e) => { e.stopPropagation(); setShowEmailModal(deal); }}
+                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <Mail size={14} />
+                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Email</span>
+                </button>
+                <button
+                  aria-label="Open WhatsApp"
+                  title="WhatsApp"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const phone = deal.contactPhone;
+                    if (phone) {
+                      window.open(`https://wa.me/${phone.replace(/\D/g, '')}`, '_blank', 'noopener');
+                    } else {
+                      showBulkToast('No phone number on record for this contact');
+                    }
+                  }}
+                  className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                >
+                  <Phone size={14} />
+                  <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">WhatsApp</span>
+                </button>
+                <button
+                  aria-label="Log activity"
                   title="Log Activity"
                   onClick={(e) => { e.stopPropagation(); openLogMeeting(deal); }}
                   className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
@@ -2143,6 +2286,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Log</span>
                 </button>
                 <button
+                  aria-label="Open deal detail"
                   title="Open Deal"
                   onClick={(e) => { e.stopPropagation(); navigate(`/crm/deals/${deal.id}`); }}
                   className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
@@ -2151,6 +2295,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   <span className="text-xs font-medium opacity-0 group-hover/hover-btn:opacity-100 transition-opacity max-w-0 group-hover/hover-btn:max-w-[80px] overflow-hidden whitespace-nowrap">Open</span>
                 </button>
                 <button
+                  aria-label="Schedule follow-up"
                   title="Schedule Follow-up"
                   onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
                   className="group/hover-btn flex items-center gap-1 px-2 py-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
@@ -2162,6 +2307,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               {/* ··· dropdown */}
               <div className="relative">
                 <button
+                  aria-label={`More actions for ${deal.dealName}`}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   onClick={(e) => { e.stopPropagation(); setShowActionDropdown(showActionDropdown === deal.id ? null : deal.id); }}
                 >
@@ -2195,6 +2341,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         onClick={() => { openAddSequence(deal); setShowActionDropdown(null); }} />
                       <MenuItem icon={<Link2 size={13} />} label="Copy Deal Link"
                         onClick={() => { shareDeal(deal); setShowActionDropdown(null); }} />
+                      {isStalled(deal) && (
+                        <MenuItem icon={<Sparkles size={13} />} label="Re-engage Deal"
+                          onClick={() => { showBulkToast(`Re-engage flow for "${deal.dealName}" — sending outreach sequence`); setShowActionDropdown(null); }} />
+                      )}
                     </div>
                     <div className="mx-2 my-1 border-t border-gray-100" />
                     <div className="px-1.5 space-y-0.5">
@@ -2258,6 +2408,29 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             </button>
           ))}
         </div>
+
+        {/* 8.3 — Next Best Action banner */}
+        {!isClosed && (() => {
+          const nba = getNextBestAction(deal);
+          if (nba.urgency === 'low') return null;
+          const bannerColor = nba.urgency === 'high'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-indigo-50 border-indigo-200 text-indigo-800';
+          return (
+            <div className={`flex items-center justify-between gap-3 px-4 py-2.5 border-b ${bannerColor}`}>
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <p className="text-xs font-medium truncate">{nba.text}</p>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); openScheduleFollowUp(deal); }}
+                className="flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full border border-current hover:bg-white/50 transition-colors"
+              >
+                {nba.urgency === 'high' ? 'Act now' : 'Schedule'}
+              </button>
+            </div>
+          );
+        })()}
 
         {/* 4-zone body — stacks vertically on mobile, horizontal on md+ */}
         <div className={`flex flex-col md:flex-row border-l-4 ${accentClass}`}>
@@ -2351,7 +2524,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           {/* Zone 3 — Intelligence & Context (tabbed) */}
           {(() => {
             const panelTab = expandedPanelTabs[deal.id] ?? 'intelligence';
-            const setPanelTab = (t: 'intelligence' | 'context') =>
+            const setPanelTab = (t: 'intelligence' | 'context' | 'timeline') =>
               setExpandedPanelTabs(prev => ({ ...prev, [deal.id]: t }));
             const dq = getDealDataQuality(expandedMerged);
             const hasContextIssues = !dq.isClean;
@@ -2360,7 +2533,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 flex flex-col">
                 {/* Tab switcher */}
                 <div className="flex border-b border-gray-100 px-4 pt-3 gap-1">
-                  {(['intelligence', 'context'] as const).map(t => (
+                  {(['intelligence', 'context', 'timeline'] as const).map(t => (
                     <button
                       key={t}
                       onClick={e => { e.stopPropagation(); setPanelTab(t); }}
@@ -2371,7 +2544,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                           : 'text-gray-400 hover:text-gray-600',
                       ].join(' ')}
                     >
-                      {t === 'intelligence' ? 'Intelligence' : 'Context'}
+                      {t === 'intelligence' ? 'Intelligence' : t === 'context' ? 'Context' : 'Timeline'}
                       {t === 'context' && hasContextIssues && panelTab !== 'context' && (
                         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400" />
                       )}
@@ -2469,6 +2642,56 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         <span className="text-xs text-gray-400">Score based on deal activity and engagement</span>
                       )}
                     </>
+                  ) : panelTab === 'timeline' ? (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-3">Activity Timeline</p>
+                      {deal.lastActivity ? (
+                        <div className="relative pl-6 border-l-2 border-gray-100 space-y-4">
+                          {deal.nextStep && (
+                            <div className="relative">
+                              <span className="absolute -left-[17px] w-3 h-3 rounded-full bg-amber-400 border-2 border-white shadow" />
+                              <div className="flex items-start gap-2">
+                                <ArrowLeftRight size={11} className="text-amber-500 mt-0.5 shrink-0" />
+                                <div>
+                                  <p className="text-xs text-gray-700 font-medium">Next Step</p>
+                                  <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{deal.nextStep}</p>
+                                  {deal.nextStepDueDate && (
+                                    <p className="text-[10px] text-amber-600 mt-0.5">Due: {formatCloseDate(deal.nextStepDueDate)}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <div className="relative">
+                            <span className="absolute -left-[17px] w-3 h-3 rounded-full bg-indigo-400 border-2 border-white shadow" />
+                            <div className="flex items-start gap-2">
+                              <Phone size={11} className="text-indigo-500 mt-0.5 shrink-0" />
+                              <div>
+                                <p className="text-xs text-gray-700 font-medium">Last Contact</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">{formatRelativeTime(deal.lastActivity, 'unknown')}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="relative">
+                            <span className="absolute -left-[17px] w-3 h-3 rounded-full bg-gray-300 border-2 border-white shadow" />
+                            <div className="flex items-start gap-2">
+                              <StickyNote size={11} className="text-gray-400 mt-0.5 shrink-0" />
+                              <div>
+                                <p className="text-xs text-gray-700 font-medium">Deal Created</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">{deal.createdAt ? formatRelativeTime(deal.createdAt, 'unknown') : 'Unknown'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-6">
+                          <Clock className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                          <p className="text-xs text-gray-400">No activity recorded yet</p>
+                          <button onClick={e => { e.stopPropagation(); openLogMeeting(deal); }} className="mt-2 text-xs text-indigo-600 hover:underline">Log first activity</button>
+                        </div>
+                      )}
+                      <button onClick={e => { e.stopPropagation(); openLogMeeting(deal); }} className="text-xs text-indigo-600 hover:underline mt-3 block">+ Log activity</button>
+                    </div>
                   ) : (
                     <>
                       {/* Relationship Health */}
@@ -2622,10 +2845,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
+
+      {/* ── Stats Bar + Stage Pipeline Bar — sticky below the two kanban toolbar rows ── */}
+      <div ref={kpiSectionRef} className="sticky top-[104px] z-30 bg-gray-50 -mx-6">
 
       {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-4 sm:px-8 py-4 sm:py-6">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 sm:py-6">
         <div className={`grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-3 ${activePairCount > 0 ? 'lg:grid-cols-8' : 'lg:grid-cols-7'}`}>
 
           {/* Card 1: Total Deals — clickable, active when no KPI filter */}
@@ -2635,19 +2861,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             onClick={() => setActiveKpiFilter(null)}
             onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(null)}
             className={[
-              'relative bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border',
+              'relative bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-l-4',
               'cursor-pointer select-none transition-all duration-150',
-              'hover:shadow-md hover:scale-[1.01]',
+              'hover:shadow-md hover:-translate-y-0.5',
               activeKpiFilter === null
-                ? 'border-indigo-400 ring-2 ring-indigo-400 ring-offset-1'
-                : 'border-blue-200',
+                ? 'border-indigo-400 border-l-blue-500 ring-2 ring-indigo-400 ring-offset-1'
+                : 'border-blue-200 border-l-blue-500',
             ].join(' ')}
           >
-            <div className={`text-xl sm:text-3xl text-blue-900 ${activeKpiFilter === null ? 'font-extrabold' : 'font-bold'}`}>
+            <div className={`text-xl sm:text-3xl text-blue-900 tabular-nums ${activeKpiFilter === null ? 'font-extrabold' : 'font-black'}`}>
               {filteredDeals.length}
             </div>
             <div
-              className="text-sm text-blue-700 font-medium mt-1"
+              className="text-xs text-blue-700 font-medium mt-1 uppercase tracking-wide"
               title={hasActiveFilters ? 'Count reflects current filters — clear filters to see all deals' : undefined}
             >
               {hasActiveFilters ? 'Deals Shown' : 'Total Deals'}
@@ -2655,10 +2881,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           </div>
 
           {/* Card 2: Total Value — decorative only */}
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200 cursor-default">
-            <div className="text-xl sm:text-3xl font-bold text-green-900">{formatAmountUSD(totalValue)}</div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-l-4 border-green-200 border-l-green-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5">
+            <div className="text-xl sm:text-3xl font-black text-green-900 tabular-nums">{formatAmountUSD(totalValue)}</div>
             <div
-              className="text-sm text-green-700 font-medium mt-1"
+              className="text-xs text-green-700 font-medium mt-1 uppercase tracking-wide"
               title={`Values converted to ${reportingCurrency} · Indicative rates, ${RATES_SNAPSHOT_DATE}`}
             >
               Total Value ({reportingCurrency})
@@ -2667,13 +2893,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* Card 3: Avg Win Rate — computed from allDeals closed-won / total closed */}
           <div
-            className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200 cursor-default"
+            className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-l-4 border-purple-200 border-l-purple-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
             title="Win rate computed from all closed deals (won ÷ total closed)"
           >
-            <div className="text-xl sm:text-3xl font-bold text-purple-900">
+            <div className="text-xl sm:text-3xl font-black text-purple-900 tabular-nums">
               {computedWinRate !== null ? `${computedWinRate}%` : '—'}
             </div>
-            <div className="text-sm text-purple-700 font-medium mt-1">Avg Win Rate</div>
+            <div className="text-xs text-purple-700 font-medium mt-1 uppercase tracking-wide">Avg Win Rate</div>
           </div>
 
           {/* Card 4: Closing This Week — clickable filter */}
@@ -2683,12 +2909,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             onClick={() => setActiveKpiFilter(activeKpiFilter === 'closingWeek' ? null : 'closingWeek')}
             onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'closingWeek' ? null : 'closingWeek')}
             className={[
-              'relative bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border',
+              'relative bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-l-4',
               'cursor-pointer select-none transition-all duration-150',
-              'hover:shadow-md hover:scale-[1.01]',
+              'hover:shadow-md hover:-translate-y-0.5',
               activeKpiFilter === 'closingWeek'
-                ? 'border-orange-400 ring-2 ring-orange-400 ring-offset-2 scale-[1.02]'
-                : 'border-orange-200',
+                ? 'border-amber-400 border-l-amber-500 ring-2 ring-amber-400 ring-offset-2'
+                : 'border-amber-200 border-l-amber-500',
             ].join(' ')}
           >
             {activeKpiFilter === 'closingWeek' && (
@@ -2699,10 +2925,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 tabIndex={-1}
               >×</button>
             )}
-            <div className={`text-xl sm:text-3xl text-orange-900 ${activeKpiFilter === 'closingWeek' ? 'font-extrabold' : 'font-bold'}`}>
+            <div className={`text-xl sm:text-3xl text-amber-900 tabular-nums ${activeKpiFilter === 'closingWeek' ? 'font-extrabold' : 'font-black'}`}>
               {kpiClosingCount}
             </div>
-            <div className="text-sm text-orange-700 font-medium mt-1">Closing This Week</div>
+            <div className="text-xs text-amber-700 font-medium mt-1 uppercase tracking-wide">Closing This Week</div>
           </div>
 
           {/* Card 5: Stalled Deals — clickable filter */}
@@ -2720,12 +2946,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             onClick={() => setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
             onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
             className={[
-              'relative bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border',
+              'relative bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-l-4',
               'cursor-pointer select-none transition-all duration-150',
-              'hover:shadow-md hover:scale-[1.01]',
+              'hover:shadow-md hover:-translate-y-0.5',
               activeKpiFilter === 'stalled'
-                ? 'border-red-400 ring-2 ring-red-400 ring-offset-2 scale-[1.02]'
-                : 'border-red-200',
+                ? 'border-red-400 border-l-red-500 ring-2 ring-red-400 ring-offset-2'
+                : 'border-red-200 border-l-red-500',
             ].join(' ')}
           >
             {activeKpiFilter === 'stalled' && (
@@ -2736,11 +2962,16 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 tabIndex={-1}
               >×</button>
             )}
-            <div className={`text-xl sm:text-3xl text-red-900 ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-bold'}`}>
-              {kpiStalledCount}
+            <div className="flex items-center gap-2">
+              <span className={`text-xl sm:text-3xl text-red-900 tabular-nums ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-black'}`}>
+                {kpiStalledCount}
+              </span>
+              {kpiStalledCount > 5 && (
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" title="High stall count — action required" />
+              )}
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-sm text-red-700 font-medium">Stalled Deals</span>
+              <span className="text-xs text-red-700 font-medium uppercase tracking-wide">Stalled Deals</span>
               <button
                 onClick={e => { e.stopPropagation(); navigate('/crm/settings'); }}
                 title="Configure stall rules in Settings → Pipeline Settings → Stalled Rules"
@@ -2754,24 +2985,24 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* Card 6: Avg Days to Close — computed from closed-won deals in filteredDeals */}
           <div
-            className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200 cursor-default"
+            className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-l-4 border-gray-200 border-l-gray-400 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
             title="Average days from creation to close, based on closed-won deals in current filter"
           >
-            <div className="text-xl sm:text-3xl font-bold text-gray-900">
+            <div className="text-xl sm:text-3xl font-black text-gray-900 tabular-nums">
               {computedAvgDaysToClose !== null ? computedAvgDaysToClose : '—'}
             </div>
-            <div className="text-sm text-gray-700 font-medium mt-1">Avg Days to Close</div>
+            <div className="text-xs text-gray-700 font-medium mt-1 uppercase tracking-wide">Avg Days to Close</div>
           </div>
 
           {/* Card 7: Weighted Forecast — Σ value × probability for active deals */}
           <div
-            className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-violet-200 cursor-default"
+            className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-l-4 border-violet-200 border-l-violet-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
             title={`Weighted pipeline: sum of deal value × win probability for all active deals in current filter · ${reportingCurrency}`}
           >
-            <div className="text-xl sm:text-3xl font-bold text-violet-900">
+            <div className="text-xl sm:text-3xl font-black text-violet-900 tabular-nums">
               {formatAmountUSD(weightedForecast)}
             </div>
-            <div className="text-sm text-violet-700 font-medium mt-1">Weighted Forecast</div>
+            <div className="text-xs text-violet-700 font-medium mt-1 uppercase tracking-wide">Weighted Forecast</div>
           </div>
 
           {/* Card 8: Duplicate Pairs — only shown when pairs exist */}
@@ -2785,8 +3016,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 'hover:shadow-md hover:scale-[1.01] border-amber-300',
               ].join(' ')}
             >
-              <div className="text-xl sm:text-3xl font-bold text-amber-800">{activePairCount}</div>
-              <div className="text-sm text-amber-700 font-medium mt-1">Duplicates<br />to Review</div>
+              <div className="text-xl sm:text-3xl font-black text-amber-800 tabular-nums">{activePairCount}</div>
+              <div className="text-xs text-amber-700 font-medium mt-1 uppercase tracking-wide">Duplicates to Review</div>
             </button>
           )}
 
@@ -2805,7 +3036,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         };
         const maxCount = Math.max(...stageSummary.map(s => s.count), 1);
         return (
-          <div className="bg-white border-b border-gray-100 px-4 sm:px-8 py-3">
+          <div className="bg-white border-b border-gray-100 px-6 py-3">
             <div className="flex items-end gap-1 sm:gap-2 h-14">
               {stageSummary.map(({ stage, count, value }) => {
                 const cfg = stageConfig[stage];
@@ -2825,9 +3056,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       isActive ? 'opacity-100' : 'opacity-70 hover:opacity-90',
                     ].join(' ')}
                   >
-                    <span className={`text-[10px] font-semibold tabular-nums ${cfg.text} opacity-0 group-hover:opacity-100 transition-opacity`}>
-                      {count > 0 ? count : ''}
-                    </span>
+                    {count > 0 ? (
+                      <span className={`text-[10px] font-semibold tabular-nums text-white ${cfg.bar} rounded-full px-1.5 py-0.5 leading-none`}>
+                        {count}
+                      </span>
+                    ) : <span className="h-4" />}
                     <div
                       className={`w-full rounded-t-sm transition-all duration-200 ${isActive ? cfg.active : cfg.bar} ${isActive ? 'ring-2 ring-offset-1 ring-current' : ''}`}
                       style={{ height: `${heightPct}%` }}
@@ -2835,6 +3068,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     <span className={`text-[9px] font-medium hidden sm:block truncate w-full text-center ${isActive ? cfg.text : 'text-gray-400'}`}>
                       {cfg.label}
                     </span>
+                    {count > 0 && (
+                      <span className="text-[9px] text-gray-400 hidden sm:block truncate w-full text-center tabular-nums">
+                        {fmtValK(value)}
+                      </span>
+                    )}
+                    <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden hidden sm:block">
+                      <div
+                        className={`h-full rounded-full transition-all duration-200 ${isActive ? cfg.active : cfg.bar}`}
+                        style={{ width: `${Math.round((count / maxCount) * 100)}%` }}
+                      />
+                    </div>
                   </button>
                 );
               })}
@@ -2843,850 +3087,33 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         );
       })()}
 
-      {/* ── Filter Bar ────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-100" ref={filterBarRef}>
+      </div>{/* end sticky KPI + stage wrapper */}
 
-        {/* Mobile: single "Filters" button */}
-        <div className="md:hidden flex items-center gap-2 px-4 py-3">
-          <button
-            onClick={() => setShowMobileFilters(true)}
-            className="flex items-center gap-2 text-sm font-medium px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-600"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-            {hasActiveFilters && (
-              <span className="bg-indigo-500 text-white text-[10px] rounded-full px-1.5 py-0.5 leading-none">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          {hasActiveFilters && (
-            <button onClick={clearAllFilters} className="text-sm text-red-500 hover:text-red-700 font-medium">
-              Clear all
-            </button>
-          )}
-        </div>
-
-        {/* Desktop: full filter row */}
-        <div className="hidden md:flex items-center gap-2 flex-wrap px-4 py-3">
-
-          {/* ── Deal Search ── */}
-          <div className="relative flex items-center">
-            <Search className="absolute left-2.5 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={dealSearchTerm}
-              onChange={e => setDealSearchTerm(e.target.value)}
-              placeholder="Search deals…"
-              className={`pl-8 pr-7 py-1.5 text-sm border rounded-lg bg-white transition-all duration-200 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 ${
-                dealSearchTerm ? 'w-56 border-indigo-300 text-indigo-700' : 'w-44 border-gray-200 text-gray-600 hover:border-gray-300'
-              }`}
-            />
-            {dealSearchTerm && (
-              <button
-                onClick={() => setDealSearchTerm('')}
-                className="absolute right-2 text-gray-400 hover:text-gray-600 leading-none"
-                tabIndex={-1}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* ── Stage ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'stage' ? null : 'stage')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                selectedStages.size > 0
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Stage
-              {selectedStages.size > 0 && (
-                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
-                  {selectedStages.size}
-                </span>
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'stage' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'stage' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[180px]">
-                {stageFilterOptions.map(s => (
-                  <label key={s} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedStages.has(s)}
-                      onChange={() => setSelectedStages(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700 capitalize">{s}</span>
-                  </label>
-                ))}
-                {stageFilterOptions.length === 0 && <p className="text-xs text-gray-400 px-1">No stages found</p>}
-              </div>
-            )}
-          </div>
-
-          {/* ── Owner ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'owner' ? null : 'owner')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                selectedOwners.size > 0
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Owner
-              {selectedOwners.size > 0 && (
-                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
-                  {selectedOwners.size}
-                </span>
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'owner' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'owner' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
-                {ownerFilterOptions.map(o => (
-                  <label key={o} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedOwners.has(o)}
-                      onChange={() => setSelectedOwners(prev => { const n = new Set(prev); n.has(o) ? n.delete(o) : n.add(o); return n; })}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[10px] font-semibold text-indigo-700">{getInitials(o)}</span>
-                    </div>
-                    <span className="text-sm text-gray-700">{o}</span>
-                  </label>
-                ))}
-                {ownerFilterOptions.length === 0 && <p className="text-xs text-gray-400 px-1">No owners found</p>}
-              </div>
-            )}
-          </div>
-
-          {/* ── Close Date ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'closeDate' ? null : 'closeDate')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                closeDateFilter.preset !== 'all'
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Close Date
-              {closeDateFilter.preset !== 'all' && (
-                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'closeDate' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'closeDate' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[240px]">
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {([
-                    { value: 'thisWeek',    label: 'This Week' },
-                    { value: 'thisMonth',   label: 'This Month' },
-                    { value: 'thisQuarter', label: 'This Quarter' },
-                    { value: 'overdue',     label: 'Overdue' },
-                    { value: 'custom',      label: 'Custom Range' },
-                  ] as const).map(({ value, label }) => (
-                    <button
-                      key={value}
-                      onClick={() => setCloseDateFilter(
-                        closeDateFilter.preset === value ? { preset: 'all' } : { preset: value }
-                      )}
-                      className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                        closeDateFilter.preset === value
-                          ? 'bg-purple-100 text-purple-700 border-purple-300'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className={closeDateFilter.preset === 'custom' ? 'block mt-2 pt-2 border-t border-gray-100' : 'hidden'}>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-[11px] text-gray-500 font-medium block mb-0.5">From</label>
-                      <input
-                        type="date"
-                        value={closeDateFilter.from ?? ''}
-                        onChange={e => setCloseDateFilter(prev => ({ ...prev, from: e.target.value || undefined }))}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] text-gray-500 font-medium block mb-0.5">To</label>
-                      <input
-                        type="date"
-                        value={closeDateFilter.to ?? ''}
-                        onChange={e => setCloseDateFilter(prev => ({ ...prev, to: e.target.value || undefined }))}
-                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Value ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'value' ? null : 'value')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                valueFilter.min !== null || valueFilter.max !== null
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Value
-              {(valueFilter.min !== null || valueFilter.max !== null) && (
-                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'value' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'value' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[220px]">
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {((): { label: string; min: number | null; max: number | null }[] => {
-                    const sym = CURRENCY_SYMBOLS[reportingCurrency] ?? '$';
-                    return [
-                      { label: `< ${sym}10K`,                 min: null,   max: 10000  },
-                      { label: `${sym}10K – ${sym}50K`,        min: 10000,  max: 50000  },
-                      { label: `${sym}50K – ${sym}200K`,       min: 50000,  max: 200000 },
-                      { label: `> ${sym}200K`,                 min: 200000, max: null   },
-                    ];
-                  })().map((preset) => {
-                    const isActive = valueFilter.min === preset.min && valueFilter.max === preset.max;
-                    return (
-                      <button
-                        key={preset.label}
-                        onClick={() => setValueFilter(isActive ? { min: null, max: null } : { min: preset.min, max: preset.max })}
-                        className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                          isActive
-                            ? 'bg-blue-100 text-blue-700 border-blue-300'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="border-t border-gray-100 my-2" />
-                <div className="text-xs text-gray-400 mb-1.5">Custom range</div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 block mb-0.5">Min {CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      value={valueFilter.min ?? ''}
-                      onChange={e => setValueFilter(prev => ({ ...prev, min: e.target.value ? parseFloat(e.target.value) : null }))}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </div>
-                  <span className="text-gray-400 text-sm mt-3">–</span>
-                  <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 block mb-0.5">Max {CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="∞"
-                      value={valueFilter.max ?? ''}
-                      onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Source ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'source' ? null : 'source')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                selectedSources.size > 0
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Source
-              {selectedSources.size > 0 && (
-                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
-                  {selectedSources.size}
-                </span>
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'source' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'source' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[180px]">
-                {sourceFilterOptions.map(s => (
-                  <label key={s} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedSources.has(s)}
-                      onChange={() => setSelectedSources(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">{s}</span>
-                  </label>
-                ))}
-                {sourceFilterOptions.length === 0 && <p className="text-xs text-gray-400 px-1">No sources found</p>}
-              </div>
-            )}
-          </div>
-
-          {/* ── Health ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'health' ? null : 'health')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                selectedHealthTiers.size > 0
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Health
-              {selectedHealthTiers.size > 0 && (
-                <span className="ml-0.5 bg-indigo-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
-                  {selectedHealthTiers.size}
-                </span>
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'health' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'health' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[260px]">
-                <div className="flex gap-2">
-                  {([
-                    { tier: 'strong' as HealthTierFilter, label: 'Healthy', dot: 'bg-green-500', activeClass: 'bg-green-100 text-green-700 border-green-300' },
-                    { tier: 'fair'   as HealthTierFilter, label: 'Needs Attention', dot: 'bg-amber-500', activeClass: 'bg-amber-100 text-amber-700 border-amber-300' },
-                    { tier: 'weak'   as HealthTierFilter, label: 'At Risk', dot: 'bg-red-500',   activeClass: 'bg-red-100   text-red-700   border-red-300'   },
-                  ]).map(({ tier, label, dot, activeClass }) => (
-                    <button
-                      key={tier}
-                      onClick={() => {
-                        const next = new Set(selectedHealthTiers);
-                        next.has(tier) ? next.delete(tier) : next.add(tier);
-                        setSelectedHealthTiers(next);
-                      }}
-                      className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                        selectedHealthTiers.has(tier)
-                          ? activeClass
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Competitor ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'competitor' ? null : 'competitor')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                selectedCompetitors.size > 0
-                  ? 'bg-teal-50 border-teal-300 text-teal-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Competitor
-              {selectedCompetitors.size > 0 && (
-                <span className="ml-0.5 bg-teal-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 inline-flex items-center justify-center px-1">
-                  {selectedCompetitors.size}
-                </span>
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'competitor' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'competitor' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
-                {availableCompetitors.map(c => (
-                  <label key={c} className="flex items-center gap-2 px-1 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedCompetitors.has(c)}
-                      onChange={() => setSelectedCompetitors(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n; })}
-                      className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span className="text-sm text-gray-700">{c}</span>
-                  </label>
-                ))}
-                {availableCompetitors.length === 0 && <p className="text-xs text-gray-400 px-1">No competitors tracked yet</p>}
-              </div>
-            )}
-          </div>
-
-          {/* ── Activity Gap ── */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenFilter(openFilter === 'pipelineAge' ? null : 'pipelineAge')}
-              className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-medium'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              No Contact (Days)
-              {(pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) && (
-                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block flex-shrink-0" />
-              )}
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openFilter === 'pipelineAge' ? 'rotate-180' : ''}`} />
-            </button>
-            {openFilter === 'pipelineAge' && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-3 z-50 min-w-[200px]">
-                <p className="text-[11px] text-gray-500 font-medium mb-1">
-                  No Contact (Days)
-                  <span title="Days since this deal's last recorded contact or activity" className="ml-1 cursor-help text-gray-400">ⓘ</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 block mb-0.5">Min days</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      value={pipelineAgeFilter.min ?? ''}
-                      onChange={e => setPipelineAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </div>
-                  <span className="text-gray-400 text-sm mt-3">–</span>
-                  <div className="flex-1">
-                    <label className="text-[10px] text-gray-400 block mb-0.5">Max days</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="∞"
-                      value={pipelineAgeFilter.max ?? ''}
-                      onChange={e => setPipelineAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => setPipelineAgeFilter({ min: null, max: null })}
-                  className="mt-2 text-xs text-gray-400 hover:text-gray-600 w-full text-left"
-                >
-                  Clear
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Advanced filter builder toggle ── */}
-          <button
-            onClick={() => setShowBuilder(v => !v)}
-            className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-              advancedConditions.length > 0
-                ? 'bg-violet-50 border-violet-300 text-violet-700 font-medium'
-                : showBuilder
-                  ? 'bg-gray-100 border-gray-300 text-gray-700'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            <ListFilter className="h-3.5 w-3.5" />
-            {advancedConditions.length > 0
-              ? `${advancedConditions.length} active rule${advancedConditions.length !== 1 ? 's' : ''}`
-              : 'More filters'}
-          </button>
-
-          {/* ── Pipeline Hygiene badge ── */}
-          {dqSummary.total > 0 && (
-            <button
-              onClick={() => setShowIssuesOnly(prev => !prev)}
-              title={`${dqSummary.errors} data error${dqSummary.errors !== 1 ? 's' : ''}, ${dqSummary.warnings} warning${dqSummary.warnings !== 1 ? 's' : ''} — click to filter`}
-              className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
-                showIssuesOnly
-                  ? 'bg-red-50 border-red-300 text-red-700'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-red-200 hover:text-red-600'
-              }`}
-            >
-              <AlertCircle size={13} className={showIssuesOnly ? 'text-red-500' : 'text-gray-400'} />
-              {dqSummary.errors > 0 && (
-                <span className={`font-bold ${showIssuesOnly ? 'text-red-700' : 'text-red-500'}`}>
-                  {dqSummary.errors} error{dqSummary.errors !== 1 ? 's' : ''}
-                </span>
-              )}
-              {dqSummary.warnings > 0 && (
-                <span className={showIssuesOnly ? 'text-amber-700' : 'text-amber-500'}>
-                  {dqSummary.errors > 0 ? ', ' : ''}{dqSummary.warnings} warning{dqSummary.warnings !== 1 ? 's' : ''}
-                </span>
-              )}
-            </button>
-          )}
-
-          {/* ── Column settings ── */}
-          <div className="ml-auto flex items-center gap-2">
-
-            {/* Reporting currency selector */}
-            <div className="relative flex items-center">
-              <select
-                value={reportingCurrency}
-                onChange={e => setReportingCurrency(e.target.value as SupportedCurrency)}
-                className="text-xs border border-gray-200 rounded-lg pl-2 pr-6 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer appearance-none"
-                title={`Report values in ${reportingCurrency} · Indicative rates, ${RATES_SNAPSHOT_DATE}`}
-              >
-                {SUPPORTED_REPORTING_CURRENCIES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <ChevronDown className="h-3 w-3 text-gray-400 absolute right-1.5 pointer-events-none" />
-            </div>
-
-            {/* Density toggle */}
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-              <button
-                title="Comfortable density"
-                onClick={() => setDensity('comfortable')}
-                className={`px-2 py-1.5 flex items-center gap-1 transition-colors ${density === 'comfortable' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-              >
-                <AlignJustify className="h-3.5 w-3.5" />
-                <span className="text-xs font-medium hidden sm:inline">Comfortable</span>
-              </button>
-              <button
-                title="Compact density"
-                onClick={() => setDensity('compact')}
-                className={`px-2 py-1.5 flex items-center gap-1 transition-colors ${density === 'compact' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-                <span className="text-xs font-medium hidden sm:inline">Compact</span>
-              </button>
-            </div>
-
-            {/* Column settings */}
-            <div className="relative">
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg border border-gray-200"
-                onClick={(e) => { e.stopPropagation(); setShowColumnSettings(v => !v); }}
-                title="Show/hide columns"
-              >
-                <Columns2 className="h-4 w-4" />
-                <span className="text-xs font-medium hidden sm:inline">Columns</span>
-              </button>
-              {showColumnSettings && (
-                <div
-                  className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <p className="px-3 pb-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                    Columns
-                  </p>
-                  {columnOrder.map(key => {
-                    const col = ALL_COLUMNS.find(c => c.key === key)!;
-                    return (
-                      <div
-                        key={key}
-                        draggable
-                        onDragStart={() => { dragKey.current = key; }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => {
-                          if (!dragKey.current || dragKey.current === key) return;
-                          setColumnOrder(prev => {
-                            const next = [...prev];
-                            const fromIdx = next.indexOf(dragKey.current!);
-                            const toIdx = next.indexOf(key);
-                            next.splice(fromIdx, 1);
-                            next.splice(toIdx, 0, dragKey.current!);
-                            return next;
-                          });
-                          dragKey.current = null;
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-default"
-                      >
-                        <GripVertical className="h-3.5 w-3.5 text-gray-300 cursor-grab flex-shrink-0" />
-                        <input
-                          type="checkbox"
-                          checked={visibleColumns.has(key)}
-                          onChange={() => toggleColumn(key)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-sm text-gray-700">{col.label}</span>
-                      </div>
-                    );
-                  })}
-                  <div className="border-t border-gray-200 mt-1 pt-1 px-3">
-                    <button
-                      onClick={resetColumns}
-                      className="w-full text-left text-xs text-indigo-600 hover:text-indigo-700 py-1.5 font-medium"
-                    >
-                      Reset to default
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Active filter chips row */}
-        {hasActiveFilters && (
-          <div className="hidden md:flex items-center gap-2 flex-wrap px-4 py-2 border-t border-gray-100 bg-gray-50/50">
-            <span className="text-xs text-gray-400 font-medium shrink-0">Active:</span>
-            {[...selectedStages].map(s => (
-              <FilterChip key={`stage-${s}`} label={s} color="indigo" onRemove={() => setSelectedStages(prev => { const n = new Set(prev); n.delete(s); return n; })} />
-            ))}
-            {[...selectedOwners].map(o => (
-              <FilterChip key={`owner-${o}`} label={o.split(' ')[0]} color="indigo" onRemove={() => setSelectedOwners(prev => { const n = new Set(prev); n.delete(o); return n; })} />
-            ))}
-            {[...selectedSources].map(s => (
-              <FilterChip key={`source-${s}`} label={s} color="indigo" onRemove={() => setSelectedSources(prev => { const n = new Set(prev); n.delete(s); return n; })} />
-            ))}
-            {[...selectedHealthTiers].map(t => (
-              <FilterChip
-                key={`health-${t}`}
-                label={HEALTH_TIER_LABELS[t]}
-                color={t === 'strong' ? 'green' : t === 'fair' ? 'amber' : 'red'}
-                onRemove={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.delete(t); return n; })}
-              />
-            ))}
-            {closeDateFilter.preset !== 'all' && (
-              <FilterChip
-                color="purple"
-                label={
-                  closeDateFilter.preset === 'thisWeek'    ? 'This Week' :
-                  closeDateFilter.preset === 'thisMonth'   ? 'This Month' :
-                  closeDateFilter.preset === 'thisQuarter' ? 'This Quarter' :
-                  closeDateFilter.preset === 'overdue'     ? 'Overdue' :
-                  closeDateFilter.from && closeDateFilter.to ? `${closeDateFilter.from} – ${closeDateFilter.to}` :
-                  closeDateFilter.from ? `From ${closeDateFilter.from}` :
-                  closeDateFilter.to   ? `Until ${closeDateFilter.to}` : 'Custom'
-                }
-                onRemove={() => setCloseDateFilter({ preset: 'all' })}
-              />
-            )}
-            {(valueFilter.min !== null || valueFilter.max !== null) && (
-              <FilterChip
-                color="blue"
-                label={
-                  valueFilter.min !== null && valueFilter.max !== null
-                    ? `${fmtValK(valueFilter.min)} – ${fmtValK(valueFilter.max)}`
-                    : valueFilter.min !== null
-                      ? `> ${fmtValK(valueFilter.min)}`
-                      : `< ${fmtValK(valueFilter.max!)}`
-                }
-                onRemove={() => setValueFilter({ min: null, max: null })}
-              />
-            )}
-            {(pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) && (
-              <FilterChip
-                color="orange"
-                label={
-                  pipelineAgeFilter.min !== null && pipelineAgeFilter.max !== null
-                    ? `Silent ${pipelineAgeFilter.min}–${pipelineAgeFilter.max} days`
-                    : pipelineAgeFilter.min !== null
-                      ? `Silent ${pipelineAgeFilter.min}+ days`
-                      : `Contact < ${pipelineAgeFilter.max} days`
-                }
-                onRemove={() => setPipelineAgeFilter({ min: null, max: null })}
-              />
-            )}
-            {advancedConditions.length > 0 && (
-              <FilterChip
-                color="purple"
-                label={`⚙ ${advancedConditions.length} active rule${advancedConditions.length !== 1 ? 's' : ''}`}
-                onRemove={() => setAdvancedConditions([])}
-              />
-            )}
-            {[...selectedCompetitors].map(c => (
-              <FilterChip
-                key={`competitor-${c}`}
-                label={c}
-                color="teal"
-                onRemove={() => setSelectedCompetitors(prev => { const n = new Set(prev); n.delete(c); return n; })}
-              />
-            ))}
-            {showIssuesOnly && (
-              <FilterChip label="⚠ Has issues" color="red" onRemove={() => setShowIssuesOnly(false)} />
-            )}
-            {debouncedDealSearch && (
-              <FilterChip label={`"${debouncedDealSearch}"`} color="indigo" onRemove={() => setDealSearchTerm('')} />
-            )}
-            <button
-              onClick={clearAllFilters}
-              className="text-xs text-red-500 hover:text-red-700 font-medium ml-auto shrink-0"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
-
-        {/* KPI filter active pill */}
-        {activeKpiFilter && (
-          <div className="flex items-center gap-2 px-4 pb-2">
-            <span className="text-xs text-gray-500">Filtered:</span>
-            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
-              {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
-              <button
-                onClick={() => setActiveKpiFilter(null)}
-                className="ml-1 text-indigo-400 hover:text-indigo-600 leading-none"
-                title="Clear filter"
-              >×</button>
-            </span>
-          </div>
-        )}
-
-      </div>
-
-      {/* ── Advanced Filter Builder Panel ─────────────────────────────────────── */}
-      {showBuilder && (
-        <AdvancedFilterBuilder
-          conditions={advancedConditions}
-          conjunction={advancedConjunction}
-          onConditionsChange={setAdvancedConditions}
-          onConjunctionChange={setAdvancedConjunction}
-          stageOptions={stageFilterOptions}
-          ownerOptions={ownerFilterOptions}
-          onClose={() => setShowBuilder(false)}
-        />
-      )}
-
-      {/* Mobile filter sheet */}
-      {showMobileFilters && (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto md:hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 sticky top-0 bg-white">
-            <h2 className="text-base font-semibold text-gray-900">Filters</h2>
-            <button onClick={() => setShowMobileFilters(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          <div className="p-4 space-y-6">
-            {/* Stage */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Stage</p>
-              <div className="space-y-2">
-                {stageFilterOptions.map(s => (
-                  <label key={s} className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={selectedStages.has(s)} onChange={() => setSelectedStages(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })} className="rounded border-gray-300 text-indigo-600" />
-                    <span className="text-sm text-gray-700 capitalize">{s}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Owner */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Owner</p>
-              <div className="space-y-2">
-                {ownerFilterOptions.map(o => (
-                  <label key={o} className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={selectedOwners.has(o)} onChange={() => setSelectedOwners(prev => { const n = new Set(prev); n.has(o) ? n.delete(o) : n.add(o); return n; })} className="rounded border-gray-300 text-indigo-600" />
-                    <span className="text-sm text-gray-700">{o}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Source */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Source</p>
-              <div className="space-y-2">
-                {sourceFilterOptions.map(s => (
-                  <label key={s} className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={selectedSources.has(s)} onChange={() => setSelectedSources(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; })} className="rounded border-gray-300 text-indigo-600" />
-                    <span className="text-sm text-gray-700">{s}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Win Score */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Win Score</p>
-              <div className="space-y-2">
-                {([['strong','Healthy','bg-green-400'],['fair','Needs Attention','bg-amber-400'],['weak','At Risk','bg-red-400']] as [HealthTierFilter,string,string][]).map(([tier,label,dot]) => (
-                  <label key={tier} className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={selectedHealthTiers.has(tier)} onChange={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.has(tier) ? n.delete(tier) : n.add(tier); return n; })} className="rounded border-gray-300 text-indigo-600" />
-                    <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
-                    <span className="text-sm text-gray-700">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Close Date */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Close Date</p>
-              <div className="space-y-2">
-                {(['all','thisWeek','thisMonth','thisQuarter','overdue','custom'] as const).map(preset => (
-                  <label key={preset} className="flex items-center gap-3 cursor-pointer">
-                    <input type="radio" name="mobileCloseDatePreset" checked={closeDateFilter.preset === preset} onChange={() => setCloseDateFilter({ preset })} className="text-indigo-600" />
-                    <span className="text-sm text-gray-700">{preset === 'all' ? 'Any' : preset === 'thisWeek' ? 'This week' : preset === 'thisMonth' ? 'This month' : preset === 'thisQuarter' ? 'This quarter' : preset === 'overdue' ? 'Overdue' : 'Custom'}</span>
-                  </label>
-                ))}
-                {closeDateFilter.preset === 'custom' && (
-                  <div className="space-y-2 pl-6">
-                    <input type="date" value={closeDateFilter.from ?? ''} onChange={e => setCloseDateFilter(prev => ({ ...prev, from: e.target.value || undefined }))} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-                    <input type="date" value={closeDateFilter.to ?? ''} onChange={e => setCloseDateFilter(prev => ({ ...prev, to: e.target.value || undefined }))} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Value */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-2">Value range</p>
-              <div className="flex items-center gap-2">
-                <input type="number" min={0} placeholder={`Min ${CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}`} value={valueFilter.min ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, min: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-                <span className="text-gray-400">–</span>
-                <input type="number" min={0} placeholder={`Max ${CURRENCY_SYMBOLS[reportingCurrency] ?? '$'}`} value={valueFilter.max ?? ''} onChange={e => setValueFilter(prev => ({ ...prev, max: e.target.value ? parseFloat(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-              </div>
-            </div>
-            {/* No Contact (Days) */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-1">No Contact (Days)</p>
-              <p className="text-xs text-gray-400 mb-2">Days since this deal's last recorded contact or activity.</p>
-              <div className="flex items-center gap-2">
-                <input type="number" min={0} placeholder="Min" value={pipelineAgeFilter.min ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-                <span className="text-gray-400">–</span>
-                <input type="number" min={0} placeholder="Max" value={pipelineAgeFilter.max ?? ''} onChange={e => setPipelineAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))} className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
-              </div>
-            </div>
-            {/* Competitor */}
-            {availableCompetitors.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">Competitor</p>
-                <div className="space-y-2">
-                  {availableCompetitors.map(c => (
-                    <label key={c} className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" checked={selectedCompetitors.has(c)} onChange={() => setSelectedCompetitors(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n; })} className="rounded border-gray-300 text-teal-600" />
-                      <span className="text-sm text-gray-700">{c}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-3 flex gap-3">
-            {hasActiveFilters && (
-              <button onClick={clearAllFilters} className="flex-1 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">
-                Clear all
-              </button>
-            )}
-            <button onClick={() => setShowMobileFilters(false)} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-              Done ({filteredDeals.length} deals)
-            </button>
-          </div>
+      {/* ── Filter Bar removed — filters now live in the Kanban page toolbar ── */}
+      {/* Active KPI filter pill */}
+      {activeKpiFilter && (
+        <div className="bg-white border-b border-gray-100 flex items-center gap-2 px-4 py-2">
+          <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
+            {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
+            <button onClick={() => setActiveKpiFilter(null)} className="ml-1 text-indigo-400 hover:text-indigo-600 leading-none" title="Clear filter">×</button>
+          </span>
         </div>
       )}
+      {/* placeholder div kept so existing ref-based click-outside logic compiles */}
+      <div ref={filterBarRef} className="hidden" />
+
 
       {/* ── Table + Card List ────────────────────────────────────────────────── */}
-      <div className="py-3 sm:py-6">
+      <div className="py-0">
 
         {/* Desktop table (md+) */}
-        <div className="hidden md:block px-4 md:px-8">
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto">
+        <div className="hidden md:block px-0">
+          <div
+            className="bg-white rounded-lg border border-gray-200 overflow-auto"
+            style={{ height: `calc(100vh - ${240 + kpiSectionHeight}px)`, minHeight: '220px' }}
+          >
             <table className="w-full">
-              <thead className="bg-gray-50/80 border-b-2 border-gray-200">
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
                 <tr>
                   {/* Checkbox — always visible */}
                   <th className={`w-12 pl-3 ${effectiveDensity === 'compact' ? 'py-2' : 'py-3'}`}>
@@ -3700,11 +3127,48 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     />
                   </th>
                   {orderedVisible.map(key => renderHeader(key))}
+                  {/* Column picker — sticky far right */}
+                  <th
+                    ref={columnPickerRef}
+                    className={`sticky right-0 bg-white border-l border-gray-200 ${effectiveDensity === 'compact' ? 'px-2 py-2' : 'px-3 py-3'}`}
+                  >
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowColumnSettings(v => !v)}
+                        title="Configure columns"
+                        aria-label="Configure visible columns"
+                        className={`p-1 rounded transition-colors ${showColumnSettings ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                      >
+                        <SlidersHorizontal size={14} />
+                      </button>
+                      {showColumnSettings && (
+                        <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+                          <p className="px-3 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Visible Columns</p>
+                          {ALL_COLUMNS.filter(c => c.key !== 'dealName' && c.key !== 'actions').map(col => (
+                            <label key={col.key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns.has(col.key)}
+                                onChange={() => setVisibleColumns(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(col.key)) next.delete(col.key);
+                                  else next.add(col.key);
+                                  return next;
+                                })}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5"
+                              />
+                              <span className="text-xs text-gray-700">{col.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100">
-                {sortedDeals.map((deal, rowIdx) => {
+                {pagedDeals.map((deal, rowIdx) => {
                   const isExpanded = expandedRows.includes(deal.id);
                   const isSelected = selectedDealSet.has(deal.id);
                   const isActiveRow = activeRowIndex === rowIdx;
@@ -3712,7 +3176,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     <React.Fragment key={deal.id}>
                       <tr
                         id={`deal-row-${deal.id}`}
-                        className={getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id, isActiveRow)}
+                        className={`group ${getRowClassName(isExpanded, isSelected, hoveredRowId === deal.id, isActiveRow)}`}
+                        style={{ scrollMarginTop: '48px' }}
                         onClick={() => { setActiveRowIndex(rowIdx); toggleRowExpansion(deal.id); }}
                         onContextMenu={(e) => handleContextMenu(e, deal.id)}
                         onMouseEnter={() => setHoveredRowId(deal.id)}
@@ -3750,7 +3215,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
             {sortedDeals.length === 0 && (
               <div className="text-center py-16 px-8">
-                {allDeals.length === 0 ? (
+                {(totalPipelineDeals ?? allDeals.length) === 0 ? (
                   <>
                     <BarChart3 className="h-10 w-10 text-indigo-200 mx-auto mb-3" />
                     <p className="text-sm font-semibold text-gray-700 mb-1">Your pipeline is empty</p>
@@ -3771,23 +3236,66 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     <button onClick={() => setShowIssuesOnly(false)} className="mt-3 text-xs text-indigo-600 hover:underline">Clear filter</button>
                   </>
                 ) : (
-                  <>
-                    <ListFilter className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                    <p className="text-sm font-semibold text-gray-500 mb-1">No deals match your filters</p>
-                    <p className="text-xs text-gray-400 mb-3">
+                  <div className="flex flex-col items-center justify-center min-h-[320px] py-16 text-center">
+                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                      <Search className="w-7 h-7 text-gray-400" />
+                    </div>
+                    <h3 className="text-base font-semibold text-gray-900 mb-1">No deals match your filters</h3>
+                    <p className="text-sm text-gray-500 mb-5 max-w-xs">
                       {hasActiveFilters ? 'Try relaxing some filters or clearing them all.' : 'Try adjusting the stage, date, or value filters above.'}
                     </p>
-                    {hasActiveFilters && (
-                      <button onClick={clearAllFilters} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
-                        Clear all filters
-                      </button>
-                    )}
-                  </>
+                    <button
+                      onClick={clearAllFilters}
+                      className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
                 )}
               </div>
             )}
           </div>
         </div>
+
+        {/* 8.4 — Pagination footer (desktop) */}
+        {sortedDeals.length > 0 && (
+          <div className="hidden md:flex items-center justify-between px-0 py-3 bg-white border-t border-gray-200">
+            <span className="text-xs text-gray-500 font-tabular">
+              Showing {currentPage * rowsPerPage + 1}–{Math.min((currentPage + 1) * rowsPerPage, sortedDeals.length)} of {sortedDeals.length} deal{sortedDeals.length !== 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500">Rows:</span>
+                {([25, 50, 100] as const).map(n => (
+                  <button
+                    key={n}
+                    onClick={() => { setRowsPerPage(n); setCurrentPage(0); }}
+                    className={`text-xs px-2 py-0.5 rounded-md border transition-colors ${rowsPerPage === n ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                  disabled={currentPage === 0}
+                  className="px-2.5 py-1 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  ‹ Prev
+                </button>
+                <span className="text-xs text-gray-500 px-2">{currentPage + 1} / {Math.max(1, totalPages)}</span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={currentPage >= totalPages - 1}
+                  className="px-2.5 py-1 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next ›
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mobile card list (< md) */}
         <div className="block md:hidden py-2 space-y-2">
@@ -3922,9 +3430,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           })}
         </div>
 
-        <div className="mt-3 sm:mt-4 text-center text-sm text-gray-600 px-4">
-          Showing {sortedDeals.length} of {allDeals.length} deals
-        </div>
       </div>
 
       {/* ── Context Menu ──────────────────────────────────────────────────────── */}
@@ -4582,14 +4087,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         role="toolbar"
         aria-label="Bulk actions"
         className={[
-          'fixed z-40 transition-all duration-200 ease-out',
+          'fixed z-40',
           'left-0 right-0 bottom-0',
           'md:left-1/2 md:right-auto md:bottom-6 md:-translate-x-1/2',
-          showBulkActions ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none md:translate-y-4',
+          showBulkActions ? 'animate-slide-in-bottom pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none',
         ].join(' ')}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-gray-900 text-white rounded-t-2xl md:rounded-2xl shadow-2xl px-4 py-3 flex items-center gap-2 flex-wrap">
+        <div className="bg-gray-900 text-white rounded-t-2xl md:rounded-full shadow-2xl px-6 py-3 flex items-center gap-2 flex-wrap">
 
           {/* Selection count + Select all affordance */}
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -5180,6 +4685,92 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
           {bulkToast}
         </div>
+      )}
+
+      {/* ── Data Quality Slide-over Drawer ────────────────────────────────────── */}
+      {showDQDrawer && (
+        <>
+          <div className="fixed inset-0 bg-black/20 z-40" onClick={() => setShowDQDrawer(false)} />
+          <div className="fixed right-0 top-0 h-full w-[480px] max-w-full bg-white shadow-2xl z-50 flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 shrink-0">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Pipeline Hygiene</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {dqSummary.errors} error{dqSummary.errors !== 1 ? 's' : ''}, {dqSummary.warnings} warning{dqSummary.warnings !== 1 ? 's' : ''} across {dqSummary.total} deal{dqSummary.total !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const rows = filteredDeals
+                      .flatMap(d => {
+                        const dq = getDealDataQuality(d);
+                        if (dq.isClean) return [];
+                        return dq.issues.map((i: DataQualityIssue) => `${d.dealName}\t${i.severity}\t${i.message}`);
+                      })
+                      .join('\n');
+                    const blob = new Blob([`Deal\tSeverity\tIssue\n${rows}`], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = 'pipeline-hygiene.csv'; a.click(); URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  <Download size={12} />
+                  Export CSV
+                </button>
+                <button onClick={() => setShowDQDrawer(false)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+              {filteredDeals.map(d => {
+                const dq = getDealDataQuality(d);
+                if (dq.isClean) return null;
+                const assignTarget = currentUser || availableOwners[0] || '';
+                return (
+                  <div key={d.id} className="px-5 py-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <button
+                        onClick={() => { setShowDQDrawer(false); navigate(`/crm/deals/${d.id}`); }}
+                        className="text-sm font-semibold text-gray-800 hover:text-indigo-600 transition-colors text-left truncate max-w-[260px]"
+                      >
+                        {d.dealName}
+                      </button>
+                      <span className="text-xs text-gray-400 shrink-0 ml-2 truncate max-w-[120px]">{d.companyName}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {dq.issues.map((issue: DataQualityIssue, i: number) => (
+                        <div key={i} className="flex items-center justify-between gap-3">
+                          <div className="flex items-start gap-1.5 min-w-0">
+                            <span className={`text-xs font-bold shrink-0 ${issue.severity === 'error' ? 'text-red-500' : 'text-amber-500'}`}>
+                              {issue.severity === 'error' ? '✗' : '⚠'}
+                            </span>
+                            <span className={`text-xs leading-snug ${issue.severity === 'error' ? 'text-red-700' : 'text-amber-700'}`}>{issue.message}</span>
+                          </div>
+                          {issue.canAutoFix && issue.type === 'missing_owner' && assignTarget ? (
+                            <button onClick={() => { onFieldUpdate?.(d.id, 'owner', assignTarget); setShowDQDrawer(false); }} className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap shrink-0">Assign me</button>
+                          ) : issue.fixField && issue.fixField !== 'contact' ? (
+                            <button onClick={() => { setShowDQDrawer(false); startEdit(d.id, issue.fixField!); }} className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap shrink-0">Fix →</button>
+                          ) : (
+                            <button onClick={() => { setShowDQDrawer(false); navigate(`/crm/deals/${d.id}`); }} className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 whitespace-nowrap shrink-0">Open →</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {dqSummary.total === 0 && (
+                <div className="flex flex-col items-center justify-center h-64">
+                  <CheckCircle2 className="h-10 w-10 text-green-400 mb-3" />
+                  <p className="text-sm font-semibold text-gray-700">All deals are clean</p>
+                  <p className="text-xs text-gray-400 mt-1">No data quality issues found.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── Undo Toast (archive actions) ─────────────────────────────────────── */}

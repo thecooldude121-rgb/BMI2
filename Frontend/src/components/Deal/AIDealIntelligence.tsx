@@ -42,6 +42,9 @@ interface AIDealIntelligenceProps {
   onScheduleMeeting?: () => void;
   onFindBestTime?: () => void;
   onViewBattleCard?: (competitor: string) => void;
+  showOnlyNextBestActions?: boolean;
+  maxActions?: number;
+  stageNumber?: number;
 }
 
 export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
@@ -60,10 +63,11 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
   onScheduleMeeting,
   onFindBestTime,
   onViewBattleCard,
+  showOnlyNextBestActions = false,
+  maxActions,
+  stageNumber = 1,
 }) => {
   const navigate = useNavigate();
-  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
-  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
   const [showScoreFactors, setShowScoreFactors] = useState(false);
   const [healthBarWidth, setHealthBarWidth] = useState(0);
 
@@ -85,6 +89,12 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
   const effectiveBreakdown = scoreBreakdown.length > 0 ? scoreBreakdown : fallbackFactors;
   const positiveFactors = effectiveBreakdown.filter(f => f.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
   const negativeFactors = effectiveBreakdown.filter(f => f.score < 0).sort((a, b) => a.score - b.score).slice(0, 2);
+
+  const engagementEntry = effectiveBreakdown.find(f => f.category?.toLowerCase().includes('engagement'));
+  const derivedEngagementScore = engagementEntry?.score ? Math.min(Math.abs(engagementEntry.score) * 4, 100) : 70;
+  const stageProgressPct = (Math.max(stageNumber, 1) / 6) * 100;
+  const winProb = winProbAI || winProbability || 45;
+  const dealQualityScore = Math.round((winProb * 0.5) + (derivedEngagementScore * 0.3) + (stageProgressPct * 0.2));
 
   const getWinProbabilityColor = (prob: number) => {
     if (prob >= 75) return 'bg-green-500';
@@ -115,6 +125,51 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
     if (priority === 'medium') return 'border-l-4 border-amber-400 bg-amber-50';
     return 'border-l-4 border-gray-300 bg-white';
   };
+
+  if (showOnlyNextBestActions) {
+    const visibleActions = maxActions ? nextActions.slice(0, maxActions) : nextActions;
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        <h3 className="text-[15px] font-semibold text-gray-900 mb-2.5">Next Best Actions (AI-Recommended)</h3>
+        <div className="space-y-4">
+          {visibleActions.map((action, idx) => (
+            <div key={idx} className={`rounded-lg p-4 border ${getPriorityCardClass(action.priority)}`}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg font-bold text-gray-700">{idx + 1}.</span>
+                  <Target className="h-5 w-5 text-gray-600" />
+                  <span className="font-bold text-gray-900">{action.title}</span>
+                </div>
+              </div>
+              <div className="ml-8 space-y-2">
+                <div className="text-sm text-gray-700"><span className="font-semibold">Why:</span> {action.reason}</div>
+                <div className="text-sm text-gray-700"><span className="font-semibold">Suggested:</span> "{action.suggestion}"</div>
+                <div className="flex items-center space-x-2 mt-3">
+                  {action.actions.map((actionBtn, btnIdx) => {
+                    const handleClick = () => {
+                      if (actionBtn === 'Send Email' && onSendEmail) onSendEmail('john@acme.com', 'Following up on proposal', 'Hi John,\n\n');
+                      else if (actionBtn === 'Schedule Call' && onScheduleCall) onScheduleCall();
+                      else if (actionBtn === 'Schedule Meeting' && onScheduleMeeting) onScheduleMeeting();
+                      else if (actionBtn === 'AI Find Best Time' && onFindBestTime) onFindBestTime();
+                      else if (actionBtn === 'Send Case Study' && onSendEmail) onSendEmail('john@acme.com', 'ROI Case Study', 'Hi John,\n\n');
+                      else if (actionBtn === 'Draft Email' && onSendEmail) onSendEmail('john@acme.com', 'Introduction to CEO', 'Hi John,\n\n');
+                      else if (actionBtn === 'View Battle Card' && onViewBattleCard) onViewBattleCard(action.competitor ?? 'Salesforce');
+                    };
+                    return (
+                      <button key={btnIdx} onClick={handleClick}
+                        className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-50 font-medium transition-colors">
+                        {actionBtn}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
@@ -210,184 +265,102 @@ export const AIDealIntelligence: React.FC<AIDealIntelligenceProps> = ({
         </div>
       </div>
 
-      {/* Deal Health — clickable, expands score factor panel (item 10) */}
+      {/* Data Completeness + Deal Quality — two side-by-side cards */}
       <div className="mb-4 pb-4 border-b border-gray-200">
-        <button
-          type="button"
-          onClick={() => setShowScoreFactors(v => !v)}
-          className="w-full flex items-center justify-between mb-1 rounded-lg hover:bg-gray-50 px-2 py-1.5 -mx-2 transition-colors group"
-        >
-          <h3 className="text-[15px] font-semibold text-gray-900">Deal Health</h3>
-          <div className="flex items-center gap-2">
-            {/* Gradient health bar (item 8) */}
-            <div className="w-24 h-2 rounded-full overflow-hidden bg-gray-100 relative">
+        <div className="grid grid-cols-2 gap-3">
+
+          {/* LEFT — Data Completeness */}
+          <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Data Completeness</p>
+            <div className="flex items-end gap-1.5">
+              <span className={`text-[28px] font-bold leading-none ${
+                healthScore >= 80 ? 'text-emerald-600' : healthScore >= 60 ? 'text-blue-600' : healthScore >= 40 ? 'text-amber-600' : 'text-red-600'
+              }`}>
+                {healthScore}
+              </span>
+              <span className="text-xs text-gray-400 mb-1">/100</span>
+            </div>
+            {/* Solid emerald bar */}
+            <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
               <div
-                className="absolute inset-0 rounded-full"
-                style={{
-                  background: 'linear-gradient(to right, #EF4444 0%, #EF4444 40%, #F59E0B 40%, #F59E0B 70%, #22C55E 70%, #22C55E 100%)',
-                }}
-              />
-              {/* Gray mask slides from right to reveal gradient */}
-              <div
-                className="absolute inset-0 bg-gray-100 origin-right"
-                style={{
-                  transform: `scaleX(${1 - healthBarWidth / 100})`,
-                  transition: 'transform 0.8s ease-in-out',
-                  transformOrigin: 'right center',
-                }}
+                className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                style={{ width: `${healthBarWidth}%` }}
               />
             </div>
-            {/* Score number — pulse when ≥ 85 */}
-            <span
-              className={`text-[22px] font-bold leading-none ${
-                healthScore >= 80 ? 'text-green-600' : healthScore >= 60 ? 'text-blue-600' : healthScore >= 40 ? 'text-yellow-600' : 'text-red-600'
-              } ${healthScore >= 85 ? 'animate-[pulse_2s_ease-in-out_infinite]' : ''}`}
-            >
-              {healthScore}
-            </span>
-            <span className="text-xs text-gray-400">/100</span>
-            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${showScoreFactors ? 'rotate-180' : ''}`} />
+            <p className="text-[11px] text-gray-500 leading-snug">
+              {healthScore >= 90
+                ? 'All required CRM fields filled'
+                : healthScore >= 70
+                ? 'Most fields complete — a few gaps'
+                : 'Several key fields are missing'}
+            </p>
           </div>
-        </button>
 
-        {/* Hint text — only when collapsed */}
-        {!showScoreFactors && (
-          <p className="text-xs text-gray-400 mb-2 px-2">Click to see score breakdown</p>
-        )}
+          {/* RIGHT — Deal Quality */}
+          <div className="rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Deal Quality</p>
+              <button
+                type="button"
+                onClick={() => setShowScoreFactors(v => !v)}
+                className="p-0.5 rounded hover:bg-gray-100 transition-colors"
+                title="Show score breakdown"
+              >
+                <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${showScoreFactors ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+            <div className="flex items-end gap-1.5">
+              <span className={`text-[28px] font-bold leading-none ${
+                dealQualityScore >= 75 ? 'text-green-600' : dealQualityScore >= 50 ? 'text-blue-600' : dealQualityScore >= 30 ? 'text-amber-600' : 'text-red-600'
+              }`}>
+                {dealQualityScore}
+              </span>
+              <span className="text-xs text-gray-400 mb-1">/100</span>
+            </div>
+            {/* Tricolor gradient bar */}
+            <div className="w-full h-1.5 rounded-full overflow-hidden bg-gray-100 relative">
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{ background: 'linear-gradient(to right, #EF4444 0%, #EF4444 40%, #F59E0B 40%, #F59E0B 70%, #22C55E 70%, #22C55E 100%)' }}
+              />
+              <div
+                className="absolute inset-0 bg-gray-100"
+                style={{ transform: `scaleX(${1 - dealQualityScore / 100})`, transformOrigin: 'right center', transition: 'transform 0.8s ease-in-out' }}
+              />
+            </div>
+            <p className="text-[11px] text-gray-500 leading-snug">
+              {dealQualityScore >= 75 ? 'Strong win probability & engagement' : dealQualityScore >= 50 ? 'Moderate — nurture key signals' : 'Needs attention on engagement & stage'}
+            </p>
+          </div>
+        </div>
 
-        {/* Inline factor panel (item 10) */}
+        {/* Expandable factor panel — toggled by chevron in Deal Quality card */}
         {showScoreFactors && (
-          <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Score Factor Breakdown</p>
-
-            {/* Positive factors */}
-            <div className="space-y-2 mb-3">
-              <p className="text-xs font-medium text-green-700 mb-1">✅ Driving Score Up</p>
+          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Score Factor Breakdown</p>
+            <div className="space-y-1.5 mb-2">
+              <p className="text-[11px] font-medium text-green-700">✅ Driving Score Up</p>
               {positiveFactors.map((f, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
+                <div key={i} className="flex items-center justify-between text-xs">
                   <span className="text-gray-700">{f.category}</span>
                   <span className="font-semibold text-green-600">+{f.score}</span>
                 </div>
               ))}
             </div>
-
-            {/* Negative factors */}
-            <div className="space-y-2 pt-2 border-t border-gray-200">
-              <p className="text-xs font-medium text-red-600 mb-1">⚠️ Dragging Score Down</p>
+            <div className="space-y-1.5 pt-2 border-t border-gray-200">
+              <p className="text-[11px] font-medium text-red-600">⚠️ Dragging Score Down</p>
               {negativeFactors.length > 0 ? (
                 negativeFactors.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
+                  <div key={i} className="flex items-center justify-between text-xs">
                     <span className="text-gray-700">{f.category}</span>
                     <span className="font-semibold text-red-500">{f.score}</span>
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-gray-400 italic">No negative factors — deal is fully optimised.</p>
+                <p className="text-xs text-gray-400 italic">No negative factors — deal is fully optimised.</p>
               )}
             </div>
           </div>
-        )}
-
-        {/* Show full analysis toggle (item 19) */}
-        <button
-          type="button"
-          onClick={() => setShowFullAnalysis(v => !v)}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors mb-2"
-        >
-          {showFullAnalysis ? 'Hide analysis ↑' : 'Show full analysis ↓'}
-        </button>
-
-        {showFullAnalysis && (
-          <>
-            <div className="mb-3">
-              <div className="text-xs font-medium text-gray-500 mb-1.5">Strengths:</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
-                <div className="flex items-center gap-1.5 text-xs text-gray-900">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  <span>Contact responds quickly (avg 2 hours)</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-gray-900">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  <span>Multiple touchpoints (3 meetings, 8 emails)</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-gray-900">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  <span>Budget confirmed ($50K available)</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-gray-900">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                  <span>Strong business case (ROI: 240%)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-3">
-              <div className="text-xs font-medium text-gray-500 mb-1.5">Risks:</div>
-              <div className="space-y-1.5">
-                <div className="bg-yellow-50 rounded-lg py-2 px-3 border border-yellow-200">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-900">Stalled - No activity in 5 days</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">Action: Schedule follow-up call</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-yellow-50 rounded-lg py-2 px-3 border border-yellow-200">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-900">Competitor (Salesforce) mentioned in last meeting</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">Action: Address competitive positioning</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-yellow-50 rounded-lg py-2 px-3 border border-yellow-200">
-                  <div className="flex items-start space-x-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-gray-900">CEO approval needed (not yet engaged)</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">Action: Request intro to CEO</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {scoreBreakdown.length > 0 && (
-              <div className="pt-2 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setShowScoreBreakdown(v => !v)}
-                  className="flex items-center justify-between w-full text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  <span>Score Breakdown</span>
-                  <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showScoreBreakdown ? 'rotate-180' : ''}`} />
-                </button>
-                {showScoreBreakdown && (
-                  <div className="mt-3 space-y-3">
-                    {scoreBreakdown.map((item, idx) => (
-                      <div key={idx}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm text-gray-700">{item.category}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-gray-900">{item.score}</span>
-                            <span className="text-xs">{getStars(item.stars)}</span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
-                          <div
-                            className={`h-1.5 rounded-full ${getScoreBarColor(item.score)}`}
-                            style={{ width: `${item.score}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
         )}
       </div>
 

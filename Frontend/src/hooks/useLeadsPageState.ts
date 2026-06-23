@@ -5,31 +5,41 @@ import { useLeads } from '../contexts/LeadContext';
 import { toLeadDomain } from '../utils/leadAdapters';
 import { SYSTEM_PRESETS } from '../utils/savedViewPresets';
 import type { PresetSetters } from '../utils/savedViewPresets';
+import type { AdvancedFilter } from '../types/leadFilter';
+import { applyAdvancedFilter } from '../utils/leadFilterEngine';
+import type { SortMode } from '../utils/leadSorting';
+import { sortLeads, getSortDescription, SORT_OPTIONS } from '../utils/leadSorting';
+import { computeLeadSLA, getSLAConfig, HEALTHY_SLA_RESULT } from '../utils/leadSla';
+import type { LeadSLAResult } from '../utils/leadSla';
+import { computeNBA } from '../utils/leadNBA/engine';
+import type { NBAPriority } from '../utils/leadNBA/engine';
+import { computeMultiFactorScore } from '../utils/leadScoring/multiFactorScore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type ViewMode = 'list' | 'grid' | 'kanban';
 
-export type SortOption = 'score_high_low' | 'score_low_high' | 'name_az' | 'date_newest';
-
-export const SORT_LABELS: Record<SortOption, string> = {
-  score_high_low: 'Score (High to Low)',
-  score_low_high: 'Score (Low to High)',
-  name_az:        'Name (A-Z)',
-  date_newest:    'Date (Newest)',
-};
+// SortOption is now an alias for SortMode — canonical type lives in leadSorting.ts
+export type SortOption = SortMode;
 
 export type ModalId =
   | 'contactLead'
   | 'convertLead'
+  | 'editLead'
+  | 'assignOwner'
+  | 'addTag'
+  | 'enrichLead'
+  | 'mergeDuplicate'
   | 'bulkAssign'
   | 'bulkStatus'
   | 'sortDropdown'
   | 'actionsMenu'
   | 'confirmDelete'
+  | 'confirmArchive'
   | 'createView'
   | 'editView'
-  | 'manageViews';
+  | 'manageViews'
+  | 'advancedFilters';
 
 export interface FilterState {
   status: string;
@@ -47,6 +57,8 @@ export interface KpiMetrics {
   newToday:         number;
   hot:              number;
   importedThisWeek: number;
+  urgentNbaCount:   number;
+  highNbaCount:     number;
 }
 
 export interface SourceQuality {
@@ -56,13 +68,14 @@ export interface SourceQuality {
   weeklyLeads:        number;
 }
 
-export type ActiveInsight = 'overdue' | 'duplicateRisk' | 'untouched' | 'readyToConvert' | null;
+export type ActiveInsight = 'overdue' | 'duplicateRisk' | 'untouched' | 'readyToConvert' | 'slaBreach' | 'nbaAction' | null;
 
 export interface LeadsPageState {
   viewMode:        ViewMode;
   searchQuery:     string;
   sortBy:          SortOption;
-  sortLabel:       string;
+  sortLabel:        string;
+  sortExplanation:  string;
   displayedCount:  number;
   filterState:     FilterState;
   selectedLeadIds: string[];
@@ -83,11 +96,18 @@ export interface LeadsPageState {
   untouchedLeads:         Lead[];
   readyToConvertLeads:    Lead[];
   duplicateRiskLeads:     Lead[];
+  nbaQueue:               Map<string, NBAPriority>;
+  leadSLAMap:             Map<string, LeadSLAResult>;
   slaBreachedLeads:       Lead[];
+  slaAtRiskLeads:         Lead[];
+  slaEscalateLeads:       Lead[];
+  slaBreachCounts:        { firstResponse: number; followUp: number; stale: number };
   newUnworkedLeads:       Lead[];
   sourceQualityThisWeek:  SourceQuality;
   newUnworkedDelta:       number;
   readyToConvertDelta:    number;
+  advancedFilter:         AdvancedFilter;
+  hasActiveAdvancedFilter: boolean;
 
   setViewMode:         (mode: ViewMode) => void;
   setSearchQuery:      (q: string) => void;
@@ -99,6 +119,7 @@ export interface LeadsPageState {
   loadMore:            () => void;
   toggleLeadSelection: (id: string) => void;
   selectAllLeads:      () => void;
+  setSelection:        (ids: string[]) => void;
   clearSelection:      () => void;
   isSelected:          (id: string) => boolean;
   openModal:           (id: ModalId, lead?: Lead) => void;
@@ -109,9 +130,11 @@ export interface LeadsPageState {
   createSavedView:     (view: Partial<LeadView>) => Promise<LeadView | null>;
   deleteSavedView:     (id: string) => Promise<boolean>;
   // Saved-views actions
-  setActiveView:       (id: string) => void;
-  clearActiveView:     () => void;
-  setActiveInsight:    (insight: ActiveInsight) => void;
+  setActiveView:        (id: string) => void;
+  clearActiveView:      () => void;
+  setActiveInsight:     (insight: ActiveInsight) => void;
+  setAdvancedFilter:    (filter: AdvancedFilter) => void;
+  clearAdvancedFilter:  () => void;
   saveCurrentAsView:   (name: string, visibility: 'private' | 'team' | 'organization') => Promise<void>;
   updateActiveView:    () => Promise<void>;
   renameView:          (id: string, name: string) => Promise<void>;
@@ -130,8 +153,9 @@ function getLeadScore(lead: Lead): number {
   return lead.ai_score ?? lead.score;
 }
 
+const VALID_SORT_MODES = new Set<string>(SORT_OPTIONS.map(o => o.mode));
 function isSortOption(s: string | undefined): s is SortOption {
-  return s === 'score_high_low' || s === 'score_low_high' || s === 'name_az' || s === 'date_newest';
+  return s !== undefined && VALID_SORT_MODES.has(s);
 }
 
 const DEFAULT_FILTER: FilterState = { status: 'all', source: 'all', score: 'all' };
@@ -153,7 +177,7 @@ export function useLeadsPageState(): LeadsPageState {
   // ── State ─────────────────────────────────────────────────────────────────
   const [viewMode,        setViewMode]        = useState<ViewMode>('list');
   const [searchQuery,     setSearchQuery]     = useState('');
-  const [sortBy,          setSortBy]          = useState<SortOption>('score_high_low');
+  const [sortBy,          setSortBy]          = useState<SortOption>('priority');
   const [displayedCount,  setDisplayedCount]  = useState(PAGE_SIZE);
   const [filterState,     setFilterState]     = useState<FilterState>(DEFAULT_FILTER);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -163,6 +187,7 @@ export function useLeadsPageState(): LeadsPageState {
   // Saved views state
   const [activeViewId,    setActiveViewId]    = useState<string | null>(null);
   const [activeInsight,   setActiveInsightSt] = useState<ActiveInsight>(null);
+  const [advancedFilter,  setAdvancedFilterSt] = useState<AdvancedFilter>({ groups: [] });
 
   useEffect(() => {
     fetchLeads();
@@ -214,23 +239,58 @@ export function useLeadsPageState(): LeadsPageState {
     [contextLeads],
   );
 
-  const duplicateRiskLeads = useMemo(() => {
-    const emailCounts: Record<string, number> = {};
-    for (const lead of contextLeads) {
-      if (lead.email) emailCounts[lead.email] = (emailCounts[lead.email] || 0) + 1;
-    }
-    return contextLeads.filter(l => l.email && emailCounts[l.email] > 1);
+  // Shared domain-level duplicate set — consumed by filteredLeads, sortedLeads, and duplicateRiskLeads
+  const duplicateEmailDomainSet = useMemo(() => {
+    const domainCounts = contextLeads.reduce((acc, l) => {
+      const domain = l.email?.split('@')[1];
+      if (domain) acc[domain] = (acc[domain] ?? 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    return new Set(
+      Object.entries(domainCounts)
+        .filter(([, count]) => count > 1)
+        .map(([domain]) => domain),
+    );
   }, [contextLeads]);
 
-  const slaBreachedLeads = useMemo(() => {
-    const now = new Date().getTime();
-    return contextLeads.filter(lead => {
-      if (lead.status !== 'new') return false;
-      if (lead.last_contact_date) return false;
-      const slaHours = lead.source === 'Website' ? 4 : 24;
-      return now - new Date(lead.created_at).getTime() > slaHours * 3_600_000;
-    });
+  const duplicateRiskLeads = useMemo(
+    () => contextLeads.filter(l => {
+      const domain = l.email?.split('@')[1];
+      return domain !== undefined && duplicateEmailDomainSet.has(domain);
+    }),
+    [contextLeads, duplicateEmailDomainSet],
+  );
+
+  const leadSLAMap = useMemo(() => {
+    const cfg = getSLAConfig();
+    const now = new Date();
+    return new Map(contextLeads.map(l => [l.id, computeLeadSLA(l, now, cfg)]));
   }, [contextLeads]);
+
+  const slaBreachedLeads = useMemo(
+    () => contextLeads.filter(l => leadSLAMap.get(l.id)?.overall === 'breached'),
+    [contextLeads, leadSLAMap],
+  );
+
+  const slaAtRiskLeads = useMemo(
+    () => contextLeads.filter(l => leadSLAMap.get(l.id)?.overall === 'at_risk'),
+    [contextLeads, leadSLAMap],
+  );
+
+  const slaEscalateLeads = useMemo(
+    () => contextLeads.filter(l => leadSLAMap.get(l.id)?.escalate === true),
+    [contextLeads, leadSLAMap],
+  );
+
+  const slaBreachCounts = useMemo(() => {
+    let firstResponse = 0, followUp = 0, stale = 0;
+    for (const result of leadSLAMap.values()) {
+      if (result.firstResponse.severity === 'breached') firstResponse++;
+      if (result.followUp.severity === 'breached') followUp++;
+      if (result.stale.severity === 'breached') stale++;
+    }
+    return { firstResponse, followUp, stale };
+  }, [leadSLAMap]);
 
   const newUnworkedLeads = useMemo(
     () => contextLeads.filter(
@@ -275,6 +335,26 @@ export function useLeadsPageState(): LeadsPageState {
     };
   }, [contextLeads]);
 
+  const nbaQueue = useMemo((): Map<string, NBAPriority> => {
+    const overdueSet   = new Set(overdueLeads.map(l => l.id));
+    const untouchedSet = new Set(untouchedLeads.map(l => l.id));
+    const map = new Map<string, NBAPriority>();
+    for (const lead of contextLeads) {
+      const domain = lead.email?.split('@')[1];
+      const isDuplicateRisk = domain !== undefined && duplicateEmailDomainSet.has(domain);
+      const mfs             = computeMultiFactorScore(lead);
+      const { priority }    = computeNBA(lead, {
+        isDuplicateRisk,
+        isOverdue:   overdueSet.has(lead.id),
+        isUntouched: untouchedSet.has(lead.id),
+        slaResult:   leadSLAMap.get(lead.id),
+        mfs,
+      });
+      map.set(lead.id, priority);
+    }
+    return map;
+  }, [contextLeads, overdueLeads, untouchedLeads, duplicateEmailDomainSet, leadSLAMap]);
+
   const filteredLeads = useMemo(() => {
     let base = contextLeads.filter(lead => {
       const matchesStatus = filterState.status === 'all' || lead.status === filterState.status;
@@ -307,18 +387,25 @@ export function useLeadsPageState(): LeadsPageState {
     } else if (activeInsight === 'readyToConvert') {
       const rtcIds = new Set(readyToConvertLeads.map(l => l.id));
       base = base.filter(l => rtcIds.has(l.id));
+    } else if (activeInsight === 'slaBreach') {
+      const slaIds = new Set(slaBreachedLeads.map(l => l.id));
+      base = base.filter(l => slaIds.has(l.id));
+    } else if (activeInsight === 'nbaAction') {
+      base = base.filter(l => {
+        const p = nbaQueue.get(l.id);
+        return p === 'urgent' || p === 'high';
+      });
     }
 
-    return base;
-  }, [contextLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads]);
+    base = applyAdvancedFilter(base, advancedFilter, duplicateEmailDomainSet, leadSLAMap);
 
-  const sortedLeads = useMemo(() => [...filteredLeads].sort((a, b) => {
-    if (sortBy === 'score_high_low') return getLeadScore(b) - getLeadScore(a);
-    if (sortBy === 'score_low_high') return getLeadScore(a) - getLeadScore(b);
-    if (sortBy === 'name_az')        return getLeadName(a).localeCompare(getLeadName(b));
-    if (sortBy === 'date_newest')    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    return 0;
-  }), [filteredLeads, sortBy]);
+    return base;
+  }, [contextLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads, slaBreachedLeads, nbaQueue, advancedFilter, duplicateEmailDomainSet, leadSLAMap]);
+
+  const sortedLeads = useMemo(
+    () => sortLeads(filteredLeads, sortBy, duplicateEmailDomainSet, leadSLAMap),
+    [filteredLeads, sortBy, duplicateEmailDomainSet, leadSLAMap],
+  );
 
   const paginatedLeads = useMemo(
     () => sortedLeads.slice(0, displayedCount),
@@ -330,6 +417,14 @@ export function useLeadsPageState(): LeadsPageState {
     const weekStart = new Date();
     weekStart.setHours(0, 0, 0, 0);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+
+    let urgentNbaCount = 0;
+    let highNbaCount   = 0;
+    for (const priority of nbaQueue.values()) {
+      if (priority === 'urgent') urgentNbaCount++;
+      else if (priority === 'high') highNbaCount++;
+    }
+
     return {
       total:    contextLeads.length,
       newToday: contextLeads.filter(l => new Date(l.created_at).toDateString() === today).length,
@@ -341,8 +436,10 @@ export function useLeadsPageState(): LeadsPageState {
           (src.includes('lead gen') || src.includes('hrms') || src.includes('apollo'))
         );
       }).length,
+      urgentNbaCount,
+      highNbaCount,
     };
-  }, [contextLeads]);
+  }, [contextLeads, nbaQueue]);
 
   // ── Trend deltas (7d vs prior 7d, derived — not memoized) ────────────────
 
@@ -403,6 +500,8 @@ export function useLeadsPageState(): LeadsPageState {
       prev.length === sortedLeads.length ? [] : sortedLeads.map(l => l.id),
     ), [sortedLeads]);
 
+  const setSelection = useCallback((ids: string[]) => setSelectedLeadIds(ids), []);
+
   const clearSelection = useCallback(() => setSelectedLeadIds([]), []);
 
   const isSelected = useCallback(
@@ -448,6 +547,22 @@ export function useLeadsPageState(): LeadsPageState {
     [ctxDeleteView],
   );
 
+  // ── Advanced filter actions ───────────────────────────────────────────────
+
+  const setAdvancedFilter = useCallback(
+    (filter: AdvancedFilter) => setAdvancedFilterSt(filter),
+    [],
+  );
+
+  const clearAdvancedFilter = useCallback(
+    () => setAdvancedFilterSt({ groups: [] }),
+    [],
+  );
+
+  const hasActiveAdvancedFilter =
+    advancedFilter.groups.length > 0 &&
+    advancedFilter.groups.some(g => g.conditions.length > 0);
+
   // ── Saved views actions ───────────────────────────────────────────────────
 
   const setActiveInsight = useCallback(
@@ -475,7 +590,9 @@ export function useLeadsPageState(): LeadsPageState {
     } else {
       const view = views.find(v => v.id === id);
       if (!view) return;
-      setFilterState(view.filters as FilterState ?? DEFAULT_FILTER);
+      const { advancedFilter: savedAdv, ...savedSimple } = (view.filters ?? {}) as any;
+      setFilterState((savedSimple as FilterState) ?? DEFAULT_FILTER);
+      setAdvancedFilterSt(savedAdv ?? { groups: [] });
       setSearchQuery(view.search_query ?? '');
       if (isSortOption(view.sort_by)) setSortBy(view.sort_by);
       setViewMode((view.view_mode ?? 'list') as ViewMode);
@@ -496,7 +613,7 @@ export function useLeadsPageState(): LeadsPageState {
         const created = await createView({
           name,
           visibility,
-          filters:      filterState,
+          filters:      { ...filterState, advancedFilter },
           sort_by:      sortBy,
           sort_order:   'desc',
           search_query: searchQuery,
@@ -515,14 +632,14 @@ export function useLeadsPageState(): LeadsPageState {
         showToast(err.message ?? 'Failed to save view', 'error');
       }
     },
-    [createView, filterState, sortBy, searchQuery, viewMode, views.length, showToast],
+    [createView, filterState, advancedFilter, sortBy, searchQuery, viewMode, views.length, showToast],
   );
 
   const updateActiveView = useCallback(async () => {
     if (!activeViewId || activeViewId.startsWith('preset_')) return;
     try {
       await updateView(activeViewId, {
-        filters:      filterState,
+        filters:      { ...filterState, advancedFilter },
         sort_by:      sortBy,
         sort_order:   'desc',
         search_query: searchQuery,
@@ -577,13 +694,19 @@ export function useLeadsPageState(): LeadsPageState {
     }
   }, [ctxDeleteView, activeViewId, clearActiveView, showToast]);
 
+  // ── Derived sort metadata ─────────────────────────────────────────────────
+
+  const sortLabel       = SORT_OPTIONS.find(o => o.mode === sortBy)?.label ?? sortBy;
+  const sortExplanation = getSortDescription(sortBy);
+
   // ── Return ─────────────────────────────────────────────────────────────────
 
   return {
     viewMode,
     searchQuery,
     sortBy,
-    sortLabel: SORT_LABELS[sortBy],
+    sortLabel,
+    sortExplanation,
     displayedCount,
     filterState,
     selectedLeadIds,
@@ -604,11 +727,18 @@ export function useLeadsPageState(): LeadsPageState {
     untouchedLeads,
     readyToConvertLeads,
     duplicateRiskLeads,
+    nbaQueue,
+    leadSLAMap,
     slaBreachedLeads,
+    slaAtRiskLeads,
+    slaEscalateLeads,
+    slaBreachCounts,
     newUnworkedLeads,
     sourceQualityThisWeek,
     newUnworkedDelta,
     readyToConvertDelta,
+    advancedFilter,
+    hasActiveAdvancedFilter,
 
     setViewMode,
     setSearchQuery,
@@ -620,6 +750,7 @@ export function useLeadsPageState(): LeadsPageState {
     loadMore,
     toggleLeadSelection,
     selectAllLeads,
+    setSelection,
     clearSelection,
     isSelected,
     openModal,
@@ -632,6 +763,8 @@ export function useLeadsPageState(): LeadsPageState {
     setActiveView,
     clearActiveView,
     setActiveInsight,
+    setAdvancedFilter,
+    clearAdvancedFilter,
     saveCurrentAsView,
     updateActiveView,
     renameView,

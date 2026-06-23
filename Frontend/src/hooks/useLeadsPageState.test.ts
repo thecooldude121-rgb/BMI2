@@ -94,10 +94,10 @@ describe('useLeadsPageState — initial state', () => {
     expect(result.current.filterState).toEqual({ status: 'all', source: 'all', score: 'all' });
   });
 
-  it('starts with score_high_low sort and correct sortLabel', () => {
+  it('starts with priority sort and correct sortLabel', () => {
     const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.sortBy).toBe('score_high_low');
-    expect(result.current.sortLabel).toBe('Score (High to Low)');
+    expect(result.current.sortBy).toBe('priority');
+    expect(result.current.sortLabel).toBe('Priority (Recommended)');
   });
 
   it('starts with no selection and no active modal', () => {
@@ -150,9 +150,11 @@ describe('useLeadsPageState — filters', () => {
 });
 
 describe('useLeadsPageState — sorting', () => {
-  it('default sort score_high_low puts highest score first', () => {
+  it('default priority sort ranks qualified leads ahead of raw score alone', () => {
     const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.sortedLeads[0].id).toBe('1'); // score 90
+    // Bob (id='2') is qualified → conversionBonus lifts his priority above Alice (id='1')
+    // even though Alice has a higher raw score (90 vs 70)
+    expect(result.current.sortedLeads[0].id).toBe('2');
   });
 
   it('setSortBy score_low_high reverses score order', () => {
@@ -161,16 +163,17 @@ describe('useLeadsPageState — sorting', () => {
     expect(result.current.sortedLeads[0].id).toBe('3'); // score 40
   });
 
-  it('setSortBy name_az puts Alice before Bob before Carol', () => {
+  it('setSortBy oldest puts the oldest lead first', () => {
     const { result } = renderHook(() => useLeadsPageState());
-    act(() => { result.current.setSortBy('name_az'); });
-    expect(result.current.sortedLeads.map(l => l.first_name)).toEqual(['Alice', 'Bob', 'Carol']);
+    act(() => { result.current.setSortBy('oldest'); });
+    // All three leads share the same created_at, so order is stable; just verify no crash
+    expect(result.current.sortedLeads).toHaveLength(3);
   });
 
   it('sortLabel updates when sortBy changes', () => {
     const { result } = renderHook(() => useLeadsPageState());
-    act(() => { result.current.setSortBy('name_az'); });
-    expect(result.current.sortLabel).toBe('Name (A-Z)');
+    act(() => { result.current.setSortBy('score_high_low'); });
+    expect(result.current.sortLabel).toBe('Score (High to Low)');
   });
 });
 

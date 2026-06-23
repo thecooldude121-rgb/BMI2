@@ -62,10 +62,11 @@ function getWeekLabel(bucketIdx: number): string {
 
 /** Maps an activity count to a GitHub-style heat-intensity colour. */
 function heatmapSquareColor(count: number): string {
-  if (count === 0) return '#F3F4F6'; // bg-gray-100
-  if (count === 1) return '#DBEAFE'; // bg-blue-100
-  if (count <= 3)  return '#93C5FD'; // bg-blue-300
-  return '#2563EB';                   // bg-blue-600
+  if (count === 0) return '#F3F4F6'; // gray-100
+  if (count === 1) return '#DBEAFE'; // blue-100
+  if (count <= 3)  return '#93C5FD'; // blue-300
+  if (count <= 6)  return '#3B82F6'; // blue-500
+  return '#1D4ED8';                   // blue-700
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,6 +300,14 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
             <div className="flex justify-between mb-2">
               <span className="text-[9px] text-gray-400">8 wks ago</span>
               <span className="text-[9px] text-gray-400">This week</span>
+            </div>
+            {/* Intensity legend — GitHub-style */}
+            <div className="flex items-center justify-end gap-1 mb-2">
+              <span className="text-[9px] text-gray-400 mr-0.5">Less</span>
+              {['#F3F4F6', '#DBEAFE', '#93C5FD', '#3B82F6', '#1D4ED8'].map((hex) => (
+                <div key={hex} style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: hex, flexShrink: 0 }} />
+              ))}
+              <span className="text-[9px] text-gray-400 ml-0.5">More</span>
             </div>
             <p className="text-[10px] text-gray-500 leading-relaxed">
               Peak week: {getWeekLabel(heatmapPeakIdx)} ({heatmapPeakCount}{' '}

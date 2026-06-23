@@ -38,6 +38,7 @@ const TABS = [
   { id: 'people',      label: 'People' },
   { id: 'timeline',    label: 'Timeline' },
   { id: 'files-notes', label: 'Files & Notes' },
+  { id: 'deal-info',   label: 'Deal Info' },
 ] as const;
 
 export const ComprehensiveDealDetailPage: React.FC = () => {
@@ -115,6 +116,16 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     accountModuleSetup: '',
     clientDiscovers: '',
     discoveryDate: '',
+    platformFee: null as number | null,
+    customFee: null as number | null,
+    licenseFee: null as number | null,
+    onboardingFee: null as number | null,
+    whiteLabellingFee: null as number | null,
+    exchangeRate: null as number | null,
+    nrMargin: null as number | null,
+    startDate: '',
+    contractEndDate: '',
+    country: '',
   });
 
   useEffect(() => {
@@ -171,7 +182,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           },
           createdDate: formatDisplayDate(createdIso.split('T')[0]),
           accountSize: '',
-          accountIndustry: '',
+          accountIndustry: data.account_industry || '',
           contactName: data.contact_name || '',
           contactTitle: data.contact_title || '',
           source: data.source || '',
@@ -197,6 +208,16 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           accountModuleSetup: data.account_module_setup || '',
           clientDiscovers: data.client_discovers || '',
           discoveryDate: data.discovery_date ? data.discovery_date.split('T')[0] : '',
+          platformFee: data.platform_fee != null ? Number(data.platform_fee) : null,
+          customFee: data.custom_fee != null ? Number(data.custom_fee) : null,
+          licenseFee: data.license_fee != null ? Number(data.license_fee) : null,
+          onboardingFee: data.onboarding_fee != null ? Number(data.onboarding_fee) : null,
+          whiteLabellingFee: data.white_labelling_fee != null ? Number(data.white_labelling_fee) : null,
+          exchangeRate: data.exchange_rate != null ? Number(data.exchange_rate) : 1,
+          nrMargin: data.nr_margin != null ? Number(data.nr_margin) : null,
+          startDate: data.start_date ? data.start_date.split('T')[0] : '',
+          contractEndDate: data.contract_end_date ? data.contract_end_date.split('T')[0] : '',
+          country: data.country || '',
         });
       })
       .catch((err) => setFetchError(err.message ?? 'Failed to load deal'))
@@ -222,6 +243,13 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   }), [deal]);
 
   const healthResult = useMemo(() => calculateDealHealthScore(healthFormData), [healthFormData]);
+
+  // Compute days in current stage from stageChangedAt if available; undefined triggers component fallback
+  const timeInStage: number | undefined = (deal as any).stageChangedAt
+    ? Math.floor((Date.now() - new Date((deal as any).stageChangedAt).getTime()) / 86400000)
+    : deal.daysInStage > 0
+    ? deal.daysInStage
+    : undefined;
 
   // Demo Accelerating — replace these values to show Decelerating:
   // responseTimesHours:[12,24,48], daysSinceLastTwoWay:6, newStakeholdersLast14Days:0,
@@ -775,7 +803,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     }
   };
 
-  const handleMoreAction = (action: string) => {
+  const handleMoreAction = async (action: string) => {
     switch (action) {
       case 'clone':
         showToast('Deal cloned successfully', 'success');
@@ -789,12 +817,36 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       case 'change-stage':
         setShowStageChange(true);
         break;
-      case 'mark-won':
-        showToast('Deal marked as won!', 'success');
+      case 'mark-won': {
+        const confirmed = window.confirm(
+          `Mark "${deal.dealName}" as WON?\n\nThis will move it to Closed Won stage.`
+        );
+        if (confirmed) {
+          try {
+            if (id) await updateDeal(id, { stage: 'closed-won' });
+            setDeal((prev: any) => ({ ...prev, stage: 'closed-won', stageName: 'Closed Won' }));
+            showToast('🎉 Deal marked as Won!', 'success');
+          } catch {
+            showToast('Failed to update deal stage.', 'error');
+          }
+        }
         break;
-      case 'mark-lost':
-        showToast('Deal marked as lost', 'info');
+      }
+      case 'mark-lost': {
+        const confirmed = window.confirm(
+          `Mark "${deal.dealName}" as LOST?\n\nThis action will move the deal to Closed Lost.`
+        );
+        if (confirmed) {
+          try {
+            if (id) await updateDeal(id, { stage: 'closed-lost' });
+            setDeal((prev: any) => ({ ...prev, stage: 'closed-lost', stageName: 'Closed Lost' }));
+            showToast('Deal marked as Lost.', 'info');
+          } catch {
+            showToast('Failed to update deal stage.', 'error');
+          }
+        }
         break;
+      }
       case 'archive':
         showToast('Deal archived', 'info');
         break;
@@ -813,6 +865,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     }
   };
 
+  const handleMarkWon  = () => handleMoreAction('mark-won');
+  const handleMarkLost = () => handleMoreAction('mark-lost');
+
   const handleAssignOwner = async (ownerName: string) => {
     setDeal((prev: any) => ({
       ...prev,
@@ -824,6 +879,20 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       showToast(`Owner assigned to ${ownerName}`, 'success');
     } catch {
       showToast('Failed to save owner assignment', 'error');
+    }
+  };
+
+  const handleSaveCloseDate = async (isoDate: string) => {
+    if (!id) return;
+    const displayDate = new Date(isoDate).toLocaleDateString('en-US', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+    setDeal((prev: any) => ({ ...prev, closeDate: displayDate }));
+    try {
+      await updateDeal(id, { expected_close_date: isoDate });
+      showToast('Close date updated', 'success');
+    } catch {
+      showToast('Failed to update close date', 'error');
     }
   };
 
@@ -919,7 +988,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 -mt-6">
+    <div className="min-h-screen bg-gray-50">
       <div className="sticky top-0 z-50 bg-white border-b border-gray-200 -mx-6 px-8 py-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3 min-w-0">
@@ -952,6 +1021,35 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                 onAction={(action) => { handleMoreAction(action); setShowTopMoreActions(false); }}
               />
             </div>
+
+            <div className="w-px h-5 bg-gray-300 mx-1 flex-shrink-0" />
+
+            {deal.stage === 'closed-won' ? (
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2.5 py-1 flex-shrink-0">
+                ✓ WON
+              </span>
+            ) : deal.stage === 'closed-lost' ? (
+              <span className="text-xs font-bold text-red-700 bg-red-100 border border-red-200 rounded px-2.5 py-1 flex-shrink-0">
+                ✗ LOST
+              </span>
+            ) : (
+              <>
+                <button
+                  onClick={handleMarkWon}
+                  title="Mark deal as Won"
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1 transition-colors flex-shrink-0 whitespace-nowrap"
+                >
+                  ✓ Won
+                </button>
+                <button
+                  onClick={handleMarkLost}
+                  title="Mark deal as Lost"
+                  className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 border border-red-200 rounded px-2.5 py-1 transition-colors flex-shrink-0 whitespace-nowrap"
+                >
+                  ✗ Lost
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -969,6 +1067,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onMoveStage={() => setShowStageChange(true)}
         onUpdateAmount={() => setShowUpdateAmount(true)}
         onAssignOwner={handleAssignOwner}
+        onSaveAmount={(amount) => handleUpdateAmount(amount, '')}
+        onSaveCloseDate={handleSaveCloseDate}
         onShowShortcuts={() => setShowShortcuts(true)}
         momentumResult={momentumResult}
         revenueSchedule={activeRevenueSchedule}
@@ -991,6 +1091,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onViewAllActions={() => handleTabClick('ai-insights')}
         healthScoreFactors={aiIntelligenceData.scoreBreakdown}
         daysSinceContact={5}
+        timeInStage={timeInStage}
       />
       </div>
 
@@ -1012,6 +1113,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           'people':      contacts.length,
           'timeline':    activities.length,
           'files-notes': notes.length,
+          'deal-info':   null,
         };
         return (
           <div className="sticky top-14 z-40 bg-white border-b border-gray-200 -mx-6 px-8">
@@ -1053,6 +1155,109 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
         {/* ── Overview ── */}
         {activeTab === 'overview' && (
+          <div className="space-y-0">
+
+            {/* Section A — Contact Spotlight */}
+            {(() => {
+              const contact = contacts[0];
+              if (!contact) return (
+                <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-4 mb-4 text-center text-sm text-gray-400">
+                  No contacts linked yet —{' '}
+                  <button className="text-blue-600 underline ml-1" onClick={() => handleTabClick('people')}>Add Contact</button>
+                </div>
+              );
+              const initials = contact.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+              const daysAgo = contact.daysAgo ?? null;
+              return (
+                <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900 text-sm">{contact.name}</span>
+                      {contact.title && <span className="text-xs text-gray-500">{contact.title}</span>}
+                      {contact.role && (
+                        <span className="text-xs bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 font-medium capitalize">
+                          {contact.role}
+                        </span>
+                      )}
+                      {daysAgo !== null && (
+                        <span className={`text-xs font-medium ${daysAgo <= 3 ? 'text-green-600' : daysAgo <= 7 ? 'text-amber-600' : 'text-red-600'}`}>
+                          · Last contact: {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-gray-500">
+                      {contact.email && <span>✉ {contact.email}</span>}
+                      {contact.phone && <span>📞 {contact.phone}</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button onClick={() => handleSendEmail(contact.email || '', '', '')}
+                      className="text-xs bg-blue-600 text-white rounded px-3 py-1.5 hover:bg-blue-700 font-medium transition-colors">
+                      Email
+                    </button>
+                    <button onClick={() => setShowCallLog(true)}
+                      className="text-xs bg-green-600 text-white rounded px-3 py-1.5 hover:bg-green-700 font-medium transition-colors">
+                      Call
+                    </button>
+                    <button onClick={() => handleTabClick('people')}
+                      className="text-xs border border-gray-300 text-gray-600 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors">
+                      View Profile →
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Section B — Activity Summary Strip */}
+            {(() => {
+              const emailCount   = activities.filter((a: any) => a.type === 'email').length;
+              const callCount    = activities.filter((a: any) => a.type === 'call').length;
+              const meetingCount = activities.filter((a: any) => a.type === 'meeting').length;
+              const sorted = [...activities].sort((a: any, b: any) =>
+                new Date(b.isoDate || b.date || 0).getTime() - new Date(a.isoDate || a.date || 0).getTime()
+              );
+              const lastIso = sorted[0]?.isoDate;
+              const daysSince = lastIso
+                ? Math.floor((Date.now() - new Date(lastIso).getTime()) / (1000 * 60 * 60 * 24))
+                : null;
+              const responseRate = contacts[0]?.engagement?.match(/\d+/)?.[0] ?? '92';
+              return (
+                <div className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 mb-4 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-gray-600 items-center">
+                  {daysSince !== null && (
+                    <span className="flex items-center gap-1">
+                      📅 Last activity: <strong className={daysSince <= 3 ? 'text-green-600' : daysSince <= 7 ? 'text-amber-600' : 'text-red-600'}>
+                        {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince}d ago`}
+                      </strong>
+                    </span>
+                  )}
+                  <span>✉ <strong className="text-gray-800">{emailCount}</strong> emails</span>
+                  <span>📞 <strong className="text-gray-800">{callCount}</strong> calls</span>
+                  <span>🤝 <strong className="text-gray-800">{meetingCount}</strong> meetings</span>
+                  <span>📊 Response rate: <strong className="text-green-600">{responseRate}%</strong></span>
+                </div>
+              );
+            })()}
+
+            {/* Section C — Top 3 Next Best Actions */}
+            <AIDealIntelligence
+              {...aiIntelligenceData}
+              showOnlyNextBestActions
+              maxActions={3}
+              stageNumber={deal.stageNumber || 1}
+              onSendEmail={handleSendEmail}
+              onScheduleCall={() => setShowCallLog(true)}
+              onScheduleMeeting={() => setShowMeetingScheduler(true)}
+              onFindBestTime={() => setShowBestTime(true)}
+              onViewBattleCard={handleViewBattleCard}
+            />
+          </div>
+        )}
+
+        {/* ── Deal Info (full field panel) ── */}
+        {activeTab === 'deal-info' && (
           <DealDetailsPanel
             deal={deal}
             stageHistory={stageHistory}
@@ -1075,6 +1280,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                 {...aiIntelligenceData}
                 winProbAI={aiIntelligenceData.winProbAI}
                 winProbOverrideReason={aiIntelligenceData.winProbOverrideReason}
+                stageNumber={deal.stageNumber || 1}
                 onSendEmail={handleSendEmail}
                 onScheduleCall={() => setShowCallLog(true)}
                 onScheduleMeeting={() => setShowMeetingScheduler(true)}

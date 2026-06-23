@@ -223,3 +223,52 @@ export const parseDateMs = (input: string | Date | null | undefined): number => 
   const d = parseDate(input);
   return d ? d.getTime() : Infinity;
 };
+
+/**
+ * Returns a short human-readable relative label for a past date.
+ * Future dates return '' (not a negative value).
+ *
+ *   same day  → "Today"
+ *   1 day ago → "Yesterday"
+ *   2–6 days  → "N days ago"
+ *   7–29 days → "N weeks ago"
+ *   30+ days  → "N months ago"
+ */
+export const formatRelativeDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '';
+  const d = parseDate(dateStr);
+  if (!d) return '';
+  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  if (days < 0)   return '';               // future date — caller handles separately
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7)   return `${days} days ago`;
+  if (days < 30)  return `${Math.floor(days / 7)} weeks ago`;
+  return `${Math.floor(days / 30)} months ago`;
+};
+
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as const;
+
+/**
+ * Formats a follow-up Date for display in the Urgency zone.
+ * Uses midnight-normalised arithmetic to avoid time-of-day skew.
+ *
+ *   Today    → "Today"
+ *   Tomorrow → "Tomorrow"
+ *   2–6 days → "This {DayName}"  e.g. "This Friday"
+ *   else     → "DD Mon"          e.g. "28 Jun"
+ */
+export const formatFollowUpDate = (date: Date): string => {
+  const todayMs  = new Date().setHours(0, 0, 0, 0);
+  const targetMs = new Date(date).setHours(0, 0, 0, 0);
+  const diffDays = Math.round((targetMs - todayMs) / 86_400_000);
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays >= 2 && diffDays <= 6) return `This ${DAY_NAMES[date.getDay()]}`;
+
+  // Overdue or far future — DD Mon format
+  const day = String(date.getDate()).padStart(2, '0');
+  const mon = MONTHS[date.getMonth()];
+  return `${day} ${mon}`;
+};

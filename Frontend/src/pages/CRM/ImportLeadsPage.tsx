@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ImportWizard from '../../components/Leads/ImportWizard';
 import {
   Upload,
   Check,
@@ -49,10 +50,6 @@ interface ImportHistory {
   duplicates?: number;
 }
 
-interface CSVColumnMapping {
-  csvColumn: string;
-  crmField: string;
-}
 
 const ImportLeadsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -61,10 +58,9 @@ const ImportLeadsPage: React.FC = () => {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [showImportDetailsModal, setShowImportDetailsModal] = useState(false);
-  const [showCSVPreviewModal, setShowCSVPreviewModal] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [selectedImport, setSelectedImport] = useState<ImportHistory | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importSuccess, setImportSuccess] = useState(false);
@@ -78,14 +74,6 @@ const ImportLeadsPage: React.FC = () => {
     syncFrequency: 'Every 6 hours',
     aiScoring: true
   });
-
-  const [csvMapping, setCsvMapping] = useState<CSVColumnMapping[]>([
-    { csvColumn: 'Full Name', crmField: 'name' },
-    { csvColumn: 'Company', crmField: 'company' },
-    { csvColumn: 'Email', crmField: 'email' },
-    { csvColumn: 'Phone', crmField: 'phone' },
-    { csvColumn: 'Job Title', crmField: 'position' }
-  ]);
 
   const integrations: Integration[] = [
     {
@@ -244,16 +232,6 @@ const ImportLeadsPage: React.FC = () => {
     navigate('/crm/leads?filter=just-imported');
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.name.endsWith('.csv')) {
-      setUploadedFile(file);
-      setShowCSVPreviewModal(true);
-    } else {
-      alert('Please upload a CSV file');
-    }
-  };
-
   const handleSaveConfig = () => {
     setShowConfigModal(false);
     setTimeout(() => {
@@ -275,26 +253,6 @@ const ImportLeadsPage: React.FC = () => {
   const handleViewDetails = (importItem: ImportHistory) => {
     setSelectedImport(importItem);
     setShowImportDetailsModal(true);
-  };
-
-  const handleCSVImport = () => {
-    setShowCSVPreviewModal(false);
-    setImporting(true);
-    setImportProgress(0);
-    setShowImportModal(true);
-
-    const interval = setInterval(() => {
-      setImportProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setImporting(false);
-          setImportSuccess(true);
-          setImportedCount(50);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 300);
   };
 
   const handleDownloadSample = () => {
@@ -556,28 +514,20 @@ const ImportLeadsPage: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Manual Import</h2>
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
             <div className="max-w-3xl mx-auto">
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-blue-400 transition-colors">
+              <div
+                onClick={() => setWizardOpen(true)}
+                className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
+              >
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Upload CSV File
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Drop your CSV file here, or click to browse
-                </p>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="csv-upload"
-                />
-                <label
-                  htmlFor="csv-upload"
-                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer font-medium"
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload CSV File</h3>
+                <p className="text-sm text-gray-600 mb-4">Click to open the guided import wizard</p>
+                <button
+                  onClick={e => { e.stopPropagation(); setWizardOpen(true); }}
+                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  Choose File
-                </label>
+                  Start CSV Import
+                </button>
               </div>
 
               <div className="mt-6 flex items-center justify-center">
@@ -591,28 +541,14 @@ const ImportLeadsPage: React.FC = () => {
               </div>
 
               <div className="mt-8 p-6 bg-blue-50 rounded-lg">
-                <h4 className="font-semibold text-gray-900 mb-3">How CSV Import Works:</h4>
+                <h4 className="font-semibold text-gray-900 mb-3">6-step guided import:</h4>
                 <ol className="space-y-2 text-sm text-gray-700">
-                  <li className="flex items-start space-x-2">
-                    <span className="font-semibold">1.</span>
-                    <span>Upload your CSV file with lead data</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="font-semibold">2.</span>
-                    <span>Map CSV columns to CRM fields</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="font-semibold">3.</span>
-                    <span>Review and preview the data</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="font-semibold">4.</span>
-                    <span>Import leads with AI-powered scoring</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span className="font-semibold">5.</span>
-                    <span>Duplicate detection automatically skips existing leads</span>
-                  </li>
+                  {['Upload CSV (up to 1,000 rows)', 'Auto-map columns to CRM fields', 'Validate rows — see errors, warnings & duplicates', 'Set import rules: status, owner, tags, source', 'Review the final plan before confirming', 'Real-time progress + post-import summary'].map((step, i) => (
+                    <li key={i} className="flex items-start space-x-2">
+                      <span className="font-semibold flex-shrink-0">{i + 1}.</span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
                 </ol>
               </div>
             </div>
@@ -1045,86 +981,8 @@ const ImportLeadsPage: React.FC = () => {
         </div>
       )}
 
-      {/* CSV Preview Modal */}
-      {showCSVPreviewModal && uploadedFile && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                Map CSV Columns
-              </h3>
-              <button
-                onClick={() => setShowCSVPreviewModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-gray-600 mb-4">
-                File: <span className="font-medium">{uploadedFile.name}</span>
-              </p>
-              <p className="text-sm text-gray-600 mb-4">
-                Map your CSV columns to CRM fields. Preview shows approximately 50 leads will be imported.
-              </p>
-
-              <div className="space-y-3">
-                {csvMapping.map((mapping, index) => (
-                  <div key={index} className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-600 mb-1">CSV Column</label>
-                      <input
-                        type="text"
-                        value={mapping.csvColumn}
-                        readOnly
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
-                      />
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-gray-400 mt-5" />
-                    <div className="flex-1">
-                      <label className="block text-xs text-gray-600 mb-1">CRM Field</label>
-                      <select
-                        value={mapping.crmField}
-                        onChange={(e) => {
-                          const newMapping = [...csvMapping];
-                          newMapping[index].crmField = e.target.value;
-                          setCsvMapping(newMapping);
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="name">Name</option>
-                        <option value="company">Company</option>
-                        <option value="email">Email</option>
-                        <option value="phone">Phone</option>
-                        <option value="position">Position/Title</option>
-                        <option value="website">Website</option>
-                        <option value="linkedin">LinkedIn URL</option>
-                        <option value="skip">Skip this column</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowCSVPreviewModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCSVImport}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                Import 50 Leads
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Import Wizard overlay */}
+      {wizardOpen && <ImportWizard onClose={() => setWizardOpen(false)} />}
 
     </div>
   );

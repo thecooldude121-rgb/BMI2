@@ -35,8 +35,10 @@ import {
 } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
 import { useLeads } from '../../contexts/LeadContext';
 import { fetchLeadByIdFromAPI } from '../../utils/leadsApi';
+import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 import type { Lead } from '../../types/lead';
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -709,6 +711,18 @@ const LeadDetailPage: React.FC = () => {
                   No AI analysis available yet for this lead.
                 </div>
               )}
+            </div>
+
+            {/* Multi-factor score breakdown */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+                <span>Score Breakdown</span>
+              </h3>
+              <LeadScoreBreakdownPanel
+                multiFactorScore={computeMultiFactorScore(lead)}
+                lead={lead}
+              />
             </div>
 
             {/* AI Recommended Actions */}

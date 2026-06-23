@@ -72,6 +72,7 @@ import {
   computeInspectionSignals,
   getInspectionBadge,
 } from '../../utils/inspectionSignals';
+import { getDealDataQuality } from '../../utils/dealDataQuality';
 
 // ── localStorage helpers for user-created saved views ────────────────────────
 
@@ -1246,10 +1247,39 @@ const DealsKanbanPage: React.FC = () => {
       }))
     : stages;
 
+  // All kanban filters applied to stages — passed to List view so every toolbar
+  // control (Filter panel, My Deals/All Deals tabs, Search) works in list mode.
+  const filteredStagesForList = useMemo(
+    () => stages.map(stage => ({
+      ...stage,
+      deals: filterDeals(dedupStageDeals(stage.deals)),
+    })),
+    // filterDeals closes over: debouncedSearch, selectedOwner, selectedCloseDateFilter,
+    // selectedValueFilter, selectedSourceFilter, selectedAccountFilter, viewPredicate, user
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stages, debouncedSearch, selectedOwner, selectedCloseDateFilter,
+     selectedValueFilter, selectedSourceFilter, selectedAccountFilter, viewPredicate]
+  );
+
+  // DQ summary — computed from all pipeline deals so Attention tab can show counts
+  const dqSummary = useMemo(() => {
+    let errors = 0;
+    let warnings = 0;
+    stages.flatMap(s => s.deals).forEach(d => {
+      const dq = getDealDataQuality(d);
+      if (dq.hasErrors) errors++;
+      else if (dq.hasWarnings) warnings++;
+    });
+    return { errors, warnings, total: errors + warnings };
+  }, [stages]);
+
+  // Controls the DQ drawer inside DealsListView from this parent
+  const [openDQDrawer, setOpenDQDrawer] = useState(false);
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50">
       {/* ── Row 1: sticky at top-0 — tabs · AI signals · actions ───────────────── */}
-      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 -mx-6 -mt-4 lg:-mt-6">
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 -mx-6">
         <div className="flex items-center h-[52px] px-6 gap-0 overflow-x-auto scrollbar-none">
 
           {/* ── View tabs ──────────────────────────────────────────────── */}
@@ -1384,19 +1414,46 @@ const DealsKanbanPage: React.FC = () => {
               : `$${v}`;
             return (
               <div className="flex items-center gap-0.5 flex-shrink-0">
-                {/* Needs Attention */}
+                {/* Needs Attention + DQ errors/warnings */}
                 <button
-                  onClick={handleViewDeals}
-                  title={aiInsights.needAttention.length > 0
-                    ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} with no recent activity`
-                    : 'All deals have recent activity'}
+                  onClick={() => {
+                    if (dqSummary.total > 0) setOpenDQDrawer(true);
+                    else handleViewDeals();
+                  }}
+                  title={
+                    dqSummary.total > 0
+                      ? `${dqSummary.errors} data error${dqSummary.errors !== 1 ? 's' : ''}, ${dqSummary.warnings} warning${dqSummary.warnings !== 1 ? 's' : ''} — click to review`
+                      : aiInsights.needAttention.length > 0
+                        ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} with no recent activity`
+                        : 'All deals have recent activity'
+                  }
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 transition-colors group flex-shrink-0"
                 >
-                  <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-500' : 'text-gray-300 group-hover:text-amber-400'}`} />
-                  <span className={`text-[13px] font-semibold tabular-nums transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                    {aiInsights.needAttention.length > 0 ? aiInsights.needAttention.length : '0'}
-                  </span>
-                  <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Attention</span>
+                  <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${(aiInsights.needAttention.length > 0 || dqSummary.total > 0) ? 'text-amber-500' : 'text-gray-300 group-hover:text-amber-400'}`} />
+                  {dqSummary.total > 0 ? (
+                    <>
+                      {dqSummary.errors > 0 && (
+                        <span className="text-[13px] font-semibold tabular-nums text-gray-800">
+                          {dqSummary.errors} <span className="text-[11px] font-normal text-gray-500">error{dqSummary.errors !== 1 ? 's' : ''}</span>
+                        </span>
+                      )}
+                      {dqSummary.errors > 0 && dqSummary.warnings > 0 && (
+                        <span className="text-gray-300 text-[11px]">·</span>
+                      )}
+                      {dqSummary.warnings > 0 && (
+                        <span className="text-[13px] font-semibold tabular-nums text-gray-800">
+                          {dqSummary.warnings} <span className="text-[11px] font-normal text-gray-500">warning{dqSummary.warnings !== 1 ? 's' : ''}</span>
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className={`text-[13px] font-semibold tabular-nums transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                        {aiInsights.needAttention.length > 0 ? aiInsights.needAttention.length : '0'}
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Attention</span>
+                    </>
+                  )}
                 </button>
 
                 <div className="w-px h-4 bg-gray-100 flex-shrink-0 mx-0.5" />
@@ -1769,7 +1826,8 @@ const DealsKanbanPage: React.FC = () => {
 
       {viewMode === 'list' ? (
         <DealsListView
-          stages={searchFilteredStages}
+          stages={filteredStagesForList}
+          totalPipelineDeals={stages.flatMap(s => s.deals).length}
           onDealClick={handleCardClick}
           onStageChange={(dealId, newStage) => {
             console.log('Stage change:', dealId, newStage);
@@ -1794,6 +1852,9 @@ const DealsKanbanPage: React.FC = () => {
           setActiveKpiFilter={setActiveKpiFilter}
           externalFilters={externalListFilters}
           onFiltersChange={(filters) => { listFiltersRef.current = filters; }}
+          density={cardDensity}
+          openDQDrawer={openDQDrawer}
+          onDQDrawerClose={() => setOpenDQDrawer(false)}
         />
       ) : viewMode === 'grid' ? (
         <DealsGridView
@@ -1843,48 +1904,39 @@ const DealsKanbanPage: React.FC = () => {
 
               return (
                 <div key={stage.id} style={{ width: '280px' }} className="flex-shrink-0">
-                  {/* Column header — white with colored accent dot */}
-                  <div className="bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 py-3">
-                    <div className="flex items-center justify-between mb-2">
+                  {/* Column header — colored top border, pill count, value */}
+                  <div className="bg-white rounded-t-lg border border-b-0 border-gray-200 px-4 pt-0 pb-3 overflow-hidden" style={{ borderTop: `3px solid ${accentColor}` }}>
+                    <div className="flex items-center justify-between mt-3 mb-2">
                       <button
                         onClick={() => toggleStageCollapse(stage.id)}
                         className="flex items-center gap-2 group"
                         title={`${isCollapsed ? 'Expand' : 'Collapse'} ${stage.name}`}
                       >
-                        <span
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: accentColor }}
-                        />
-                        <span className="text-[11px] font-semibold text-gray-700 uppercase tracking-wider group-hover:text-gray-900 transition-colors">
+                        <span className="text-xs font-bold text-gray-700 uppercase tracking-widest group-hover:text-gray-900 transition-colors">
                           {stage.name}
                         </span>
                       </button>
-                      {!['closed-won', 'closed-lost'].includes(stage.id) && (
-                        <button
-                          onClick={() => handleAddDealToStage(stage.id)}
-                          className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                          title={`Add deal to ${stage.name}`}
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="text-xs font-bold text-white rounded-full px-2 py-0.5 tabular-nums"
+                          style={{ backgroundColor: accentColor }}
                         >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={(e) => handleStageCountClick(e, stage.id)}
-                        className="text-[13px] font-semibold text-gray-900 hover:text-indigo-600 transition-colors tabular-nums"
-                      >
-                        {filteredDeals.length}
-                        <span className="text-[12px] font-normal text-gray-400 ml-1">
-                          {`deal${filteredDeals.length !== 1 ? 's' : ''}${debouncedSearch && filteredDeals.length !== stage.deals.length ? ` / ${stage.deals.length}` : ''}`}
+                          {filteredDeals.length}
                         </span>
-                      </button>
-                      <button
-                        onClick={(e) => handleStageValueClick(e, stage)}
-                        className="text-[12px] font-medium text-gray-500 hover:text-gray-700 transition-colors tabular-nums"
-                      >
-                        {formatCurrency(stageTotal)}
-                      </button>
+                        {!['closed-won', 'closed-lost'].includes(stage.id) && (
+                          <button
+                            onClick={() => handleAddDealToStage(stage.id)}
+                            aria-label={`Add deal to ${stage.name}`}
+                            className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            title={`Add deal to ${stage.name}`}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-[11px] font-medium text-gray-400 tabular-nums">
+                      {formatCurrency(stageTotal)}
                     </div>
                   </div>
 
@@ -1977,13 +2029,15 @@ const DealsKanbanPage: React.FC = () => {
                         </>
                       )}
 
-                      {/* Add deal — dashed CTA at column bottom */}
+                      {/* Add deal — dashed CTA at column bottom (6.4) */}
                       {!isCollapsed && !['closed-won', 'closed-lost'].includes(stage.id) && (
                         <button
                           onClick={() => handleAddDealToStage(stage.id)}
-                          className="w-full py-2 border border-dashed border-gray-300 rounded-md text-[12px] text-gray-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/40 transition-colors font-medium"
+                          aria-label={`Add deal to ${stage.name}`}
+                          className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-indigo-50/40 transition-all duration-150 font-medium flex items-center justify-center gap-1.5"
                         >
-                          + Add deal
+                          <Plus className="h-3.5 w-3.5" />
+                          Add deal to {stage.name}
                         </button>
                       )}
                     </div>

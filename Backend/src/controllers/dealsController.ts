@@ -72,6 +72,8 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       is_test,
       sales_drive_folder, agreement_url, account_module_setup, client_discovers,
       discovery_date,
+      platform_fee, custom_fee, license_fee, onboarding_fee, white_labelling_fee,
+      exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
     } = req.body;
 
     const dealName = (name || title || '').trim();
@@ -97,9 +99,11 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           source, priority, tags, product, contract_term, payment_terms,
           attachment_metadata, win_prob_override_reason, win_prob_ai, is_test,
           sales_drive_folder, agreement_url, account_module_setup, client_discovers,
-          discovery_date)
+          discovery_date,
+          platform_fee, custom_fee, license_fee, onboarding_fee, white_labelling_fee,
+          exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55)
        RETURNING *`,
       [
         id, dealName, title || dealName, lead_id, value,
@@ -123,6 +127,11 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         sales_drive_folder ?? null, agreement_url ?? null,
         account_module_setup ?? null, client_discovers ?? null,
         discovery_date ?? null,
+        platform_fee ?? null, custom_fee ?? null, license_fee ?? null,
+        onboarding_fee ?? null, white_labelling_fee ?? null,
+        exchange_rate ?? 1, nr_margin ?? null,
+        start_date ?? null, contract_end_date ?? null,
+        country ?? null, account_industry ?? null,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -131,7 +140,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;

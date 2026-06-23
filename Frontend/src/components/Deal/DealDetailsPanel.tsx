@@ -31,6 +31,10 @@ interface DealDetailsPanelProps {
     dealType?: string; nextStep?: string; description?: string; winProbAI?: number;
     salesDriveFolder?: string; agreementUrl?: string; accountModuleSetup?: string;
     clientDiscovers?: string; discoveryDate?: string;
+    platformFee?: number | null; customFee?: number | null; licenseFee?: number | null;
+    onboardingFee?: number | null; whiteLabellingFee?: number | null;
+    exchangeRate?: number | null; nrMargin?: number | null;
+    startDate?: string; contractEndDate?: string; country?: string;
   };
   stageHistory?: Stage[];
   competitors?: string[];
@@ -408,6 +412,11 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
     sales_drive_folder: 'salesDriveFolder', agreement_url: 'agreementUrl',
     account_module_setup: 'accountModuleSetup', client_discovers: 'clientDiscovers',
     discovery_date: 'discoveryDate',
+    account_industry: 'accountIndustry',
+    platform_fee: 'platformFee', custom_fee: 'customFee', license_fee: 'licenseFee',
+    onboarding_fee: 'onboardingFee', white_labelling_fee: 'whiteLabellingFee',
+    exchange_rate: 'exchangeRate', nr_margin: 'nrMargin',
+    start_date: 'startDate', contract_end_date: 'contractEndDate', country: 'country',
   };
 
   const ctxValue = {
@@ -532,9 +541,9 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                 {deal.contactTitle || <Dash />}
               </EditableRow>
 
-              <ReadonlyRow label="Account Industry">
+              <EditableRow label="Account Industry" apiKey="account_industry" rawValue={deal.accountIndustry ?? ''}>
                 {deal.accountIndustry || <Dash />}
-              </ReadonlyRow>
+              </EditableRow>
             </TwoCol>
           </Section>
 
@@ -546,9 +555,17 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                 {deal.currency || 'USD'}
               </EditableRow>
 
-              <ReadonlyRow label="Platform Fee (%)"><Dash /></ReadonlyRow>
-              <ReadonlyRow label="Exchange Rate">1</ReadonlyRow>
-              <ReadonlyRow label="Custom Fee ($)"><Dash /></ReadonlyRow>
+              <EditableRow label="Platform Fee (%)" apiKey="platform_fee" rawValue={deal.platformFee ?? ''} type="number">
+                {deal.platformFee != null ? `${deal.platformFee}%` : <Dash />}
+              </EditableRow>
+
+              <EditableRow label="Exchange Rate" apiKey="exchange_rate" rawValue={deal.exchangeRate ?? 1} type="number">
+                {deal.exchangeRate != null ? deal.exchangeRate : 1}
+              </EditableRow>
+
+              <EditableRow label="Custom Fee ($)" apiKey="custom_fee" rawValue={deal.customFee ?? ''} type="number">
+                {deal.customFee != null ? formatCurrency(deal.customFee, deal.currency || BASE_CURRENCY_CODE) : <Dash />}
+              </EditableRow>
 
               <EditableRow label="Amount" apiKey="value" rawValue={deal.amount} type="number">
                 {deal.amount > 0
@@ -556,15 +573,25 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                   : <Dash />}
               </EditableRow>
 
-              <ReadonlyRow label="License Fee ($)"><Dash /></ReadonlyRow>
-              <ReadonlyRow label="NR Margin (%)"><Dash /></ReadonlyRow>
-              <ReadonlyRow label="Onboarding Fee ($)"><Dash /></ReadonlyRow>
+              <EditableRow label="License Fee ($)" apiKey="license_fee" rawValue={deal.licenseFee ?? ''} type="number">
+                {deal.licenseFee != null ? formatCurrency(deal.licenseFee, deal.currency || BASE_CURRENCY_CODE) : <Dash />}
+              </EditableRow>
+
+              <EditableRow label="NR Margin (%)" apiKey="nr_margin" rawValue={deal.nrMargin ?? ''} type="number">
+                {deal.nrMargin != null ? `${deal.nrMargin}%` : <Dash />}
+              </EditableRow>
+
+              <EditableRow label="Onboarding Fee ($)" apiKey="onboarding_fee" rawValue={deal.onboardingFee ?? ''} type="number">
+                {deal.onboardingFee != null ? formatCurrency(deal.onboardingFee, deal.currency || BASE_CURRENCY_CODE) : <Dash />}
+              </EditableRow>
 
               <ReadonlyRow label="Probability Amount">
                 {probabilityAmount || <Dash />}
               </ReadonlyRow>
 
-              <ReadonlyRow label="White-labelling Fee ($)"><Dash /></ReadonlyRow>
+              <EditableRow label="White-labelling Fee ($)" apiKey="white_labelling_fee" rawValue={deal.whiteLabellingFee ?? ''} type="number">
+                {deal.whiteLabellingFee != null ? formatCurrency(deal.whiteLabellingFee, deal.currency || BASE_CURRENCY_CODE) : <Dash />}
+              </EditableRow>
             </TwoCol>
           </Section>
 
@@ -575,13 +602,17 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                 {deal.package || <Dash />}
               </EditableRow>
 
-              <ReadonlyRow label="Start Date"><Dash /></ReadonlyRow>
+              <EditableRow label="Start Date" apiKey="start_date" rawValue={deal.startDate ?? ''} type="date">
+                {deal.startDate || <Dash />}
+              </EditableRow>
 
               <EditableRow label="Contract Term" apiKey="contract_term" rawValue={deal.contractTerm ?? ''}>
                 {deal.contractTerm || <Dash />}
               </EditableRow>
 
-              <ReadonlyRow label="End Date">{deal.closeDate || <Dash />}</ReadonlyRow>
+              <EditableRow label="End Date" apiKey="contract_end_date" rawValue={deal.contractEndDate ?? ''} type="date">
+                {deal.contractEndDate || <Dash />}
+              </EditableRow>
 
               <EditableRow label="Payment Terms" apiKey="payment_terms"
                 rawValue={deal.paymentTerms ?? ''} type="select" options={PAYMENT_TERMS_OPTIONS}>
@@ -595,7 +626,9 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                 {deal.source || <Dash />}
               </EditableRow>
 
-              <ReadonlyRow label="Country / Region"><Dash /></ReadonlyRow>
+              <EditableRow label="Country / Region" apiKey="country" rawValue={deal.country ?? ''}>
+                {deal.country || <Dash />}
+              </EditableRow>
             </TwoCol>
 
             {deal.tags && deal.tags.length > 0 && (

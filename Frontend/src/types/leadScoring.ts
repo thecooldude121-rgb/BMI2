@@ -20,6 +20,7 @@ export interface LeadScoreBreakdown {
   engagementScore: ScoreComponent;
   fitScore: ScoreComponent;
   intentScore: ScoreComponent;
+  confidenceScore?: ScoreComponent;
   lastUpdated: string;
   trend: 'up' | 'down' | 'stable';
   changeAmount: number;

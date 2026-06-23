@@ -71,19 +71,12 @@ const STAGE_HEX: Record<number, string> = {
 };
 
 // Item 6: color-coded days away label (returns hex to avoid Tailwind JIT dynamic-class purge)
-function getDaysAwayDisplay(daysAway: number): { label: string; colorHex: string } {
-  if (daysAway < 0) return { label: `${Math.abs(daysAway)} days overdue`, colorHex: '#B91C1C' };
-  if (daysAway < 10) return { label: `${daysAway} days away`, colorHex: '#DC2626' };
-  if (daysAway <= 30) return { label: `${daysAway} days away`, colorHex: '#D97706' };
-  return { label: `${daysAway} days away`, colorHex: '#16A34A' };
-}
-
 
 // ── Keyboard shortcut badge ───────────────────────────────────────────────────
 
 function KbdBadge({ char }: { char: string }) {
   return (
-    <kbd className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-black/20 border border-white/25 rounded text-white leading-none tracking-wide">
+    <kbd className="ml-1 hidden xl:inline-flex items-center justify-center min-w-[16px] h-4 px-1 text-[9px] font-bold bg-black/20 border border-white/25 rounded text-white leading-none tracking-wide">
       {char}
     </kbd>
   );
@@ -126,6 +119,7 @@ interface DealHeroSectionProps {
     daysAway: number;
     stageNumber: number;
     totalStages: number;
+    probability?: number;
   };
   onEdit: () => void;
   onMoreAction: (action: string) => void;
@@ -136,6 +130,8 @@ interface DealHeroSectionProps {
   onMoveStage?: () => void;
   onUpdateAmount?: () => void;
   onAssignOwner?: (ownerName: string) => void;
+  onSaveAmount?: (amount: number) => void;
+  onSaveCloseDate?: (isoDate: string) => void;
   onShowShortcuts?: () => void;
   momentumResult?: MomentumResult;
   revenueSchedule?: RevenueSchedule | null;
@@ -144,6 +140,8 @@ interface DealHeroSectionProps {
   onViewAllActions?: () => void;
   healthScoreFactors?: Array<{ category: string; score: number; stars: number }>;
   daysSinceContact?: number;
+  timeInStage?: number;
+  avgStageDuration?: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -159,6 +157,8 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onMoveStage,
   onUpdateAmount,
   onAssignOwner,
+  onSaveAmount,
+  onSaveCloseDate,
   onShowShortcuts,
   momentumResult,
   revenueSchedule,
@@ -167,6 +167,8 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onViewAllActions,
   healthScoreFactors,
   daysSinceContact = 0,
+  timeInStage,
+  avgStageDuration,
 }) => {
   const navigate = useNavigate();
 
@@ -191,6 +193,15 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   const [isLoadingOwners, setIsLoadingOwners]         = useState(false);
   const ownerDropdownRef = useRef<HTMLDivElement>(null);
 
+  // ── Inline edit ───────────────────────────────────────────────────────────
+  const [activeInlineEdit, setActiveInlineEdit] = useState<'value' | 'closeDate' | 'owner' | null>(null);
+  const [draftAmount, setDraftAmount] = useState<number>(0);
+  const [draftCloseDate, setDraftCloseDate] = useState<string>('');
+  const [draftOwner, setDraftOwner] = useState<string>('');
+  const valueCardRef = useRef<HTMLDivElement>(null);
+  const closeDateCardRef = useRef<HTMLDivElement>(null);
+  const ownerInlineRef = useRef<HTMLDivElement>(null);
+
   // Action bar "..." dropdown
 
   // Move-stage tooltip
@@ -212,6 +223,31 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showOwnerDropdown]);
 
+  // Escape cancels any active inline edit
+  useEffect(() => {
+    if (!activeInlineEdit) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setActiveInlineEdit(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [activeInlineEdit]);
+
+  // Click outside the active card cancels inline edit
+  useEffect(() => {
+    if (!activeInlineEdit) return;
+    const refMap: Record<string, React.RefObject<HTMLDivElement | null>> = {
+      value: valueCardRef,
+      closeDate: closeDateCardRef,
+      owner: ownerInlineRef,
+    };
+    const activeRef = refMap[activeInlineEdit];
+    const handler = (e: MouseEvent) => {
+      if (activeRef?.current && !activeRef.current.contains(e.target as Node)) {
+        setActiveInlineEdit(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [activeInlineEdit]);
 
   // ── Owner helpers ──────────────────────────────────────────────────────────
 
@@ -240,6 +276,47 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         .finally(() => setIsLoadingOwners(false));
     }
     setShowOwnerDropdown(true);
+  }
+
+  // ── Inline edit helpers ────────────────────────────────────────────────────
+
+  function displayDateToIso(display: string): string {
+    const d = new Date(display);
+    return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+  }
+
+  function openValueEdit() {
+    setDraftAmount(deal.amount);
+    setActiveInlineEdit('value');
+  }
+
+  function openCloseDateEdit() {
+    setDraftCloseDate(displayDateToIso(deal.closeDate));
+    setActiveInlineEdit('closeDate');
+  }
+
+  function openOwnerEdit() {
+    setDraftOwner(ownerName);
+    if (ownersList.length === 0) {
+      setIsLoadingOwners(true);
+      getUsers().then(users => setOwnersList(users)).catch(() => {}).finally(() => setIsLoadingOwners(false));
+    }
+    setActiveInlineEdit('owner');
+  }
+
+  function commitValue() {
+    if (draftAmount > 0) onSaveAmount?.(draftAmount);
+    setActiveInlineEdit(null);
+  }
+
+  function commitCloseDate() {
+    if (draftCloseDate) onSaveCloseDate?.(draftCloseDate);
+    setActiveInlineEdit(null);
+  }
+
+  function commitOwner(name: string) {
+    onAssignOwner?.(name);
+    setActiveInlineEdit(null);
   }
 
   // ── Value history helpers ──────────────────────────────────────────────────
@@ -339,6 +416,32 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     };
   })() : null;
 
+  // ── Velocity strip computations ───────────────────────────────────────────
+  const VELOCITY_STAGE_AVG: Record<string, number> = {
+    prospecting: 14, qualified: 10, proposal: 12, negotiation: 21,
+  };
+  const velocityStageKey = (deal.stage || '').toLowerCase();
+  const velocityDaysInStage = timeInStage ?? 8;
+  const resolvedAvgDays = avgStageDuration ?? VELOCITY_STAGE_AVG[velocityStageKey] ?? 12;
+  const velocityPct = Math.round((velocityDaysInStage / resolvedAvgDays) * 100);
+  const showVelocityStrip = !['closed-won', 'closed-lost'].includes(velocityStageKey) && velocityDaysInStage > 0;
+  const velocityStatus =
+    velocityPct <= 75
+      ? { label: 'Moving Fast', icon: '⚡', textColor: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' }
+      : velocityPct <= 100
+      ? { label: 'On Track',    icon: '✓',  textColor: 'text-blue-700',  bg: 'bg-blue-50',  border: 'border-blue-200' }
+      : velocityPct <= 140
+      ? { label: 'Slowing',     icon: '⚠',  textColor: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' }
+      : { label: 'Stalled',     icon: '●',  textColor: 'text-red-700',   bg: 'bg-red-50',   border: 'border-red-200' };
+
+  // ── Weighted forecast card values ─────────────────────────────────────────
+  const probability = deal.probability ?? 45;
+  const dealAmount = deal.amount || 30000;
+  const weightedValue = Math.round(dealAmount * (probability / 100));
+  const weightedCardClass = deal.stage === 'closed-won'
+    ? 'rounded-xl border p-4 min-w-0 bg-emerald-50 border-emerald-200'
+    : 'rounded-xl border p-4 min-w-0 bg-violet-50 border-violet-100';
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -377,14 +480,25 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
         {/* Key Metrics — flex so Value is wider (items 4, 5, 6) */}
         <div className="flex gap-6 mb-2">
-          {/* Value tile — flex: 1.5, dominant hero metric (item 4) */}
+          {/* Value tile — inline editable */}
           <div
-            className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200"
-            style={{ flex: 1.5, borderLeft: '4px solid #3B82F6' }}
+            ref={valueCardRef}
+            className="relative group bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200"
+            style={{ flex: 1.2, borderLeft: '4px solid #3B82F6' }}
           >
+            {activeInlineEdit !== 'value' && (
+              <button
+                type="button"
+                onClick={openValueEdit}
+                className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-blue-200"
+                title="Edit value"
+              >
+                <Edit className="h-3.5 w-3.5 text-blue-500" />
+              </button>
+            )}
             <div className="flex items-center justify-between mb-1">
               <div className="text-sm font-medium text-blue-700">Value</div>
-              {valueDelta !== 0 && (
+              {valueDelta !== 0 && activeInlineEdit !== 'value' && (
                 <div title={valueDeltaTooltip} className="cursor-help">
                   {valueDelta > 0
                     ? <TrendingUp className="h-4 w-4 text-green-500" />
@@ -392,35 +506,71 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                 </div>
               )}
             </div>
-            <div className="text-4xl font-bold text-blue-900">
-              {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
-            </div>
-            {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
-              <div className="text-xs text-blue-600 mt-0.5 opacity-80">
-                ≈ {formatCurrencyCompact(
-                    deal.base_amount_usd || convertToBaseCurrency(deal.amount, deal.currency),
-                    BASE_CURRENCY_CODE
-                  )} USD
-              </div>
+            {activeInlineEdit === 'value' ? (
+              <>
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={draftAmount}
+                  onChange={e => setDraftAmount(Number(e.target.value))}
+                  onKeyDown={e => { if (e.key === 'Enter') commitValue(); }}
+                  autoFocus
+                  className="w-full text-2xl font-bold text-blue-900 bg-white border border-blue-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={commitValue}
+                    className="flex-1 text-xs font-semibold bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 transition-colors"
+                  >
+                    ✓ Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveInlineEdit(null)}
+                    className="flex-1 text-xs font-semibold bg-gray-100 text-gray-600 rounded-md py-1.5 hover:bg-gray-200 transition-colors"
+                  >
+                    ✗ Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  className="text-4xl font-bold text-blue-900 cursor-pointer hover:opacity-75 transition-opacity"
+                  onClick={openValueEdit}
+                >
+                  {formatCurrencyCompact(deal.amount, deal.currency || BASE_CURRENCY_CODE)}
+                </div>
+                {deal.currency && deal.currency !== BASE_CURRENCY_CODE && deal.amount > 0 && (
+                  <div className="text-xs text-blue-600 mt-0.5 opacity-80">
+                    ≈ {formatCurrencyCompact(
+                        deal.base_amount_usd || convertToBaseCurrency(deal.amount, deal.currency),
+                        BASE_CURRENCY_CODE
+                      )} USD
+                  </div>
+                )}
+                {revenueStatusLine && (
+                  <button
+                    type="button"
+                    onClick={onViewRevenue}
+                    className="mt-1 flex items-center gap-1.5 text-left hover:opacity-75 transition-opacity"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${revenueStatusLine.dotClass}`} />
+                    <span className={`text-xs ${revenueStatusLine.colorClass}`}>{revenueStatusLine.text}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowValueHistory(v => !v)}
+                  className="mt-2 flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  {showValueHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  Value History
+                </button>
+              </>
             )}
-            {revenueStatusLine && (
-              <button
-                type="button"
-                onClick={onViewRevenue}
-                className="mt-1 flex items-center gap-1.5 text-left hover:opacity-75 transition-opacity"
-              >
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${revenueStatusLine.dotClass}`} />
-                <span className={`text-xs ${revenueStatusLine.colorClass}`}>{revenueStatusLine.text}</span>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowValueHistory(v => !v)}
-              className="mt-2 flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
-            >
-              {showValueHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              Value History
-            </button>
           </div>
 
           {/* Stage tile — item 5: dot replaces emoji */}
@@ -436,25 +586,142 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             <div className="text-xs text-orange-700 mt-1">Stage {deal.stageNumber} of {deal.totalStages}</div>
           </div>
 
-          {/* Close date tile — item 6: color-coded days away */}
-          <div className={`rounded-xl p-5 border ${closeDateUrgencyClass(deal.closeDate)}`} style={{ flex: 1 }}>
+          {/* Close date tile — inline editable */}
+          <div
+            ref={closeDateCardRef}
+            className={`relative group rounded-xl p-5 border ${closeDateUrgencyClass(deal.closeDate)}`}
+            style={{ flex: 1 }}
+          >
+            {activeInlineEdit !== 'closeDate' && (
+              <button
+                type="button"
+                onClick={openCloseDateEdit}
+                className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/10"
+                title="Edit close date"
+              >
+                <Edit className="h-3.5 w-3.5 opacity-50" />
+              </button>
+            )}
             <div className="text-sm font-medium mb-1 opacity-70">Close Date</div>
-            <div className="text-lg font-bold">{deal.closeDate}</div>
-            {(() => {
-              const { label, colorHex } = getDaysAwayDisplay(deal.daysAway);
-              return <div className="text-xs mt-1 font-semibold" style={{ color: colorHex }}>{label}</div>;
-            })()}
+            {activeInlineEdit === 'closeDate' ? (
+              <>
+                <input
+                  type="date"
+                  value={draftCloseDate}
+                  onChange={e => setDraftCloseDate(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') commitCloseDate(); }}
+                  autoFocus
+                  className="w-full text-base font-bold bg-white border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={commitCloseDate}
+                    className="flex-1 text-xs font-semibold bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 transition-colors"
+                  >
+                    ✓ Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveInlineEdit(null)}
+                    className="flex-1 text-xs font-semibold bg-gray-100 text-gray-600 rounded-md py-1.5 hover:bg-gray-200 transition-colors"
+                  >
+                    ✗ Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div
+                  className="text-lg font-bold cursor-pointer hover:opacity-75 transition-opacity"
+                  onClick={openCloseDateEdit}
+                >
+                  {deal.closeDate}
+                </div>
+                {(() => {
+                  const closeDate = new Date(deal.closeDate || '');
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  closeDate.setHours(0, 0, 0, 0);
+                  const daysAway = Math.floor((closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  if (isNaN(daysAway)) return null;
+                  const colorClass = daysAway < 0
+                    ? 'text-red-700 font-bold'
+                    : daysAway < 10
+                    ? 'text-red-600 font-bold'
+                    : daysAway < 30
+                    ? 'text-amber-600 font-semibold'
+                    : 'text-green-600 font-semibold';
+                  const label = daysAway < 0
+                    ? `${Math.abs(daysAway)} days overdue`
+                    : `${daysAway} days away`;
+                  return <span className={`text-sm mt-1 block ${colorClass}`}>{label}</span>;
+                })()}
+              </>
+            )}
           </div>
 
-          {/* Owner tile */}
-          <div className="relative bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200" style={{ flex: 1 }}>
+          {/* Owner tile — inline editable */}
+          <div
+            ref={ownerInlineRef}
+            className="relative group bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200"
+            style={{ flex: 1 }}
+          >
+            {!isUnassigned && activeInlineEdit !== 'owner' && (
+              <button
+                type="button"
+                onClick={openOwnerEdit}
+                className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-purple-200"
+                title="Change owner"
+              >
+                <Edit className="h-3.5 w-3.5 text-purple-500" />
+              </button>
+            )}
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm font-medium text-purple-700">Owner</div>
-              {isOOO && (
+              {isOOO && activeInlineEdit !== 'owner' && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200 leading-tight">OOO</span>
               )}
             </div>
-            {isUnassigned ? (
+            {activeInlineEdit === 'owner' ? (
+              <>
+                {isLoadingOwners ? (
+                  <div className="text-sm text-purple-400 italic py-2">Loading team members…</div>
+                ) : (
+                  <select
+                    autoFocus
+                    value={draftOwner}
+                    onChange={e => setDraftOwner(e.target.value)}
+                    className="w-full text-sm font-semibold text-purple-900 bg-white border border-purple-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400 mb-2"
+                  >
+                    {ownersList.map((u: any) => {
+                      const name = `${u.first_name} ${u.last_name}`;
+                      return (
+                        <option key={u.id} value={name}>
+                          {name}{u.role ? ` (${u.role})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => commitOwner(draftOwner)}
+                    className="flex-1 text-xs font-semibold bg-purple-600 text-white rounded-md py-1.5 hover:bg-purple-700 transition-colors"
+                  >
+                    ✓ Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveInlineEdit(null)}
+                    className="flex-1 text-xs font-semibold bg-gray-100 text-gray-600 rounded-md py-1.5 hover:bg-gray-200 transition-colors"
+                  >
+                    ✗ Cancel
+                  </button>
+                </div>
+              </>
+            ) : isUnassigned ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
@@ -508,6 +775,29 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               </div>
             )}
           </div>
+
+          {/* 5th KPI Card: Weighted Forecast Value */}
+          {deal.stage !== 'closed-lost' && (
+            <div
+              style={{ flex: 1 }}
+              className={weightedCardClass}
+              title={`Weighted forecast: ${probability}% win probability × ${formatCurrencyCompact(dealAmount)}`}
+            >
+              {deal.stage === 'closed-won' ? (
+                <>
+                  <div className="text-xs font-semibold text-emerald-500 uppercase tracking-wide mb-1">Final Value</div>
+                  <div className="text-2xl font-bold text-emerald-700 mb-1 leading-none">{formatCurrencyCompact(dealAmount)}</div>
+                  <div className="text-xs text-emerald-500 font-medium">🎉 Deal Won</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs font-semibold text-violet-500 uppercase tracking-wide mb-1">Weighted Value</div>
+                  <div className="text-2xl font-bold text-violet-700 mb-1 leading-none">{formatCurrencyCompact(weightedValue)}</div>
+                  <div className="text-xs text-violet-400">{probability}% of {formatCurrencyCompact(dealAmount)}</div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Value History accordion */}
@@ -574,7 +864,79 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           </div>
         </div>
 
-        {/* Item 7: separator between KPI area and Account/Contact row */}
+        {/* Stage Velocity strip */}
+        {showVelocityStrip && (
+          <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border text-xs my-2 ${velocityStatus.bg} ${velocityStatus.border}`}>
+            <span className="font-semibold text-gray-500 flex-shrink-0">Stage Velocity</span>
+            <span className={`font-bold flex-shrink-0 ${velocityStatus.textColor}`}>
+              {velocityStatus.icon} {velocityStatus.label}
+            </span>
+            <span className="text-gray-500">
+              {velocityDaysInStage}d in {deal.stageName || deal.stage}
+              &nbsp;·&nbsp;avg {resolvedAvgDays}d
+            </span>
+            {velocityPct > 100 ? (
+              <span className={`ml-auto font-semibold flex-shrink-0 ${velocityStatus.textColor}`}>
+                +{velocityDaysInStage - resolvedAvgDays}d over avg
+              </span>
+            ) : (
+              <span className="ml-auto text-gray-400 flex-shrink-0">
+                {resolvedAvgDays - velocityDaysInStage}d to avg
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── 4-column context strip: Account | Contact | Source | Last Contact ── */}
+        <div className="flex items-start gap-0 border-t border-b border-gray-100 py-2.5 px-1 my-2">
+
+          {/* Account */}
+          <div className="flex flex-col min-w-0 flex-1 px-3 border-r border-gray-200">
+            <span className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-0.5">Account</span>
+            <span className="text-sm font-semibold text-blue-600 truncate hover:underline cursor-pointer">
+              {deal.accountName || '—'}
+            </span>
+          </div>
+
+          {/* Contact */}
+          <div className="flex flex-col min-w-0 flex-1 px-3 border-r border-gray-200">
+            <span className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-0.5">Contact</span>
+            <span className="text-sm font-semibold text-gray-800 truncate">
+              {deal.contactName || '—'}
+            </span>
+            {deal.contactTitle && (
+              <span className="text-xs text-gray-400 truncate capitalize">{deal.contactTitle}</span>
+            )}
+          </div>
+
+          {/* Source */}
+          <div className="flex flex-col min-w-0 flex-1 px-3 border-r border-gray-200">
+            <span className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-0.5">Source</span>
+            <span className="text-sm font-semibold text-gray-800 capitalize truncate">
+              {deal.source || '—'}
+            </span>
+          </div>
+
+          {/* Last Contact */}
+          <div className="flex flex-col min-w-0 flex-1 px-3">
+            <span className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-0.5">Last Contact</span>
+            {(() => {
+              const days = daysSinceContact;
+              if (days === null || days === undefined) {
+                return <span className="text-sm text-gray-400">No contact yet</span>;
+              }
+              const label = days === 0 ? 'Today' : days === 1 ? 'Yesterday' : `${days}d ago`;
+              const colorClass = days <= 3
+                ? 'text-green-600'
+                : days <= 7
+                ? 'text-amber-600 font-semibold'
+                : 'text-red-600 font-bold';
+              return <span className={`text-sm ${colorClass}`}>{label}</span>;
+            })()}
+          </div>
+
+        </div>
+
         {/* AI Health Score — items 8, 9, 10 */}
         <div
           className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 border border-purple-200 mb-4 cursor-pointer select-none"
@@ -686,37 +1048,37 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         <div className="-mx-8 -mb-6 mt-4">
 
           {/* Desktop: single unified row */}
-          <div className="hidden md:flex items-center gap-1 px-6 py-2 border-t border-gray-200 overflow-x-auto">
+          <div className="hidden md:flex items-center gap-1 px-6 py-2 border-t border-gray-200 overflow-hidden">
 
             {/* ── Communication group ── */}
-            <button onClick={onEmail} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <Mail className="h-4 w-4" />
+            <button title="Email (E)" onClick={onEmail} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <Mail className="h-3.5 w-3.5" />
               Email
               <KbdBadge char="E" />
             </button>
-            <button onClick={onCall} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <Phone className="h-4 w-4" />
+            <button title="Call (C)" onClick={onCall} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <Phone className="h-3.5 w-3.5" />
               Call
               <KbdBadge char="C" />
             </button>
-            <button onClick={onMeeting} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-gray-800 hover:bg-gray-900 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <CalendarDays className="h-4 w-4" />
+            <button title="Meeting (M)" onClick={onMeeting} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-gray-800 hover:bg-gray-900 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <CalendarDays className="h-3.5 w-3.5" />
               Meeting
               <KbdBadge char="M" />
             </button>
-            <button onClick={onProposal} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <FileText className="h-4 w-4" />
+            <button title="Proposal (P)" onClick={onProposal} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <FileText className="h-3.5 w-3.5" />
               Proposal
               <KbdBadge char="P" />
             </button>
-            <button onClick={() => onMoreAction('add-note')} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <StickyNote className="h-4 w-4" />
+            <button title="Note (N)" onClick={() => onMoreAction('add-note')} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <StickyNote className="h-3.5 w-3.5" />
               Note
               <KbdBadge char="N" />
             </button>
 
             {/* Divider */}
-            <div className="w-px h-6 bg-gray-300 mx-2 flex-shrink-0" />
+            <div className="w-px h-6 bg-gray-300 mx-1 flex-shrink-0" />
 
             {/* ── Pipeline group ── */}
             <div
@@ -725,11 +1087,12 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               onMouseLeave={() => setShowStageTooltip(false)}
             >
               <button
+                title="Next Stage (S)"
                 onClick={hasNextStage ? onMoveStage : undefined}
                 disabled={!hasNextStage}
-                className="flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors whitespace-nowrap"
+                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors whitespace-nowrap"
               >
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-3.5 w-3.5" />
                 Next Stage
                 <KbdBadge char="S" />
               </button>
@@ -741,12 +1104,11 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                 </div>
               )}
             </div>
-            <button onClick={onUpdateAmount} className="flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium bg-gray-700 hover:bg-gray-800 text-white transition-colors whitespace-nowrap flex-shrink-0">
-              <DollarSign className="h-4 w-4" />
+            <button title="Update Amount (U)" onClick={onUpdateAmount} className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-800 text-white transition-colors whitespace-nowrap flex-shrink-0">
+              <DollarSign className="h-3.5 w-3.5" />
               Amount
               <KbdBadge char="U" />
             </button>
-
 
           </div>
 
