@@ -6,7 +6,7 @@ export interface Deal {
   
   // Ownership & Classification
   ownerId: string;
-  dealType: 'new-business' | 'existing-business' | 'upsell' | 'renewal' | 'cross-sell';
+  dealType: 'new-business' | 'upsell' | 'cross-sell' | 'renewal' | 'reactivation';
   country: string;
 
   // Source Attribution

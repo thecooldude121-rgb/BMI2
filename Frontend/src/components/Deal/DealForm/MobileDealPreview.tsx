@@ -3,6 +3,7 @@ import { formatCurrency } from '../../../utils/currencyUtils';
 import { daysFromNowLabel } from '../../../utils/dateUtils';
 import { getPipelineStage, DEFAULT_PIPELINE } from '../../../config/pipelines';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
+import { getDealType } from '../../../config/dealTypes';
 
 interface MobileDealPreviewProps {
   formData: any;
@@ -24,6 +25,7 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
 
   const pipelineId = formData.pipelineId || DEFAULT_PIPELINE.id;
   const stageObj = getPipelineStage(pipelineId, formData.stage);
+  const dealTypeObj = getDealType(formData.dealType || '');
 
   const effectiveProb = winProbOverrideEnabled && winProbOverrideValue !== ''
     ? Number(winProbOverrideValue)
@@ -50,6 +52,11 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
           {stageObj && (
             <span className="text-xs font-medium px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100">
               {stageObj.name}
+            </span>
+          )}
+          {formData.dealType && (
+            <span className="text-xs font-medium px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full border border-indigo-100">
+              {dealTypeObj.label}
             </span>
           )}
           {formData.closeDate && (

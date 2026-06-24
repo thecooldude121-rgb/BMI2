@@ -507,6 +507,27 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           </p>
         </div>
 
+        {/* Deal Type */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Deal Type <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={formData.dealType || ''}
+            onChange={(e) => onChange('dealType', e.target.value)}
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+          >
+            {DEAL_TYPES.map((type) => (
+              <option key={type.id} value={type.id} title={type.description}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-gray-400">
+            Used for forecasting, reporting, and commission analysis.
+          </p>
+        </div>
+
         {/* Forecast Category */}
         {(() => {
           const currentCategory = formData.forecastCategory || '';
@@ -565,29 +586,6 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             </div>
           );
         })()}
-
-        {/* Deal Type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Deal Type <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={formData.dealType || ''}
-            onChange={(e) => onChange('dealType', e.target.value)}
-            className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm ${
-              !formData.dealType ? 'border-red-300' : 'border-gray-300'
-            }`}
-          >
-            {DEAL_TYPES.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1.5 text-xs text-gray-400">
-            Used for forecasting, reporting, and commission analysis.
-          </p>
-        </div>
 
         {/* Win Probability — with optional rep override */}
         <div>

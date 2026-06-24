@@ -507,6 +507,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         if (!value) return 'Close date is required';
         return null;
 
+      case 'dealType':
+        if (!value) return 'Deal type is required';
+        return null;
+
       case 'accountName':
         if (!value || value.trim().length === 0) return 'Account is required';
         return null;
