@@ -29,6 +29,7 @@ import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
 import { getSuggestedDealValue, valueMatchesSuggestion, PriceResult } from '../../utils/productPricingEngine';
 import { DealFormAttachments } from '../../components/Deal/DealForm/DealFormAttachments';
+import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
 import { DealFormCommercialDocs } from '../../components/Deal/DealForm/DealFormCommercialDocs';
 import { AttachedFile } from '../../config/attachments';
 import { MobileHealthScoreBar } from '../../components/Deal/DealForm/MobileHealthScoreBar';
@@ -1184,6 +1185,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
           {/* Right Column — desktop sidebar only */}
           <div className="hidden lg:block space-y-6">
             <DealHealthScorePanel formData={formData} />
+            <ValidationChecklistPanel validation={validation} formData={formData} />
             <DealPreviewPanel
               formData={formData}
               winProbOverrideEnabled={winProbOverrideEnabled}
