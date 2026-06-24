@@ -3,6 +3,7 @@ import { computeLeadSLA } from '../leadSla';
 import type { LeadSLAResult } from '../leadSla';
 import { computeMultiFactorScore } from '../leadScoring/multiFactorScore';
 import type { MultiFactorScore } from '../leadScoring/multiFactorScore';
+import { computeConversionReadiness } from '../conversionReadiness';
 // import type only — erased at runtime, breaking the circular dep with leadActions.ts
 import type { ActionId, ActionVariant, LeadAction } from '../leadActions';
 
@@ -101,8 +102,8 @@ export function computeNBA(lead: Lead, opts: NBAOpts = {}): NBAResult {
     };
   }
 
-  // 7. New lead, never contacted → send first outreach
-  if (lead.status === 'new' && !lead.last_contact_date) {
+  // 7. New or assigned lead, never contacted → send first outreach
+  if ((lead.status === 'new' || lead.status === 'assigned') && !lead.last_contact_date) {
     return {
       action:   act('send_first_outreach', 'Send outreach', 'active'),
       reason:   'New lead with no contact logged — send a personalized first outreach.',
@@ -111,7 +112,9 @@ export function computeNBA(lead: Lead, opts: NBAOpts = {}): NBAResult {
   }
 
   // 8. High fit + intent in active pipeline → book discovery call
-  const inProgressStatuses: Array<Lead['status']> = ['new', 'contacted', 'working', 'nurturing'];
+  const inProgressStatuses: Array<Lead['status']> = [
+    'new', 'assigned', 'enriching', 'attempting_contact', 'engaged', 'nurture',
+  ];
   if (
     inProgressStatuses.includes(lead.status) &&
     mfs.fitScore.score    >= 65 &&
@@ -124,17 +127,27 @@ export function computeNBA(lead: Lead, opts: NBAOpts = {}): NBAResult {
     };
   }
 
-  // 9. Qualified + meets MFS conversion thresholds
-  if (
-    lead.status === 'qualified' &&
-    mfs.fitScore.score    >= 60 &&
-    mfs.intentScore.score >= 40 &&
-    mfs.overallScore      >= 65
-  ) {
+  // 9. Conversion readiness — defers to shared model (thresholds live in conversionReadiness.ts)
+  const readiness = computeConversionReadiness(lead, mfs);
+  if (readiness.state === 'ready_for_deal') {
     return {
       action:   act('convert_to_deal', 'Convert to deal', 'ready'),
       reason:   'Qualified lead meets scoring thresholds — move to deal stage now.',
       priority: 'high',
+    };
+  }
+  if (readiness.state === 'ready_for_account_contact') {
+    return {
+      action:   act('convert_to_contact', 'Create account + contact', 'ready'),
+      reason:   'Qualified lead with company data — create account and contact records.',
+      priority: 'high',
+    };
+  }
+  if (readiness.state === 'ready_for_contact') {
+    return {
+      action:   act('convert_to_contact', 'Create contact', 'active'),
+      reason:   'Qualified lead — convert to a contact record.',
+      priority: 'medium',
     };
   }
 
@@ -165,33 +178,56 @@ export function computeNBA(lead: Lead, opts: NBAOpts = {}): NBAResult {
 
   // 12. Status-based defaults
   switch (lead.status) {
-    case 'qualified':
-      return {
-        action:   act('complete_qualification', 'Complete qualification', 'active'),
-        reason:   'Qualified lead — fill in data gaps to reach the deal-ready conversion threshold.',
-        priority: 'medium',
-      };
-    case 'contacted':
-    case 'working':
-      return {
-        action:   act('follow_up', 'Follow up', 'active'),
-        reason:   'Keep momentum — schedule a timely follow-up touchpoint.',
-        priority: 'medium',
-      };
-    case 'nurturing':
-      return {
-        action:   act('check_in', 'Check in', 'default'),
-        reason:   'Periodic check-in to maintain relationship and watch for buying signals.',
-        priority: 'low',
-      };
     case 'new':
       return {
         action:   act('contact', 'Contact', 'default'),
         reason:   'New lead — initiate first contact.',
         priority: 'medium',
       };
+    case 'assigned':
+      return {
+        action:   act('send_first_outreach', 'Send outreach', 'active'),
+        reason:   'Assigned and waiting — send first outreach to start the conversation.',
+        priority: 'high',
+      };
+    case 'enriching':
+      return {
+        action:   act('enrich', 'Enrich data', 'default'),
+        reason:   'Lead is in the enrichment phase — complete data gathering before outreach.',
+        priority: 'medium',
+      };
+    case 'attempting_contact':
+      return {
+        action:   act('follow_up', 'Follow up', 'active'),
+        reason:   'Outreach sent but no reply yet — send a follow-up to increase response rate.',
+        priority: 'medium',
+      };
+    case 'engaged':
+      return {
+        action:   act('book_discovery', 'Book discovery', 'ready'),
+        reason:   'Lead is engaged — book a discovery call while momentum is high.',
+        priority: 'high',
+      };
+    case 'qualified':
+      return {
+        action:   act('complete_qualification', 'Complete qualification', 'active'),
+        reason:   'Qualified lead — fill in data gaps to reach the deal-ready conversion threshold.',
+        priority: 'medium',
+      };
+    case 'sales_accepted':
+      return {
+        action:   act('convert_to_deal', 'Convert to deal', 'ready'),
+        reason:   'Sales-accepted lead — create a deal to move into the pipeline.',
+        priority: 'high',
+      };
+    case 'nurture':
+      return {
+        action:   act('check_in', 'Check in', 'default'),
+        reason:   'Periodic check-in to maintain relationship and watch for buying signals.',
+        priority: 'low',
+      };
+    case 'disqualified':
     case 'lost':
-    case 'unqualified':
       return {
         action:   act('revive', 'Revive', 'default'),
         reason:   'Consider reaching out to see if circumstances have changed.',

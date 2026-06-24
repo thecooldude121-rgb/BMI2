@@ -36,9 +36,13 @@ import {
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
+import ConversionWorkflowModal from '../../components/Leads/ConversionWorkflowModal';
 import { useLeads } from '../../contexts/LeadContext';
 import { fetchLeadByIdFromAPI } from '../../utils/leadsApi';
 import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
+import { computeConversionReadiness } from '../../utils/conversionReadiness';
+import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
+import type { TerminalAction } from '../../utils/leadReasons';
 import type { Lead } from '../../types/lead';
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -78,7 +82,8 @@ const LeadDetailPage: React.FC = () => {
   const [showCallLogger, setShowCallLogger] = useState(false);
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
-  const [showLostReasonForm, setShowLostReasonForm] = useState(false);
+  const [terminalModalAction, setTerminalModalAction] = useState<TerminalAction | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
@@ -106,14 +111,17 @@ const LeadDetailPage: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      new: 'bg-blue-500 text-white',
-      contacted: 'bg-orange-500 text-white',
-      qualified: 'bg-green-500 text-white',
-      lost: 'bg-red-500 text-white',
-      working: 'bg-orange-400 text-white',
-      nurturing: 'bg-purple-500 text-white',
-      unqualified: 'bg-gray-400 text-white',
-      converted: 'bg-teal-500 text-white',
+      new:               'bg-blue-500 text-white',
+      assigned:          'bg-indigo-500 text-white',
+      enriching:         'bg-cyan-500 text-white',
+      attempting_contact: 'bg-orange-500 text-white',
+      engaged:           'bg-emerald-500 text-white',
+      qualified:         'bg-green-500 text-white',
+      sales_accepted:    'bg-teal-500 text-white',
+      nurture:           'bg-purple-500 text-white',
+      disqualified:      'bg-gray-400 text-white',
+      converted:         'bg-teal-600 text-white',
+      lost:              'bg-red-500 text-white',
     };
     return colors[status] || 'bg-gray-500 text-white';
   };
@@ -129,12 +137,57 @@ const LeadDetailPage: React.FC = () => {
     setShowDeleteModal(false);
   };
 
-  const handleStatusChange = async (newStatus: string) => {
+  // Lifecycle order — used for forward/backward detection
+  const LIFECYCLE_ORDER = [
+    'new', 'assigned', 'enriching', 'attempting_contact',
+    'engaged', 'qualified', 'sales_accepted',
+    'nurture', 'disqualified', 'converted', 'lost',
+  ];
+  const EARLY_STAGES = new Set(['new', 'assigned', 'enriching', 'attempting_contact']);
+
+  const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
     await updateLead(lead.id, { status: newStatus as Lead['status'] });
     setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
     setShowStatusDropdown(false);
+    setPendingStatus(null);
     showToast(`Status updated to ${newStatus}`);
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    if (!lead) return;
+
+    if (newStatus === 'disqualified' || newStatus === 'lost') {
+      setShowStatusDropdown(false);
+      setTerminalModalAction(newStatus as TerminalAction);
+      return;
+    }
+
+    const currentIdx = LIFECYCLE_ORDER.indexOf(lead.status);
+    const targetIdx  = LIFECYCLE_ORDER.indexOf(newStatus);
+
+    // Hard block: early stage → converted (must pass through qualified first)
+    if (EARLY_STAGES.has(lead.status) && newStatus === 'converted') {
+      showToast('Cannot convert directly from this stage — must reach Qualified first.');
+      setShowStatusDropdown(false);
+      return;
+    }
+
+    // Soft warnings
+    const isBackward = currentIdx > -1 && targetIdx > -1 && targetIdx < currentIdx;
+    const skipsEngaged =
+      ['new', 'assigned', 'enriching', 'attempting_contact'].includes(lead.status) &&
+      newStatus === 'qualified';
+    const salesAcceptedWithoutQual =
+      newStatus === 'sales_accepted' && !lead.is_qualified;
+
+    if (isBackward || skipsEngaged || salesAcceptedWithoutQual) {
+      setPendingStatus(newStatus);
+      setShowStatusDropdown(false);
+      return;
+    }
+
+    void applyStatusChange(newStatus);
   };
 
   const handleSendEmail = () => {
@@ -153,16 +206,33 @@ const LeadDetailPage: React.FC = () => {
     setShowAIMeetSetter(false);
   };
 
-  const handleConvert = () => {
+  const handleConvert = () => setShowConvertModal(true);
+
+  const handleConvertContact = () => {
+    setShowConvertModal(false);
     navigate('/crm/contacts/new', { state: { fromLead: lead } });
   };
 
-  const handleMarkAsLost = async (reason: string) => {
-    if (!lead) return;
-    await updateLead(lead.id, { status: 'lost' as Lead['status'] });
-    setLead(prev => prev ? { ...prev, status: 'lost' as Lead['status'] } : null);
-    showToast(`Lead marked as lost. Reason: ${reason}`);
-    setShowLostReasonForm(false);
+  const handleConvertAccountContact = () => {
+    setShowConvertModal(false);
+    navigate('/crm/contacts/new', { state: { fromLead: lead, createAccount: true } });
+  };
+
+  const handleConvertDeal = () => {
+    setShowConvertModal(false);
+    navigate(`/crm/deals/new?leadId=${lead?.id}`);
+  };
+
+  const handleTerminalConfirm = async (reason: string, notes: string) => {
+    if (!lead || !terminalModalAction) return;
+    const status = terminalModalAction;
+    const extra = status === 'disqualified'
+      ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
+      : { lost_reason: reason, lost_reason_notes: notes || undefined };
+    await updateLead(lead.id, { status, ...extra } as Partial<Lead>);
+    setLead(prev => prev ? { ...prev, status, ...extra } as Lead : null);
+    showToast(`Lead marked as ${status}`);
+    setTerminalModalAction(null);
   };
 
   const handleAddActivity = (activityType: string) => {
@@ -269,6 +339,36 @@ const LeadDetailPage: React.FC = () => {
         </div>
       )}
 
+      {/* Status transition soft warning */}
+      {pendingStatus && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Confirm status change</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {pendingStatus === 'sales_accepted' && !lead?.is_qualified
+                ? 'This lead is not formally qualified yet. Moving to Sales Accepted anyway?'
+                : LIFECYCLE_ORDER.indexOf(pendingStatus) < LIFECYCLE_ORDER.indexOf(lead?.status ?? '')
+                  ? `Moving backwards to "${pendingStatus.replace(/_/g, ' ')}" — confirm this is intentional.`
+                  : `Skipping lifecycle steps to "${pendingStatus.replace(/_/g, ' ')}" — confirm this is intentional.`}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => void applyStatusChange(pendingStatus)}
+                className="flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700"
+              >
+                Proceed anyway
+              </button>
+              <button
+                onClick={() => setPendingStatus(null)}
+                className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete confirmation */}
       <ConfirmationModal
         isOpen={showDeleteModal}
@@ -327,14 +427,18 @@ const LeadDetailPage: React.FC = () => {
                 {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)} ▼
               </button>
               {showStatusDropdown && (
-                <div className="absolute top-full left-20 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                  {['new', 'contacted', 'qualified', 'lost'].map(status => (
+                <div className="absolute top-full left-20 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
+                  {([
+                    'new', 'assigned', 'enriching', 'attempting_contact',
+                    'engaged', 'qualified', 'sales_accepted',
+                    'nurture', 'disqualified', 'converted', 'lost',
+                  ] as const).map(status => (
                     <button
                       key={status}
                       onClick={() => handleStatusChange(status)}
                       className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
                     >
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                      {status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                     </button>
                   ))}
                 </div>
@@ -379,7 +483,7 @@ const LeadDetailPage: React.FC = () => {
             Convert to Contact
           </button>
           <button
-            onClick={() => setShowLostReasonForm(true)}
+            onClick={() => setTerminalModalAction('lost')}
             className="flex items-center px-5 py-2.5 border-2 border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium"
           >
             <TrendingDown className="h-4 w-4 mr-2" />
@@ -387,6 +491,90 @@ const LeadDetailPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Conversion Readiness Card */}
+      {(() => {
+        const mfs      = computeMultiFactorScore(lead);
+        const rdns     = computeConversionReadiness(lead, mfs);
+        const isActive = !['converted', 'lost', 'disqualified'].includes(lead.status);
+        if (!isActive) return null;
+
+        const STATE_STYLE: Record<string, { card: string; chip: string }> = {
+          ready_for_deal:            { card: 'border-green-200  bg-green-50',  chip: 'bg-green-100  text-green-700  border-green-200'  },
+          ready_for_account_contact: { card: 'border-teal-200   bg-teal-50',   chip: 'bg-teal-100   text-teal-700   border-teal-200'   },
+          ready_for_contact:         { card: 'border-blue-200   bg-blue-50',   chip: 'bg-blue-100   text-blue-700   border-blue-200'   },
+          needs_qualification:       { card: 'border-amber-200  bg-amber-50',  chip: 'bg-amber-100  text-amber-700  border-amber-200'  },
+          needs_enrichment:          { card: 'border-orange-200 bg-orange-50', chip: 'bg-orange-100 text-orange-700 border-orange-200' },
+          not_ready:                 { card: 'border-gray-200   bg-gray-50',   chip: 'bg-gray-100   text-gray-500   border-gray-200'   },
+        };
+        const style = STATE_STYLE[rdns.state] ?? STATE_STYLE.not_ready;
+        const isConvertible = ['ready_for_deal', 'ready_for_account_contact', 'ready_for_contact'].includes(rdns.state);
+
+        return (
+          <div className={`mx-8 mt-6 rounded-xl border-2 p-5 ${style.card}`}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                    Conversion Readiness
+                  </p>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${style.chip}`}>
+                    {rdns.label}
+                  </span>
+                </div>
+
+                {/* Checklist — 2-column grid */}
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
+                  {rdns.checklist.map((item, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs">
+                      <span className={item.met ? 'text-green-500' : 'text-gray-300'}>
+                        {item.met ? '✓' : '✗'}
+                      </span>
+                      <span className={item.met ? 'text-gray-700' : 'text-gray-400'}>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Reasons / blockers */}
+                {rdns.reasons.length > 0 && (
+                  <div className="space-y-0.5">
+                    {rdns.reasons.map((r, i) => (
+                      <p key={i} className="text-xs text-gray-600 italic">{r}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {isConvertible && (
+                <button
+                  onClick={handleConvert}
+                  className="shrink-0 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
+                >
+                  Convert →
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Conversion Workflow Modal */}
+      {(() => {
+        if (!showConvertModal) return null;
+        const mfs  = computeMultiFactorScore(lead);
+        const rdns = computeConversionReadiness(lead, mfs);
+        return (
+          <ConversionWorkflowModal
+            lead={lead}
+            readiness={rdns}
+            isOpen={showConvertModal}
+            onClose={() => setShowConvertModal(false)}
+            onCreateContact={handleConvertContact}
+            onCreateAccountContact={handleConvertAccountContact}
+            onCreateDeal={handleConvertDeal}
+          />
+        );
+      })()}
 
       {/* Two Column Layout */}
       <div className="px-8 py-8">
@@ -1093,43 +1281,15 @@ const LeadDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Mark as Lost */}
-      {showLostReasonForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Mark as Lost</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                <select id="lostReason" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  <option>No response</option>
-                  <option>Not interested</option>
-                  <option>Budget constraints</option>
-                  <option>Chose competitor</option>
-                  <option>Wrong timing</option>
-                  <option>Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Additional Notes</label>
-                <textarea rows={4} placeholder="Add any additional details…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  const reason = (document.getElementById('lostReason') as HTMLSelectElement).value;
-                  handleMarkAsLost(reason);
-                }}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
-              >
-                Mark as Lost
-              </button>
-              <button onClick={() => setShowLostReasonForm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Mark as Disqualified / Lost */}
+      <TerminalStatusModal
+        open={terminalModalAction !== null}
+        action={terminalModalAction ?? 'lost'}
+        count={1}
+        leadName={lead ? leadDisplayName(lead) : undefined}
+        onConfirm={handleTerminalConfirm}
+        onClose={() => setTerminalModalAction(null)}
+      />
 
       {/* Add Activity */}
       {showActivityForm && (

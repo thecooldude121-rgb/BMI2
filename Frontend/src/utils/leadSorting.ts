@@ -147,11 +147,18 @@ export function priorityScore(lead: Lead): number {
 
 function statusOrder(status: string | undefined): number {
   switch (status) {
-    case 'qualified': return 1;
-    case 'contacted': return 2;
-    case 'new':       return 3;
-    case 'lost':      return 4;
-    default:          return 5;
+    case 'sales_accepted':    return 1;
+    case 'qualified':         return 2;
+    case 'engaged':           return 3;
+    case 'attempting_contact': return 4;
+    case 'enriching':         return 5;
+    case 'assigned':          return 6;
+    case 'new':               return 7;
+    case 'nurture':           return 8;
+    case 'converted':         return 9;
+    case 'disqualified':      return 10;
+    case 'lost':              return 11;
+    default:                  return 12;
   }
 }
 

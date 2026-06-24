@@ -21,6 +21,11 @@ import AdvancedFilterDrawer from '../../components/Leads/AdvancedFilterDrawer';
 import BulkActionBar from '../../components/Leads/BulkActionBar';
 import type { FollowUpType } from '../../components/Leads/BulkActionBar';
 import QuickAddLeadModal from '../../components/Leads/QuickAddLeadModal';
+import ConversionWorkflowModal from '../../components/Leads/ConversionWorkflowModal';
+import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
+import type { TerminalAction } from '../../utils/leadReasons';
+import { computeConversionReadiness } from '../../utils/conversionReadiness';
+import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 import type { AdvancedFilter, FilterGroup } from '../../types/leadFilter';
 import type { Lead } from '../../types/lead';
 import type { ModalId } from '../../hooks/useLeadsPageState';
@@ -47,17 +52,23 @@ const getScoreColor = (score: number) => {
 
 const getStatusBadge = (status: string) => {
   const colors: Record<string, string> = {
-    new: 'bg-blue-500 text-white',
-    contacted: 'bg-orange-500 text-white',
-    qualified: 'bg-green-500 text-white',
-    lost: 'bg-red-500 text-white',
-    working: 'bg-orange-400 text-white',
-    nurturing: 'bg-purple-500 text-white',
-    unqualified: 'bg-gray-400 text-white',
-    converted: 'bg-teal-500 text-white',
+    new:               'bg-blue-500 text-white',
+    assigned:          'bg-indigo-500 text-white',
+    enriching:         'bg-cyan-500 text-white',
+    attempting_contact: 'bg-orange-500 text-white',
+    engaged:           'bg-emerald-500 text-white',
+    qualified:         'bg-green-500 text-white',
+    sales_accepted:    'bg-teal-500 text-white',
+    nurture:           'bg-purple-500 text-white',
+    disqualified:      'bg-gray-400 text-white',
+    converted:         'bg-teal-600 text-white',
+    lost:              'bg-red-500 text-white',
   };
   return colors[status] || 'bg-gray-500 text-white';
 };
+
+const getStatusLabel = (status: string) =>
+  status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 const getSourceInfo = (source?: string) => {
   const s = (source || '').toLowerCase();
@@ -84,11 +95,22 @@ const STUB_LABELS: Partial<Record<ModalId, string>> = {
   editLead:       'Edit lead',
 };
 
-const KANBAN_COLUMNS: Array<{ id: Lead['status']; label: string; headerColor: string }> = [
-  { id: 'new',       label: 'New',       headerColor: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { id: 'contacted', label: 'Contacted', headerColor: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { id: 'qualified', label: 'Qualified', headerColor: 'bg-green-100 text-green-800 border-green-200' },
-  { id: 'lost',      label: 'Lost',      headerColor: 'bg-red-100 text-red-800 border-red-200' },
+// 7 swim-lane columns — each maps to one or more lifecycle statuses.
+// Cards within a lane show their individual status badge.
+const KANBAN_SWIM_LANES: Array<{
+  id: string;
+  label: string;
+  statuses: Lead['status'][];
+  dropTarget: Lead['status'];
+  headerColor: string;
+}> = [
+  { id: 'incoming',   label: 'Incoming',   statuses: ['new', 'assigned'],                    dropTarget: 'new',               headerColor: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { id: 'research',   label: 'Research',   statuses: ['enriching'],                           dropTarget: 'enriching',          headerColor: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  { id: 'outreach',   label: 'Outreach',   statuses: ['attempting_contact'],                  dropTarget: 'attempting_contact', headerColor: 'bg-orange-100 text-orange-800 border-orange-200' },
+  { id: 'engaged',    label: 'Engaged',    statuses: ['engaged'],                             dropTarget: 'engaged',            headerColor: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  { id: 'qualifying', label: 'Qualifying', statuses: ['qualified', 'sales_accepted'],         dropTarget: 'qualified',          headerColor: 'bg-green-100 text-green-800 border-green-200' },
+  { id: 'nurturing',  label: 'Nurturing',  statuses: ['nurture'],                             dropTarget: 'nurture',            headerColor: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { id: 'closed',     label: 'Closed',     statuses: ['converted', 'disqualified', 'lost'],  dropTarget: 'lost',               headerColor: 'bg-red-100 text-red-800 border-red-200' },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -117,11 +139,16 @@ const LeadsPage: React.FC = () => {
     activeInsight, setActiveInsight,
     // Advanced filters
     advancedFilter, hasActiveAdvancedFilter, setAdvancedFilter, clearAdvancedFilter,
+    // Status view mode
+    statusViewMode, setStatusViewMode,
     // Saved views
     savedViews, activeViewId, activeViewLabel,
     setActiveView, clearActiveView,
     saveCurrentAsView, updateActiveView, renameView, pinView, reorderViews, deleteView,
   } = useLeadsPageState();
+
+  // ── Terminal status modal (disqualify / lost) ─────────────────────────────
+  const [bulkTerminalAction, setBulkTerminalAction] = useState<TerminalAction | null>(null);
 
   // ── KPI helpers ───────────────────────────────────────────────────────────
   const uniqueDomainsCount = new Set(
@@ -194,11 +221,22 @@ const LeadsPage: React.FC = () => {
 
   // ── Single-lead modal actions (triggered from row ⋯ menu) ─────────────────
 
-  const confirmConvert = () => {
-    if (activeLead) {
-      closeModal();
-      navigate('/crm/contacts/new', { state: { fromLead: activeLead } });
-    }
+  const handleConvertContact = () => {
+    if (!activeLead) return;
+    closeModal();
+    navigate('/crm/contacts/new', { state: { fromLead: activeLead } });
+  };
+
+  const handleConvertAccountContact = () => {
+    if (!activeLead) return;
+    closeModal();
+    navigate('/crm/contacts/new', { state: { fromLead: activeLead, createAccount: true } });
+  };
+
+  const handleConvertDeal = () => {
+    if (!activeLead) return;
+    closeModal();
+    navigate(`/crm/deals/new?leadId=${activeLead.id}`);
   };
 
   const handleSingleDelete = () => {
@@ -210,11 +248,7 @@ const LeadsPage: React.FC = () => {
   };
 
   const handleSingleArchive = () => {
-    if (activeLead) {
-      updateLead(activeLead.id, { status: 'lost' as Lead['status'] });
-      closeModal();
-      showToast('Lead archived', 'success');
-    }
+    // Now handled by TerminalStatusModal via the 'terminalLost' modal ID
   };
 
   // ── Bulk action handlers (delegated from BulkActionBar) ───────────────────
@@ -257,18 +291,31 @@ const LeadsPage: React.FC = () => {
     clearSelection();
   };
 
-  const handleBulkArchive = () => {
-    const n = selectedLeadIds.length;
-    selectedLeadIds.forEach(id => updateLead(id, { status: 'lost' as Lead['status'] }));
-    showToast(`${n} lead${n !== 1 ? 's' : ''} archived`, 'success');
-    clearSelection();
-  };
+  const handleBulkArchive = () => setBulkTerminalAction('lost');
 
-  const handleBulkDisqualify = () => {
-    const n = selectedLeadIds.length;
-    selectedLeadIds.forEach(id => updateLead(id, { status: 'unqualified' as Lead['status'] }));
-    showToast(`${n} lead${n !== 1 ? 's' : ''} marked disqualified`, 'success');
-    clearSelection();
+  const handleBulkDisqualify = () => setBulkTerminalAction('disqualified');
+
+  const handleTerminalConfirm = (reason: string, notes: string) => {
+    if (bulkTerminalAction !== null) {
+      const status = bulkTerminalAction;
+      const n = selectedLeadIds.length;
+      const extra = status === 'disqualified'
+        ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
+        : { lost_reason: reason, lost_reason_notes: notes || undefined };
+      selectedLeadIds.forEach(id => updateLead(id, { status, ...extra } as Partial<Lead>));
+      showToast(`${n} lead${n !== 1 ? 's' : ''} marked ${status}`, 'success');
+      clearSelection();
+      setBulkTerminalAction(null);
+    } else if (activeLead) {
+      const isSingleDisqualify = isModalOpen('terminalDisqualify');
+      const status: Lead['status'] = isSingleDisqualify ? 'disqualified' : 'lost';
+      const extra = isSingleDisqualify
+        ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
+        : { lost_reason: reason, lost_reason_notes: notes || undefined };
+      updateLead(activeLead.id, { status, ...extra } as Partial<Lead>);
+      showToast(`Lead marked as ${status}`, 'success');
+      closeModal();
+    }
   };
 
   const handleBulkDelete = () => {
@@ -281,7 +328,8 @@ const LeadsPage: React.FC = () => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const { draggableId, destination } = result;
-    updateLead(draggableId, { status: destination.droppableId as Lead['status'] });
+    const lane = KANBAN_SWIM_LANES.find(l => l.id === destination.droppableId);
+    if (lane) updateLead(draggableId, { status: lane.dropTarget });
   };
 
   // ── Kanban mini-card ──────────────────────────────────────────────────────
@@ -307,9 +355,11 @@ const LeadsPage: React.FC = () => {
               {getLeadScore(lead)}
             </span>
           </div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mt-1">
             <span className="text-xs text-gray-400 truncate">{lead.position || '—'}</span>
-            <span className="text-sm">{getSourceInfo(lead.source).icon}</span>
+            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${getStatusBadge(lead.status)}`}>
+              {getStatusLabel(lead.status)}
+            </span>
           </div>
         </div>
       )}
@@ -336,7 +386,7 @@ const LeadsPage: React.FC = () => {
         <p className="text-xs text-gray-500 mb-2 truncate">{lead.email || '—'}</p>
         <div className="flex items-center justify-between mt-auto">
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusBadge(lead.status)}`}>
-            {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+            {getStatusLabel(lead.status)}
           </span>
           <div className="flex items-center space-x-1">
             <span className={`text-sm p-1 rounded ${src.color}`}>{src.icon}</span>
@@ -388,15 +438,21 @@ const LeadsPage: React.FC = () => {
         onCancel={closeModal}
       />
 
-      {/* Single-lead archive (from row ⋯ menu) */}
-      <ConfirmationModal
-        isOpen={isModalOpen('confirmArchive')}
-        title="Archive Lead"
-        message={activeLead ? `Archive ${[activeLead.first_name, activeLead.last_name].filter(Boolean).join(' ') || 'this lead'}? Their status will be set to "Lost".` : ''}
-        confirmLabel="Archive"
-        type="warning"
-        onConfirm={handleSingleArchive}
-        onCancel={closeModal}
+      {/* Single-lead terminal status modals (disqualify / lost) */}
+      <TerminalStatusModal
+        open={isModalOpen('terminalDisqualify') || isModalOpen('terminalLost') || bulkTerminalAction !== null}
+        action={
+          isModalOpen('terminalDisqualify') ? 'disqualified' :
+          isModalOpen('terminalLost')        ? 'lost' :
+          bulkTerminalAction!
+        }
+        count={bulkTerminalAction !== null ? selectedLeadIds.length : 1}
+        leadName={bulkTerminalAction === null && activeLead ? getLeadName(activeLead) : undefined}
+        onConfirm={handleTerminalConfirm}
+        onClose={() => {
+          if (bulkTerminalAction !== null) setBulkTerminalAction(null);
+          else closeModal();
+        }}
       />
 
       {/* Header */}
@@ -646,21 +702,66 @@ const LeadsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Status filter */}
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium text-gray-700">Status:</span>
-            <div className="flex items-center space-x-2">
-              {['all', 'new', 'contacted', 'qualified', 'lost'].map(status => (
+          {/* Status filter with simplified/detailed toggle */}
+          <div className="flex items-start gap-4 flex-wrap">
+            <div className="flex items-center gap-2 shrink-0 pt-0.5">
+              <span className="text-sm font-medium text-gray-700">Status:</span>
+              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
                 <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterState.status === status ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  onClick={() => setStatusViewMode('simplified')}
+                  className={`px-2.5 py-1 font-medium transition-colors ${
+                    statusViewMode === 'simplified' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
+                  Simple
                 </button>
-              ))}
+                <button
+                  onClick={() => setStatusViewMode('detailed')}
+                  className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
+                    statusViewMode === 'detailed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  Detailed
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {statusViewMode === 'simplified' ? (
+                [
+                  { value: 'all',            label: 'All'         },
+                  { value: '__incoming__',   label: 'New'         },
+                  { value: '__in_progress__', label: 'In Progress' },
+                  { value: '__qualified__',  label: 'Qualified'   },
+                  { value: '__nurturing__',  label: 'Nurturing'   },
+                  { value: '__closed__',     label: 'Closed'      },
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setFilterStatus(value)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      filterState.status === value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))
+              ) : (
+                [
+                  'all', 'new', 'assigned', 'enriching', 'attempting_contact',
+                  'engaged', 'qualified', 'sales_accepted', 'nurture',
+                  'disqualified', 'converted', 'lost',
+                ].map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      filterState.status === status ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {status === 'all' ? 'All' : getStatusLabel(status)}
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -966,18 +1067,18 @@ const LeadsPage: React.FC = () => {
             </div>
           ) : (
             <DragDropContext onDragEnd={handleDragEnd}>
-              <div className="grid grid-cols-4 gap-4">
-                {KANBAN_COLUMNS.map(col => {
-                  const colLeads = sortedLeads.filter(l => l.status === col.id);
+              <div className="grid grid-cols-7 gap-3">
+                {KANBAN_SWIM_LANES.map(lane => {
+                  const laneLeads = sortedLeads.filter(l => lane.statuses.includes(l.status));
                   return (
-                    <div key={col.id} className="flex flex-col">
-                      <div className={`flex items-center justify-between px-3 py-2 rounded-t-lg border ${col.headerColor} mb-0`}>
-                        <span className="text-sm font-semibold">{col.label}</span>
-                        <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full">
-                          {colLeads.length}
+                    <div key={lane.id} className="flex flex-col min-w-0">
+                      <div className={`flex items-center justify-between px-2.5 py-2 rounded-t-lg border ${lane.headerColor}`}>
+                        <span className="text-xs font-semibold truncate">{lane.label}</span>
+                        <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full ml-1 shrink-0">
+                          {laneLeads.length}
                         </span>
                       </div>
-                      <Droppable droppableId={col.id}>
+                      <Droppable droppableId={lane.id}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}
@@ -986,10 +1087,10 @@ const LeadsPage: React.FC = () => {
                               snapshot.isDraggingOver ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'
                             }`}
                           >
-                            {colLeads.map((lead, index) => renderKanbanCard(lead, index))}
+                            {laneLeads.map((lead, index) => renderKanbanCard(lead, index))}
                             {provided.placeholder}
-                            {colLeads.length === 0 && !snapshot.isDraggingOver && (
-                              <p className="text-xs text-gray-400 text-center py-6">Drop leads here</p>
+                            {laneLeads.length === 0 && !snapshot.isDraggingOver && (
+                              <p className="text-xs text-gray-400 text-center py-6">Drop here</p>
                             )}
                           </div>
                         )}
@@ -1019,6 +1120,7 @@ const LeadsPage: React.FC = () => {
           onConvert={handleBulkConvert}
           onArchive={handleBulkArchive}
           onDisqualify={handleBulkDisqualify}
+          onOpenTerminalModal={setBulkTerminalAction}
           onDelete={handleBulkDelete}
           onToast={(msg, type) => showToast(msg, type)}
         />
@@ -1093,31 +1195,17 @@ const LeadsPage: React.FC = () => {
         onPin={pinView}
       />
 
-      {/* Convert to Contact modal */}
-      {isModalOpen('convertLead') && activeLead && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Convert to Contact</h3>
-            <p className="text-gray-600 mb-6">
-              Convert <strong>{getLeadName(activeLead)}</strong> from{' '}
-              {activeLead.company || 'their company'} to a contact?
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={confirmConvert}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
-              >
-                Convert
-              </button>
-              <button
-                onClick={closeModal}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Conversion workflow modal */}
+      {activeLead && (
+        <ConversionWorkflowModal
+          lead={activeLead}
+          readiness={computeConversionReadiness(activeLead, computeMultiFactorScore(activeLead))}
+          isOpen={isModalOpen('convertLead')}
+          onClose={closeModal}
+          onCreateContact={handleConvertContact}
+          onCreateAccountContact={handleConvertAccountContact}
+          onCreateDeal={handleConvertDeal}
+        />
       )}
 
       {/* ── Advanced Filter Drawer ────────────────────────────────────────── */}

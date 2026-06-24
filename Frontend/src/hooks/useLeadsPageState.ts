@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import type { Lead, LeadView } from '../types/lead';
+import type { Lead, LeadLifecycleStage, LeadView } from '../types/lead';
 import type { LeadDomain } from '../types/leadDomain';
 import { useLeads } from '../contexts/LeadContext';
 import { toLeadDomain } from '../utils/leadAdapters';
@@ -35,7 +35,8 @@ export type ModalId =
   | 'sortDropdown'
   | 'actionsMenu'
   | 'confirmDelete'
-  | 'confirmArchive'
+  | 'terminalDisqualify'
+  | 'terminalLost'
   | 'createView'
   | 'editView'
   | 'manageViews'
@@ -69,6 +70,18 @@ export interface SourceQuality {
 }
 
 export type ActiveInsight = 'overdue' | 'duplicateRisk' | 'untouched' | 'readyToConvert' | 'slaBreach' | 'nbaAction' | null;
+
+export type StatusViewMode = 'simplified' | 'detailed';
+
+// Simplified status groups — map to arrays of individual lifecycle stages.
+// Used when the status filter bar is in "Simplified" mode.
+export const STATUS_GROUPS: Record<string, LeadLifecycleStage[]> = {
+  '__incoming__':    ['new', 'assigned'],
+  '__in_progress__': ['enriching', 'attempting_contact', 'engaged'],
+  '__qualified__':   ['qualified', 'sales_accepted'],
+  '__nurturing__':   ['nurture'],
+  '__closed__':      ['converted', 'disqualified', 'lost'],
+};
 
 export interface LeadsPageState {
   viewMode:        ViewMode;
@@ -108,6 +121,7 @@ export interface LeadsPageState {
   readyToConvertDelta:    number;
   advancedFilter:         AdvancedFilter;
   hasActiveAdvancedFilter: boolean;
+  statusViewMode:         StatusViewMode;
 
   setViewMode:         (mode: ViewMode) => void;
   setSearchQuery:      (q: string) => void;
@@ -133,6 +147,7 @@ export interface LeadsPageState {
   setActiveView:        (id: string) => void;
   clearActiveView:      () => void;
   setActiveInsight:     (insight: ActiveInsight) => void;
+  setStatusViewMode:    (mode: StatusViewMode) => void;
   setAdvancedFilter:    (filter: AdvancedFilter) => void;
   clearAdvancedFilter:  () => void;
   saveCurrentAsView:   (name: string, visibility: 'private' | 'team' | 'organization') => Promise<void>;
@@ -188,11 +203,34 @@ export function useLeadsPageState(): LeadsPageState {
   const [activeViewId,    setActiveViewId]    = useState<string | null>(null);
   const [activeInsight,   setActiveInsightSt] = useState<ActiveInsight>(null);
   const [advancedFilter,  setAdvancedFilterSt] = useState<AdvancedFilter>({ groups: [] });
+  const [statusViewMode,  setStatusViewModeSt] = useState<StatusViewMode>(
+    () => (localStorage.getItem('bmi_lead_status_view') as StatusViewMode | null) ?? 'detailed',
+  );
 
   useEffect(() => {
     fetchLeads();
     fetchViews();
   }, [fetchLeads, fetchViews]);
+
+  // ── Frontend migration layer ──────────────────────────────────────────────
+  // Normalises legacy status values from the DB into the 12-state model.
+  // In production, apply the SQL migration in Backend/migrations/ first, then remove this.
+  const migratedLeads = useMemo((): Lead[] => {
+    const STATUS_MAP: Record<string, LeadLifecycleStage> = {
+      contacted: 'attempting_contact',
+      working:   'attempting_contact',
+      nurturing: 'nurture',
+      unqualified: 'disqualified',
+    };
+    return contextLeads.map(lead => {
+      const migrated = STATUS_MAP[lead.status];
+      // Auto-derive 'assigned' for new leads that already have an owner
+      const derived: LeadLifecycleStage =
+        migrated ??
+        (lead.status === 'new' && lead.owner_id ? 'assigned' : lead.status as LeadLifecycleStage);
+      return derived !== lead.status ? { ...lead, status: derived } : lead;
+    });
+  }, [contextLeads]);
 
   // ── Sorted saved views (pinned first, then view_order) ───────────────────
   const savedViews = useMemo(
@@ -212,36 +250,36 @@ export function useLeadsPageState(): LeadsPageState {
     return savedViews.find(v => v.id === activeViewId)?.name ?? '';
   }, [activeViewId, savedViews]);
 
-  // ── Derived selectors ─────────────────────────────────────────────────────
+  // ── Derived selectors — all operate on migratedLeads, not raw contextLeads ──
 
   const domainLeads = useMemo(
-    () => contextLeads.map(toLeadDomain),
-    [contextLeads],
+    () => migratedLeads.map(toLeadDomain),
+    [migratedLeads],
   );
 
   const overdueLeads = useMemo(() => {
     const now = new Date();
-    return contextLeads.filter(
+    return migratedLeads.filter(
       l => l.next_follow_up_date && new Date(l.next_follow_up_date) < now,
     );
-  }, [contextLeads]);
+  }, [migratedLeads]);
 
   const untouchedLeads = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 30);
-    return contextLeads.filter(
+    return migratedLeads.filter(
       l => !l.last_contact_date || new Date(l.last_contact_date) < cutoff,
     );
-  }, [contextLeads]);
+  }, [migratedLeads]);
 
   const readyToConvertLeads = useMemo(
-    () => contextLeads.filter(l => l.status === 'qualified'),
-    [contextLeads],
+    () => migratedLeads.filter(l => l.status === 'qualified' || l.status === 'sales_accepted'),
+    [migratedLeads],
   );
 
   // Shared domain-level duplicate set — consumed by filteredLeads, sortedLeads, and duplicateRiskLeads
   const duplicateEmailDomainSet = useMemo(() => {
-    const domainCounts = contextLeads.reduce((acc, l) => {
+    const domainCounts = migratedLeads.reduce((acc, l) => {
       const domain = l.email?.split('@')[1];
       if (domain) acc[domain] = (acc[domain] ?? 0) + 1;
       return acc;
@@ -251,35 +289,35 @@ export function useLeadsPageState(): LeadsPageState {
         .filter(([, count]) => count > 1)
         .map(([domain]) => domain),
     );
-  }, [contextLeads]);
+  }, [migratedLeads]);
 
   const duplicateRiskLeads = useMemo(
-    () => contextLeads.filter(l => {
+    () => migratedLeads.filter(l => {
       const domain = l.email?.split('@')[1];
       return domain !== undefined && duplicateEmailDomainSet.has(domain);
     }),
-    [contextLeads, duplicateEmailDomainSet],
+    [migratedLeads, duplicateEmailDomainSet],
   );
 
   const leadSLAMap = useMemo(() => {
     const cfg = getSLAConfig();
     const now = new Date();
-    return new Map(contextLeads.map(l => [l.id, computeLeadSLA(l, now, cfg)]));
-  }, [contextLeads]);
+    return new Map(migratedLeads.map(l => [l.id, computeLeadSLA(l, now, cfg)]));
+  }, [migratedLeads]);
 
   const slaBreachedLeads = useMemo(
-    () => contextLeads.filter(l => leadSLAMap.get(l.id)?.overall === 'breached'),
-    [contextLeads, leadSLAMap],
+    () => migratedLeads.filter(l => leadSLAMap.get(l.id)?.overall === 'breached'),
+    [migratedLeads, leadSLAMap],
   );
 
   const slaAtRiskLeads = useMemo(
-    () => contextLeads.filter(l => leadSLAMap.get(l.id)?.overall === 'at_risk'),
-    [contextLeads, leadSLAMap],
+    () => migratedLeads.filter(l => leadSLAMap.get(l.id)?.overall === 'at_risk'),
+    [migratedLeads, leadSLAMap],
   );
 
   const slaEscalateLeads = useMemo(
-    () => contextLeads.filter(l => leadSLAMap.get(l.id)?.escalate === true),
-    [contextLeads, leadSLAMap],
+    () => migratedLeads.filter(l => leadSLAMap.get(l.id)?.escalate === true),
+    [migratedLeads, leadSLAMap],
   );
 
   const slaBreachCounts = useMemo(() => {
@@ -293,10 +331,10 @@ export function useLeadsPageState(): LeadsPageState {
   }, [leadSLAMap]);
 
   const newUnworkedLeads = useMemo(
-    () => contextLeads.filter(
-      l => l.status === 'new' && (l.last_contact_date == null),
+    () => migratedLeads.filter(
+      l => (l.status === 'new' || l.status === 'assigned') && l.last_contact_date == null,
     ),
-    [contextLeads],
+    [migratedLeads],
   );
 
   const sourceQualityThisWeek = useMemo((): SourceQuality => {
@@ -306,7 +344,7 @@ export function useLeadsPageState(): LeadsPageState {
     const dow = weekStart.getDay();
     weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1));
 
-    const weeklyLeads = contextLeads.filter(l => new Date(l.created_at) >= weekStart);
+    const weeklyLeads = migratedLeads.filter(l => new Date(l.created_at) >= weekStart);
     if (weeklyLeads.length === 0) {
       return { topSource: '—', topSourceAvgScore: 0, topSourceCount: 0, weeklyLeads: 0 };
     }
@@ -333,13 +371,13 @@ export function useLeadsPageState(): LeadsPageState {
       topSourceCount: topCount,
       weeklyLeads: weeklyLeads.length,
     };
-  }, [contextLeads]);
+  }, [migratedLeads]);
 
   const nbaQueue = useMemo((): Map<string, NBAPriority> => {
     const overdueSet   = new Set(overdueLeads.map(l => l.id));
     const untouchedSet = new Set(untouchedLeads.map(l => l.id));
     const map = new Map<string, NBAPriority>();
-    for (const lead of contextLeads) {
+    for (const lead of migratedLeads) {
       const domain = lead.email?.split('@')[1];
       const isDuplicateRisk = domain !== undefined && duplicateEmailDomainSet.has(domain);
       const mfs             = computeMultiFactorScore(lead);
@@ -353,11 +391,15 @@ export function useLeadsPageState(): LeadsPageState {
       map.set(lead.id, priority);
     }
     return map;
-  }, [contextLeads, overdueLeads, untouchedLeads, duplicateEmailDomainSet, leadSLAMap]);
+  }, [migratedLeads, overdueLeads, untouchedLeads, duplicateEmailDomainSet, leadSLAMap]);
 
   const filteredLeads = useMemo(() => {
-    let base = contextLeads.filter(lead => {
-      const matchesStatus = filterState.status === 'all' || lead.status === filterState.status;
+    let base = migratedLeads.filter(lead => {
+      const statusGroup = STATUS_GROUPS[filterState.status];
+      const matchesStatus =
+        filterState.status === 'all'       ? true :
+        statusGroup                         ? statusGroup.includes(lead.status) :
+                                              lead.status === filterState.status;
       const matchesSource = filterState.source === 'all' ||
         (lead.source || '').toLowerCase().includes(filterState.source.toLowerCase());
       const score = getLeadScore(lead);
@@ -400,7 +442,7 @@ export function useLeadsPageState(): LeadsPageState {
     base = applyAdvancedFilter(base, advancedFilter, duplicateEmailDomainSet, leadSLAMap);
 
     return base;
-  }, [contextLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads, slaBreachedLeads, nbaQueue, advancedFilter, duplicateEmailDomainSet, leadSLAMap]);
+  }, [migratedLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads, slaBreachedLeads, nbaQueue, advancedFilter, duplicateEmailDomainSet, leadSLAMap]);
 
   const sortedLeads = useMemo(
     () => sortLeads(filteredLeads, sortBy, duplicateEmailDomainSet, leadSLAMap),
@@ -426,10 +468,10 @@ export function useLeadsPageState(): LeadsPageState {
     }
 
     return {
-      total:    contextLeads.length,
-      newToday: contextLeads.filter(l => new Date(l.created_at).toDateString() === today).length,
-      hot:      contextLeads.filter(l => getLeadScore(l) >= 80).length,
-      importedThisWeek: contextLeads.filter(l => {
+      total:    migratedLeads.length,
+      newToday: migratedLeads.filter(l => new Date(l.created_at).toDateString() === today).length,
+      hot:      migratedLeads.filter(l => getLeadScore(l) >= 80).length,
+      importedThisWeek: migratedLeads.filter(l => {
         const src = (l.source || '').toLowerCase();
         return (
           new Date(l.created_at) >= weekStart &&
@@ -439,7 +481,7 @@ export function useLeadsPageState(): LeadsPageState {
       urgentNbaCount,
       highNbaCount,
     };
-  }, [contextLeads, nbaQueue]);
+  }, [migratedLeads, nbaQueue]);
 
   // ── Trend deltas (7d vs prior 7d, derived — not memoized) ────────────────
 
@@ -569,6 +611,11 @@ export function useLeadsPageState(): LeadsPageState {
     (insight: ActiveInsight) => setActiveInsightSt(insight),
     [],
   );
+
+  const setStatusViewMode = useCallback((mode: StatusViewMode) => {
+    setStatusViewModeSt(mode);
+    localStorage.setItem('bmi_lead_status_view', mode);
+  }, []);
 
   // Build the PresetSetters object — stable because setters are stable callbacks.
   const presetSetters: PresetSetters = {
@@ -739,6 +786,7 @@ export function useLeadsPageState(): LeadsPageState {
     readyToConvertDelta,
     advancedFilter,
     hasActiveAdvancedFilter,
+    statusViewMode,
 
     setViewMode,
     setSearchQuery,
@@ -763,6 +811,7 @@ export function useLeadsPageState(): LeadsPageState {
     setActiveView,
     clearActiveView,
     setActiveInsight,
+    setStatusViewMode,
     setAdvancedFilter,
     clearAdvancedFilter,
     saveCurrentAsView,

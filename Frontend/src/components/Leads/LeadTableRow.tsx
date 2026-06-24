@@ -16,6 +16,8 @@ import {
 } from '../../utils/leadActions';
 import { computeNBA } from '../../utils/leadNBA/engine';
 import type { NBAResult } from '../../utils/leadNBA/engine';
+import { computeConversionReadiness } from '../../utils/conversionReadiness';
+import ConversionReadinessBadge from './ConversionReadinessBadge';
 import SLABadge, { EscalationMarker } from './SLABadge';
 import type { LeadSLAResult } from '../../utils/leadSla';
 import { HEALTHY_SLA_RESULT } from '../../utils/leadSla';
@@ -49,15 +51,18 @@ export type LeadTableRowProps = {
 
 function statusBadge(status: Lead['status']): { label: string; cls: string } {
   switch (status) {
-    case 'new':         return { label: 'New',         cls: 'bg-blue-100 text-blue-700' };
-    case 'contacted':   return { label: 'Contacted',   cls: 'bg-yellow-100 text-yellow-700' };
-    case 'qualified':   return { label: 'Qualified',   cls: 'bg-green-100 text-green-700' };
-    case 'lost':        return { label: 'Lost',        cls: 'bg-red-100 text-red-500' };
-    case 'working':     return { label: 'Working',     cls: 'bg-orange-100 text-orange-700' };
-    case 'nurturing':   return { label: 'Nurturing',   cls: 'bg-purple-100 text-purple-700' };
-    case 'unqualified': return { label: 'Unqualified', cls: 'bg-gray-100 text-gray-500' };
-    case 'converted':   return { label: 'Converted',   cls: 'bg-teal-100 text-teal-700' };
-    default:            return { label: status,        cls: 'bg-gray-100 text-gray-500' };
+    case 'new':               return { label: 'New',               cls: 'bg-blue-100 text-blue-700' };
+    case 'assigned':          return { label: 'Assigned',          cls: 'bg-indigo-100 text-indigo-700' };
+    case 'enriching':         return { label: 'Enriching',         cls: 'bg-cyan-100 text-cyan-700' };
+    case 'attempting_contact': return { label: 'Attempting',       cls: 'bg-orange-100 text-orange-700' };
+    case 'engaged':           return { label: 'Engaged',           cls: 'bg-emerald-100 text-emerald-700' };
+    case 'qualified':         return { label: 'Qualified',         cls: 'bg-green-100 text-green-700' };
+    case 'sales_accepted':    return { label: 'Sales Accepted',    cls: 'bg-teal-100 text-teal-700' };
+    case 'nurture':           return { label: 'Nurture',           cls: 'bg-purple-100 text-purple-700' };
+    case 'disqualified':      return { label: 'Disqualified',      cls: 'bg-gray-100 text-gray-500' };
+    case 'converted':         return { label: 'Converted',         cls: 'bg-teal-100 text-teal-600' };
+    case 'lost':              return { label: 'Lost',              cls: 'bg-red-100 text-red-500' };
+    default:                  return { label: status,              cls: 'bg-gray-100 text-gray-500' };
   }
 }
 
@@ -101,6 +106,7 @@ function ActionIcon({ id }: { id: ActionId }): JSX.Element | null {
     case 'book_discovery':      return <Calendar size={11} />;
     case 'check_in':            return <MessageCircle size={11} />;
     case 'revive':              return <RotateCcw size={11} />;
+    case 'convert_to_contact':     return <UserCheck size={11} />;
     case 'convert_to_deal':
     case 'complete_qualification': return <TrendingUp size={11} />;
     case 'create_deal':         return <Briefcase size={11} />;
@@ -182,6 +188,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   const mfs             = computeMultiFactorScore(lead);
   const expl            = explainScore(lead, mfs);
   const nbaResult: NBAResult = computeNBA(lead, { ...signals, slaResult, mfs });
+  const readiness       = computeConversionReadiness(lead, mfs);
   const primaryAction   = nbaResult.action;
   const secondaryGroups = getSecondaryActions(lead, signals);
 
@@ -198,6 +205,9 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
       case 'check_in':
       case 'revive':
         onOpenModal('contactLead', lead);
+        break;
+      case 'convert_to_contact':
+        onOpenModal('convertLead', lead);
         break;
       case 'convert_to_deal':
       case 'complete_qualification':
@@ -226,16 +236,16 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
         onOpenModal('enrichLead', lead);
         break;
       case 'mark_nurture':
-        onUpdateStatus(lead.id, 'nurturing');
+        onUpdateStatus(lead.id, 'nurture');
         break;
       case 'mark_disqualified':
-        onUpdateStatus(lead.id, 'unqualified');
+        onOpenModal('terminalDisqualify', lead);
         break;
       case 'merge_duplicate':
         onOpenModal('mergeDuplicate', lead);
         break;
       case 'archive':
-        onOpenModal('confirmArchive', lead);
+        onOpenModal('terminalLost', lead);
         break;
       case 'delete':
         onOpenModal('confirmDelete', lead);
@@ -315,6 +325,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
           <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full w-fit ${statusCls}`}>
             {statusLabel}
           </span>
+          <ConversionReadinessBadge state={readiness.state} leadStatus={lead.status} />
           <div
             className="relative flex items-center gap-1"
             onMouseEnter={() => setScoreHovered(true)}

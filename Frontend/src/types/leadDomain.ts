@@ -9,12 +9,15 @@
 // Adapter: src/utils/leadAdapters.ts → toLeadDomain(lead: Lead): LeadDomain
 // ─────────────────────────────────────────────────────────────────────────────
 
+import type { LeadLifecycleStage } from './lead';
+
 // ── Typed string unions ───────────────────────────────────────────────────────
 
-// Simplified 4-state pipeline status for the domain model.
-// The data-layer Lead type carries the full 8-value set; the adapter collapses
-// 'working'/'nurturing' → 'contacted', 'converted' → 'qualified', etc.
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'lost';
+// Domain model status mirrors the full 12-state lifecycle.
+// Previously a collapsed 4-state model — now a direct alias.
+/** @deprecated Use LeadLifecycleStage from types/lead */
+export type LeadStatus = LeadLifecycleStage;
+export type { LeadLifecycleStage };
 
 export type LeadSource = 'Lead Gen' | 'HRMS' | 'Manual' | 'Website';
 

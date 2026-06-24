@@ -9,6 +9,15 @@ import type {
 } from '../types/leadFilter';
 import { computeLeadSLA } from './leadSla';
 import type { LeadSLAResult } from './leadSla';
+import { computeConversionReadiness } from './conversionReadiness';
+import type { ConversionReadinessState } from './conversionReadiness';
+import { computeMultiFactorScore } from './leadScoring/multiFactorScore';
+
+const READY_STATES = new Set<ConversionReadinessState>([
+  'ready_for_contact',
+  'ready_for_account_contact',
+  'ready_for_deal',
+]);
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -60,8 +69,17 @@ export function evaluateCondition(
   }
 
   if (fieldId === 'conversion_readiness') {
-    const ready = lead.status === 'qualified' && (lead.ai_score ?? lead.score ?? 0) >= 60;
-    return operator === 'is_true' ? ready : !ready;
+    const mfs   = computeMultiFactorScore(lead);
+    const state = computeConversionReadiness(lead, mfs).state;
+
+    const matchesValue = (v: string): boolean =>
+      v === 'any_ready' ? READY_STATES.has(state) : state === (v as ConversionReadinessState);
+
+    if (operator === 'is')        return matchesValue(value as string);
+    if (operator === 'is_not')    return !matchesValue(value as string);
+    if (operator === 'is_any_of') return (value as string[]).some(matchesValue);
+    if (operator === 'is_none_of') return !(value as string[]).some(matchesValue);
+    return false;
   }
 
   if (fieldId === 'duplicate_risk') {
@@ -144,6 +162,24 @@ export function evaluateCondition(
       case 'is_not':    return fieldVal !== (value as string);
       case 'is_any_of': return (value as string[]).includes(fieldVal);
       case 'is_none_of':return !(value as string[]).includes(fieldVal);
+      default: return false;
+    }
+  }
+
+  // ── Enum: disqualified_reason, lost_reason ────────────────────────────────
+
+  if (fieldId === 'disqualified_reason' || fieldId === 'lost_reason') {
+    const fieldVal =
+      fieldId === 'disqualified_reason'
+        ? (lead.disqualified_reason ?? '')
+        : (lead.lost_reason ?? '');
+    if (value == null) return false;
+    switch (operator as FilterOperator) {
+      case 'is':        return fieldVal === (value as string);
+      case 'is_not':    return fieldVal !== (value as string);
+      case 'is_any_of': return (value as string[]).includes(fieldVal);
+      case 'is_none_of':return !(value as string[]).includes(fieldVal);
+      case 'is_empty':  return fieldVal === '';
       default: return false;
     }
   }

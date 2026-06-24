@@ -17,7 +17,9 @@ export type FilterFieldId =
   | 'sla_first_response'
   | 'sla_follow_up'
   | 'sla_stale'
-  | 'sla_escalation';
+  | 'sla_escalation'
+  | 'disqualified_reason'
+  | 'lost_reason';
 
 // ── Operators ─────────────────────────────────────────────────────────────────
 
@@ -95,14 +97,17 @@ export const FILTER_FIELDS: FilterFieldMeta[] = [
     category: 'enum',
     allowedOperators: ['is', 'is_not', 'is_any_of', 'is_none_of'],
     valueOptions: [
-      { label: 'New',         value: 'new' },
-      { label: 'Contacted',   value: 'contacted' },
-      { label: 'Working',     value: 'working' },
-      { label: 'Nurturing',   value: 'nurturing' },
-      { label: 'Qualified',   value: 'qualified' },
-      { label: 'Unqualified', value: 'unqualified' },
-      { label: 'Converted',   value: 'converted' },
-      { label: 'Lost',        value: 'lost' },
+      { label: 'New',               value: 'new'               },
+      { label: 'Assigned',          value: 'assigned'          },
+      { label: 'Enriching',         value: 'enriching'         },
+      { label: 'Attempting Contact', value: 'attempting_contact' },
+      { label: 'Engaged',           value: 'engaged'           },
+      { label: 'Qualified',         value: 'qualified'         },
+      { label: 'Sales Accepted',    value: 'sales_accepted'    },
+      { label: 'Nurture',           value: 'nurture'           },
+      { label: 'Disqualified',      value: 'disqualified'      },
+      { label: 'Converted',         value: 'converted'         },
+      { label: 'Lost',              value: 'lost'              },
     ],
   },
   {
@@ -179,10 +184,18 @@ export const FILTER_FIELDS: FilterFieldMeta[] = [
   },
   {
     id: 'conversion_readiness',
-    label: 'Conversion Ready',
-    category: 'boolean',
-    allowedOperators: ['is_true', 'is_false'],
-    // is_true = status === 'qualified' AND ai_score >= 60
+    label: 'Conversion Readiness',
+    category: 'enum',
+    allowedOperators: ['is', 'is_not', 'is_any_of', 'is_none_of'],
+    valueOptions: [
+      { label: 'Any ready state',          value: 'any_ready'                },
+      { label: 'Ready for deal',           value: 'ready_for_deal'           },
+      { label: 'Ready for account + contact', value: 'ready_for_account_contact' },
+      { label: 'Ready for contact',        value: 'ready_for_contact'        },
+      { label: 'Needs qualification',      value: 'needs_qualification'      },
+      { label: 'Needs enrichment',         value: 'needs_enrichment'         },
+      { label: 'Not ready',                value: 'not_ready'                },
+    ],
   },
   {
     id: 'duplicate_risk',

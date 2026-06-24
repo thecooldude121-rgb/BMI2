@@ -31,7 +31,7 @@ export const DEFAULT_SLA_CONFIG: SLAConfig = {
   stale: {
     atRiskDays: 21,
     breachDays: 30,
-    activeStatuses: ['new', 'contacted', 'working', 'nurturing'],
+    activeStatuses: ['new', 'assigned', 'enriching', 'attempting_contact', 'engaged', 'nurture'],
   },
   escalation: {
     multiplier: 2.0,

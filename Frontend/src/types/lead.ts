@@ -1,4 +1,23 @@
-export type LeadStatus = 'new' | 'contacted' | 'working' | 'nurturing' | 'qualified' | 'unqualified' | 'converted' | 'lost';
+// 12-state lifecycle — replaces the old 8-state LeadStatus.
+// Production SQL migration (not yet applied):
+//   UPDATE leads SET status = 'attempting_contact' WHERE status IN ('contacted', 'working');
+//   UPDATE leads SET status = 'nurture'            WHERE status = 'nurturing';
+//   UPDATE leads SET status = 'disqualified'       WHERE status = 'unqualified';
+export type LeadLifecycleStage =
+  | 'new'
+  | 'assigned'
+  | 'enriching'
+  | 'attempting_contact'
+  | 'engaged'
+  | 'qualified'
+  | 'sales_accepted'
+  | 'nurture'
+  | 'disqualified'
+  | 'converted'
+  | 'lost';
+
+/** @deprecated Use LeadLifecycleStage */
+export type LeadStatus = LeadLifecycleStage;
 export type LeadTemperature = 'hot' | 'warm' | 'cold' | 'frozen';
 export type LeadGrade = 'A' | 'B' | 'C' | 'D' | 'F';
 export type ActivityType = 'call' | 'email' | 'meeting' | 'task' | 'note' | 'sms' | 'whatsapp' | 'linkedin' | 'demo' | 'proposal' | 'document' | 'visit';
@@ -25,7 +44,7 @@ export interface Lead {
   account_id?: string;
   contact_id?: string;
   owner_id: string;
-  status: LeadStatus;
+  status: LeadLifecycleStage;
   temperature: LeadTemperature;
   grade?: LeadGrade;
   score: number;
@@ -71,6 +90,10 @@ export interface Lead {
   qualified_at?: string;
   qualified_by?: string;
   qualification_notes?: string;
+  disqualified_reason?: string;
+  disqualified_reason_notes?: string;
+  lost_reason?: string;
+  lost_reason_notes?: string;
   converted_at?: string;
   converted_to_contact_id?: string;
   converted_to_deal_id?: string;
@@ -320,7 +343,7 @@ export interface LeadAIInsight {
 
 export interface LeadFilters {
   search?: string;
-  status?: LeadStatus[];
+  status?: LeadLifecycleStage[];
   temperature?: LeadTemperature[];
   grade?: LeadGrade[];
   source?: string[];

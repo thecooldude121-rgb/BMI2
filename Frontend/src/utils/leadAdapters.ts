@@ -15,24 +15,23 @@ import type {
 // All functions are pure with no side effects.
 
 function mapStatus(status: string): LeadStatus {
-  switch (status) {
-    case 'new':                              return 'new';
-    case 'contacted':
-    case 'working':
-    case 'nurturing':                        return 'contacted';
-    case 'qualified':
-    case 'converted':                        return 'qualified';
-    default:                                 return 'lost';
-  }
+  return status as LeadStatus;
 }
 
 function mapLifecycleStage(status: string): LifecycleStage {
   switch (status) {
-    case 'new':       return 'lead';
-    case 'contacted': return 'mql';
-    case 'qualified': return 'sql';
-    case 'lost':      return 'lead';
-    default:          return 'lead';
+    case 'new':
+    case 'assigned':           return 'lead';
+    case 'enriching':
+    case 'attempting_contact':
+    case 'engaged':            return 'mql';
+    case 'qualified':
+    case 'sales_accepted':     return 'sql';
+    case 'converted':          return 'customer';
+    case 'nurture':            return 'subscriber';
+    case 'disqualified':
+    case 'lost':               return 'lead';
+    default:                   return 'lead';
   }
 }
 
@@ -89,11 +88,18 @@ function mapScoreReason(score: number): string {
 
 function mapNextActionType(status: string): NextActionType {
   switch (status) {
-    case 'new':       return 'call';
-    case 'contacted': return 'follow_up';
-    case 'qualified': return 'demo';
-    case 'lost':      return 'none';
-    default:          return 'email';
+    case 'new':
+    case 'assigned':           return 'call';
+    case 'enriching':          return 'email';
+    case 'attempting_contact': return 'call';
+    case 'engaged':            return 'follow_up';
+    case 'qualified':
+    case 'sales_accepted':     return 'demo';
+    case 'converted':          return 'none';
+    case 'nurture':            return 'email';
+    case 'disqualified':
+    case 'lost':               return 'none';
+    default:                   return 'email';
   }
 }
 

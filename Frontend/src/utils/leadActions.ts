@@ -13,6 +13,7 @@ export type ActionId =
   | 'revive'
   | 'send_first_outreach'
   | 'book_discovery'
+  | 'convert_to_contact'
   | 'convert_to_deal'
   | 'complete_qualification'
   | 'create_deal'
@@ -91,7 +92,7 @@ export function getSecondaryActions(lead: Lead, signals: LeadSignals): ActionGro
     workflowItems.push({ id: 'contact', label: 'Contact', variant: 'default' });
   }
   if (
-    (lead.status === 'contacted' || lead.status === 'working' || lead.status === 'nurturing') &&
+    (lead.status === 'attempting_contact' || lead.status === 'engaged' || lead.status === 'nurture') &&
     primary.id !== 'follow_up' &&
     primary.id !== 'follow_up_now' &&
     primary.id !== 'check_in'
@@ -120,8 +121,8 @@ export function getSecondaryActions(lead: Lead, signals: LeadSignals): ActionGro
   }
 
   // Status transitions
-  const canNurture = !['nurturing', 'converted'].includes(lead.status);
-  const canDisqualify = !['unqualified', 'converted'].includes(lead.status);
+  const canNurture = !['nurture', 'converted', 'disqualified', 'lost'].includes(lead.status);
+  const canDisqualify = !['disqualified', 'converted', 'lost'].includes(lead.status);
   if (canNurture) {
     workflowItems.push({ id: 'mark_nurture', label: 'Mark Nurturing', variant: 'muted' });
   }

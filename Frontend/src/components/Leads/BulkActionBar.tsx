@@ -11,7 +11,7 @@ import ConfirmationModal from '../common/ConfirmationModal';
 
 export type FollowUpType = 'call' | 'email' | 'meeting';
 
-type ConfirmKind = 'archive' | 'disqualify' | 'convert' | 'delete';
+type ConfirmKind = 'convert' | 'delete';
 
 export type BulkActionBarProps = {
   selectedIds:         string[];
@@ -27,6 +27,7 @@ export type BulkActionBarProps = {
   onConvert:           (ids: string[]) => void;
   onArchive:           () => void;
   onDisqualify:        () => void;
+  onOpenTerminalModal: (action: 'disqualified' | 'lost') => void;
   onDelete:            () => void;
   onToast:             (msg: string, type?: 'success' | 'info' | 'error') => void;
 };
@@ -34,14 +35,17 @@ export type BulkActionBarProps = {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES: Array<{ value: Lead['status']; label: string; cls: string }> = [
-  { value: 'new',         label: 'New',          cls: 'text-blue-700' },
-  { value: 'contacted',   label: 'Contacted',    cls: 'text-yellow-700' },
-  { value: 'qualified',   label: 'Qualified',    cls: 'text-green-700' },
-  { value: 'working',     label: 'Working',      cls: 'text-orange-700' },
-  { value: 'nurturing',   label: 'Nurturing',    cls: 'text-purple-700' },
-  { value: 'unqualified', label: 'Unqualified',  cls: 'text-gray-500' },
-  { value: 'lost',        label: 'Lost',         cls: 'text-red-500' },
-  { value: 'converted',   label: 'Converted',    cls: 'text-teal-700' },
+  { value: 'new',               label: 'New',               cls: 'text-blue-700'    },
+  { value: 'assigned',          label: 'Assigned',          cls: 'text-indigo-700'  },
+  { value: 'enriching',         label: 'Enriching',         cls: 'text-cyan-700'    },
+  { value: 'attempting_contact', label: 'Attempting Contact', cls: 'text-orange-700' },
+  { value: 'engaged',           label: 'Engaged',           cls: 'text-emerald-700' },
+  { value: 'qualified',         label: 'Qualified',         cls: 'text-green-700'   },
+  { value: 'sales_accepted',    label: 'Sales Accepted',    cls: 'text-teal-700'    },
+  { value: 'nurture',           label: 'Nurture',           cls: 'text-purple-700'  },
+  { value: 'disqualified',      label: 'Disqualified',      cls: 'text-gray-500'    },
+  { value: 'converted',         label: 'Converted',         cls: 'text-teal-700'    },
+  { value: 'lost',              label: 'Lost',              cls: 'text-red-500'     },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -60,6 +64,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onConvert,
   onArchive,
   onDisqualify,
+  onOpenTerminalModal,
   onDelete,
   onToast,
 }) => {
@@ -111,20 +116,6 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
   // ── Confirm dialog config ──────────────────────────────────────────────────
   const confirmMessages: Record<ConfirmKind, { title: string; message: string; label: string; type: 'warning' | 'danger' | 'info'; action: () => void }> = {
-    archive: {
-      title:   'Archive Leads',
-      message: `Archive ${count} lead${plural}? Their status will be set to "Lost". You can reactivate them later.`,
-      label:   'Archive',
-      type:    'warning',
-      action:  onArchive,
-    },
-    disqualify: {
-      title:   'Mark as Disqualified',
-      message: `Mark ${count} lead${plural} as Unqualified? This signals they don't fit your criteria.`,
-      label:   'Disqualify',
-      type:    'warning',
-      action:  onDisqualify,
-    },
     convert: {
       title:   'Convert to Contacts',
       message: convertibleCount === 0
@@ -335,7 +326,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
           {/* ── Archive ───────────────────────────────────────────────── */}
           <button
-            onClick={() => setConfirmKind('archive')}
+            onClick={() => onOpenTerminalModal('lost')}
             aria-label={`Archive ${count} selected lead${plural}`}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-amber-50 border border-gray-200 hover:border-amber-200 rounded-lg text-sm font-medium text-gray-600 hover:text-amber-700 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500"
           >
@@ -395,7 +386,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
                 <button
                   role="menuitem"
-                  onClick={() => { setConfirmKind('disqualify'); setMoreOpen(false); }}
+                  onClick={() => { onOpenTerminalModal('disqualified'); setMoreOpen(false); }}
                   className={`${menuItemCls} text-orange-600 hover:bg-orange-50`}
                 >
                   <XCircle className="h-3.5 w-3.5 shrink-0" /> Mark Disqualified
