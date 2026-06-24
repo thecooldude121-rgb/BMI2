@@ -4,6 +4,7 @@ import { daysFromNowLabel } from '../../../utils/dateUtils';
 import { getPipelineStage, DEFAULT_PIPELINE } from '../../../config/pipelines';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getDealType } from '../../../config/dealTypes';
+import { getContactRole, roleChipClasses, hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
 interface MobileDealPreviewProps {
   formData: any;
@@ -35,6 +36,18 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
     effectiveProb >= 70 ? 'text-emerald-600' :
     effectiveProb >= 40 ? 'text-blue-600'    :
                           'text-amber-600';
+
+  // Stakeholder chip row — primary first, max 3 visible
+  const additional: StakeholderContact[] = formData.additionalContacts ?? [];
+  const allStakeholders = formData.primaryContactName
+    ? [
+        { name: formData.primaryContactName, role: formData.contactRole, isPrimary: true, sentiment: formData.primaryContactSentiment || 'neutral' },
+        ...additional.filter(c => c.name.trim()),
+      ]
+    : [];
+  const visibleStakeholders = allStakeholders.slice(0, 3);
+  const overflowCount = allStakeholders.length - 3;
+  const missingBuyer = formData.primaryContactName && !hasSeniorBuyer(formData.contactRole, additional);
 
   return (
     <div className="block lg:hidden bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
@@ -71,6 +84,37 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
             </span>
           )}
         </div>
+
+        {/* Stakeholder role chips — max 3 + overflow pill */}
+        {visibleStakeholders.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {visibleStakeholders.map((s, i) => {
+                const roleObj = getContactRole(s.role);
+                const sentDot =
+                  s.sentiment === 'positive' ? 'bg-green-500' :
+                  s.sentiment === 'negative' ? 'bg-red-500'   :
+                                               'bg-gray-300';
+                return (
+                  <div key={i} className="flex items-center gap-1">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleChipClasses(roleObj.chipColor)}`}>
+                      {roleObj.label}
+                    </span>
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sentDot}`} title={s.sentiment || 'neutral'} />
+                  </div>
+                );
+              })}
+              {overflowCount > 0 && (
+                <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full border border-gray-200">
+                  +{overflowCount} more
+                </span>
+              )}
+            </div>
+            {missingBuyer && (
+              <p className="text-xs text-amber-600">⚠️ No senior buyer added</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

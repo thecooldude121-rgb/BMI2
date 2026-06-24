@@ -169,18 +169,23 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
           {formData.primaryContactName && (() => {
             const additional: StakeholderContact[] = formData.additionalContacts ?? [];
             const all = [
-              { name: formData.primaryContactName, role: formData.contactRole, isPrimary: true },
+              { name: formData.primaryContactName, role: formData.contactRole, isPrimary: true, sentiment: formData.primaryContactSentiment || 'neutral' },
               ...additional.filter(c => c.name.trim()),
             ];
             return (
               <div className="space-y-1.5">
                 {all.map((s, i) => {
                   const roleObj = getContactRole(s.role);
+                  const sentDot =
+                    s.sentiment === 'positive' ? 'bg-green-500' :
+                    s.sentiment === 'negative' ? 'bg-red-500'   :
+                                                 'bg-gray-300';
                   return (
                     <div key={i} className="flex items-center space-x-2">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${roleChipClasses(roleObj.chipColor)}`}>
                         {roleObj.label}
                       </span>
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${sentDot}`} title={s.sentiment || 'neutral'} />
                       <span className="text-sm text-gray-700 truncate">
                         {s.name}
                         {s.isPrimary && <span className="ml-1 text-xs text-gray-400">(primary)</span>}

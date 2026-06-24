@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2 } from 'lucide-react';
+import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
 interface AIRecommendationsPanelProps {
@@ -34,6 +34,25 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
   }
 
   const additionalContacts: StakeholderContact[] = formData.additionalContacts ?? [];
+
+  // Detractor recommendation — surfaces before the generic senior-buyer nudge
+  const detractors: string[] = [];
+  if ((formData.primaryContactSentiment || 'neutral') === 'negative' && formData.primaryContactName) {
+    detractors.push(formData.primaryContactName);
+  }
+  additionalContacts
+    .filter(c => c.sentiment === 'negative' && c.name.trim())
+    .forEach(c => detractors.push(c.name));
+  if (detractors.length > 0) {
+    recommendations.push({
+      id: recommendations.length + 1,
+      title: `⚠️ ${detractors[0]} is flagged as a detractor — prepare objection handling before next meeting`,
+      reason: 'Detractors can stall deals late in the cycle',
+      action: () => {},
+      icon: AlertTriangle,
+    });
+  }
+
   if (!hasSeniorBuyer(formData.contactRole, additionalContacts)) {
     recommendations.push({
       id: 3,

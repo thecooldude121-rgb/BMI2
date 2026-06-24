@@ -111,6 +111,41 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
   };
   const missingBuyer = !hasSeniorBuyer(formData.contactRole, additionalContacts);
 
+  const SentimentToggle = ({
+    value,
+    onChange: onSentimentChange,
+  }: {
+    value: string;
+    onChange: (s: 'positive' | 'neutral' | 'negative') => void;
+  }) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1.5">Relationship</label>
+      <div className="flex items-center gap-1.5">
+        {(['positive', 'neutral', 'negative'] as const).map((s) => {
+          const emoji = s === 'positive' ? '😊' : s === 'neutral' ? '😐' : '😟';
+          const selected = (value || 'neutral') === s;
+          const activeRing =
+            s === 'positive' ? 'ring-green-400 bg-green-50' :
+            s === 'neutral'  ? 'ring-gray-300 bg-gray-50'  :
+                               'ring-red-400 bg-red-50';
+          return (
+            <button
+              key={s}
+              type="button"
+              title={s.charAt(0).toUpperCase() + s.slice(1)}
+              onClick={() => onSentimentChange(s)}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg text-base transition-all ring-2 ${
+                selected ? activeRing : 'ring-transparent hover:ring-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {emoji}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const handleContactSelect = (contact: SearchedContact | null) => {
     if (contact) {
       onChange('primaryContactId', contact.id);
@@ -124,7 +159,7 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
   const addContact = () => {
     onChange('additionalContacts', [
       ...additionalContacts,
-      { id: tempId(), name: '', email: '', title: '', role: DEFAULT_CONTACT_ROLE.id, isPrimary: false },
+      { id: tempId(), name: '', email: '', title: '', role: DEFAULT_CONTACT_ROLE.id, sentiment: 'neutral', isPrimary: false },
     ]);
   };
 
@@ -272,6 +307,11 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
             <p className="mt-1 text-sm text-red-600">{validationErrors.primaryContactName}</p>
           )}
 
+          <SentimentToggle
+            value={formData.primaryContactSentiment || 'neutral'}
+            onChange={(s) => onChange('primaryContactSentiment', s)}
+          />
+
           {selectedContact && (
             <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm space-y-1">
               <div className="flex justify-between">
@@ -363,6 +403,11 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
                   ))}
                 </select>
               </div>
+
+              <SentimentToggle
+                value={contact.sentiment || 'neutral'}
+                onChange={(s) => updateContact(contact.id, 'sentiment', s)}
+              />
             </div>
           ))}
 
