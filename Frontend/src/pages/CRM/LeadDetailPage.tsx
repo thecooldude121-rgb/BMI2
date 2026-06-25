@@ -42,8 +42,10 @@ import { fetchLeadByIdFromAPI } from '../../utils/leadsApi';
 import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
+import OutreachComposer from '../../components/Leads/OutreachComposer';
+import type { OutreachFollowUp } from '../../components/Leads/OutreachComposer';
 import type { TerminalAction } from '../../utils/leadReasons';
-import type { Lead } from '../../types/lead';
+import type { Lead, LeadActivity, ActivityType } from '../../types/lead';
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 
@@ -78,19 +80,16 @@ const LeadDetailPage: React.FC = () => {
   // Modal states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showEmailComposer, setShowEmailComposer] = useState(false);
-  const [showCallLogger, setShowCallLogger] = useState(false);
-  const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [terminalModalAction, setTerminalModalAction] = useState<TerminalAction | null>(null);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
-  const [showActivityForm, setShowActivityForm] = useState(false);
-  const [showNoteEditor, setShowNoteEditor] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
-  const [showEmailScheduler, setShowEmailScheduler] = useState(false);
-  const [showAIMeetSetter, setShowAIMeetSetter] = useState(false);
   const [showReminderForm, setShowReminderForm] = useState(false);
-  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState('');
+  // Unified outreach composer
+  const [showOutreachComposer, setShowOutreachComposer] = useState(false);
+  const [outreachInitialChannel, setOutreachInitialChannel] = useState<ActivityType>('email');
+  // Local activity timeline (prepended on each composer submit; TODO: persist via addActivity API)
+  const [activities, setActivities] = useState<LeadActivity[]>([]);
 
   // Fetch real lead on mount
   useEffect(() => {
@@ -190,20 +189,23 @@ const LeadDetailPage: React.FC = () => {
     void applyStatusChange(newStatus);
   };
 
-  const handleSendEmail = () => {
-    showToast('✅ Email sent successfully!');
-    setShowEmailComposer(false);
+  const openOutreach = (channel: ActivityType) => {
+    setOutreachInitialChannel(channel);
+    setShowOutreachComposer(true);
   };
 
-  const handleLogCall = () => {
-    showToast('✅ Call logged successfully!');
-    setShowCallLogger(false);
-  };
-
-  const handleScheduleMeeting = () => {
-    showToast('✅ Meeting scheduled successfully!');
-    setShowMeetingScheduler(false);
-    setShowAIMeetSetter(false);
+  const handleOutreachSubmit = (activity: LeadActivity, followUp?: OutreachFollowUp) => {
+    setActivities(prev => [activity, ...prev]);
+    if (followUp?.date && lead) {
+      void updateLead(lead.id, { next_follow_up_date: followUp.date });
+      setLead(prev => prev ? { ...prev, next_follow_up_date: followUp.date } : null);
+    }
+    const labels: Record<string, string> = {
+      email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
+      meeting: 'Meeting logged', note: 'Note saved', task: 'Task created',
+    };
+    showToast(`✅ ${labels[activity.type] ?? 'Activity logged'}`);
+    setShowOutreachComposer(false);
   };
 
   const handleConvert = () => setShowConvertModal(true);
@@ -235,25 +237,9 @@ const LeadDetailPage: React.FC = () => {
     setTerminalModalAction(null);
   };
 
-  const handleAddActivity = (activityType: string) => {
-    showToast(`✅ ${activityType} activity added successfully!`);
-    setShowActivityForm(false);
-  };
-
-  const handleAddNote = () => {
-    showToast('✅ Note added successfully!');
-    setShowNoteEditor(false);
-  };
-
   const handleFileUpload = () => {
     showToast('✅ File uploaded successfully!');
     setShowFileUpload(false);
-  };
-
-  const handleScheduleEmail = () => {
-    showToast('✅ Email scheduled successfully!');
-    setShowEmailScheduler(false);
-    setShowEmailComposer(false);
   };
 
   const handleReEnrich = async () => {
@@ -268,19 +254,6 @@ const LeadDetailPage: React.FC = () => {
     showToast('✅ Reminder set successfully!');
     setShowReminderForm(false);
   };
-
-  const handleUseTemplate = (templateName: string) => {
-    setSelectedEmailTemplate(templateName);
-    setShowEmailComposer(true);
-  };
-
-  const aiSuggestedTimes = [
-    'Tuesday, Nov 19 - 2:00 PM',
-    'Tuesday, Nov 19 - 3:30 PM',
-    'Wednesday, Nov 20 - 10:00 AM',
-    'Wednesday, Nov 20 - 2:00 PM',
-    'Thursday, Nov 21 - 11:00 AM',
-  ];
 
   // ── Loading & not found ───────────────────────────────────────────────────
 
@@ -455,21 +428,21 @@ const LeadDetailPage: React.FC = () => {
         {/* Quick Actions Bar */}
         <div className="flex items-center space-x-3 pt-4 border-t border-gray-200">
           <button
-            onClick={() => setShowEmailComposer(true)}
+            onClick={() => openOutreach('email')}
             className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             <Mail className="h-4 w-4 mr-2" />
             Send Email
           </button>
           <button
-            onClick={() => setShowCallLogger(true)}
+            onClick={() => openOutreach('call')}
             className="flex items-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
           >
             <Phone className="h-4 w-4 mr-2" />
             Log Call
           </button>
           <button
-            onClick={() => setShowMeetingScheduler(true)}
+            onClick={() => openOutreach('meeting')}
             className="flex items-center px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
           >
             <Calendar className="h-4 w-4 mr-2" />
@@ -777,6 +750,40 @@ const LeadDetailPage: React.FC = () => {
               </h3>
 
               <div className="space-y-4">
+                {/* Dynamic activities — newest first */}
+                {activities.map(act => {
+                  const iconMap: Record<string, React.ReactNode> = {
+                    email:    <Mail className="h-5 w-5 text-blue-600" />,
+                    call:     <Phone className="h-5 w-5 text-green-600" />,
+                    whatsapp: <MessageSquare className="h-5 w-5 text-green-500" />,
+                    meeting:  <Calendar className="h-5 w-5 text-purple-600" />,
+                    note:     <FileText className="h-5 w-5 text-gray-600" />,
+                    task:     <CheckCircle className="h-5 w-5 text-orange-600" />,
+                  };
+                  const bgMap: Record<string, string> = {
+                    email: 'bg-blue-100', call: 'bg-green-100', whatsapp: 'bg-green-100',
+                    meeting: 'bg-purple-100', note: 'bg-gray-100', task: 'bg-orange-100',
+                  };
+                  return (
+                    <div key={act.id} className="flex items-start space-x-4">
+                      <div className={`p-2 ${bgMap[act.type] ?? 'bg-gray-100'} rounded-lg flex-shrink-0`}>
+                        {iconMap[act.type] ?? <Activity className="h-5 w-5 text-gray-500" />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{act.subject}</p>
+                        {act.description && (
+                          <p className="text-xs text-gray-600 mt-1 line-clamp-2">{act.description}</p>
+                        )}
+                        {act.outcome && (
+                          <p className="text-xs text-gray-500 mt-1">Outcome: {act.outcome}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">{formatDate(act.created_at)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Static system events */}
                 <div className="flex items-start space-x-4">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <Upload className="h-5 w-5 text-blue-600" />
@@ -806,11 +813,11 @@ const LeadDetailPage: React.FC = () => {
               </div>
 
               <button
-                onClick={() => setShowActivityForm(true)}
+                onClick={() => openOutreach('call')}
                 className="mt-6 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center space-x-2"
               >
                 <Plus className="h-4 w-4" />
-                <span>Add Activity</span>
+                <span>Log Activity</span>
               </button>
             </div>
 
@@ -826,7 +833,7 @@ const LeadDetailPage: React.FC = () => {
                 <p className="text-gray-600 mb-4">No notes or files yet.</p>
                 <div className="flex items-center justify-center space-x-3">
                   <button
-                    onClick={() => setShowNoteEditor(true)}
+                    onClick={() => openOutreach('note')}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center space-x-2"
                   >
                     <Plus className="h-4 w-4" />
@@ -939,27 +946,13 @@ const LeadDetailPage: React.FC = () => {
                               <p className="text-xs text-gray-600 mt-1">Best time: {action.bestTime}</p>
                             )}
                             {index === 0 && (
-                              <div className="mt-3 space-y-2">
+                              <div className="mt-3">
                                 <button
-                                  onClick={() => handleUseTemplate('Intro Template')}
-                                  className="text-xs text-blue-600 hover:underline"
+                                  onClick={() => openOutreach('email')}
+                                  className="w-full px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
                                 >
-                                  Template: [Use "Intro Template"] →
+                                  Compose Email
                                 </button>
-                                <div className="flex space-x-2">
-                                  <button
-                                    onClick={handleSendEmail}
-                                    className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
-                                  >
-                                    Send Now
-                                  </button>
-                                  <button
-                                    onClick={() => setShowEmailScheduler(true)}
-                                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
-                                  >
-                                    Schedule
-                                  </button>
-                                </div>
                               </div>
                             )}
                             {index === 1 && lead.linkedin_url && (
@@ -990,13 +983,13 @@ const LeadDetailPage: React.FC = () => {
                           <p className="text-xs text-gray-600 mt-1">Reason: New lead — reach out within 24 hours for best response rate</p>
                           <div className="mt-3 flex space-x-2">
                             <button
-                              onClick={() => setShowEmailComposer(true)}
+                              onClick={() => openOutreach('email')}
                               className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
                             >
                               Send Email
                             </button>
                             <button
-                              onClick={() => setShowCallLogger(true)}
+                              onClick={() => openOutreach('call')}
                               className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
                             >
                               Log Call
@@ -1011,19 +1004,13 @@ const LeadDetailPage: React.FC = () => {
                         <span className="font-bold text-gray-900">2.</span>
                         <div className="flex-1">
                           <p className="text-sm font-bold text-gray-900">Schedule Discovery Call</p>
-                          <p className="text-xs text-gray-600 mt-1">🤖 AI Meet Setter: Suggest optimal times?</p>
-                          <div className="mt-3 flex space-x-2">
+                          <p className="text-xs text-gray-600 mt-1">Log a meeting or schedule with the prospect</p>
+                          <div className="mt-3">
                             <button
-                              onClick={() => setShowAIMeetSetter(true)}
-                              className="flex-1 px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700"
+                              onClick={() => openOutreach('meeting')}
+                              className="w-full px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700"
                             >
-                              Yes, Suggest Times
-                            </button>
-                            <button
-                              onClick={() => setShowMeetingScheduler(true)}
-                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
-                            >
-                              Schedule Manually
+                              Schedule Meeting
                             </button>
                           </div>
                         </div>
@@ -1128,157 +1115,14 @@ const LeadDetailPage: React.FC = () => {
 
       {/* ── MODALS ─────────────────────────────────────────────────────────── */}
 
-      {/* Email Composer */}
-      {showEmailComposer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Send Email</h3>
-            {selectedEmailTemplate && (
-              <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-900">Template: <strong>{selectedEmailTemplate}</strong></p>
-              </div>
-            )}
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                <input
-                  type="email"
-                  value={lead.email || ''}
-                  readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <input
-                  type="text"
-                  placeholder="Enter subject…"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea
-                  rows={8}
-                  placeholder="Enter your message…"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  defaultValue={selectedEmailTemplate ? `Hi ${displayName},\n\n` : ''}
-                />
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <button onClick={handleSendEmail} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Send Email</button>
-              <button onClick={() => setShowEmailComposer(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Call Logger */}
-      {showCallLogger && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Log Call</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Call Type</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  <option>Outbound Call</option>
-                  <option>Inbound Call</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                <input type="number" placeholder="15" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea rows={4} placeholder="Call notes…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <button onClick={handleLogCall} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">Log Call</button>
-              <button onClick={() => setShowCallLogger(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Meeting Scheduler */}
-      {showMeetingScheduler && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Schedule Meeting</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title</label>
-                <input type="text" placeholder="Discovery Call" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
-                <input type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  <option>30 minutes</option>
-                  <option>1 hour</option>
-                  <option>2 hours</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <button onClick={handleScheduleMeeting} className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium">Schedule</button>
-              <button onClick={() => setShowMeetingScheduler(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI Meet Setter */}
-      {showAIMeetSetter && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">🤖 AI Suggested Meeting Times</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Based on {displayName}'s industry and role, here are the optimal times:
-            </p>
-            <div className="space-y-2 mb-6">
-              {aiSuggestedTimes.map((time, index) => (
-                <button
-                  key={index}
-                  onClick={handleScheduleMeeting}
-                  className="w-full text-left px-4 py-3 border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-400 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-900">{time}</span>
-                    {index === 0 && (
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">Best Match</span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setShowAIMeetSetter(false)} className="w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Convert to Contact */}
-      {showConvertModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Convert to Contact</h3>
-            <p className="text-gray-600 mb-6">
-              Convert <strong>{displayName}</strong> from {lead.company || 'their company'} to a contact?
-              This will move them from leads to contacts.
-            </p>
-            <div className="flex space-x-3">
-              <button onClick={handleConvert} className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium">Convert</button>
-              <button onClick={() => setShowConvertModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
+      {/* Unified Outreach Composer */}
+      {showOutreachComposer && (
+        <OutreachComposer
+          lead={lead}
+          initialChannel={outreachInitialChannel}
+          onSubmit={handleOutreachSubmit}
+          onClose={() => setShowOutreachComposer(false)}
+        />
       )}
 
       {/* Mark as Disqualified / Lost */}
@@ -1290,57 +1134,6 @@ const LeadDetailPage: React.FC = () => {
         onConfirm={handleTerminalConfirm}
         onClose={() => setTerminalModalAction(null)}
       />
-
-      {/* Add Activity */}
-      {showActivityForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Add Activity</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Activity Type</label>
-                <select id="activityType" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  <option>Call</option>
-                  <option>Email</option>
-                  <option>Meeting</option>
-                  <option>Note</option>
-                  <option>Task</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea rows={4} placeholder="Activity details…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  const type = (document.getElementById('activityType') as HTMLSelectElement).value;
-                  handleAddActivity(type);
-                }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-              >
-                Add Activity
-              </button>
-              <button onClick={() => setShowActivityForm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Note Editor */}
-      {showNoteEditor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Add Note</h3>
-            <textarea rows={10} placeholder="Enter your note here…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-            <div className="flex space-x-3 mt-6">
-              <button onClick={handleAddNote} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Save Note</button>
-              <button onClick={() => setShowNoteEditor(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* File Upload */}
       {showFileUpload && (
@@ -1359,28 +1152,6 @@ const LeadDetailPage: React.FC = () => {
             <div className="flex space-x-3 mt-6">
               <button onClick={handleFileUpload} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Upload</button>
               <button onClick={() => setShowFileUpload(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Email Scheduler */}
-      {showEmailScheduler && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Schedule Email</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Send Date & Time</label>
-                <input type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-900">💡 Best time to send: 2–4 PM (based on industry data)</p>
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <button onClick={handleScheduleEmail} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Schedule Email</button>
-              <button onClick={() => setShowEmailScheduler(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
             </div>
           </div>
         </div>

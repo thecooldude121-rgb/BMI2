@@ -220,7 +220,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
         if (lead.converted_to_deal_id) onGoTo(`/crm/deals/${lead.converted_to_deal_id}`);
         break;
       case 'view_details':
-        onNavigate(lead.id);
+        onGoTo(`/crm/leads/${lead.id}`);
         break;
       case 'edit_lead':
         onOpenModal('editLead', lead);

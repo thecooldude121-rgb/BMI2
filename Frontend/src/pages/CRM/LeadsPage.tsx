@@ -23,6 +23,9 @@ import type { FollowUpType } from '../../components/Leads/BulkActionBar';
 import QuickAddLeadModal from '../../components/Leads/QuickAddLeadModal';
 import ConversionWorkflowModal from '../../components/Leads/ConversionWorkflowModal';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
+import LeadQuickDrawer from '../../components/Leads/LeadQuickDrawer';
+import OutreachComposer from '../../components/Leads/OutreachComposer';
+import { HEALTHY_SLA_RESULT } from '../../utils/leadSla';
 import type { TerminalAction } from '../../utils/leadReasons';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
 import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
@@ -149,6 +152,11 @@ const LeadsPage: React.FC = () => {
 
   // ── Terminal status modal (disqualify / lost) ─────────────────────────────
   const [bulkTerminalAction, setBulkTerminalAction] = useState<TerminalAction | null>(null);
+
+  // ── Quick drawer ──────────────────────────────────────────────────────────
+  const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
+  const drawerLead = drawerLeadId ? contextLeads.find(l => l.id === drawerLeadId) ?? null : null;
+  const drawerIdx  = drawerLeadId ? sortedLeads.findIndex(l => l.id === drawerLeadId) : -1;
 
   // ── KPI helpers ───────────────────────────────────────────────────────────
   const uniqueDomainsCount = new Set(
@@ -344,7 +352,7 @@ const LeadsPage: React.FC = () => {
           className={`bg-white rounded-lg border border-gray-200 p-3 mb-2 shadow-sm cursor-grab transition-shadow ${
             snapshot.isDragging ? 'shadow-lg border-blue-300' : 'hover:shadow-md'
           }`}
-          onClick={() => navigate(`/crm/leads/${lead.id}`)}
+          onClick={() => setDrawerLeadId(lead.id)}
         >
           <div className="flex items-start justify-between mb-1.5">
             <div className="flex-1 min-w-0">
@@ -973,7 +981,7 @@ const LeadsPage: React.FC = () => {
                         lead={lead}
                         isSelected={isSelected(lead.id)}
                         onToggleSelect={toggleLeadSelection}
-                        onNavigate={id => navigate(`/crm/leads/${id}`)}
+                        onNavigate={id => setDrawerLeadId(id)}
                         onGoTo={navigate}
                         onOpenModal={(modal, l) => {
                           if (STUB_MODALS.has(modal)) {
@@ -1126,35 +1134,23 @@ const LeadsPage: React.FC = () => {
         />
       )}
 
-      {/* Contact modal */}
+      {/* Outreach Composer — opened from contactLead modal (row menu, drawer, NBA actions) */}
       {isModalOpen('contactLead') && activeLead && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Contact {getLeadName(activeLead)}</h3>
-            <div className="space-y-3">
-              <button className="w-full flex items-center px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
-                <Mail className="h-5 w-5 mr-3 text-blue-600" />
-                <div>
-                  <div className="font-medium">Send Email</div>
-                  <div className="text-sm text-gray-600">{activeLead.email || '—'}</div>
-                </div>
-              </button>
-              <button className="w-full flex items-center px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
-                <Phone className="h-5 w-5 mr-3 text-green-600" />
-                <div>
-                  <div className="font-medium">Call</div>
-                  <div className="text-sm text-gray-600">{activeLead.phone || '—'}</div>
-                </div>
-              </button>
-            </div>
-            <button
-              onClick={closeModal}
-              className="w-full mt-4 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
-            >
-              Close
-            </button>
-          </div>
-        </div>
+        <OutreachComposer
+          lead={activeLead}
+          onSubmit={(activity, followUp) => {
+            if (followUp?.date) {
+              void updateLead(activeLead.id, { next_follow_up_date: followUp.date });
+            }
+            const labels: Record<string, string> = {
+              email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
+              meeting: 'Meeting logged', note: 'Note saved', task: 'Task created',
+            };
+            showToast(labels[activity.type] ?? 'Activity logged', 'success');
+            closeModal();
+          }}
+          onClose={closeModal}
+        />
       )}
 
       {/* ── Saved View Modals ─────────────────────────────────────────────── */}
@@ -1225,6 +1221,38 @@ const LeadsPage: React.FC = () => {
             setQuickAddOpen(false);
             const name = lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Lead';
             showToast(`${name} added`, 'success');
+          }}
+        />
+      )}
+
+      {/* ── Lead quick drawer ─────────────────────────────────────────────── */}
+      {drawerLead && (
+        <LeadQuickDrawer
+          lead={drawerLead}
+          slaResult={leadSLAMap.get(drawerLead.id) ?? HEALTHY_SLA_RESULT}
+          hasPrev={drawerIdx > 0}
+          hasNext={drawerIdx < sortedLeads.length - 1}
+          isDuplicateRisk={duplicateRiskIdSet.has(drawerLead.id)}
+          isOverdue={overdueIdSet.has(drawerLead.id)}
+          isUntouched={untouchedIdSet.has(drawerLead.id)}
+          onClose={() => setDrawerLeadId(null)}
+          onGoTo={navigate}
+          onPrevLead={() => {
+            if (drawerIdx > 0) setDrawerLeadId(sortedLeads[drawerIdx - 1].id);
+          }}
+          onNextLead={() => {
+            if (drawerIdx < sortedLeads.length - 1) setDrawerLeadId(sortedLeads[drawerIdx + 1].id);
+          }}
+          onOpenModal={(modal, l) => {
+            if (STUB_MODALS.has(modal)) {
+              showToast(`${STUB_LABELS[modal] ?? modal} — coming soon`, 'info');
+              return;
+            }
+            openModal(modal, l);
+          }}
+          onUpdateStatus={(id, status) => {
+            updateLead(id, { status });
+            showToast(`Lead marked as ${status}`, 'success');
           }}
         />
       )}
