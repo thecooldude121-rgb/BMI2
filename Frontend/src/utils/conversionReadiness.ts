@@ -55,10 +55,11 @@ export function computeConversionReadiness(
   const isEnriched  = !!lead.enriched_at;
   const isTerminal  = lead.status === 'lost' || lead.status === 'disqualified';
 
-  const meetsDealThreshold =
-    fit     >= T.fitScore    &&
-    intent  >= T.intentScore &&
-    overall >= T.overallScore;
+  // Source-adjusted overall score already reflects playbook weight bias applied in
+  // computeMultiFactorScore → getEffectiveWeights. A single overall gate lets
+  // source-specific trust calibration flow through (e.g. Referral: high fit compensates
+  // for lower intent because fit is weighted more in the blend).
+  const meetsDealThreshold = overall >= T.overallScore;
 
   // Build unified checklist (same items for every state — met/unmet varies)
   const checklist: ChecklistItem[] = [

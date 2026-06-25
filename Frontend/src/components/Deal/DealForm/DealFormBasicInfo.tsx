@@ -401,7 +401,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
                       className="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white resize-none"
                     />
                     <div className="flex justify-between mt-1">
-                      <p className="text-xs text-amber-600">Optional — saved with the deal if provided.</p>
+                      <p className="text-xs text-amber-600">Required to save this deal.</p>
                       <span className="text-xs text-gray-400">{(formData.closeDateOverrideReason ?? '').length}/500</span>
                     </div>
                   </div>

@@ -802,6 +802,16 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         showToast('error', 'Please fill all required fields');
         return;
       }
+
+      if (isCloseDatePast(formData.closeDate) && !formData.closeDateOverrideReason?.trim()) {
+        setValidationErrors(prev => ({
+          ...prev,
+          closeDate: 'A reason is required when the close date is in the past'
+        }));
+        showToast('error', 'Please provide a reason for the past close date');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -938,8 +948,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   const getValidationStatus = () => {
     const total = 9;
-    // Close date is complete whenever it holds a valid, reasonable date value
-    const closeDateComplete = isValidCloseDate(formData.closeDate);
+    // Close date is complete when it's a valid date AND (future, or past with a reason provided)
+    const closeDateComplete = isValidCloseDate(formData.closeDate) &&
+      (!isCloseDatePast(formData.closeDate) || !!formData.closeDateOverrideReason?.trim());
     const completed = [
       formData.dealName,
       formData.dealValue,

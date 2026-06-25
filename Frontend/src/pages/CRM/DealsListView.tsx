@@ -628,7 +628,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   });
 
   const totalPages = Math.ceil(sortedDeals.length / rowsPerPage);
-  const pagedDeals = sortedDeals.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
+  const pagedDeals = sortedDeals;
 
   const formatDate = formatCloseDate;
 
@@ -3104,13 +3104,13 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
 
       {/* ── Table + Card List ────────────────────────────────────────────────── */}
-      <div className="py-0">
+      <div className="-mx-6 py-0">
 
         {/* Desktop table (md+) */}
-        <div className="hidden md:block px-0">
+        <div className="hidden md:block">
           <div
-            className="bg-white rounded-lg border border-gray-200 overflow-auto"
-            style={{ height: `calc(100vh - ${240 + kpiSectionHeight}px)`, minHeight: '220px' }}
+            className="bg-white overflow-auto"
+            style={{ height: `calc(100vh - ${216 + kpiSectionHeight + 24}px)`, minHeight: '220px' }}
           >
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
@@ -3257,43 +3257,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           </div>
         </div>
 
-        {/* 8.4 — Pagination footer (desktop) */}
+        {/* 8.4 — Total count footer (desktop) */}
         {sortedDeals.length > 0 && (
-          <div className="hidden md:flex items-center justify-between px-0 py-3 bg-white border-t border-gray-200">
-            <span className="text-xs text-gray-500 font-tabular">
-              Showing {currentPage * rowsPerPage + 1}–{Math.min((currentPage + 1) * rowsPerPage, sortedDeals.length)} of {sortedDeals.length} deal{sortedDeals.length !== 1 ? 's' : ''}
+          <div className="hidden md:flex items-center px-6 h-6 bg-white border-t border-gray-200">
+            <span className="text-xs text-gray-400">
+              {sortedDeals.length} deal{sortedDeals.length !== 1 ? 's' : ''}
             </span>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-500">Rows:</span>
-                {([25, 50, 100] as const).map(n => (
-                  <button
-                    key={n}
-                    onClick={() => { setRowsPerPage(n); setCurrentPage(0); }}
-                    className={`text-xs px-2 py-0.5 rounded-md border transition-colors ${rowsPerPage === n ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                  disabled={currentPage === 0}
-                  className="px-2.5 py-1 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  ‹ Prev
-                </button>
-                <span className="text-xs text-gray-500 px-2">{currentPage + 1} / {Math.max(1, totalPages)}</span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-                  disabled={currentPage >= totalPages - 1}
-                  className="px-2.5 py-1 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next ›
-                </button>
-              </div>
-            </div>
           </div>
         )}
 

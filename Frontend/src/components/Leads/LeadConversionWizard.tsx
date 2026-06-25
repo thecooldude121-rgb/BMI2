@@ -12,6 +12,7 @@ import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
 import { useData } from '../../contexts/DataContext';
 import { useLeads } from '../../contexts/LeadContext';
 import { findDuplicates, computeRisk } from '../../utils/leadDuplicates';
+import { getPlaybook } from '../../utils/leadSourcePlaybook';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -78,10 +79,13 @@ const MOCK_ACCOUNTS = [
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
-function defaultPath(state: ConversionReadinessState): WizardPath {
-  if (state === 'ready_for_deal')           return 'contact_account_deal';
-  if (state === 'ready_for_account_contact') return 'contact_account';
-  return 'contact';
+function defaultPath(state: ConversionReadinessState, source?: string): WizardPath {
+  const playbook = getPlaybook(source);
+  // HRMS and other noDealPath sources are locked to contact-only
+  if (playbook.noDealPath) return 'contact';
+  // Playbook's preferred path takes precedence unless readiness says deal is ready
+  if (state === 'ready_for_deal') return 'contact_account_deal';
+  return playbook.conversionPath;
 }
 
 function defaultDealName(lead: Lead): string {
@@ -292,7 +296,7 @@ export default function LeadConversionWizard({
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [step,        setStep]        = useState<WizardStep>(1);
-  const [path,        setPath]        = useState<WizardPath>(() => defaultPath(readiness.state));
+  const [path,        setPath]        = useState<WizardPath>(() => defaultPath(readiness.state, lead.source));
   const [notReadyAck, setNotReadyAck] = useState(false);
 
   // Step 2
@@ -319,7 +323,7 @@ export default function LeadConversionWizard({
   useEffect(() => {
     if (isOpen) {
       setStep(1);
-      setPath(defaultPath(readiness.state));
+      setPath(defaultPath(readiness.state, lead.source));
       setNotReadyAck(false);
       setDupDismissed(false);
       setLinkedContactId('');
@@ -341,6 +345,9 @@ export default function LeadConversionWizard({
   // ── Derived values ─────────────────────────────────────────────────────────
 
   const suggestions = useMemo(() => buildSuggestions(lead, contacts), [lead, contacts]);
+
+  const sourcePlaybook = getPlaybook(lead.source);
+  const isNoDealPath   = !!sourcePlaybook.noDealPath;
 
   const needsAck      = NEEDS_ACK.has(readiness.state);
   const step1Disabled = needsAck && !notReadyAck;
@@ -505,35 +512,50 @@ export default function LeadConversionWizard({
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2.5">
                   Choose Conversion Path
                 </p>
+
+                {/* HRMS / noDealPath note */}
+                {isNoDealPath && (
+                  <div className="mb-3 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                    <AlertCircle size={12} className="text-blue-500 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-blue-800">
+                      {sourcePlaybook.displayName} leads are typically candidates or internal contacts — deal creation is not applicable.
+                    </p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <PathCard
                     icon={<UserPlus size={15} />}
                     title="Create Contact"
                     description="Create a contact record only — no account or deal"
                     selected={path === 'contact'}
-                    recommended={readiness.state === 'ready_for_contact'}
+                    recommended={readiness.state === 'ready_for_contact' || isNoDealPath}
                     onClick={() => setPath('contact')}
                   />
-                  <PathCard
-                    icon={<Building2 size={15} />}
-                    title="Create Contact + Account"
-                    description={hasCompany ? `Links contact to a new ${lead.company} account` : 'Add a company name to enable this path'}
-                    selected={path === 'contact_account'}
-                    recommended={readiness.state === 'ready_for_account_contact'}
-                    onClick={() => setPath('contact_account')}
-                  />
-                  <PathCard
-                    icon={<TrendingUp size={15} />}
-                    title="Create Contact + Account + Deal"
-                    description={hasCompany ? 'Creates all three — recommended for qualified leads' : 'Add a company name to enable this path'}
-                    selected={path === 'contact_account_deal'}
-                    recommended={readiness.state === 'ready_for_deal'}
-                    onClick={() => setPath('contact_account_deal')}
-                  />
+                  {!isNoDealPath && (
+                    <PathCard
+                      icon={<Building2 size={15} />}
+                      title="Create Contact + Account"
+                      description={hasCompany ? `Links contact to a new ${lead.company} account` : 'Add a company name to enable this path'}
+                      selected={path === 'contact_account'}
+                      recommended={readiness.state === 'ready_for_account_contact'}
+                      onClick={() => setPath('contact_account')}
+                    />
+                  )}
+                  {!isNoDealPath && (
+                    <PathCard
+                      icon={<TrendingUp size={15} />}
+                      title="Create Contact + Account + Deal"
+                      description={hasCompany ? 'Creates all three — recommended for qualified leads' : 'Add a company name to enable this path'}
+                      selected={path === 'contact_account_deal'}
+                      recommended={readiness.state === 'ready_for_deal'}
+                      onClick={() => setPath('contact_account_deal')}
+                    />
+                  )}
                   <PathCard
                     icon={<Link2 size={15} />}
-                    title="Link to Existing"
-                    description="Attach this lead to an existing contact and/or account"
+                    title={isNoDealPath ? 'Link to Existing Contact' : 'Link to Existing'}
+                    description={isNoDealPath ? 'Attach this lead to an existing contact record' : 'Attach this lead to an existing contact and/or account'}
                     selected={path === 'link_existing'}
                     recommended={false}
                     onClick={() => setPath('link_existing')}

@@ -2,6 +2,7 @@ import type { Lead } from '../../types/lead';
 import { LeadScoringEngine } from '../leadScoring';
 import { computeMultiFactorScore } from './multiFactorScore';
 import type { MultiFactorScore } from './multiFactorScore';
+import { getPlaybook, hasNonTrivialBias } from '../leadSourcePlaybook';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
@@ -28,6 +29,8 @@ export interface ScoreExplanation {
   activitySignals:  ActivitySignal[];
   /** Non-null when confidenceScore < 33 — rendered as amber warning banner */
   fallbackMessage:  string | null;
+  /** Non-null when the lead's source playbook applies non-trivial weight adjustments */
+  playbookNote:     string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -143,6 +146,20 @@ export function explainScore(lead: Lead, mfs?: MultiFactorScore): ScoreExplanati
     ? 'Limited profile data — fill in company, title, and contact details to unlock a reliable score.'
     : null;
 
+  // Playbook note — shown when source-specific weight adjustments are in effect
+  const playbook = getPlaybook(lead.source);
+  let playbookNote: string | null = null;
+  if (hasNonTrivialBias(playbook)) {
+    const biasEntries = Object.entries(playbook.scoreWeightBias)
+      .filter(([, v]) => v !== undefined && Math.abs((v as number) - 1.0) > 0.05)
+      .map(([dim, v]) => {
+        const pct  = Math.round(Math.abs((v as number) - 1.0) * 100);
+        const dir  = (v as number) > 1 ? 'higher' : 'lower';
+        return `${dim} weighted ${pct}% ${dir}`;
+      });
+    playbookNote = `Source-adjusted weights applied (${playbook.displayName}): ${biasEntries.join(', ')}.`;
+  }
+
   return {
     positiveDrivers:  positive.slice(0, 3),
     negativeDrivers:  negative.slice(0, 3),
@@ -150,5 +167,6 @@ export function explainScore(lead: Lead, mfs?: MultiFactorScore): ScoreExplanati
     confidenceReason,
     activitySignals,
     fallbackMessage,
+    playbookNote,
   };
 }

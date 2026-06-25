@@ -51,6 +51,7 @@ import { buildTimeline } from '../../utils/leadTimeline';
 import ActivityTimeline from '../../components/Leads/ActivityTimeline';
 import SalesMemoryBlock from '../../components/Leads/SalesMemoryBlock';
 import MergeReviewModal from '../../components/Leads/MergeReviewModal';
+import SourcePlaybookCard from '../../components/Leads/SourcePlaybookCard';
 import { findDuplicates } from '../../utils/leadDuplicates';
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -829,6 +830,8 @@ const LeadDetailPage: React.FC = () => {
 
           {/* RIGHT COLUMN */}
           <div className="space-y-6">
+
+            <SourcePlaybookCard lead={lead} />
 
             <SalesMemoryBlock lead={lead} recentActivities={activities.slice(0, 5)} />
 

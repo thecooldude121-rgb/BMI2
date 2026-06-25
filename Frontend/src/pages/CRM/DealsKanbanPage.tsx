@@ -1277,7 +1277,7 @@ const DealsKanbanPage: React.FC = () => {
   const [openDQDrawer, setOpenDQDrawer] = useState(false);
 
   return (
-    <div className="bg-gray-50">
+    <div className="bg-gray-50 -mb-6">
       {/* ── Row 1: sticky at top-0 — tabs · AI signals · actions ───────────────── */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-100 -mx-6">
         <div className="flex items-center h-[52px] px-6 gap-0 overflow-x-auto scrollbar-none">

@@ -11,7 +11,7 @@ export const MoreOptionsDropdown: React.FC<MoreOptionsDropdownProps> = ({ isOpen
   if (!isOpen) return null;
 
   const options = [
-    { id: 'clone', label: 'Clone Deal', icon: '📋' },
+    { id: 'clone', label: 'Duplicate Deal', icon: '📋' },
     { id: 'change-owner', label: 'Change Owner', icon: '👤' },
     { id: 'change-stage', label: 'Change Stage', icon: '🔄' },
     { id: 'mark-won', label: 'Mark as Won', icon: '✅', className: 'text-green-700' },
@@ -687,6 +687,120 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
           >
             Schedule
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface DuplicateDealModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  originalName: string;
+  dealValue: string;
+  owner: string;
+  closeDate: string;
+  onConfirm: (newName: string) => void;
+  isLoading?: boolean;
+}
+
+export const DuplicateDealModal: React.FC<DuplicateDealModalProps> = ({
+  isOpen,
+  onClose,
+  originalName,
+  dealValue,
+  owner,
+  closeDate,
+  onConfirm,
+  isLoading = false,
+}) => {
+  const [newName, setNewName] = useState(`Copy of ${originalName}`);
+
+  useEffect(() => {
+    if (isOpen) setNewName(`Copy of ${originalName}`);
+  }, [isOpen, originalName]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl p-6 w-[440px] shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-semibold text-gray-900">Duplicate this deal?</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded hover:bg-gray-100 transition-colors"
+          >
+            <X className="h-4 w-4 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Editable name */}
+        <div className="mb-5">
+          <label className="block text-sm font-medium text-gray-700 mb-1">New Deal Name</label>
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            autoFocus
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+          />
+        </div>
+
+        {/* Read-only preview */}
+        <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 mb-5 space-y-2.5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">What will be copied</p>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-500">Value</span>
+            <span className="font-medium text-gray-900">{dealValue}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-500">Stage</span>
+            <span className="font-medium text-blue-600">→ Prospecting (reset)</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-500">Owner</span>
+            <span className="font-medium text-gray-900">{owner || '—'}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-500">Close Date</span>
+            <span className="font-medium text-gray-900">{closeDate || '—'}</span>
+          </div>
+          <div className="pt-2 border-t border-gray-200">
+            <p className="text-xs text-gray-400">Activities, files, and notes will not be copied.</p>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!newName.trim() || isLoading}
+            onClick={() => onConfirm(newName.trim())}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Creating…' : 'Create Duplicate'}
           </button>
         </div>
       </div>

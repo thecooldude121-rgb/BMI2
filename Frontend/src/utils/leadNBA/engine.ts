@@ -4,6 +4,7 @@ import type { LeadSLAResult } from '../leadSla';
 import { computeMultiFactorScore } from '../leadScoring/multiFactorScore';
 import type { MultiFactorScore } from '../leadScoring/multiFactorScore';
 import { computeConversionReadiness } from '../conversionReadiness';
+import { getPlaybook } from '../leadSourcePlaybook';
 // import type only — erased at runtime, breaking the circular dep with leadActions.ts
 import type { ActionId, ActionVariant, LeadAction } from '../leadActions';
 
@@ -102,11 +103,17 @@ export function computeNBA(lead: Lead, opts: NBAOpts = {}): NBAResult {
     };
   }
 
-  // 7. New or assigned lead, never contacted → send first outreach
+  // 7. New or assigned lead, never contacted → source-native first CTA
   if ((lead.status === 'new' || lead.status === 'assigned') && !lead.last_contact_date) {
+    const playbook = getPlaybook(lead.source);
+    const firstActionId = playbook.firstActions[0];
+    const [label, variant]: [string, ActionVariant] =
+      firstActionId === 'book_discovery'      ? ['Book discovery',  'ready']  :
+      firstActionId === 'follow_up'           ? ['Follow up',       'active'] :
+                                                ['Send outreach',   'active'];
     return {
-      action:   act('send_first_outreach', 'Send outreach', 'active'),
-      reason:   'New lead with no contact logged — send a personalized first outreach.',
+      action:   act(firstActionId, label, variant),
+      reason:   `New ${playbook.displayName} lead with no contact logged — ${label.toLowerCase()} as recommended for this source.`,
       priority: 'high',
     };
   }

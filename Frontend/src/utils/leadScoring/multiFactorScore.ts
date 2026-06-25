@@ -1,14 +1,39 @@
 import type { Lead } from '../../types/lead';
 import { LeadScoringEngine } from '../leadScoring';
+import { getPlaybook } from '../leadSourcePlaybook';
+import type { MFSWeights } from '../leadSourcePlaybook';
 
-// ── Dimension weights ─────────────────────────────────────────────────────────
-// Adjust here to rebalance the overall score without touching logic.
-const WEIGHTS = {
+// ── Base dimension weights ────────────────────────────────────────────────────
+// Adjust here to rebalance defaults without touching source-specific logic.
+const BASE_WEIGHTS: MFSWeights = {
   fit:        0.35,
   intent:     0.25,
   engagement: 0.30,
   confidence: 0.10,
-} as const;
+};
+
+/**
+ * Returns effective weights for a source by applying playbook bias multipliers
+ * to the base weights, then renormalising so they sum to 1.0.
+ * Exported so conversionReadiness.ts can share the same adjusted values.
+ */
+export function getEffectiveWeights(source: string | undefined): MFSWeights {
+  const bias = getPlaybook(source).scoreWeightBias;
+  const raw: MFSWeights = {
+    fit:        BASE_WEIGHTS.fit        * (bias.fit        ?? 1),
+    intent:     BASE_WEIGHTS.intent     * (bias.intent     ?? 1),
+    engagement: BASE_WEIGHTS.engagement * (bias.engagement ?? 1),
+    confidence: BASE_WEIGHTS.confidence * (bias.confidence ?? 1),
+  };
+  const sum = raw.fit + raw.intent + raw.engagement + raw.confidence;
+  return {
+    fit:        raw.fit        / sum,
+    intent:     raw.intent     / sum,
+    engagement: raw.engagement / sum,
+    confidence: raw.confidence / sum,
+  };
+}
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -97,13 +122,14 @@ export function computeMultiFactorScore(lead: Lead): MultiFactorScore {
   const confidence = dim(confPts, 10,
     byName.get('Data Completeness')?.description ?? '—');
 
-  // Weighted overall — confidence also acts as a reliability discount:
-  // a low confidence score pulls the weighted sum down naturally via its own weight.
+  // Weighted overall — uses source-adjusted weights so each source calibrates
+  // the blend differently (e.g. Referral weights fit higher, Cold Email weights intent lower).
+  const w = getEffectiveWeights(lead.source);
   const rawOverall =
-    fit.score        * WEIGHTS.fit        +
-    intent.score     * WEIGHTS.intent     +
-    engagement.score * WEIGHTS.engagement +
-    confidence.score * WEIGHTS.confidence;
+    fit.score        * w.fit        +
+    intent.score     * w.intent     +
+    engagement.score * w.engagement +
+    confidence.score * w.confidence;
 
   const overallScore = Math.round(Math.min(rawOverall, 100));
   const overallBand  = scoreBand(overallScore);

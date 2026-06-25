@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getDeal, updateDeal } from '../../utils/dealsApi';
+import { getDeal, updateDeal, createDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
@@ -23,7 +23,8 @@ import {
   EmailComposerModal,
   CallLogModal,
   MeetingSchedulerModal,
-  MoreOptionsDropdown
+  MoreOptionsDropdown,
+  DuplicateDealModal,
 } from '../../components/Deal/DealModals';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -57,6 +58,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showTopMoreActions, setShowTopMoreActions] = useState(false);
+  const [showDuplicateDeal, setShowDuplicateDeal] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
   const [expandedBattleCard, setExpandedBattleCard] = useState<string | null>(null);
   const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
@@ -806,7 +809,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const handleMoreAction = async (action: string) => {
     switch (action) {
       case 'clone':
-        showToast('Deal cloned successfully', 'success');
+        setShowDuplicateDeal(true);
         break;
       case 'merge':
         showToast('Merge Deal feature coming soon', 'info');
@@ -868,6 +871,65 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const handleMarkWon  = () => handleMoreAction('mark-won');
   const handleMarkLost = () => handleMoreAction('mark-lost');
 
+  const handleDuplicateDeal = async (newName: string) => {
+    if (!id) return;
+    setIsDuplicating(true);
+    try {
+      const closeDateIso = deal.closeDate
+        ? new Date(deal.closeDate).toISOString().split('T')[0]
+        : undefined;
+
+      const { data: newDeal } = await createDeal({
+        name: newName,
+        title: newName,
+        value: deal.amount,
+        currency: deal.currency || 'USD',
+        base_amount_usd: deal.base_amount_usd || deal.amount,
+        pipeline_id: 'new-business',
+        pipeline_name: 'New Business',
+        deal_type: deal.dealType || 'new-business',
+        stage: 'prospecting',
+        probability: 10,
+        expected_close_date: closeDateIso,
+        assigned_to: deal.owner || undefined,
+        company_name: deal.companyName || undefined,
+        contact_name: deal.contactName || undefined,
+        contact_title: deal.contactTitle || undefined,
+        source: deal.source || undefined,
+        description: deal.description || undefined,
+        next_step: deal.nextStep || undefined,
+        tags: deal.tags?.length ? deal.tags : undefined,
+        product: deal.package || undefined,
+        contract_term: deal.contractTerm || undefined,
+        payment_terms: deal.paymentTerms || undefined,
+        account_industry: deal.accountIndustry || undefined,
+        country: deal.country || undefined,
+        platform_fee: deal.platformFee ?? undefined,
+        custom_fee: deal.customFee ?? undefined,
+        license_fee: deal.licenseFee ?? undefined,
+        onboarding_fee: deal.onboardingFee ?? undefined,
+        white_labelling_fee: deal.whiteLabellingFee ?? undefined,
+        exchange_rate: deal.exchangeRate ?? undefined,
+        nr_margin: deal.nrMargin ?? undefined,
+        start_date: deal.startDate || undefined,
+        contract_end_date: deal.contractEndDate || undefined,
+        stakeholders: deal.stakeholders?.length ? deal.stakeholders : undefined,
+      });
+      setShowDuplicateDeal(false);
+      const originalId = id;
+      navigate(`/crm/deals/${newDeal.id}`);
+      showToast(`Deal duplicated → ${newName}`, 'success');
+      // Brief delay so the toast renders on the new page; link navigates back to original
+      setTimeout(() => {
+        showToast(`View original deal: /crm/deals/${originalId}`, 'info');
+      }, 400);
+    } catch (err) {
+      showToast('Failed to duplicate deal. Please try again.', 'error');
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
   const handleAssignOwner = async (ownerName: string) => {
     setDeal((prev: any) => ({
       ...prev,
@@ -898,6 +960,21 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const handleStageChange = () => {
     showToast('Deal moved to Negotiation stage', 'success');
+  };
+
+  const handleStageSelect = async (stageNum: number, stageName: string, stageKey: string) => {
+    if (!id) return;
+    const prevStage = deal.stage;
+    const prevStageName = deal.stageName;
+    const prevStageNumber = deal.stageNumber;
+    setDeal((prev: any) => ({ ...prev, stage: stageKey, stageName, stageNumber: stageNum }));
+    try {
+      await updateDeal(id, { stage: stageKey });
+      showToast(`Stage updated to ${stageName}`, 'success');
+    } catch {
+      setDeal((prev: any) => ({ ...prev, stage: prevStage, stageName: prevStageName, stageNumber: prevStageNumber }));
+      showToast('Failed to update stage', 'error');
+    }
   };
 
   const handleUpdateAmount = async (newAmount: number, reason: string) => {
@@ -1002,6 +1079,15 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <h1 className="text-lg font-semibold text-gray-900 truncate">{deal.dealName}</h1>
           </div>
           <div className="flex items-center gap-2">
+            {deal.stage === 'closed-won' ? (
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2.5 py-1 flex-shrink-0">
+                ✓ WON
+              </span>
+            ) : deal.stage === 'closed-lost' ? (
+              <span className="text-xs font-bold text-red-700 bg-red-100 border border-red-200 rounded px-2.5 py-1 flex-shrink-0">
+                ✗ LOST
+              </span>
+            ) : null}
             <button
               onClick={() => navigate(`/crm/deals/${id}/edit`)}
               className="shrink-0 px-4 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -1021,35 +1107,6 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                 onAction={(action) => { handleMoreAction(action); setShowTopMoreActions(false); }}
               />
             </div>
-
-            <div className="w-px h-5 bg-gray-300 mx-1 flex-shrink-0" />
-
-            {deal.stage === 'closed-won' ? (
-              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2.5 py-1 flex-shrink-0">
-                ✓ WON
-              </span>
-            ) : deal.stage === 'closed-lost' ? (
-              <span className="text-xs font-bold text-red-700 bg-red-100 border border-red-200 rounded px-2.5 py-1 flex-shrink-0">
-                ✗ LOST
-              </span>
-            ) : (
-              <>
-                <button
-                  onClick={handleMarkWon}
-                  title="Mark deal as Won"
-                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded px-2.5 py-1 transition-colors flex-shrink-0 whitespace-nowrap"
-                >
-                  ✓ Won
-                </button>
-                <button
-                  onClick={handleMarkLost}
-                  title="Mark deal as Lost"
-                  className="text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-50 border border-red-200 rounded px-2.5 py-1 transition-colors flex-shrink-0 whitespace-nowrap"
-                >
-                  ✗ Lost
-                </button>
-              </>
-            )}
           </div>
         </div>
       </div>
@@ -1092,6 +1149,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         healthScoreFactors={aiIntelligenceData.scoreBreakdown}
         daysSinceContact={5}
         timeInStage={timeInStage}
+        onStageSelect={handleStageSelect}
       />
       </div>
 
@@ -1357,6 +1415,17 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onClose={() => setShowUpdateAmount(false)}
         currentAmount={deal.amount}
         onUpdate={handleUpdateAmount}
+      />
+
+      <DuplicateDealModal
+        isOpen={showDuplicateDeal}
+        onClose={() => setShowDuplicateDeal(false)}
+        originalName={deal.dealName}
+        dealValue={deal.amount ? `${deal.currency || 'USD'} ${deal.amount.toLocaleString()}` : '—'}
+        owner={deal.owner || '—'}
+        closeDate={deal.closeDate || '—'}
+        onConfirm={handleDuplicateDeal}
+        isLoading={isDuplicating}
       />
 
       <AIBestTimeModal

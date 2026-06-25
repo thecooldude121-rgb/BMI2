@@ -1,3 +1,5 @@
+import { buildSLAThresholds } from '../leadSourcePlaybook';
+
 const STORAGE_KEY = 'bmi_sla_config';
 
 export interface SLAConfig {
@@ -21,7 +23,7 @@ export interface SLAConfig {
 
 export const DEFAULT_SLA_CONFIG: SLAConfig = {
   firstResponse: {
-    thresholds: { Website: 4 },
+    thresholds: buildSLAThresholds(),
     defaultHours: 24,
     atRiskPct: 0.75,
   },

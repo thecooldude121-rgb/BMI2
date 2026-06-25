@@ -70,6 +70,16 @@ const STAGE_HEX: Record<number, string> = {
   1: '#3B82F6', 2: '#22C55E', 3: '#F97316', 4: '#A855F7', 5: '#10B981', 6: '#EF4444',
 };
 
+// API-compatible stage key per stage number
+const STAGE_KEY_MAP: Record<number, string> = {
+  1: 'prospecting',
+  2: 'qualified',
+  3: 'proposal',
+  4: 'negotiation',
+  5: 'closed-won',
+  6: 'closed-lost',
+};
+
 // Item 6: color-coded days away label (returns hex to avoid Tailwind JIT dynamic-class purge)
 
 // ── Keyboard shortcut badge ───────────────────────────────────────────────────
@@ -142,6 +152,7 @@ interface DealHeroSectionProps {
   daysSinceContact?: number;
   timeInStage?: number;
   avgStageDuration?: number;
+  onStageSelect?: (stageNum: number, stageName: string, stageKey: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -169,6 +180,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   daysSinceContact = 0,
   timeInStage,
   avgStageDuration,
+  onStageSelect,
 }) => {
   const navigate = useNavigate();
 
@@ -201,6 +213,10 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   const valueCardRef = useRef<HTMLDivElement>(null);
   const closeDateCardRef = useRef<HTMLDivElement>(null);
   const ownerInlineRef = useRef<HTMLDivElement>(null);
+
+  // ── Stage pill popover ────────────────────────────────────────────────────
+  const [pendingPill, setPendingPill] = useState<{ num: number; name: string; key: string } | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   // Action bar "..." dropdown
 
@@ -248,6 +264,26 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [activeInlineEdit]);
+
+  // Escape cancels pill popover
+  useEffect(() => {
+    if (!pendingPill) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setPendingPill(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [pendingPill]);
+
+  // Click outside pill popover
+  useEffect(() => {
+    if (!pendingPill) return;
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setPendingPill(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [pendingPill]);
 
   // ── Owner helpers ──────────────────────────────────────────────────────────
 
@@ -832,36 +868,95 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         )}
 
         {/* Item 23: Stage pipeline strip */}
-        <div className="mb-3">
+        <div className="mb-3 relative">
           <div className="flex items-center">
             {Object.entries(ORDERED_STAGES).map(([numStr, stageName], idx) => {
               const num = parseInt(numStr);
               const isCompleted = num < deal.stageNumber;
               const isCurrent = num === deal.stageNumber;
-              const isFuture = num > deal.stageNumber;
               const color = STAGE_HEX[num];
               return (
                 <React.Fragment key={num}>
                   {idx > 0 && (
                     <div className={`flex-1 h-px ${isCompleted || isCurrent ? 'bg-gray-400' : 'bg-gray-200'}`} />
                   )}
-                  <div
+                  <button
+                    type="button"
                     className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap flex-shrink-0"
                     style={
                       isCurrent
-                        ? { backgroundColor: color, color: '#fff' }
+                        ? { backgroundColor: color, color: '#fff', cursor: 'default' }
                         : isCompleted
-                        ? { backgroundColor: '#9CA3AF', color: '#fff' }
-                        : { backgroundColor: '#F3F4F6', color: '#9CA3AF', border: '1px solid #E5E7EB' }
+                        ? { backgroundColor: '#9CA3AF', color: '#fff', cursor: 'pointer' }
+                        : { backgroundColor: '#F3F4F6', color: '#9CA3AF', border: '1px solid #E5E7EB', cursor: 'pointer' }
                     }
+                    onMouseEnter={isCurrent ? undefined : (e) => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(0.88)'; }}
+                    onMouseLeave={isCurrent ? undefined : (e) => { (e.currentTarget as HTMLButtonElement).style.filter = ''; }}
+                    onClick={() => {
+                      if (isCurrent) return;
+                      if (num === 5) { onMoreAction('mark-won'); return; }
+                      if (num === 6) { onMoreAction('mark-lost'); return; }
+                      setPendingPill({ num, name: stageName, key: STAGE_KEY_MAP[num] });
+                    }}
                   >
                     {isCompleted && <span className="text-[10px]">✓</span>}
                     {stageName}
-                  </div>
+                  </button>
                 </React.Fragment>
               );
             })}
           </div>
+
+          {/* Inline stage-change popover */}
+          {pendingPill && (
+            <div
+              ref={popoverRef}
+              className="absolute top-full left-0 mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-4 min-w-[240px] max-w-[320px]"
+            >
+              <div className="text-sm font-semibold text-gray-900 mb-1">
+                Move to {pendingPill.name}?
+              </div>
+              {(() => {
+                const isBackward = pendingPill.num < deal.stageNumber;
+                const skipCount = Math.abs(pendingPill.num - deal.stageNumber) - 1;
+                return (
+                  <>
+                    {!isBackward && skipCount > 0 && (
+                      <div className="text-xs text-amber-600 mb-1">
+                        This will skip {skipCount} stage{skipCount > 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {isBackward && (
+                      <div className="text-xs text-amber-600 mb-1">
+                        ⚠️ Moving backwards — are you sure?
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onStageSelect?.(pendingPill.num, pendingPill.name, pendingPill.key);
+                          setPendingPill(null);
+                        }}
+                        className={`flex-1 text-xs font-semibold rounded-lg py-1.5 text-white transition-colors ${
+                          isBackward ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'
+                        }`}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingPill(null)}
+                        className="flex-1 text-xs font-semibold bg-gray-100 text-gray-600 rounded-lg py-1.5 hover:bg-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Stage Velocity strip */}

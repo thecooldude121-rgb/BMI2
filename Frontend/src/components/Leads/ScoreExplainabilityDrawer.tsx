@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, TrendingUp, TrendingDown, Minus, AlertTriangle, Info } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Minus, AlertTriangle, Info, Sliders } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { MultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 import type {
@@ -140,7 +140,7 @@ function DrawerPanel({
   }, []);
 
   const displayName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || 'Lead';
-  const { positiveDrivers, negativeDrivers, confidenceLevel, confidenceReason, activitySignals, fallbackMessage } = explanation;
+  const { positiveDrivers, negativeDrivers, confidenceLevel, confidenceReason, activitySignals, fallbackMessage, playbookNote } = explanation;
 
   return (
     <>
@@ -213,6 +213,14 @@ function DrawerPanel({
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-800">
               <AlertTriangle size={13} className="text-amber-500 shrink-0 mt-0.5" />
               <span>{fallbackMessage}</span>
+            </div>
+          )}
+
+          {/* Playbook note */}
+          {playbookNote && (
+            <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-xs text-blue-800">
+              <Sliders size={12} className="text-blue-500 shrink-0 mt-0.5" />
+              <span>{playbookNote}</span>
             </div>
           )}
 
