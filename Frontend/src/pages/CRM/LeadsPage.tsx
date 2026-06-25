@@ -21,7 +21,8 @@ import AdvancedFilterDrawer from '../../components/Leads/AdvancedFilterDrawer';
 import BulkActionBar from '../../components/Leads/BulkActionBar';
 import type { FollowUpType } from '../../components/Leads/BulkActionBar';
 import QuickAddLeadModal from '../../components/Leads/QuickAddLeadModal';
-import ConversionWorkflowModal from '../../components/Leads/ConversionWorkflowModal';
+import LeadConversionWizard from '../../components/Leads/LeadConversionWizard';
+import MergeReviewModal from '../../components/Leads/MergeReviewModal';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
 import LeadQuickDrawer from '../../components/Leads/LeadQuickDrawer';
 import OutreachComposer from '../../components/Leads/OutreachComposer';
@@ -89,13 +90,12 @@ const getSourceInfo = (source?: string) => {
 
 
 // Modals not yet implemented — show a toast instead of opening a stub modal
-const STUB_MODALS = new Set<ModalId>(['assignOwner', 'addTag', 'enrichLead', 'mergeDuplicate', 'editLead']);
+const STUB_MODALS = new Set<ModalId>(['assignOwner', 'addTag', 'enrichLead', 'editLead']);
 const STUB_LABELS: Partial<Record<ModalId, string>> = {
-  assignOwner:    'Assign owner',
-  addTag:         'Add tag',
-  enrichLead:     'Lead enrichment',
-  mergeDuplicate: 'Merge duplicate',
-  editLead:       'Edit lead',
+  assignOwner: 'Assign owner',
+  addTag:      'Add tag',
+  enrichLead:  'Lead enrichment',
+  editLead:    'Edit lead',
 };
 
 // 7 swim-lane columns — each maps to one or more lifecycle statuses.
@@ -136,7 +136,7 @@ const LeadsPage: React.FC = () => {
     paginatedLeads,
     kpiMetrics,
     // Insight selectors
-    overdueLeads, duplicateRiskLeads, untouchedLeads,
+    overdueLeads, duplicateRiskLeads, duplicateCandidateMap, untouchedLeads,
     slaBreachedLeads, slaBreachCounts, leadSLAMap, newUnworkedLeads, sourceQualityThisWeek,
     newUnworkedDelta,
     activeInsight, setActiveInsight,
@@ -163,11 +163,6 @@ const LeadsPage: React.FC = () => {
     duplicateRiskLeads.map(l => l.email?.split('@')[1]).filter(Boolean)
   ).size;
 
-  // ── Row risk id sets (zero hook changes) ──────────────────────────────────
-  const duplicateRiskIdSet = React.useMemo(
-    () => new Set(duplicateRiskLeads.map(l => l.id)),
-    [duplicateRiskLeads],
-  );
   const overdueIdSet = React.useMemo(
     () => new Set(overdueLeads.map(l => l.id)),
     [overdueLeads],
@@ -229,23 +224,6 @@ const LeadsPage: React.FC = () => {
 
   // ── Single-lead modal actions (triggered from row ⋯ menu) ─────────────────
 
-  const handleConvertContact = () => {
-    if (!activeLead) return;
-    closeModal();
-    navigate('/crm/contacts/new', { state: { fromLead: activeLead } });
-  };
-
-  const handleConvertAccountContact = () => {
-    if (!activeLead) return;
-    closeModal();
-    navigate('/crm/contacts/new', { state: { fromLead: activeLead, createAccount: true } });
-  };
-
-  const handleConvertDeal = () => {
-    if (!activeLead) return;
-    closeModal();
-    navigate(`/crm/deals/new?leadId=${activeLead.id}`);
-  };
 
   const handleSingleDelete = () => {
     if (activeLead) {
@@ -994,7 +972,7 @@ const LeadsPage: React.FC = () => {
                           updateLead(id, { status });
                           showToast(`Lead marked as ${status}`, 'success');
                         }}
-                        isDuplicateRisk={duplicateRiskIdSet.has(lead.id)}
+                        duplicateRisk={duplicateCandidateMap.get(lead.id)?.[0]?.risk}
                         isOverdue={overdueIdSet.has(lead.id)}
                         isUntouched={untouchedIdSet.has(lead.id)}
                         slaResult={leadSLAMap.get(lead.id)}
@@ -1191,16 +1169,28 @@ const LeadsPage: React.FC = () => {
         onPin={pinView}
       />
 
-      {/* Conversion workflow modal */}
+      {/* Conversion Wizard */}
       {activeLead && (
-        <ConversionWorkflowModal
+        <LeadConversionWizard
           lead={activeLead}
           readiness={computeConversionReadiness(activeLead, computeMultiFactorScore(activeLead))}
           isOpen={isModalOpen('convertLead')}
           onClose={closeModal}
-          onCreateContact={handleConvertContact}
-          onCreateAccountContact={handleConvertAccountContact}
-          onCreateDeal={handleConvertDeal}
+          onUpdateLead={updateLead}
+        />
+      )}
+
+      {/* ── Merge Review Modal ───────────────────────────────────────────── */}
+      {isModalOpen('mergeDuplicate') && activeLead && (
+        <MergeReviewModal
+          lead={activeLead}
+          candidateId={duplicateCandidateMap.get(activeLead.id)?.[0]?.leadId ?? ''}
+          allLeads={contextLeads}
+          candidates={duplicateCandidateMap.get(activeLead.id) ?? []}
+          isOpen
+          onClose={closeModal}
+          onUpdateLead={updateLead}
+          onShowToast={showToast}
         />
       )}
 
@@ -1232,7 +1222,7 @@ const LeadsPage: React.FC = () => {
           slaResult={leadSLAMap.get(drawerLead.id) ?? HEALTHY_SLA_RESULT}
           hasPrev={drawerIdx > 0}
           hasNext={drawerIdx < sortedLeads.length - 1}
-          isDuplicateRisk={duplicateRiskIdSet.has(drawerLead.id)}
+          isDuplicateRisk={duplicateCandidateMap.has(drawerLead.id)}
           isOverdue={overdueIdSet.has(drawerLead.id)}
           isUntouched={untouchedIdSet.has(drawerLead.id)}
           onClose={() => setDrawerLeadId(null)}

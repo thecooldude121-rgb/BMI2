@@ -12,6 +12,8 @@ import type { LeadSLAResult } from './leadSla';
 import { computeConversionReadiness } from './conversionReadiness';
 import type { ConversionReadinessState } from './conversionReadiness';
 import { computeMultiFactorScore } from './leadScoring/multiFactorScore';
+import { findDuplicates, computeRisk } from './leadDuplicates';
+import type { DuplicateRisk } from './leadDuplicates';
 
 const READY_STATES = new Set<ConversionReadinessState>([
   'ready_for_contact',
@@ -57,6 +59,7 @@ export function evaluateCondition(
   condition: FilterCondition,
   duplicateEmailDomainSet: Set<string>,
   slaMap?: ReadonlyMap<string, LeadSLAResult>,
+  candidateMap?: ReadonlyMap<string, { risk: DuplicateRisk }[]>,
 ): boolean {
   const { fieldId, operator, value } = condition;
   const now = new Date();
@@ -83,9 +86,17 @@ export function evaluateCondition(
   }
 
   if (fieldId === 'duplicate_risk') {
-    const domain = lead.email?.split('@')[1] ?? '';
-    const isDup  = domain !== '' && duplicateEmailDomainSet.has(domain);
-    return operator === 'is_true' ? isDup : !isDup;
+    const candidates = candidateMap?.get(lead.id);
+    const risk: DuplicateRisk | 'none' = candidates && candidates.length > 0
+      ? computeRisk(candidates as import('./leadDuplicates').DuplicateCandidate[])
+      : 'none';
+    // Legacy boolean operators
+    if (operator === 'is_true')  return risk !== 'none';
+    if (operator === 'is_not')   return risk === 'none';
+    // Risk-level operators
+    if (operator === 'is')       return risk === (value as string);
+    if (operator === 'is_any_of') return (value as string[]).includes(risk);
+    return false;
   }
 
   // ── SLA fields ────────────────────────────────────────────────────────────
@@ -224,10 +235,11 @@ function matchesGroup(
   group: FilterGroup,
   duplicateEmailDomainSet: Set<string>,
   slaMap?: ReadonlyMap<string, LeadSLAResult>,
+  candidateMap?: ReadonlyMap<string, { risk: DuplicateRisk }[]>,
 ): boolean {
   if (group.conditions.length === 0) return true;
   const evaluate = (c: FilterCondition) =>
-    evaluateCondition(lead, c, duplicateEmailDomainSet, slaMap);
+    evaluateCondition(lead, c, duplicateEmailDomainSet, slaMap, candidateMap);
   return group.logic === 'AND'
     ? group.conditions.every(evaluate)
     : group.conditions.some(evaluate);
@@ -240,10 +252,11 @@ export function applyAdvancedFilter(
   filter: AdvancedFilter,
   duplicateEmailDomainSet: Set<string>,
   slaMap?: ReadonlyMap<string, LeadSLAResult>,
+  candidateMap?: ReadonlyMap<string, { risk: DuplicateRisk }[]>,
 ): Lead[] {
   const active = filter.groups.filter(g => g.conditions.length > 0);
   if (active.length === 0) return leads;
   return leads.filter(lead =>
-    active.every(group => matchesGroup(lead, group, duplicateEmailDomainSet, slaMap))
+    active.every(group => matchesGroup(lead, group, duplicateEmailDomainSet, slaMap, candidateMap))
   );
 }

@@ -1,3 +1,4 @@
+// TODO: add duplicate detection step here — flag rows that match existing leads by email, phone, or name+company before import.
 import React from 'react';
 import { AlertTriangle, XCircle, CheckCircle, GitMerge, ToggleLeft, ToggleRight } from 'lucide-react';
 import type { ParsedRow } from './types';

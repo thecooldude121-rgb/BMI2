@@ -6,6 +6,8 @@ import {
   Zap, Activity, TrendingUp, Briefcase, Link2,
 } from 'lucide-react';
 import type { Lead } from '../../types/lead';
+import { buildTimeline, buildLastTouchSummary } from '../../utils/leadTimeline';
+import ActivityTimeline from './ActivityTimeline';
 import type { LeadSLAResult } from '../../utils/leadSla';
 import type { ModalId } from '../../hooks/useLeadsPageState';
 import type { ActionId, ActionVariant } from '../../utils/leadActions';
@@ -485,73 +487,34 @@ export default function LeadQuickDrawer({
                 ))}
               </div>
 
+              {/* Last-touch summary banner */}
+              {(() => {
+                const touchSummary = buildLastTouchSummary(lead);
+                const hasOverdue   = touchSummary.includes('overdue');
+                return (
+                  <div className={`px-3 py-2 rounded-lg text-xs leading-relaxed ${
+                    hasOverdue
+                      ? 'bg-red-50 border border-red-200 text-red-700'
+                      : 'bg-amber-50 border border-amber-200 text-amber-800'
+                  }`}>
+                    {touchSummary}
+                  </div>
+                );
+              })()}
+
               {/* Timeline */}
-              <div className="space-y-0">
-                {/* Created */}
-                <TimelineEvent
-                  icon={<Activity size={12} />}
-                  color="bg-blue-100 text-blue-600"
-                  title={`Lead created${lead.source ? ` · ${lead.source}` : ''}`}
-                  date={fmtDate(lead.created_at)}
-                />
+              {/* TODO: lift activities to Map<leadId, LeadActivity[]> in LeadsPage to share with LeadQuickDrawer. */}
+              <ActivityTimeline
+                events={buildTimeline(lead)}
+                onLogActivity={() => onOpenModal('contactLead', lead)}
+                compact
+              />
 
-                {/* Enriched */}
-                {lead.enriched_at && (
-                  <TimelineEvent
-                    icon={<Zap size={12} />}
-                    color="bg-purple-100 text-purple-600"
-                    title="AI enrichment completed"
-                    date={fmtDate(lead.enriched_at)}
-                  />
-                )}
-
-                {/* First contact */}
-                {lead.first_contact_date && (
-                  <TimelineEvent
-                    icon={<Mail size={12} />}
-                    color="bg-green-100 text-green-600"
-                    title="First contact made"
-                    date={fmtDate(lead.first_contact_date)}
-                  />
-                )}
-
-                {/* Qualified */}
-                {lead.qualified_at && (
-                  <TimelineEvent
-                    icon={<CheckCircle size={12} />}
-                    color="bg-teal-100 text-teal-600"
-                    title={`Qualified${lead.qualified_by ? ` by ${lead.qualified_by}` : ''}`}
-                    date={fmtDate(lead.qualified_at)}
-                  />
-                )}
-
-                {/* Last contact */}
-                {lead.last_contact_date && (
-                  <TimelineEvent
-                    icon={<Clock size={12} />}
-                    color="bg-gray-100 text-gray-500"
-                    title={`Last contact · ${daysAgo(lead.last_contact_date)}`}
-                    date={fmtDate(lead.last_contact_date)}
-                  />
-                )}
-
-                {/* Follow-up due */}
-                {lead.next_follow_up_date && (
-                  <TimelineEvent
-                    icon={<Calendar size={12} />}
-                    color={isOverdue ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}
-                    title={isOverdue ? 'Follow-up OVERDUE' : 'Next follow-up'}
-                    date={fmtDate(lead.next_follow_up_date)}
-                  />
-                )}
-              </div>
-
-              {/* Add activity CTA */}
               <button
-                onClick={() => onOpenModal('contactLead', lead)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                onClick={() => onGoTo(`/crm/leads/${lead.id}`)}
+                className="w-full text-center text-xs text-blue-500 hover:text-blue-700 transition-colors py-1"
               >
-                <Activity size={14} /> Log Activity
+                Full activity history on the detail page →
               </button>
             </div>
           )}
@@ -756,18 +719,3 @@ export default function LeadQuickDrawer({
   );
 }
 
-// ── Timeline event ─────────────────────────────────────────────────────────────
-
-function TimelineEvent({
-  icon, color, title, date,
-}: { icon: React.ReactNode; color: string; title: string; date: string }) {
-  return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
-      <span className={`p-1.5 rounded-lg shrink-0 ${color}`}>{icon}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-gray-800">{title}</p>
-        <p className="text-[11px] text-gray-400">{date}</p>
-      </div>
-    </div>
-  );
-}

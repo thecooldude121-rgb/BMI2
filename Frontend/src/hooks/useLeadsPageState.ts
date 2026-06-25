@@ -14,6 +14,8 @@ import type { LeadSLAResult } from '../utils/leadSla';
 import { computeNBA } from '../utils/leadNBA/engine';
 import type { NBAPriority } from '../utils/leadNBA/engine';
 import { computeMultiFactorScore } from '../utils/leadScoring/multiFactorScore';
+import { findDuplicates, computeRisk, buildDomainSet } from '../utils/leadDuplicates';
+import type { DuplicateCandidate, DuplicateRisk } from '../utils/leadDuplicates';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -277,26 +279,25 @@ export function useLeadsPageState(): LeadsPageState {
     [migratedLeads],
   );
 
-  // Shared domain-level duplicate set — consumed by filteredLeads, sortedLeads, and duplicateRiskLeads
-  const duplicateEmailDomainSet = useMemo(() => {
-    const domainCounts = migratedLeads.reduce((acc, l) => {
-      const domain = l.email?.split('@')[1];
-      if (domain) acc[domain] = (acc[domain] ?? 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    return new Set(
-      Object.entries(domainCounts)
-        .filter(([, count]) => count > 1)
-        .map(([domain]) => domain),
-    );
+  // Per-lead duplicate candidate map — replaces the old coarse domain-level set
+  const duplicateCandidateMap = useMemo((): Map<string, DuplicateCandidate[]> => {
+    const map = new Map<string, DuplicateCandidate[]>();
+    for (const lead of migratedLeads) {
+      const candidates = findDuplicates(lead, migratedLeads);
+      if (candidates.length > 0) map.set(lead.id, candidates);
+    }
+    return map;
   }, [migratedLeads]);
 
+  // Backward-compat domain set consumed by leadFilterEngine and leadSorting
+  const duplicateEmailDomainSet = useMemo(
+    () => buildDomainSet(migratedLeads),
+    [migratedLeads],
+  );
+
   const duplicateRiskLeads = useMemo(
-    () => migratedLeads.filter(l => {
-      const domain = l.email?.split('@')[1];
-      return domain !== undefined && duplicateEmailDomainSet.has(domain);
-    }),
-    [migratedLeads, duplicateEmailDomainSet],
+    () => migratedLeads.filter(l => duplicateCandidateMap.has(l.id)),
+    [migratedLeads, duplicateCandidateMap],
   );
 
   const leadSLAMap = useMemo(() => {
@@ -378,8 +379,7 @@ export function useLeadsPageState(): LeadsPageState {
     const untouchedSet = new Set(untouchedLeads.map(l => l.id));
     const map = new Map<string, NBAPriority>();
     for (const lead of migratedLeads) {
-      const domain = lead.email?.split('@')[1];
-      const isDuplicateRisk = domain !== undefined && duplicateEmailDomainSet.has(domain);
+      const isDuplicateRisk = duplicateCandidateMap.has(lead.id);
       const mfs             = computeMultiFactorScore(lead);
       const { priority }    = computeNBA(lead, {
         isDuplicateRisk,
@@ -391,7 +391,7 @@ export function useLeadsPageState(): LeadsPageState {
       map.set(lead.id, priority);
     }
     return map;
-  }, [migratedLeads, overdueLeads, untouchedLeads, duplicateEmailDomainSet, leadSLAMap]);
+  }, [migratedLeads, overdueLeads, untouchedLeads, duplicateCandidateMap, leadSLAMap]);
 
   const filteredLeads = useMemo(() => {
     let base = migratedLeads.filter(lead => {
@@ -439,10 +439,10 @@ export function useLeadsPageState(): LeadsPageState {
       });
     }
 
-    base = applyAdvancedFilter(base, advancedFilter, duplicateEmailDomainSet, leadSLAMap);
+    base = applyAdvancedFilter(base, advancedFilter, duplicateEmailDomainSet, leadSLAMap, duplicateCandidateMap);
 
     return base;
-  }, [migratedLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads, slaBreachedLeads, nbaQueue, advancedFilter, duplicateEmailDomainSet, leadSLAMap]);
+  }, [migratedLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads, slaBreachedLeads, nbaQueue, advancedFilter, duplicateEmailDomainSet, leadSLAMap, duplicateCandidateMap]);
 
   const sortedLeads = useMemo(
     () => sortLeads(filteredLeads, sortBy, duplicateEmailDomainSet, leadSLAMap),
@@ -774,6 +774,7 @@ export function useLeadsPageState(): LeadsPageState {
     untouchedLeads,
     readyToConvertLeads,
     duplicateRiskLeads,
+    duplicateCandidateMap,
     nbaQueue,
     leadSLAMap,
     slaBreachedLeads,

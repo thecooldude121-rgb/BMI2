@@ -27,6 +27,7 @@ import {
   Upload,
   Send,
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
   ExternalLink,
   RefreshCw,
@@ -36,7 +37,7 @@ import {
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
-import ConversionWorkflowModal from '../../components/Leads/ConversionWorkflowModal';
+import LeadConversionWizard from '../../components/Leads/LeadConversionWizard';
 import { useLeads } from '../../contexts/LeadContext';
 import { fetchLeadByIdFromAPI } from '../../utils/leadsApi';
 import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
@@ -46,6 +47,11 @@ import OutreachComposer from '../../components/Leads/OutreachComposer';
 import type { OutreachFollowUp } from '../../components/Leads/OutreachComposer';
 import type { TerminalAction } from '../../utils/leadReasons';
 import type { Lead, LeadActivity, ActivityType } from '../../types/lead';
+import { buildTimeline } from '../../utils/leadTimeline';
+import ActivityTimeline from '../../components/Leads/ActivityTimeline';
+import SalesMemoryBlock from '../../components/Leads/SalesMemoryBlock';
+import MergeReviewModal from '../../components/Leads/MergeReviewModal';
+import { findDuplicates } from '../../utils/leadDuplicates';
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 
@@ -70,7 +76,7 @@ const leadAnnualRevenue = (lead: Lead) =>
 const LeadDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { updateLead, deleteLead } = useLeads();
+  const { updateLead, deleteLead, leads: allLeads } = useLeads();
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +87,7 @@ const LeadDetailPage: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [showMergeModal, setShowMergeModal]     = useState(false);
   const [terminalModalAction, setTerminalModalAction] = useState<TerminalAction | null>(null);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [showFileUpload, setShowFileUpload] = useState(false);
@@ -210,20 +217,6 @@ const LeadDetailPage: React.FC = () => {
 
   const handleConvert = () => setShowConvertModal(true);
 
-  const handleConvertContact = () => {
-    setShowConvertModal(false);
-    navigate('/crm/contacts/new', { state: { fromLead: lead } });
-  };
-
-  const handleConvertAccountContact = () => {
-    setShowConvertModal(false);
-    navigate('/crm/contacts/new', { state: { fromLead: lead, createAccount: true } });
-  };
-
-  const handleConvertDeal = () => {
-    setShowConvertModal(false);
-    navigate(`/crm/deals/new?leadId=${lead?.id}`);
-  };
 
   const handleTerminalConfirm = async (reason: string, notes: string) => {
     if (!lead || !terminalModalAction) return;
@@ -294,6 +287,9 @@ const LeadDetailPage: React.FC = () => {
     enrichmentData.similarDeals || [];
   const recommendedActions: { priority: string; action: string; reason: string; bestTime?: string }[] =
     (lead.ai_recommendations as any[]) || [];
+
+  // Duplicate detection (person-level, scans entire lead pool)
+  const duplicateCandidates = lead ? findDuplicates(lead, allLeads ?? []) : [];
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -531,23 +527,16 @@ const LeadDetailPage: React.FC = () => {
         );
       })()}
 
-      {/* Conversion Workflow Modal */}
-      {(() => {
-        if (!showConvertModal) return null;
-        const mfs  = computeMultiFactorScore(lead);
-        const rdns = computeConversionReadiness(lead, mfs);
-        return (
-          <ConversionWorkflowModal
-            lead={lead}
-            readiness={rdns}
-            isOpen={showConvertModal}
-            onClose={() => setShowConvertModal(false)}
-            onCreateContact={handleConvertContact}
-            onCreateAccountContact={handleConvertAccountContact}
-            onCreateDeal={handleConvertDeal}
-          />
-        );
-      })()}
+      {/* Conversion Wizard */}
+      {showConvertModal && (
+        <LeadConversionWizard
+          lead={lead}
+          readiness={computeConversionReadiness(lead, computeMultiFactorScore(lead))}
+          isOpen={showConvertModal}
+          onClose={() => setShowConvertModal(false)}
+          onUpdateLead={updateLead}
+        />
+      )}
 
       {/* Two Column Layout */}
       <div className="px-8 py-8">
@@ -555,6 +544,59 @@ const LeadDetailPage: React.FC = () => {
 
           {/* LEFT COLUMN */}
           <div className="lg:col-span-2 space-y-6">
+
+            {/* Duplicate detection banner */}
+            {duplicateCandidates.length > 0 && (
+              <div className={`rounded-lg border px-4 py-3 ${
+                duplicateCandidates[0].risk === 'high'
+                  ? 'bg-red-50 border-red-200'
+                  : duplicateCandidates[0].risk === 'medium'
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-gray-50 border-gray-200'
+              }`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
+                      duplicateCandidates[0].risk === 'high' ? 'text-red-500'
+                      : duplicateCandidates[0].risk === 'medium' ? 'text-amber-500'
+                      : 'text-gray-400'
+                    }`} />
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium ${
+                        duplicateCandidates[0].risk === 'high' ? 'text-red-800'
+                        : duplicateCandidates[0].risk === 'medium' ? 'text-amber-800'
+                        : 'text-gray-700'
+                      }`}>
+                        {duplicateCandidates.length === 1 ? 'Similar lead found' : `${duplicateCandidates.length} similar leads found`}
+                        {' · '}
+                        <span className="font-normal capitalize">{duplicateCandidates[0].risk} confidence</span>
+                      </p>
+                      <div className="mt-1 space-y-0.5">
+                        {duplicateCandidates.slice(0, 3).map(c => {
+                          const cl = (allLeads ?? []).find(l => l.id === c.leadId);
+                          if (!cl) return null;
+                          const name = cl.full_name || [cl.first_name, cl.last_name].filter(Boolean).join(' ') || cl.email || c.leadId;
+                          return (
+                            <p key={c.leadId} className="text-xs text-gray-600">
+                              <span className="font-medium">{name}</span>
+                              {cl.company && ` · ${cl.company}`}
+                              {' — '}
+                              {c.signals[0]?.reason}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowMergeModal(true)}
+                    className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 whitespace-nowrap transition-colors"
+                  >
+                    Review &amp; Merge
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Basic Information */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -749,76 +791,10 @@ const LeadDetailPage: React.FC = () => {
                 <span>📋 ACTIVITY TIMELINE</span>
               </h3>
 
-              <div className="space-y-4">
-                {/* Dynamic activities — newest first */}
-                {activities.map(act => {
-                  const iconMap: Record<string, React.ReactNode> = {
-                    email:    <Mail className="h-5 w-5 text-blue-600" />,
-                    call:     <Phone className="h-5 w-5 text-green-600" />,
-                    whatsapp: <MessageSquare className="h-5 w-5 text-green-500" />,
-                    meeting:  <Calendar className="h-5 w-5 text-purple-600" />,
-                    note:     <FileText className="h-5 w-5 text-gray-600" />,
-                    task:     <CheckCircle className="h-5 w-5 text-orange-600" />,
-                  };
-                  const bgMap: Record<string, string> = {
-                    email: 'bg-blue-100', call: 'bg-green-100', whatsapp: 'bg-green-100',
-                    meeting: 'bg-purple-100', note: 'bg-gray-100', task: 'bg-orange-100',
-                  };
-                  return (
-                    <div key={act.id} className="flex items-start space-x-4">
-                      <div className={`p-2 ${bgMap[act.type] ?? 'bg-gray-100'} rounded-lg flex-shrink-0`}>
-                        {iconMap[act.type] ?? <Activity className="h-5 w-5 text-gray-500" />}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{act.subject}</p>
-                        {act.description && (
-                          <p className="text-xs text-gray-600 mt-1 line-clamp-2">{act.description}</p>
-                        )}
-                        {act.outcome && (
-                          <p className="text-xs text-gray-500 mt-1">Outcome: {act.outcome}</p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-1">{formatDate(act.created_at)}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Static system events */}
-                <div className="flex items-start space-x-4">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Upload className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">
-                      📥 Lead created {lead.source ? `from ${lead.source}` : ''}
-                    </p>
-                    {lead.source_detail && (
-                      <p className="text-xs text-gray-500 mt-1">Source: {lead.source_detail}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-1">{formatDate(lead.created_at)}</p>
-                  </div>
-                </div>
-
-                {lead.enriched_at && (
-                  <div className="flex items-start space-x-4">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Zap className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">🤖 AI enrichment completed</p>
-                      <p className="text-xs text-gray-500 mt-2">{formatDate(lead.enriched_at)}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={() => openOutreach('call')}
-                className="mt-6 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center space-x-2"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Log Activity</span>
-              </button>
+              <ActivityTimeline
+                events={buildTimeline(lead, activities)}
+                onLogActivity={() => openOutreach('call')}
+              />
             </div>
 
             {/* Notes & Files */}
@@ -853,6 +829,8 @@ const LeadDetailPage: React.FC = () => {
 
           {/* RIGHT COLUMN */}
           <div className="space-y-6">
+
+            <SalesMemoryBlock lead={lead} recentActivities={activities.slice(0, 5)} />
 
             {/* AI Insights */}
             <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow-sm border-2 border-purple-200 p-6">
@@ -1122,6 +1100,23 @@ const LeadDetailPage: React.FC = () => {
           initialChannel={outreachInitialChannel}
           onSubmit={handleOutreachSubmit}
           onClose={() => setShowOutreachComposer(false)}
+        />
+      )}
+
+      {/* Merge Review Modal */}
+      {showMergeModal && lead && duplicateCandidates.length > 0 && (
+        <MergeReviewModal
+          lead={lead}
+          candidateId={duplicateCandidates[0].leadId}
+          allLeads={allLeads ?? []}
+          candidates={duplicateCandidates}
+          isOpen
+          onClose={() => setShowMergeModal(false)}
+          onUpdateLead={updateLead}
+          onShowToast={(msg, type) => {
+            if (type === 'success') showToast(`✅ ${msg}`);
+            else showToast(msg);
+          }}
         />
       )}
 

@@ -41,7 +41,7 @@ export type LeadTableRowProps = {
   onGoTo:           (path: string) => void;
   onOpenModal:      (modal: ModalId, lead: Lead) => void;
   onUpdateStatus:   (id: string, status: Lead['status']) => void;
-  isDuplicateRisk:  boolean;
+  duplicateRisk?:   'low' | 'medium' | 'high';
   isOverdue:        boolean;
   isUntouched:      boolean;
   slaResult?:       LeadSLAResult;
@@ -159,7 +159,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   onGoTo,
   onOpenModal,
   onUpdateStatus,
-  isDuplicateRisk,
+  duplicateRisk,
   isOverdue,
   isUntouched,
   slaResult = HEALTHY_SLA_RESULT,
@@ -184,6 +184,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   }, [menuOpen]);
 
   // ── Action computation ────────────────────────────────────────────────────
+  const isDuplicateRisk = duplicateRisk != null;
   const signals = { isDuplicateRisk, isOverdue, isUntouched };
   const mfs             = computeMultiFactorScore(lead);
   const expl            = explainScore(lead, mfs);
@@ -304,9 +305,19 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
           )}
           {(isDuplicateRisk || isUntouched) && (
             <div className="flex items-center gap-1 mt-1 flex-wrap">
-              {isDuplicateRisk && (
-                <span className="bg-orange-50 text-orange-600 border border-orange-200 text-[10px] px-1.5 py-0.5 rounded-full">
-                  Duplicate
+              {duplicateRisk === 'high' && (
+                <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+                  High risk dup
+                </span>
+              )}
+              {duplicateRisk === 'medium' && (
+                <span className="bg-amber-50 text-amber-600 border border-amber-200 text-[10px] px-1.5 py-0.5 rounded-full">
+                  Possible dup
+                </span>
+              )}
+              {duplicateRisk === 'low' && (
+                <span className="bg-gray-100 text-gray-500 border border-gray-200 text-[10px] px-1.5 py-0.5 rounded-full">
+                  Low risk dup
                 </span>
               )}
               {isUntouched && (
