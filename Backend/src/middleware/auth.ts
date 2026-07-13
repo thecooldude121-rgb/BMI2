@@ -12,7 +12,9 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction): vo
     return;
   }
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET is not configured');
+    const decoded = jwt.verify(token, secret) as {
       id: string; email: string; role: string;
     };
     req.user = decoded;

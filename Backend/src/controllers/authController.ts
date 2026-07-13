@@ -3,6 +3,12 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/database';
 
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is not configured');
+  return secret;
+};
+
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { email, password, first_name, last_name, role, department } = req.body;
@@ -20,7 +26,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     const user = result.rows[0];
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'secret'
+      getJwtSecret()
     );
     res.status(201).json({ success: true, token, user });
   } catch (error) {
@@ -39,7 +45,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     }
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'secret'
+      getJwtSecret()
     );
     const { password_hash: _, ...safeUser } = user;
     res.json({ success: true, token, user: safeUser });
