@@ -9,6 +9,7 @@ import {
   Pencil, ArrowLeftRight, UserCog, Zap, FileText,
   CheckSquare, ClipboardList, Workflow, Link2,
   AlignJustify, LayoutList, Columns2, ListFilter, Swords, AlertCircle, Search,
+  TrendingUp, TrendingDown,
 } from 'lucide-react';
 import {
   formatAmountUSD, formatAmountCompact,
@@ -299,6 +300,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     const p = searchParams.get('healthTiers');
     return p ? new Set(p.split(',').filter(Boolean) as HealthTierFilter[]) : new Set();
   });
+  const [velocityFilter, setVelocityFilter] = useState<Set<'ahead' | 'slipping'>>(() => {
+    const p = searchParams.get('velocity');
+    return p ? new Set(p.split(',').filter(Boolean) as ('ahead' | 'slipping')[]) : new Set();
+  });
+  const [dealAgeFilter, setDealAgeFilter] = useState<{ min: number | null; max: number | null }>(() => {
+    const min = searchParams.get('dealAgeMin');
+    const max = searchParams.get('dealAgeMax');
+    return { min: min ? parseInt(min) : null, max: max ? parseInt(max) : null };
+  });
   const [pipelineAgeFilter, setPipelineAgeFilter] = useState<PipelineAgeFilter>(() => {
     const min = searchParams.get('pipelineAgeMin');
     const max = searchParams.get('pipelineAgeMax');
@@ -368,6 +378,29 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     setKpiSectionHeight(el.offsetHeight);
     return () => ro.disconnect();
   }, []);
+
+  // ── Dynamic table height: measure exact viewport offset of the table container ──
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [tableOffsetTop, setTableOffsetTop] = useState(320);
+  const [filterBarHeight, setFilterBarHeight] = useState(44);
+  useEffect(() => {
+    const el = filterBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setFilterBarHeight(el.offsetHeight));
+    ro.observe(el);
+    setFilterBarHeight(el.offsetHeight);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    const measure = () => {
+      if (tableContainerRef.current) {
+        setTableOffsetTop(tableContainerRef.current.getBoundingClientRect().top);
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [kpiSectionHeight, filterBarHeight]);
 
   // ── Workflow modal state ────────────────────────────────────────────────────
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
@@ -454,6 +487,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const editInputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   const commitEditRef = useRef<() => Promise<void>>(async () => {});
 
+  const getDealAgeDays = (createdAt?: string): number => {
+    if (!createdAt) return 0;
+    return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
+  };
+
   const allDeals = useMemo(
     () => stages
       .flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })))
@@ -465,6 +503,48 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     () => [...new Set(allDeals.map(d => d.stage).filter(Boolean))].sort(),
     [allDeals]
   );
+
+  // Unfiltered counts for filter dropdowns (so unchecked options always show totals)
+  const stageDealCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of allDeals) counts[d.stage] = (counts[d.stage] ?? 0) + 1;
+    return counts;
+  }, [allDeals]);
+
+  const ownerDealCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of allDeals) if (d.owner) counts[d.owner] = (counts[d.owner] ?? 0) + 1;
+    return counts;
+  }, [allDeals]);
+
+  const sourceDealCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of allDeals) if (d.source) counts[d.source] = (counts[d.source] ?? 0) + 1;
+    return counts;
+  }, [allDeals]);
+
+  const velocityDealCounts = useMemo(() => {
+    let ahead = 0, slipping = 0;
+    for (const d of allDeals) {
+      const v = getDealVelocity(d);
+      if (v?.rating === 'ahead') ahead++;
+      else if (v?.rating === 'slipping') slipping++;
+    }
+    return { ahead, slipping };
+  }, [allDeals]);
+
+  const dealAgeCounts = useMemo(() => {
+    let new30 = 0, d30to90 = 0, d90plus = 0, d180plus = 0;
+    for (const d of allDeals) {
+      const age = getDealAgeDays(d.createdAt);
+      if (age < 30) new30++;
+      if (age >= 30 && age <= 90) d30to90++;
+      if (age > 90) d90plus++;
+      if (age > 180) d180plus++;
+    }
+    return { new30, d30to90, d90plus, d180plus };
+  }, [allDeals]);
+
   const ownerFilterOptions = useMemo(
     () => availableOwners.length > 0
       ? availableOwners
@@ -530,6 +610,20 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         if (!selectedHealthTiers.has(tier)) return false;
       }
 
+      // Velocity
+      if (velocityFilter.size > 0) {
+        const v = getDealVelocity(deal);
+        const r = (v?.rating ?? 'unknown') as string;
+        if (!velocityFilter.has(r as 'ahead' | 'slipping')) return false;
+      }
+
+      // Deal age (days since creation)
+      if (dealAgeFilter.min !== null || dealAgeFilter.max !== null) {
+        const age = getDealAgeDays(deal.createdAt);
+        if (dealAgeFilter.min !== null && age < dealAgeFilter.min) return false;
+        if (dealAgeFilter.max !== null && age > dealAgeFilter.max) return false;
+      }
+
       // Activity gap (days since last contact)
       if (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) {
         const idleDays = deal.daysSinceContact;
@@ -567,7 +661,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       return true;
     });
-  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, selectedCompetitors, advancedConditions, advancedConjunction, reportingCurrency, debouncedDealSearch]);
+  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, velocityFilter, dealAgeFilter, pipelineAgeFilter, selectedCompetitors, advancedConditions, advancedConjunction, reportingCurrency, debouncedDealSearch]);
 
   const kpiFilteredDeals = useMemo(() => {
     let result = filteredDeals;
@@ -649,11 +743,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     const parts = name.trim().split(/\s+/);
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-  };
-
-  const getDealAgeDays = (createdAt?: string): number => {
-    if (!createdAt) return 0;
-    return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
   };
 
   // Coerce Deal → DealCard shape so explainDealHealth can run on list-view rows.
@@ -1145,12 +1234,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     set('valueMax',        valueFilter.max !== null ? String(valueFilter.max) : null);
     set('sources',         selectedSources.size > 0 ? [...selectedSources].join(',') : null);
     set('healthTiers',     selectedHealthTiers.size > 0 ? [...selectedHealthTiers].join(',') : null);
+    set('velocity',        velocityFilter.size > 0 ? [...velocityFilter].join(',') : null);
+    set('dealAgeMin',      dealAgeFilter.min !== null ? String(dealAgeFilter.min) : null);
+    set('dealAgeMax',      dealAgeFilter.max !== null ? String(dealAgeFilter.max) : null);
     set('pipelineAgeMin',  pipelineAgeFilter.min !== null ? String(pipelineAgeFilter.min) : null);
     set('pipelineAgeMax',  pipelineAgeFilter.max !== null ? String(pipelineAgeFilter.max) : null);
     set('competitors',     selectedCompetitors.size > 0 ? [...selectedCompetitors].join(',') : null);
     setSearchParams(params, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, pipelineAgeFilter, selectedCompetitors]);
+  }, [selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, velocityFilter, dealAgeFilter, pipelineAgeFilter, selectedCompetitors]);
 
   // ── URL sync: advanced filter builder ─────────────────────────────────────
   useEffect(() => {
@@ -1192,6 +1284,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     setValueFilter({ min: null, max: null });
     setSelectedSources(new Set());
     setSelectedHealthTiers(new Set());
+    setVelocityFilter(new Set());
+    setDealAgeFilter({ min: null, max: null });
     setPipelineAgeFilter({ min: null, max: null });
     setSelectedCompetitors(new Set());
     setAdvancedConditions([]);
@@ -1203,7 +1297,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     selectedStages.size > 0 || selectedOwners.size > 0 ||
     closeDateFilter.preset !== 'all' ||
     valueFilter.min !== null || valueFilter.max !== null ||
-    selectedSources.size > 0 || selectedHealthTiers.size > 0 ||
+    selectedSources.size > 0 || selectedHealthTiers.size > 0 || velocityFilter.size > 0 ||
+    dealAgeFilter.min !== null || dealAgeFilter.max !== null ||
     pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ||
     selectedCompetitors.size > 0 ||
     advancedConditions.length > 0 ||
@@ -1211,10 +1306,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     debouncedDealSearch !== '';
 
   const activeFilterCount =
-    selectedStages.size + selectedOwners.size + selectedSources.size + selectedHealthTiers.size +
+    selectedStages.size + selectedOwners.size + selectedSources.size + selectedHealthTiers.size + velocityFilter.size +
     selectedCompetitors.size +
     (closeDateFilter.preset !== 'all' ? 1 : 0) +
     (valueFilter.min !== null || valueFilter.max !== null ? 1 : 0) +
+    (dealAgeFilter.min !== null || dealAgeFilter.max !== null ? 1 : 0) +
     (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null ? 1 : 0) +
     advancedConditions.length +
     (debouncedDealSearch ? 1 : 0);
@@ -3024,93 +3120,527 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       </div>
 
-      {/* ── Stage Pipeline Bar ────────────────────────────────────────────────── */}
-      {filteredDeals.length > 0 && (() => {
-        const stageConfig: Record<string, { label: string; bar: string; active: string; text: string }> = {
-          'prospecting':  { label: 'Prospecting',  bar: 'bg-slate-400',   active: 'bg-slate-600',   text: 'text-slate-700' },
-          'qualified':    { label: 'Qualified',    bar: 'bg-blue-400',    active: 'bg-blue-600',    text: 'text-blue-700' },
-          'proposal':     { label: 'Proposal',     bar: 'bg-indigo-500',  active: 'bg-indigo-700',  text: 'text-indigo-700' },
-          'negotiation':  { label: 'Negotiation',  bar: 'bg-purple-500',  active: 'bg-purple-700',  text: 'text-purple-700' },
-          'closed-won':   { label: 'Won',          bar: 'bg-green-500',   active: 'bg-green-700',   text: 'text-green-700' },
-          'closed-lost':  { label: 'Lost',         bar: 'bg-red-400',     active: 'bg-red-600',     text: 'text-red-700' },
-        };
-        const maxCount = Math.max(...stageSummary.map(s => s.count), 1);
-        return (
-          <div className="bg-white border-b border-gray-100 px-6 py-3">
-            <div className="flex items-end gap-1 sm:gap-2 h-14">
-              {stageSummary.map(({ stage, count, value }) => {
-                const cfg = stageConfig[stage];
-                const isActive = selectedStages.has(stage);
-                const heightPct = Math.max(8, Math.round((count / maxCount) * 100));
-                return (
-                  <button
-                    key={stage}
-                    onClick={() => setSelectedStages(prev => {
-                      const n = new Set(prev);
-                      n.has(stage) ? n.delete(stage) : n.add(stage);
-                      return n;
-                    })}
-                    title={`${cfg.label}: ${count} deal${count !== 1 ? 's' : ''} · ${fmtValK(value)}`}
-                    className={[
-                      'flex-1 flex flex-col items-center gap-0.5 rounded-t group transition-all duration-150',
-                      isActive ? 'opacity-100' : 'opacity-70 hover:opacity-90',
-                    ].join(' ')}
-                  >
-                    {count > 0 ? (
-                      <span className={`text-[10px] font-semibold tabular-nums text-white ${cfg.bar} rounded-full px-1.5 py-0.5 leading-none`}>
-                        {count}
-                      </span>
-                    ) : <span className="h-4" />}
-                    <div
-                      className={`w-full rounded-t-sm transition-all duration-200 ${isActive ? cfg.active : cfg.bar} ${isActive ? 'ring-2 ring-offset-1 ring-current' : ''}`}
-                      style={{ height: `${heightPct}%` }}
-                    />
-                    <span className={`text-[9px] font-medium hidden sm:block truncate w-full text-center ${isActive ? cfg.text : 'text-gray-400'}`}>
-                      {cfg.label}
-                    </span>
-                    {count > 0 && (
-                      <span className="text-[9px] text-gray-400 hidden sm:block truncate w-full text-center tabular-nums">
-                        {fmtValK(value)}
-                      </span>
-                    )}
-                    <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden hidden sm:block">
-                      <div
-                        className={`h-full rounded-full transition-all duration-200 ${isActive ? cfg.active : cfg.bar}`}
-                        style={{ width: `${Math.round((count / maxCount) * 100)}%` }}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
 
       </div>{/* end sticky KPI + stage wrapper */}
 
-      {/* ── Filter Bar removed — filters now live in the Kanban page toolbar ── */}
-      {/* Active KPI filter pill */}
-      {activeKpiFilter && (
-        <div className="bg-white border-b border-gray-100 flex items-center gap-2 px-4 py-2">
-          <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
-            {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
-            <button onClick={() => setActiveKpiFilter(null)} className="ml-1 text-indigo-400 hover:text-indigo-600 leading-none" title="Clear filter">×</button>
-          </span>
+      {/* ── Filter Bar ──────────────────────────────────────────────────────── */}
+      <div ref={filterBarRef} className="sticky z-20 bg-white border-b border-gray-200" style={{ top: 104 + kpiSectionHeight }}>
+
+        {/* Row 1: filter buttons */}
+        <div className="flex items-center gap-1.5 px-4 py-2 overflow-x-auto scrollbar-none">
+          <ListFilter className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mr-0.5" />
+
+          {/* ── Stage ──────────────────────────────────────────── */}
+          {(() => {
+            const STAGE_ORDER = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'] as const;
+            const isOpen = openFilter === 'stage';
+            return (
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setOpenFilter(isOpen ? null : 'stage')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                    selectedStages.size > 0
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Stage
+                  {selectedStages.size > 0 && (
+                    <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                      {selectedStages.size}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isOpen && (
+                  <div className="absolute left-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30">
+                    {STAGE_ORDER.map(stageId => {
+                      const count = stageDealCounts[stageId] ?? 0;
+                      const checked = selectedStages.has(stageId);
+                      return (
+                        <label key={stageId} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setSelectedStages(prev => {
+                              const next = new Set(prev);
+                              if (next.has(stageId)) next.delete(stageId); else next.add(stageId);
+                              return next;
+                            })}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
+                          />
+                          <span className="flex-1 text-[13px] text-gray-700">{getStageName(stageId)}</span>
+                          <span className="text-[11px] text-gray-400 tabular-nums">{count}</span>
+                        </label>
+                      );
+                    })}
+                    {selectedStages.size > 0 && (
+                      <div className="border-t border-gray-100 mt-1 pt-1">
+                        <button
+                          onClick={() => { setSelectedStages(new Set()); setOpenFilter(null); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
+                        >
+                          Clear stage filter
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Owner ──────────────────────────────────────────── */}
+          {ownerFilterOptions.length > 0 && (() => {
+            const isOpen = openFilter === 'owner';
+            return (
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setOpenFilter(isOpen ? null : 'owner')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                    selectedOwners.size > 0
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Owner
+                  {selectedOwners.size > 0 && (
+                    <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                      {selectedOwners.size}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isOpen && (
+                  <div className="absolute left-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30 max-h-56 overflow-y-auto">
+                    {ownerFilterOptions.map(owner => (
+                      <label key={owner} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedOwners.has(owner)}
+                          onChange={() => setSelectedOwners(prev => {
+                            const next = new Set(prev);
+                            if (next.has(owner)) next.delete(owner); else next.add(owner);
+                            return next;
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
+                        />
+                        <span className="flex-1 text-[13px] text-gray-700 truncate">{owner}</span>
+                        <span className="text-[11px] text-gray-400 tabular-nums">{ownerDealCounts[owner] ?? 0}</span>
+                      </label>
+                    ))}
+                    {selectedOwners.size > 0 && (
+                      <div className="border-t border-gray-100 mt-1 pt-1">
+                        <button
+                          onClick={() => { setSelectedOwners(new Set()); setOpenFilter(null); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
+                        >
+                          Clear owner filter
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Source ─────────────────────────────────────────── */}
+          {sourceFilterOptions.length > 0 && (() => {
+            const isOpen = openFilter === 'source';
+            return (
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setOpenFilter(isOpen ? null : 'source')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                    selectedSources.size > 0
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Source
+                  {selectedSources.size > 0 && (
+                    <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                      {selectedSources.size}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isOpen && (
+                  <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30">
+                    {sourceFilterOptions.map(src => (
+                      <label key={src} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedSources.has(src)}
+                          onChange={() => setSelectedSources(prev => {
+                            const next = new Set(prev);
+                            if (next.has(src)) next.delete(src); else next.add(src);
+                            return next;
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
+                        />
+                        <span className="flex-1 text-[13px] text-gray-700">{src}</span>
+                        <span className="text-[11px] text-gray-400 tabular-nums">{sourceDealCounts[src] ?? 0}</span>
+                      </label>
+                    ))}
+                    {selectedSources.size > 0 && (
+                      <div className="border-t border-gray-100 mt-1 pt-1">
+                        <button
+                          onClick={() => { setSelectedSources(new Set()); setOpenFilter(null); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
+                        >
+                          Clear source filter
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Health / Win Score ─────────────────────────────── */}
+          {(() => {
+            const HEALTH_OPTIONS: Array<{ key: HealthTierFilter; label: string; dot: string }> = [
+              { key: 'strong', label: 'Healthy',          dot: 'bg-green-500'  },
+              { key: 'fair',   label: 'Needs Attention',  dot: 'bg-amber-500'  },
+              { key: 'weak',   label: 'At Risk',          dot: 'bg-red-500'    },
+            ];
+            const isOpen = openFilter === 'health';
+            return (
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setOpenFilter(isOpen ? null : 'health')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                    selectedHealthTiers.size > 0
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  Health
+                  {selectedHealthTiers.size > 0 && (
+                    <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                      {selectedHealthTiers.size}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isOpen && (
+                  <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30">
+                    {HEALTH_OPTIONS.map(({ key, label, dot }) => (
+                      <label key={key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedHealthTiers.has(key)}
+                          onChange={() => setSelectedHealthTiers(prev => {
+                            const next = new Set(prev);
+                            if (next.has(key)) next.delete(key); else next.add(key);
+                            return next;
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
+                        />
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                        <span className="flex-1 text-[13px] text-gray-700">{label}</span>
+                      </label>
+                    ))}
+                    {selectedHealthTiers.size > 0 && (
+                      <div className="border-t border-gray-100 mt-1 pt-1">
+                        <button
+                          onClick={() => { setSelectedHealthTiers(new Set()); setOpenFilter(null); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
+                        >
+                          Clear health filter
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Deal Age ───────────────────────────────────────── */}
+          {(() => {
+            type Preset = { label: string; min: number | null; max: number | null; countKey: keyof typeof dealAgeCounts; icon?: 'warn' | 'crit' };
+            const PRESETS: Preset[] = [
+              { label: 'New (< 30 days)',   min: null, max: 30,   countKey: 'new30'   },
+              { label: '30–90 days',        min: 30,   max: 90,   countKey: 'd30to90' },
+              { label: '90+ days',          min: 90,   max: null, countKey: 'd90plus', icon: 'warn' },
+              { label: '180+ days (Stale)', min: 180,  max: null, countKey: 'd180plus', icon: 'crit' },
+            ];
+            const isActive = dealAgeFilter.min !== null || dealAgeFilter.max !== null;
+            const activePreset = PRESETS.find(p => p.min === dealAgeFilter.min && p.max === dealAgeFilter.max);
+            const activeLabel = activePreset
+              ? activePreset.label
+              : dealAgeFilter.min !== null && dealAgeFilter.max !== null
+                ? `${dealAgeFilter.min}–${dealAgeFilter.max} days`
+                : dealAgeFilter.min !== null
+                  ? `${dealAgeFilter.min}+ days`
+                  : dealAgeFilter.max !== null
+                    ? `< ${dealAgeFilter.max} days`
+                    : 'Deal Age';
+            const isOpen = openFilter === 'dealAge';
+            return (
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => setOpenFilter(isOpen ? null : 'dealAge')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                    isActive
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  {activeLabel}
+                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isOpen && (
+                  <div className="absolute left-0 top-full mt-1.5 w-58 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30" style={{ minWidth: '224px' }}>
+                    {PRESETS.map(p => {
+                      const selected = dealAgeFilter.min === p.min && dealAgeFilter.max === p.max;
+                      return (
+                        <button
+                          key={p.label}
+                          onClick={() => { setDealAgeFilter({ min: p.min, max: p.max }); setOpenFilter(null); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left transition-colors ${selected ? 'bg-indigo-50' : ''}`}
+                        >
+                          {p.icon === 'crit'
+                            ? <AlertCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
+                            : p.icon === 'warn'
+                              ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                              : <span className="w-3.5 flex-shrink-0" />
+                          }
+                          <span className={`flex-1 text-[13px] ${selected ? 'text-indigo-700 font-medium' : 'text-gray-700'}`}>{p.label}</span>
+                          <span className="text-[11px] text-gray-400 tabular-nums">{dealAgeCounts[p.countKey]}</span>
+                        </button>
+                      );
+                    })}
+
+                    {/* Custom range */}
+                    <div className="border-t border-gray-100 mt-1 pt-2 px-3 pb-2">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Custom range</p>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="Min"
+                          value={dealAgeFilter.min ?? ''}
+                          onChange={e => setDealAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))}
+                          className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          onClick={e => e.stopPropagation()}
+                        />
+                        <span className="text-gray-400 text-xs">–</span>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="Max"
+                          value={dealAgeFilter.max ?? ''}
+                          onChange={e => setDealAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))}
+                          className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          onClick={e => e.stopPropagation()}
+                        />
+                        <span className="text-[11px] text-gray-400">days</span>
+                      </div>
+                    </div>
+
+                    {isActive && (
+                      <div className="border-t border-gray-100 pt-1">
+                        <button
+                          onClick={() => { setDealAgeFilter({ min: null, max: null }); setOpenFilter(null); }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
+                        >
+                          Clear deal age filter
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Velocity ───────────────────────────────────────── */}
+          <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-200 flex-shrink-0">
+            <button
+              onClick={() => setVelocityFilter(prev => {
+                const n = new Set(prev);
+                if (n.has('ahead')) n.delete('ahead'); else n.add('ahead');
+                return n;
+              })}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                velocityFilter.has('ahead')
+                  ? 'bg-green-50 border-green-300 text-green-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <TrendingUp className="h-3.5 w-3.5" />
+              Accelerating
+              <span className={`text-[11px] tabular-nums ml-0.5 ${velocityFilter.has('ahead') ? 'text-green-600' : 'text-gray-400'}`}>
+                {velocityDealCounts.ahead}
+              </span>
+            </button>
+            <button
+              onClick={() => setVelocityFilter(prev => {
+                const n = new Set(prev);
+                if (n.has('slipping')) n.delete('slipping'); else n.add('slipping');
+                return n;
+              })}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
+                velocityFilter.has('slipping')
+                  ? 'bg-orange-50 border-orange-300 text-orange-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <TrendingDown className="h-3.5 w-3.5" />
+              Stalling
+              <span className={`text-[11px] tabular-nums ml-0.5 ${velocityFilter.has('slipping') ? 'text-orange-600' : 'text-gray-400'}`}>
+                {velocityDealCounts.slipping}
+              </span>
+            </button>
+          </div>
+
+          {/* ── Clear all (right-aligned) ───────────────────────── */}
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="ml-auto flex-shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all
+              <span className="bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold px-1.5 py-0.5">{activeFilterCount}</span>
+            </button>
+          )}
         </div>
-      )}
-      {/* placeholder div kept so existing ref-based click-outside logic compiles */}
-      <div ref={filterBarRef} className="hidden" />
+
+        {/* Row 2: active filter pills + KPI filter pill */}
+        {(hasActiveFilters || activeKpiFilter) && (
+          <div className="flex items-center gap-1.5 px-4 pb-2.5 flex-wrap">
+
+            {/* KPI pill */}
+            {activeKpiFilter && (
+              <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {activeKpiFilter === 'closingWeek' ? 'Closing This Week' : 'Stalled Deals'}
+                <button onClick={() => setActiveKpiFilter(null)} className="ml-0.5 hover:text-indigo-900" title="Clear">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Stage pills */}
+            {[...selectedStages].map(stageId => (
+              <span key={stageId} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {getStageName(stageId)}
+                <button
+                  onClick={() => setSelectedStages(prev => { const n = new Set(prev); n.delete(stageId); return n; })}
+                  className="ml-0.5 hover:text-blue-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Owner pills */}
+            {[...selectedOwners].map(owner => (
+              <span key={owner} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {owner}
+                <button
+                  onClick={() => setSelectedOwners(prev => { const n = new Set(prev); n.delete(owner); return n; })}
+                  className="ml-0.5 hover:text-blue-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Source pills */}
+            {[...selectedSources].map(src => (
+              <span key={src} className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {src}
+                <button
+                  onClick={() => setSelectedSources(prev => { const n = new Set(prev); n.delete(src); return n; })}
+                  className="ml-0.5 hover:text-emerald-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Health pills */}
+            {([...selectedHealthTiers] as HealthTierFilter[]).map(key => (
+              <span key={key} className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {HEALTH_TIER_LABELS[key]}
+                <button
+                  onClick={() => setSelectedHealthTiers(prev => { const n = new Set(prev); n.delete(key); return n; })}
+                  className="ml-0.5 hover:text-amber-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+
+            {/* Deal Age pill */}
+            {(dealAgeFilter.min !== null || dealAgeFilter.max !== null) && (
+              <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                <Clock className="h-3 w-3" />
+                {dealAgeFilter.min !== null && dealAgeFilter.max !== null
+                  ? `${dealAgeFilter.min}–${dealAgeFilter.max} days old`
+                  : dealAgeFilter.min !== null
+                    ? `${dealAgeFilter.min}+ days old`
+                    : `< ${dealAgeFilter.max} days old`}
+                <button
+                  onClick={() => setDealAgeFilter({ min: null, max: null })}
+                  className="ml-0.5 hover:text-sky-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+            {/* Velocity pills */}
+            {velocityFilter.has('ahead') && (
+              <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 border border-green-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                <TrendingUp className="h-3 w-3" />
+                Accelerating
+                <button
+                  onClick={() => setVelocityFilter(prev => { const n = new Set(prev); n.delete('ahead'); return n; })}
+                  className="ml-0.5 hover:text-green-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {velocityFilter.has('slipping') && (
+              <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                <TrendingDown className="h-3 w-3" />
+                Stalling
+                <button
+                  onClick={() => setVelocityFilter(prev => { const n = new Set(prev); n.delete('slipping'); return n; })}
+                  className="ml-0.5 hover:text-orange-900"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+
+          </div>
+        )}
+      </div>
 
 
       {/* ── Table + Card List ────────────────────────────────────────────────── */}
       <div className="-mx-6 py-0">
 
         {/* Desktop table (md+) */}
-        <div className="hidden md:block">
+        <div ref={tableContainerRef} className="hidden md:block">
           <div
             className="bg-white overflow-auto"
-            style={{ height: `calc(100vh - ${216 + kpiSectionHeight + 24}px)`, minHeight: '220px' }}
+            style={{ height: `calc(100vh - ${tableOffsetTop + 12}px)`, minHeight: '220px' }}
           >
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
@@ -3259,8 +3789,8 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
         {/* 8.4 — Total count footer (desktop) */}
         {sortedDeals.length > 0 && (
-          <div className="hidden md:flex items-center px-6 h-6 bg-white border-t border-gray-200">
-            <span className="text-xs text-gray-400">
+          <div className="hidden md:flex items-center bg-white border-t border-gray-200" style={{ height: '12px', paddingLeft: '24px', paddingRight: '24px' }}>
+            <span style={{ fontSize: '10px', lineHeight: 1, color: '#9CA3AF' }}>
               {sortedDeals.length} deal{sortedDeals.length !== 1 ? 's' : ''}
             </span>
           </div>
