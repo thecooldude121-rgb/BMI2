@@ -30,6 +30,8 @@ import {
   FEEDBACK_META,
   type FeedbackType,
 } from '../../utils/leadScoring/scoreFeedback';
+import { useLeadActions } from '../../hooks/useLeadActions';
+import { useLeads } from '../../contexts/LeadContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +47,8 @@ export type LeadTableRowProps = {
   isOverdue:        boolean;
   isUntouched:      boolean;
   slaResult?:       LeadSLAResult;
+  canConvert:       boolean;
+  canDelete:        boolean;
 };
 
 // ── Sub-helpers ───────────────────────────────────────────────────────────────
@@ -163,7 +167,12 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   isOverdue,
   isUntouched,
   slaResult = HEALTHY_SLA_RESULT,
+  canConvert,
+  canDelete,
 }) => {
+  const { updateLead } = useLeads();
+  const actions = useLeadActions(updateLead);
+
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [scoreHovered,  setScoreHovered]  = useState(false);
   const [drawerOpen,    setDrawerOpen]    = useState(false);
@@ -208,11 +217,11 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
         onOpenModal('contactLead', lead);
         break;
       case 'convert_to_contact':
-        onOpenModal('convertLead', lead);
+        if (canConvert) onOpenModal('convertLead', lead);
         break;
       case 'convert_to_deal':
       case 'complete_qualification':
-        onOpenModal('convertLead', lead);
+        if (canConvert) onOpenModal('convertLead', lead);
         break;
       case 'create_deal':
         onGoTo(`/crm/deals/new?leadId=${lead.id}`);
@@ -249,7 +258,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
         onOpenModal('terminalLost', lead);
         break;
       case 'delete':
-        onOpenModal('confirmDelete', lead);
+        if (canDelete) onOpenModal('confirmDelete', lead);
         break;
     }
   }
@@ -455,13 +464,23 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
       >
         <div className="flex items-center gap-2 justify-end">
           {/* Primary CTA */}
-          <button
-            onClick={() => handleAction(primaryAction)}
-            className={`text-xs font-medium px-2.5 py-1 rounded-md whitespace-nowrap flex items-center gap-1 ${CTA_CLS[primaryAction.variant]}`}
-          >
-            <ActionIcon id={primaryAction.id} />
-            {primaryAction.label}
-          </button>
+          {(() => {
+            const isConvertCta = primaryAction.id === 'convert_to_contact' || primaryAction.id === 'convert_to_deal' || primaryAction.id === 'complete_qualification';
+            const blocked      = isConvertCta && !canConvert;
+            return (
+              <button
+                onClick={() => !blocked && handleAction(primaryAction)}
+                disabled={blocked}
+                title={blocked ? 'Not available for your role — contact your manager' : undefined}
+                className={`text-xs font-medium px-2.5 py-1 rounded-md whitespace-nowrap flex items-center gap-1 ${
+                  blocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200' : CTA_CLS[primaryAction.variant]
+                }`}
+              >
+                <ActionIcon id={primaryAction.id} />
+                {primaryAction.label}
+              </button>
+            );
+          })()}
 
           {/* ⋯ overflow menu */}
           <div className="relative" ref={menuRef}>
@@ -478,16 +497,27 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
                 {secondaryGroups.map((group, gi) => (
                   <React.Fragment key={group.id}>
                     {gi > 0 && <div className="my-1 border-t border-gray-100" />}
-                    {group.items.map(action => (
-                      <button
-                        key={action.id}
-                        onClick={() => handleAction(action)}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuItemCls(action.variant)}`}
-                      >
-                        <ActionIcon id={action.id} />
-                        {action.label}
-                      </button>
-                    ))}
+                    {group.items.map(action => {
+                      const isConvertAction = action.id === 'convert_to_contact' || action.id === 'convert_to_deal' || action.id === 'complete_qualification';
+                      const isDeleteAction  = action.id === 'delete';
+                      // Destructive actions are hidden when not permitted (vs disabled)
+                      if (isDeleteAction && !canDelete) return null;
+                      const blocked = isConvertAction && !canConvert;
+                      return (
+                        <button
+                          key={action.id}
+                          onClick={() => !blocked && handleAction(action)}
+                          disabled={blocked}
+                          title={blocked ? 'Not available for your role — contact your manager' : undefined}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${
+                            blocked ? 'text-gray-300 cursor-not-allowed' : menuItemCls(action.variant)
+                          }`}
+                        >
+                          <ActionIcon id={action.id} />
+                          {action.label}
+                        </button>
+                      );
+                    })}
                   </React.Fragment>
                 ))}
               </div>
@@ -506,7 +536,10 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
       nbaResult={nbaResult}
       onClose={() => setDrawerOpen(false)}
       initialFeedback={feedbackMark}
-      onFeedbackSubmit={(type) => setFeedbackMark(type)}
+      onFeedbackSubmit={(type) => {
+        setFeedbackMark(type);
+        actions.recordFeedback(lead, type, lead.ai_score ?? lead.score);
+      }}
     />
     </>
   );

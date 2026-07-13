@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, AlertTriangle, ChevronLeft, ChevronRight, Merge, CheckSquare, Square } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { DuplicateCandidate } from '../../utils/leadDuplicates';
@@ -55,6 +55,7 @@ interface Props {
   onClose:     () => void;
   onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
   onShowToast:  (msg: string, type: 'success' | 'error' | 'info') => void;
+  onMergeComplete?: (absorbedLeadId: string, absorbedLeadName: string) => void;
 }
 
 export default function MergeReviewModal({
@@ -66,6 +67,7 @@ export default function MergeReviewModal({
   onClose,
   onUpdateLead,
   onShowToast,
+  onMergeComplete,
 }: Props) {
   const [activeCandidateId, setActiveCandidateId] = useState(candidateId);
   const [choices, setChoices] = useState<Partial<Record<keyof Lead, FieldChoice>>>({});
@@ -83,6 +85,13 @@ export default function MergeReviewModal({
     () => candidates.find(c => c.leadId === activeCandidateId),
     [candidates, activeCandidateId],
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !candidate) return null;
 
@@ -126,6 +135,7 @@ export default function MergeReviewModal({
 
       const loserName = [candidate.first_name, candidate.last_name].filter(Boolean).join(' ') || candidate.email || candidate.id;
       onShowToast(`Leads merged. ${loserName} marked as disqualified.`, 'success');
+      onMergeComplete?.(candidate.id, loserName);
       onClose();
     } catch {
       onShowToast('Merge failed — please try again.', 'error');

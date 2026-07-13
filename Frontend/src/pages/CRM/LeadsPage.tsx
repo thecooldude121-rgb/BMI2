@@ -9,6 +9,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
 import { useLeadsPageState } from '../../hooks/useLeadsPageState';
+import { usePermissions } from '../../hooks/usePermissions';
 import { SORT_OPTIONS } from '../../utils/leadSorting';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -23,9 +24,13 @@ import type { FollowUpType } from '../../components/Leads/BulkActionBar';
 import QuickAddLeadModal from '../../components/Leads/QuickAddLeadModal';
 import LeadConversionWizard from '../../components/Leads/LeadConversionWizard';
 import MergeReviewModal from '../../components/Leads/MergeReviewModal';
+import KanbanOutcomeModal from '../../components/Leads/KanbanOutcomeModal';
+import KanbanQualifyModal from '../../components/Leads/KanbanQualifyModal';
+import SourceQualityDrawer from '../../components/Leads/SourceQualityDrawer';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
 import LeadQuickDrawer from '../../components/Leads/LeadQuickDrawer';
 import OutreachComposer from '../../components/Leads/OutreachComposer';
+import { useLeadActions } from '../../hooks/useLeadActions';
 import { HEALTHY_SLA_RESULT } from '../../utils/leadSla';
 import type { TerminalAction } from '../../utils/leadReasons';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
@@ -87,6 +92,31 @@ const getSourceInfo = (source?: string) => {
   return { icon: '📋', color: 'text-gray-600 bg-gray-50' };
 };
 
+const formatRecency = (date?: string): string => {
+  if (!date) return 'Never';
+  const days = Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7)  return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+};
+
+const getCtaStyle = (color: string): string => {
+  switch (color) {
+    case 'green': return 'bg-green-600 text-white hover:bg-green-700';
+    case 'red':   return 'bg-red-600   text-white hover:bg-red-700';
+    case 'amber': return 'bg-amber-500 text-white hover:bg-amber-600';
+    case 'blue':  return 'bg-blue-600  text-white hover:bg-blue-700';
+    default:      return 'bg-gray-100  text-gray-700 hover:bg-gray-200';
+  }
+};
+
+const getAgingDays = (lead: Lead): number => {
+  const ref = lead.stage_entered_at ?? lead.created_at;
+  return Math.floor((Date.now() - new Date(ref).getTime()) / 86_400_000);
+};
+
 
 
 // Modals not yet implemented — show a toast instead of opening a stub modal
@@ -96,6 +126,17 @@ const STUB_LABELS: Partial<Record<ModalId, string>> = {
   addTag:      'Add tag',
   enrichLead:  'Lead enrichment',
   editLead:    'Edit lead',
+};
+
+// WIP limits per lane — soft warning only, no hard block on drop.
+// TODO: move to a team settings page when per-user configuration is needed.
+const WIP_LIMITS: Record<string, number> = {
+  incoming:   50,
+  research:   20,
+  outreach:   30,
+  engaged:    20,
+  qualifying: 15,
+  nurturing:  25,
 };
 
 // 7 swim-lane columns — each maps to one or more lifecycle statuses.
@@ -121,6 +162,9 @@ const KANBAN_SWIM_LANES: Array<{
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
   const { leads: contextLeads, loading, updateLead, deleteLead, updateView: ctxUpdateView } = useLeads();
+  const actions = useLeadActions(updateLead);
+
+  const { can } = usePermissions();
 
   const {
     viewMode, setViewMode,
@@ -137,8 +181,10 @@ const LeadsPage: React.FC = () => {
     kpiMetrics,
     // Insight selectors
     overdueLeads, duplicateRiskLeads, duplicateCandidateMap, untouchedLeads,
-    slaBreachedLeads, slaBreachCounts, leadSLAMap, newUnworkedLeads, sourceQualityThisWeek,
+    slaBreachedLeads, slaBreachCounts, leadSLAMap, newUnworkedLeads, nbaQueue, sourceQualityThisWeek,
+    sourceAnalytics,
     newUnworkedDelta,
+    canViewAllLeads,
     activeInsight, setActiveInsight,
     // Advanced filters
     advancedFilter, hasActiveAdvancedFilter, setAdvancedFilter, clearAdvancedFilter,
@@ -150,6 +196,9 @@ const LeadsPage: React.FC = () => {
     saveCurrentAsView, updateActiveView, renameView, pinView, reorderViews, deleteView,
   } = useLeadsPageState();
 
+  // ── Source quality drawer ─────────────────────────────────────────────────
+  const [showSourceQualityDrawer, setShowSourceQualityDrawer] = useState(false);
+
   // ── Terminal status modal (disqualify / lost) ─────────────────────────────
   const [bulkTerminalAction, setBulkTerminalAction] = useState<TerminalAction | null>(null);
 
@@ -157,6 +206,13 @@ const LeadsPage: React.FC = () => {
   const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
   const drawerLead = drawerLeadId ? contextLeads.find(l => l.id === drawerLeadId) ?? null : null;
   const drawerIdx  = drawerLeadId ? sortedLeads.findIndex(l => l.id === drawerLeadId) : -1;
+
+  // ── Kanban workflow state ─────────────────────────────────────────────────
+  const [pendingDropLeadId, setPendingDropLeadId] = useState<string | null>(null);
+  const [kanbanModal,       setKanbanModal]       = useState<'qualify' | 'outcome' | null>(null);
+  const pendingLead = pendingDropLeadId
+    ? (contextLeads.find(l => l.id === pendingDropLeadId) ?? null)
+    : null;
 
   // ── KPI helpers ───────────────────────────────────────────────────────────
   const uniqueDomainsCount = new Set(
@@ -288,18 +344,20 @@ const LeadsPage: React.FC = () => {
       const extra = status === 'disqualified'
         ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
         : { lost_reason: reason, lost_reason_notes: notes || undefined };
+      // TODO: wire bulk terminal actions through actions.disqualify/markLost per-lead for audit trail
       selectedLeadIds.forEach(id => updateLead(id, { status, ...extra } as Partial<Lead>));
       showToast(`${n} lead${n !== 1 ? 's' : ''} marked ${status}`, 'success');
       clearSelection();
       setBulkTerminalAction(null);
     } else if (activeLead) {
       const isSingleDisqualify = isModalOpen('terminalDisqualify');
-      const status: Lead['status'] = isSingleDisqualify ? 'disqualified' : 'lost';
-      const extra = isSingleDisqualify
-        ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
-        : { lost_reason: reason, lost_reason_notes: notes || undefined };
-      updateLead(activeLead.id, { status, ...extra } as Partial<Lead>);
-      showToast(`Lead marked as ${status}`, 'success');
+      const notesOrUndefined = notes || undefined;
+      if (isSingleDisqualify) {
+        void actions.disqualify(activeLead, reason, notesOrUndefined);
+      } else {
+        void actions.markLost(activeLead, reason, notesOrUndefined);
+      }
+      showToast(`Lead marked as ${isSingleDisqualify ? 'disqualified' : 'lost'}`, 'success');
       closeModal();
     }
   };
@@ -314,83 +372,259 @@ const LeadsPage: React.FC = () => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const { draggableId, destination } = result;
-    const lane = KANBAN_SWIM_LANES.find(l => l.id === destination.droppableId);
-    if (lane) updateLead(draggableId, { status: lane.dropTarget });
+    const laneId = destination.droppableId;
+
+    // Guarded lanes — intercept drop and open the relevant modal.
+    // The lead's status is NOT updated yet; if the user cancels, the card
+    // snaps back automatically because the underlying data never changed.
+    if (laneId === 'qualifying') {
+      setPendingDropLeadId(draggableId);
+      setKanbanModal('qualify');
+      return;
+    }
+    if (laneId === 'closed') {
+      setPendingDropLeadId(draggableId);
+      setKanbanModal('outcome');
+      return;
+    }
+
+    // Unguarded lanes — update directly.
+    const lane = KANBAN_SWIM_LANES.find(l => l.id === laneId);
+    if (lane) {
+      const draggedLead = contextLeads.find(l => l.id === draggableId);
+      if (draggedLead) void actions.changeStatus(draggedLead, lane.dropTarget);
+      else updateLead(draggableId, { status: lane.dropTarget });
+    }
   };
 
-  // ── Kanban mini-card ──────────────────────────────────────────────────────
+  // ── Kanban card (workflow-aware) ──────────────────────────────────────────
 
-  const renderKanbanCard = (lead: Lead, index: number) => (
-    <Draggable key={lead.id} draggableId={lead.id} index={index}>
-      {(provided, snapshot) => (
-        <div
-          ref={provided.innerRef}
-          {...provided.draggableProps}
-          {...provided.dragHandleProps}
-          className={`bg-white rounded-lg border border-gray-200 p-3 mb-2 shadow-sm cursor-grab transition-shadow ${
-            snapshot.isDragging ? 'shadow-lg border-blue-300' : 'hover:shadow-md'
-          }`}
-          onClick={() => setDrawerLeadId(lead.id)}
-        >
-          <div className="flex items-start justify-between mb-1.5">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{getLeadName(lead)}</p>
-              <p className="text-xs text-gray-500 truncate">{lead.company}</p>
+  const renderKanbanCard = (lead: Lead, index: number) => {
+    const score      = getLeadScore(lead);
+    const ageDays    = getAgingDays(lead);
+    const slaResult  = leadSLAMap.get(lead.id);
+    const nbaPri     = nbaQueue.get(lead.id);
+
+    // Build urgency signal list in priority order (max 3 shown, rest as +N)
+    type Sig = { cls: string; icon: React.ReactNode; title: string };
+    const signals: Sig[] = [];
+    if (overdueIdSet.has(lead.id))
+      signals.push({ cls: 'text-amber-500', icon: <Clock size={9} />, title: 'Overdue' });
+    if (slaResult?.overall === 'breached')
+      signals.push({ cls: 'text-red-500', icon: <AlertTriangle size={9} />, title: 'SLA breach' });
+    if (duplicateCandidateMap.has(lead.id))
+      signals.push({ cls: 'text-orange-500', icon: <Copy size={9} />, title: 'Duplicate risk' });
+    if (nbaPri === 'urgent' || nbaPri === 'high')
+      signals.push({
+        cls:   nbaPri === 'urgent' ? 'text-red-500' : 'text-amber-500',
+        icon:  <TrendingUp size={9} />,
+        title: `${nbaPri} priority`,
+      });
+    const shownSigs = signals.slice(0, 3);
+    const overflow  = Math.max(0, signals.length - 3);
+
+    const ageColor =
+      ageDays < 7  ? 'bg-gray-50  text-gray-400'  :
+      ageDays < 21 ? 'bg-amber-50 text-amber-600' :
+                     'bg-red-50   text-red-600';
+
+    return (
+      <Draggable key={lead.id} draggableId={lead.id} index={index}>
+        {(provided, snapshot) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.draggableProps}
+            {...provided.dragHandleProps}
+            className={`bg-white rounded-lg border p-3 mb-2 shadow-sm cursor-grab transition-shadow ${
+              snapshot.isDragging
+                ? 'shadow-lg border-blue-300'
+                : 'border-gray-200 hover:shadow-md'
+            }`}
+            onClick={() => setDrawerLeadId(lead.id)}
+          >
+            {/* Name + score */}
+            <div className="flex items-start justify-between gap-1.5 mb-1">
+              <p className="text-sm font-semibold text-gray-900 truncate flex-1 min-w-0 leading-tight">
+                {getLeadName(lead)}
+              </p>
+              <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${getScoreColor(score)}`}>
+                {score}
+              </span>
             </div>
-            <span className={`ml-2 text-xs font-bold px-1.5 py-0.5 rounded border flex-shrink-0 ${getScoreColor(getLeadScore(lead))}`}>
-              {getLeadScore(lead)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-xs text-gray-400 truncate">{lead.position || '—'}</span>
-            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${getStatusBadge(lead.status)}`}>
-              {getStatusLabel(lead.status)}
-            </span>
-          </div>
-        </div>
-      )}
-    </Draggable>
-  );
 
-  // ── Grid card ─────────────────────────────────────────────────────────────
+            {/* Company + status badge */}
+            <div className="flex items-center justify-between gap-1 mb-2.5">
+              <p className="text-xs text-gray-500 truncate flex-1 min-w-0">{lead.company || '—'}</p>
+              <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${getStatusBadge(lead.status)}`}>
+                {getStatusLabel(lead.status)}
+              </span>
+            </div>
+
+            {/* Footer: urgency icons (max 3 + overflow) + aging chip */}
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1">
+                {shownSigs.map((sig, i) => (
+                  <span key={i} className={sig.cls} title={sig.title}>
+                    {sig.icon}
+                  </span>
+                ))}
+                {overflow > 0 && (
+                  <span className="text-[9px] font-bold text-gray-400">+{overflow}</span>
+                )}
+              </div>
+              <span
+                className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${ageColor}`}
+                title={`${ageDays}d in stage`}
+              >
+                {ageDays === 0 ? 'Today' : `${ageDays}d`}
+              </span>
+            </div>
+          </div>
+        )}
+      </Draggable>
+    );
+  };
+
+  // ── Grid card (triage-optimized) ─────────────────────────────────────────
 
   const renderGridCard = (lead: Lead) => {
-    const score = getLeadScore(lead);
-    const src = getSourceInfo(lead.source);
+    const score       = getLeadScore(lead);
+    const src         = getSourceInfo(lead.source);
+    const selected    = isSelected(lead.id);
+    const isDuplicate = duplicateCandidateMap.has(lead.id);
+    const isOver      = overdueIdSet.has(lead.id);
+    const isUnworked  = (lead.status === 'new' || lead.status === 'assigned') && !lead.last_contact_date;
+    const slaResult   = leadSLAMap.get(lead.id);
+    const nbaPri      = nbaQueue.get(lead.id);
+    const hasSLABreach = slaResult?.overall === 'breached';
+    const hasUrgency   = isOver || hasSLABreach || isDuplicate || nbaPri === 'urgent' || nbaPri === 'high';
+    const recency      = formatRecency(lead.last_contact_date);
+
+    // CTA: nbaQueue priority drives urgency; rule hierarchy drives action label
+    const canConvertLead = can('leads.convert');
+    const cta: { label: string; modal: ModalId | null; color: string; blocked?: boolean } = (() => {
+      if (isDuplicate)
+        return { label: 'Review duplicate', modal: 'mergeDuplicate', color: 'amber' };
+      if (lead.status === 'qualified' || lead.status === 'sales_accepted')
+        return { label: 'Convert', modal: 'convertLead', color: 'green', blocked: !canConvertLead };
+      if (isOver || nbaPri === 'urgent')
+        return { label: 'Follow up', modal: 'contactLead', color: 'red' };
+      if (isUnworked || nbaPri === 'high')
+        return { label: 'Contact now', modal: 'contactLead', color: 'blue' };
+      if (lead.status === 'engaged' || lead.status === 'attempting_contact')
+        return { label: 'Log activity', modal: 'contactLead', color: 'blue' };
+      return { label: 'View details', modal: null, color: 'gray' };
+    })();
+
     return (
-      <div key={lead.id} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-gray-900 truncate text-sm">{getLeadName(lead)}</h3>
-            <p className="text-xs text-gray-500 truncate">{lead.position || '—'}</p>
-            <p className="text-xs font-medium text-gray-700 truncate">{lead.company || '—'}</p>
+      <div
+        key={lead.id}
+        className={`relative bg-white rounded-xl border flex flex-col cursor-pointer transition-all duration-150 hover:shadow-md ${
+          selected
+            ? 'ring-2 ring-blue-500 border-blue-300 shadow-sm'
+            : 'border-gray-200 hover:border-gray-300 shadow-sm'
+        }`}
+        onClick={() => setDrawerLeadId(lead.id)}
+      >
+        {/* ── Header: checkbox + name/company + score ──────────────────── */}
+        <div className="px-4 pt-4 pb-2 flex items-start gap-3">
+          <div
+            className="shrink-0 mt-0.5"
+            onClick={e => { e.stopPropagation(); toggleLeadSelection(lead.id); }}
+          >
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => toggleLeadSelection(lead.id)}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer focus:ring-blue-500"
+              aria-label={`Select ${getLeadName(lead)}`}
+            />
           </div>
-          <span className={`ml-2 text-base font-bold px-2 py-0.5 rounded-lg border-2 flex-shrink-0 ${getScoreColor(score)}`}>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-900 truncate leading-tight">{getLeadName(lead)}</p>
+            <p className="text-xs text-gray-500 truncate">{lead.company || '—'}</p>
+          </div>
+          <span className={`shrink-0 text-sm font-bold px-2 py-0.5 rounded-lg border-2 ${getScoreColor(score)}`}>
             {score}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mb-2 truncate">{lead.email || '—'}</p>
-        <div className="flex items-center justify-between mt-auto">
-          <span className={`text-xs px-2 py-1 rounded-full font-medium ${getStatusBadge(lead.status)}`}>
+
+        {/* ── Identity sub-row: title + source ─────────────────────────── */}
+        <div className="px-4 pb-3 flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-400 truncate">{lead.position || 'No title'}</span>
+          <span className={`text-sm px-1.5 py-0.5 rounded shrink-0 ${src.color}`}>{src.icon}</span>
+        </div>
+
+        {/* ── Urgency strip (rendered only when flags exist) ────────────── */}
+        {hasUrgency && (
+          <div className="px-4 pb-3 flex flex-wrap gap-1">
+            {isOver && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                <Clock size={9} />Overdue
+              </span>
+            )}
+            {hasSLABreach && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                <AlertTriangle size={9} />SLA breach
+              </span>
+            )}
+            {isDuplicate && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                <Copy size={9} />Dup risk
+              </span>
+            )}
+            {nbaPri === 'urgent' && !isOver && !hasSLABreach && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                Urgent
+              </span>
+            )}
+            {nbaPri === 'high' && !isOver && !hasSLABreach && !isDuplicate && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                High priority
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Divider ──────────────────────────────────────────────────── */}
+        <div className="mx-4 border-t border-gray-100" />
+
+        {/* ── State row: status badge + last contact recency ───────────── */}
+        <div className="px-4 py-2.5 flex items-center justify-between gap-2">
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full truncate max-w-[120px] ${getStatusBadge(lead.status)}`}>
             {getStatusLabel(lead.status)}
           </span>
-          <div className="flex items-center space-x-1">
-            <span className={`text-sm p-1 rounded ${src.color}`}>{src.icon}</span>
-            <button
-              onClick={() => navigate(`/crm/leads/${lead.id}`)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="View details"
-            >
-              <Eye className="h-3.5 w-3.5 text-gray-500" />
-            </button>
-            <button
-              onClick={() => openModal('convertLead', lead)}
-              className="p-1 hover:bg-gray-100 rounded"
-              title="Convert to contact"
-            >
-              <UserPlus className="h-3.5 w-3.5 text-gray-500" />
-            </button>
-          </div>
+          <span className={`text-[10px] shrink-0 tabular-nums ${recency === 'Never' ? 'text-amber-500 font-medium' : 'text-gray-400'}`}>
+            {recency === 'Never' ? 'Never contacted' : recency}
+          </span>
+        </div>
+
+        {/* ── Primary CTA ──────────────────────────────────────────────── */}
+        <div className="px-3 pb-3 mt-auto">
+          <button
+            disabled={cta.blocked}
+            title={cta.blocked ? 'Requires Senior SDR or above' : undefined}
+            className={`w-full py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+              cta.blocked
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                : getCtaStyle(cta.color)
+            }`}
+            onClick={e => {
+              e.stopPropagation();
+              if (cta.blocked) return;
+              if (cta.modal) {
+                if (STUB_MODALS.has(cta.modal)) {
+                  showToast(`${STUB_LABELS[cta.modal] ?? cta.modal} — coming soon`, 'info');
+                } else {
+                  openModal(cta.modal, lead);
+                }
+              } else {
+                setDrawerLeadId(lead.id);
+              }
+            }}
+          >
+            {cta.label}
+          </button>
         </div>
       </div>
     );
@@ -608,27 +842,35 @@ const LeadsPage: React.FC = () => {
           />
 
           {/* 6 — Top Source This Week */}
-          <KpiCard
-            title="Top Source This Week"
-            value={sourceQualityThisWeek.topSource}
-            subtitle={
-              sourceQualityThisWeek.weeklyLeads > 0
-                ? `avg score ${sourceQualityThisWeek.topSourceAvgScore} · ${sourceQualityThisWeek.topSourceCount} lead${sourceQualityThisWeek.topSourceCount !== 1 ? 's' : ''}`
-                : 'No leads this week'
-            }
-            neutral
-            icon={<BarChart2 size={18} />}
-            badge="This week"
-            onClick={
-              sourceQualityThisWeek.topSource !== '—'
-                ? () => setFilterSource(sourceQualityThisWeek.topSource)
-                : undefined
-            }
-            isActive={
-              filterState.source === sourceQualityThisWeek.topSource &&
-              sourceQualityThisWeek.topSource !== '—'
-            }
-          />
+          <div className="flex flex-col gap-1.5">
+            <KpiCard
+              title="Top Source This Week"
+              value={sourceQualityThisWeek.topSource}
+              subtitle={
+                sourceQualityThisWeek.weeklyLeads > 0
+                  ? `avg score ${sourceQualityThisWeek.topSourceAvgScore} · ${sourceQualityThisWeek.topSourceCount} lead${sourceQualityThisWeek.topSourceCount !== 1 ? 's' : ''}`
+                  : 'No leads this week'
+              }
+              neutral
+              icon={<BarChart2 size={18} />}
+              badge="This week"
+              onClick={
+                sourceQualityThisWeek.topSource !== '—'
+                  ? () => setFilterSource(sourceQualityThisWeek.topSource)
+                  : undefined
+              }
+              isActive={
+                filterState.source === sourceQualityThisWeek.topSource &&
+                sourceQualityThisWeek.topSource !== '—'
+              }
+            />
+            <button
+              onClick={() => setShowSourceQualityDrawer(true)}
+              className="text-right text-xs text-blue-500 hover:text-blue-700 font-medium px-1 transition-colors"
+            >
+              View source breakdown →
+            </button>
+          </div>
 
         </div>
       </div>
@@ -639,7 +881,7 @@ const LeadsPage: React.FC = () => {
           savedViews={savedViews}
           activeViewId={activeViewId}
           onSelectView={setActiveView}
-          onNewView={() => openModal('createView')}
+          onNewView={can('leads.manage_views') ? () => openModal('createView') : undefined}
           onEditView={(id) => { setEditingViewId(id); openModal('editView'); }}
           onManageViews={() => openModal('manageViews')}
           onRenameView={renameView}
@@ -669,22 +911,24 @@ const LeadsPage: React.FC = () => {
                   </button>
                 </span>
               </div>
-              <div className="flex items-center space-x-2">
-                {isUserViewActive && (
+              {can('leads.manage_views') && (
+                <div className="flex items-center space-x-2">
+                  {isUserViewActive && (
+                    <button
+                      onClick={updateActiveView}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700"
+                    >
+                      Update {activeViewLabel}
+                    </button>
+                  )}
                   <button
-                    onClick={updateActiveView}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700"
+                    onClick={() => openModal('createView')}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 text-gray-700"
                   >
-                    Update {activeViewLabel}
+                    Save as new view
                   </button>
-                )}
-                <button
-                  onClick={() => openModal('createView')}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 text-gray-700"
-                >
-                  Save as new view
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -969,13 +1213,17 @@ const LeadsPage: React.FC = () => {
                           openModal(modal, l);
                         }}
                         onUpdateStatus={(id, status) => {
-                          updateLead(id, { status });
+                          const target = contextLeads.find(l => l.id === id);
+                          if (target) void actions.changeStatus(target, status);
+                          else updateLead(id, { status });
                           showToast(`Lead marked as ${status}`, 'success');
                         }}
                         duplicateRisk={duplicateCandidateMap.get(lead.id)?.[0]?.risk}
                         isOverdue={overdueIdSet.has(lead.id)}
                         isUntouched={untouchedIdSet.has(lead.id)}
                         slaResult={leadSLAMap.get(lead.id)}
+                        canConvert={can('leads.convert')}
+                        canDelete={can('leads.delete')}
                       />
                     ))}
                   </tbody>
@@ -1017,7 +1265,7 @@ const LeadsPage: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {paginatedLeads.map(renderGridCard)}
               </div>
               {sortedLeads.length === 0 && (
@@ -1060,9 +1308,19 @@ const LeadsPage: React.FC = () => {
                     <div key={lane.id} className="flex flex-col min-w-0">
                       <div className={`flex items-center justify-between px-2.5 py-2 rounded-t-lg border ${lane.headerColor}`}>
                         <span className="text-xs font-semibold truncate">{lane.label}</span>
-                        <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full ml-1 shrink-0">
-                          {laneLeads.length}
-                        </span>
+                        <div className="flex items-center gap-1 ml-1 shrink-0">
+                          {WIP_LIMITS[lane.id] != null && laneLeads.length > WIP_LIMITS[lane.id] && (
+                            <span
+                              className="text-[9px] font-bold bg-amber-400 text-white px-1 py-0.5 rounded leading-none"
+                              title={`WIP limit exceeded (limit: ${WIP_LIMITS[lane.id]})`}
+                            >
+                              WIP
+                            </span>
+                          )}
+                          <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full">
+                            {laneLeads.length}
+                          </span>
+                        </div>
                       </div>
                       <Droppable droppableId={lane.id}>
                         {(provided, snapshot) => (
@@ -1076,7 +1334,9 @@ const LeadsPage: React.FC = () => {
                             {laneLeads.map((lead, index) => renderKanbanCard(lead, index))}
                             {provided.placeholder}
                             {laneLeads.length === 0 && !snapshot.isDraggingOver && (
-                              <p className="text-xs text-gray-400 text-center py-6">Drop here</p>
+                              <p className="text-xs text-gray-400 text-center py-6">
+                                {canViewAllLeads ? 'Drop here' : 'None assigned to you'}
+                              </p>
                             )}
                           </div>
                         )}
@@ -1091,7 +1351,7 @@ const LeadsPage: React.FC = () => {
       )}
 
       {/* ── BULK ACTIONS BAR ──────────────────────────────────────────────── */}
-      {selectedLeadIds.length > 0 && (
+      {selectedLeadIds.length > 0 && can('leads.bulk_actions') && (
         <BulkActionBar
           selectedIds={selectedLeadIds}
           selectedLeads={selectedLeads}
@@ -1109,6 +1369,8 @@ const LeadsPage: React.FC = () => {
           onOpenTerminalModal={setBulkTerminalAction}
           onDelete={handleBulkDelete}
           onToast={(msg, type) => showToast(msg, type)}
+          canConvert={can('leads.convert')}
+          canDelete={can('leads.delete')}
         />
       )}
 
@@ -1176,7 +1438,16 @@ const LeadsPage: React.FC = () => {
           readiness={computeConversionReadiness(activeLead, computeMultiFactorScore(activeLead))}
           isOpen={isModalOpen('convertLead')}
           onClose={closeModal}
-          onUpdateLead={updateLead}
+          onUpdateLead={async (id, updates) => {
+            await updateLead(id, updates);
+            if (updates.status === 'converted') {
+              const targetType =
+                updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
+                : updates.converted_to_deal_id    ? 'deal'
+                : 'contact';
+              actions.convert(activeLead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
+            }
+          }}
         />
       )}
 
@@ -1191,6 +1462,9 @@ const LeadsPage: React.FC = () => {
           onClose={closeModal}
           onUpdateLead={updateLead}
           onShowToast={showToast}
+          onMergeComplete={(absorbedId, absorbedName) =>
+            actions.merge(activeLead, absorbedId, absorbedName)
+          }
         />
       )}
 
@@ -1201,6 +1475,47 @@ const LeadsPage: React.FC = () => {
         leads={contextLeads}
         onChange={setAdvancedFilter}
         onClose={closeModal}
+      />
+
+      {/* ── Kanban Qualify Gate ──────────────────────────────────────────── */}
+      {kanbanModal === 'qualify' && pendingLead && (
+        <KanbanQualifyModal
+          lead={pendingLead}
+          canOverride={can('leads.override_qualification_guard')}
+          onConfirm={() => {
+            void actions.changeStatus(pendingLead, 'qualified');
+            setPendingDropLeadId(null);
+            setKanbanModal(null);
+            showToast(`${pendingLead.first_name || 'Lead'} moved to Qualifying`, 'success');
+          }}
+          onClose={() => { setPendingDropLeadId(null); setKanbanModal(null); }}
+        />
+      )}
+
+      {/* ── Kanban Outcome Picker ─────────────────────────────────────────── */}
+      {kanbanModal === 'outcome' && pendingLead && (
+        <KanbanOutcomeModal
+          lead={pendingLead}
+          onSelect={outcome => {
+            setKanbanModal(null);
+            setPendingDropLeadId(null);
+            if (outcome === 'converted')     openModal('convertLead',         pendingLead);
+            else if (outcome === 'disqualified') openModal('terminalDisqualify', pendingLead);
+            else                             openModal('terminalLost',         pendingLead);
+          }}
+          onClose={() => { setKanbanModal(null); setPendingDropLeadId(null); }}
+        />
+      )}
+
+      {/* ── Source Quality Drawer ─────────────────────────────────────────── */}
+      <SourceQualityDrawer
+        open={showSourceQualityDrawer}
+        data={sourceAnalytics}
+        onClose={() => setShowSourceQualityDrawer(false)}
+        onFilterSource={source => {
+          setFilterSource(source);
+          setShowSourceQualityDrawer(false);
+        }}
       />
 
       {/* ── Quick Add Modal ───────────────────────────────────────────────── */}

@@ -35,7 +35,7 @@ export interface SavedViewsBarProps {
   savedViews:      LeadView[];
   activeViewId:    string | null;
   onSelectView:    (id: string) => void;
-  onNewView:       () => void;
+  onNewView?:      () => void;
   onEditView:      (id: string) => void;
   onManageViews:   () => void;
   onRenameView:    (id: string, name: string) => Promise<void>;
@@ -333,14 +333,16 @@ const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
           </button>
         )}
 
-        {/* + New View */}
-        <button
-          onClick={onNewView}
-          className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium text-blue-600 hover:bg-blue-50 whitespace-nowrap"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>New view</span>
-        </button>
+        {/* + New View (hidden when caller does not pass onNewView) */}
+        {onNewView && (
+          <button
+            onClick={onNewView}
+            className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium text-blue-600 hover:bg-blue-50 whitespace-nowrap"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>New view</span>
+          </button>
+        )}
       </div>
     </div>
   );

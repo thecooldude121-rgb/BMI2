@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Pin, Trash2, Edit2, Check, AlertTriangle } from 'lucide-react';
 import type { LeadView } from '../../types/lead';
 
@@ -317,6 +317,13 @@ const ManageRow: React.FC<{
 // ── Main modal component ──────────────────────────────────────────────────────
 
 const SavedViewModal: React.FC<Props> = (props) => {
+  useEffect(() => {
+    if (!props.isOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [props.isOpen, props.onClose]);
+
   if (!props.isOpen) return null;
 
   if (props.mode === 'create') {

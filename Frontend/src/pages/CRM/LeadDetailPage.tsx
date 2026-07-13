@@ -19,6 +19,7 @@ import {
   Target,
   Zap,
   ChevronDown,
+  MoreHorizontal,
   Linkedin,
   Globe,
   Users,
@@ -39,6 +40,7 @@ import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
 import LeadConversionWizard from '../../components/Leads/LeadConversionWizard';
 import { useLeads } from '../../contexts/LeadContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { fetchLeadByIdFromAPI } from '../../utils/leadsApi';
 import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
@@ -47,7 +49,9 @@ import OutreachComposer from '../../components/Leads/OutreachComposer';
 import type { OutreachFollowUp } from '../../components/Leads/OutreachComposer';
 import type { TerminalAction } from '../../utils/leadReasons';
 import type { Lead, LeadActivity, ActivityType } from '../../types/lead';
-import { buildTimeline } from '../../utils/leadTimeline';
+import { buildTimeline, auditEventsToTimelineEvents } from '../../utils/leadTimeline';
+import { getAuditEventsForLead } from '../../utils/auditLog';
+import { useLeadActions } from '../../hooks/useLeadActions';
 import ActivityTimeline from '../../components/Leads/ActivityTimeline';
 import SalesMemoryBlock from '../../components/Leads/SalesMemoryBlock';
 import MergeReviewModal from '../../components/Leads/MergeReviewModal';
@@ -78,6 +82,9 @@ const LeadDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { updateLead, deleteLead, leads: allLeads } = useLeads();
+  const actions = useLeadActions(updateLead);
+  const { can } = usePermissions();
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -154,7 +161,7 @@ const LeadDetailPage: React.FC = () => {
 
   const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
-    await updateLead(lead.id, { status: newStatus as Lead['status'] });
+    await actions.changeStatus(lead, newStatus as Lead['status']);
     setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
     setShowStatusDropdown(false);
     setPendingStatus(null);
@@ -212,7 +219,7 @@ const LeadDetailPage: React.FC = () => {
       email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
       meeting: 'Meeting logged', note: 'Note saved', task: 'Task created',
     };
-    showToast(`✅ ${labels[activity.type] ?? 'Activity logged'}`);
+    showToast(labels[activity.type] ?? 'Activity logged');
     setShowOutreachComposer(false);
   };
 
@@ -222,17 +229,20 @@ const LeadDetailPage: React.FC = () => {
   const handleTerminalConfirm = async (reason: string, notes: string) => {
     if (!lead || !terminalModalAction) return;
     const status = terminalModalAction;
-    const extra = status === 'disqualified'
-      ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
-      : { lost_reason: reason, lost_reason_notes: notes || undefined };
-    await updateLead(lead.id, { status, ...extra } as Partial<Lead>);
-    setLead(prev => prev ? { ...prev, status, ...extra } as Lead : null);
+    const notesOrUndefined = notes || undefined;
+    if (status === 'disqualified') {
+      await actions.disqualify(lead, reason, notesOrUndefined);
+      setLead(prev => prev ? { ...prev, status, disqualified_reason: reason, disqualified_reason_notes: notesOrUndefined } as Lead : null);
+    } else {
+      await actions.markLost(lead, reason, notesOrUndefined);
+      setLead(prev => prev ? { ...prev, status, lost_reason: reason, lost_reason_notes: notesOrUndefined } as Lead : null);
+    }
     showToast(`Lead marked as ${status}`);
     setTerminalModalAction(null);
   };
 
   const handleFileUpload = () => {
-    showToast('✅ File uploaded successfully!');
+    showToast('File uploaded successfully');
     setShowFileUpload(false);
   };
 
@@ -240,12 +250,12 @@ const LeadDetailPage: React.FC = () => {
     setEnriching(true);
     setTimeout(() => {
       setEnriching(false);
-      showToast('✅ Lead data re-enriched successfully!');
+      showToast('Lead data re-enriched');
     }, 2000);
   };
 
   const handleSetReminder = () => {
-    showToast('✅ Reminder set successfully!');
+    showToast('Reminder set');
     setShowReminderForm(false);
   };
 
@@ -365,25 +375,58 @@ const LeadDetailPage: React.FC = () => {
       <div className="bg-white border-b border-gray-200 px-8 py-6">
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center space-x-3">
-              <span>🎯</span>
-              <span>Lead: {displayName}</span>
-            </h1>
-            <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
+            <div className="flex items-center space-x-2">
               <button
                 onClick={() => navigate(`/crm/leads/${id}/edit`)}
-                className="flex items-center px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                className="flex items-center px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
               >
-                <Edit3 className="h-4 w-4 mr-2" />
+                <Edit3 className="h-4 w-4 mr-1.5" />
                 Edit
               </button>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                className="flex items-center px-4 py-2 border-2 border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </button>
+              {/* ⋯ overflow: terminal actions + delete */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowOverflowMenu(v => !v)}
+                  className="flex items-center px-2.5 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+                  aria-label="More options"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+                {showOverflowMenu && (
+                  <div
+                    className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30"
+                    onMouseLeave={() => setShowOverflowMenu(false)}
+                  >
+                    <button
+                      onClick={() => { setTerminalModalAction('lost'); setShowOverflowMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 flex items-center gap-2"
+                    >
+                      <TrendingDown className="h-4 w-4" />
+                      Mark as lost
+                    </button>
+                    <button
+                      onClick={() => { setTerminalModalAction('disqualified'); setShowOverflowMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <X className="h-4 w-4" />
+                      Mark as disqualified
+                    </button>
+                    {can('leads.delete') && (
+                      <>
+                        <div className="my-1 border-t border-gray-100" />
+                        <button
+                          onClick={() => { setShowDeleteModal(true); setShowOverflowMenu(false); }}
+                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete lead
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <p className="text-gray-600 text-lg">{lead.position || '—'} at {lead.company || '—'}</p>
@@ -423,41 +466,43 @@ const LeadDetailPage: React.FC = () => {
         </div>
 
         {/* Quick Actions Bar */}
-        <div className="flex items-center space-x-3 pt-4 border-t border-gray-200">
+        <div className="flex items-center flex-wrap gap-2 pt-4 border-t border-gray-200">
+          {/* Primary */}
           <button
             onClick={() => openOutreach('email')}
-            className="flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             <Mail className="h-4 w-4 mr-2" />
-            Send Email
+            Send email
           </button>
+          {/* Secondary */}
           <button
             onClick={() => openOutreach('call')}
-            className="flex items-center px-5 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
+            className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
           >
             <Phone className="h-4 w-4 mr-2" />
-            Log Call
+            Log call
           </button>
           <button
             onClick={() => openOutreach('meeting')}
-            className="flex items-center px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+            className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
           >
             <Calendar className="h-4 w-4 mr-2" />
-            Schedule Meeting
+            Schedule meeting
           </button>
+          {/* Tertiary: convert — disabled+tooltip when role can't convert */}
           <button
-            onClick={() => setShowConvertModal(true)}
-            className="flex items-center px-5 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium"
+            onClick={() => can('leads.convert') && setShowConvertModal(true)}
+            disabled={!can('leads.convert')}
+            title={!can('leads.convert') ? 'Not available for your role — contact your manager' : undefined}
+            className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              can('leads.convert')
+                ? 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                : 'border-gray-200 text-gray-300 cursor-not-allowed'
+            }`}
           >
             <Users className="h-4 w-4 mr-2" />
-            Convert to Contact
-          </button>
-          <button
-            onClick={() => setTerminalModalAction('lost')}
-            className="flex items-center px-5 py-2.5 border-2 border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium"
-          >
-            <TrendingDown className="h-4 w-4 mr-2" />
-            Mark as Lost
+            Convert
           </button>
         </div>
       </div>
@@ -535,7 +580,16 @@ const LeadDetailPage: React.FC = () => {
           readiness={computeConversionReadiness(lead, computeMultiFactorScore(lead))}
           isOpen={showConvertModal}
           onClose={() => setShowConvertModal(false)}
-          onUpdateLead={updateLead}
+          onUpdateLead={async (id, updates) => {
+            await updateLead(id, updates);
+            if (updates.status === 'converted') {
+              const targetType =
+                updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
+                : updates.converted_to_deal_id    ? 'deal'
+                : 'contact';
+              actions.convert(lead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
+            }
+          }}
         />
       )}
 
@@ -603,7 +657,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <User className="h-5 w-5 text-blue-600" />
-                <span>👤 BASIC INFORMATION</span>
+                <span>Basic information</span>
               </h3>
 
               <div className="grid grid-cols-2 gap-4 mb-6">
@@ -697,7 +751,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <Building className="h-5 w-5 text-blue-600" />
-                <span>🏢 COMPANY INFORMATION</span>
+                <span>Company information</span>
                 {lead.enriched_at && (
                   <span className="text-sm font-normal text-purple-600">(🤖 AI Enriched)</span>
                 )}
@@ -789,11 +843,14 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <Activity className="h-5 w-5 text-blue-600" />
-                <span>📋 ACTIVITY TIMELINE</span>
+                <span>Activity timeline</span>
               </h3>
 
               <ActivityTimeline
-                events={buildTimeline(lead, activities)}
+                events={[
+                  ...buildTimeline(lead, activities),
+                  ...auditEventsToTimelineEvents(getAuditEventsForLead(lead.id)),
+                ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())}
                 onLogActivity={() => openOutreach('call')}
               />
             </div>
@@ -802,7 +859,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <FileText className="h-5 w-5 text-blue-600" />
-                <span>📝 NOTES & FILES</span>
+                <span>Notes & files</span>
               </h3>
 
               <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
@@ -839,7 +896,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow-sm border-2 border-purple-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <Zap className="h-5 w-5 text-purple-600" />
-                <span>🤖 AI INSIGHTS</span>
+                <span>AI insights</span>
               </h3>
 
               <div className="text-center mb-6">
@@ -905,7 +962,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <Target className="h-5 w-5 text-orange-600" />
-                <span>🎯 AI RECOMMENDED ACTIONS</span>
+                <span>AI recommended actions</span>
               </h3>
 
               {recommendedActions.length > 0 ? (
@@ -1019,7 +1076,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <ExternalLink className="h-5 w-5 text-blue-600" />
-                <span>🔗 INTEGRATIONS</span>
+                <span>Integrations</span>
               </h3>
 
               <p className="text-sm font-medium text-gray-700 mb-3">Data Sources:</p>
@@ -1058,7 +1115,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="bg-orange-50 rounded-lg shadow-sm border-2 border-orange-200 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
                 <AlertCircle className="h-5 w-5 text-orange-600" />
-                <span>⚠️ NEXT STEPS</span>
+                <span>Next steps</span>
               </h3>
 
               <div className="mb-4">
@@ -1117,9 +1174,11 @@ const LeadDetailPage: React.FC = () => {
           onClose={() => setShowMergeModal(false)}
           onUpdateLead={updateLead}
           onShowToast={(msg, type) => {
-            if (type === 'success') showToast(`✅ ${msg}`);
-            else showToast(msg);
+            showToast(msg);
           }}
+          onMergeComplete={(absorbedId, absorbedName) =>
+            actions.merge(lead, absorbedId, absorbedName)
+          }
         />
       )}
 

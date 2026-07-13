@@ -16,6 +16,9 @@ import type { NBAPriority } from '../utils/leadNBA/engine';
 import { computeMultiFactorScore } from '../utils/leadScoring/multiFactorScore';
 import { findDuplicates, computeRisk, buildDomainSet } from '../utils/leadDuplicates';
 import type { DuplicateCandidate, DuplicateRisk } from '../utils/leadDuplicates';
+import { computeSourceAnalytics } from '../utils/leadSourceAnalytics';
+import type { SourceStats } from '../utils/leadSourceAnalytics';
+import { usePermissions } from './usePermissions';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +74,14 @@ export interface SourceQuality {
   weeklyLeads:        number;
 }
 
+export interface SourceAnalytics {
+  all:   SourceStats[];
+  week:  SourceStats[];
+  month: SourceStats[];
+}
+
+export type { SourceStats };
+
 export type ActiveInsight = 'overdue' | 'duplicateRisk' | 'untouched' | 'readyToConvert' | 'slaBreach' | 'nbaAction' | null;
 
 export type StatusViewMode = 'simplified' | 'detailed';
@@ -111,6 +122,7 @@ export interface LeadsPageState {
   untouchedLeads:         Lead[];
   readyToConvertLeads:    Lead[];
   duplicateRiskLeads:     Lead[];
+  duplicateCandidateMap:  Map<string, DuplicateCandidate[]>;
   nbaQueue:               Map<string, NBAPriority>;
   leadSLAMap:             Map<string, LeadSLAResult>;
   slaBreachedLeads:       Lead[];
@@ -119,6 +131,8 @@ export interface LeadsPageState {
   slaBreachCounts:        { firstResponse: number; followUp: number; stale: number };
   newUnworkedLeads:       Lead[];
   sourceQualityThisWeek:  SourceQuality;
+  sourceAnalytics:        SourceAnalytics;
+  canViewAllLeads:        boolean;
   newUnworkedDelta:       number;
   readyToConvertDelta:    number;
   advancedFilter:         AdvancedFilter;
@@ -181,6 +195,8 @@ const PAGE_SIZE = 20;
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useLeadsPageState(): LeadsPageState {
+  const { can, canViewLead } = usePermissions();
+
   const {
     leads: contextLeads,
     fetchLeads,
@@ -206,7 +222,13 @@ export function useLeadsPageState(): LeadsPageState {
   const [activeInsight,   setActiveInsightSt] = useState<ActiveInsight>(null);
   const [advancedFilter,  setAdvancedFilterSt] = useState<AdvancedFilter>({ groups: [] });
   const [statusViewMode,  setStatusViewModeSt] = useState<StatusViewMode>(
-    () => (localStorage.getItem('bmi_lead_status_view') as StatusViewMode | null) ?? 'detailed',
+    () => {
+      try {
+        return (localStorage.getItem('bmi_lead_status_view') as StatusViewMode | null) ?? 'detailed';
+      } catch {
+        return 'detailed';
+      }
+    },
   );
 
   useEffect(() => {
@@ -231,8 +253,8 @@ export function useLeadsPageState(): LeadsPageState {
         migrated ??
         (lead.status === 'new' && lead.owner_id ? 'assigned' : lead.status as LeadLifecycleStage);
       return derived !== lead.status ? { ...lead, status: derived } : lead;
-    });
-  }, [contextLeads]);
+    }).filter(lead => canViewLead(lead));
+  }, [contextLeads, canViewLead]);
 
   // ── Sorted saved views (pinned first, then view_order) ───────────────────
   const savedViews = useMemo(
@@ -373,6 +395,25 @@ export function useLeadsPageState(): LeadsPageState {
       weeklyLeads: weeklyLeads.length,
     };
   }, [migratedLeads]);
+
+  const sourceAnalytics = useMemo((): SourceAnalytics => {
+    const now = Date.now();
+    const WEEK_MS  = 7  * 86_400_000;
+    const MONTH_MS = 30 * 86_400_000;
+    return {
+      all:   computeSourceAnalytics(migratedLeads, duplicateCandidateMap, leadSLAMap),
+      week:  computeSourceAnalytics(
+        migratedLeads.filter(l => now - new Date(l.created_at).getTime() <= WEEK_MS),
+        duplicateCandidateMap,
+        leadSLAMap,
+      ),
+      month: computeSourceAnalytics(
+        migratedLeads.filter(l => now - new Date(l.created_at).getTime() <= MONTH_MS),
+        duplicateCandidateMap,
+        leadSLAMap,
+      ),
+    };
+  }, [migratedLeads, duplicateCandidateMap, leadSLAMap]);
 
   const nbaQueue = useMemo((): Map<string, NBAPriority> => {
     const overdueSet   = new Set(overdueLeads.map(l => l.id));
@@ -783,6 +824,8 @@ export function useLeadsPageState(): LeadsPageState {
     slaBreachCounts,
     newUnworkedLeads,
     sourceQualityThisWeek,
+    sourceAnalytics,
+    canViewAllLeads: can('leads.view_all'),
     newUnworkedDelta,
     readyToConvertDelta,
     advancedFilter,
