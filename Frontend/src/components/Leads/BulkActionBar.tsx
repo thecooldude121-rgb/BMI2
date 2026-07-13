@@ -30,6 +30,8 @@ export type BulkActionBarProps = {
   onOpenTerminalModal: (action: 'disqualified' | 'lost') => void;
   onDelete:            () => void;
   onToast:             (msg: string, type?: 'success' | 'info' | 'error') => void;
+  canConvert:          boolean;
+  canDelete:           boolean;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -67,6 +69,8 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onOpenTerminalModal,
   onDelete,
   onToast,
+  canConvert,
+  canDelete,
 }) => {
   const count  = selectedIds.length;
   const plural = count !== 1 ? 's' : '';
@@ -316,9 +320,15 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
           {/* ── Convert ───────────────────────────────────────────────── */}
           <button
-            onClick={handleConvertClick}
+            onClick={canConvert ? handleConvertClick : undefined}
+            disabled={!canConvert}
+            title={!canConvert ? 'Not available for your role — contact your manager' : undefined}
             aria-label={`Convert ${convertibleCount} qualified lead${convertibleCount !== 1 ? 's' : ''} to contacts`}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white hover:bg-green-700 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-500"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-500 ${
+              canConvert
+                ? 'bg-green-600 text-white hover:bg-green-700 cursor-pointer'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
           >
             <ArrowRightCircle className="h-3.5 w-3.5" />
             Convert{convertibleCount > 0 && convertibleCount < count ? ` (${convertibleCount})` : ''}
@@ -394,13 +404,15 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
                 <div className="my-1 border-t border-gray-100" />
 
-                <button
-                  role="menuitem"
-                  onClick={() => { setConfirmKind('delete'); setMoreOpen(false); }}
-                  className={`${menuItemCls} text-red-600 hover:bg-red-50`}
-                >
-                  <Trash2 className="h-3.5 w-3.5 shrink-0" /> Delete Selected
-                </button>
+                {canDelete && (
+                  <button
+                    role="menuitem"
+                    onClick={() => { setConfirmKind('delete'); setMoreOpen(false); }}
+                    className={`${menuItemCls} text-red-600 hover:bg-red-50`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 shrink-0" /> Delete Selected
+                  </button>
+                )}
               </div>
             )}
           </div>

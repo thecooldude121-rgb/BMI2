@@ -1,6 +1,8 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { CurrentUserProvider } from './contexts/CurrentUserContext';
+import RoleSwitcher from './components/Dev/RoleSwitcher';
 import { DataProvider } from './contexts/DataContext';
 import { LeadProvider } from './contexts/LeadContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -53,13 +55,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
 const App = () => {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <DataProvider>
-          <LeadProvider>
-            <SettingsProvider>
-              <IntegrationsProvider>
-                <Routes>
+    <CurrentUserProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <DataProvider>
+            <LeadProvider>
+              <SettingsProvider>
+                <IntegrationsProvider>
+                  <Routes>
                   <Route path="/login" element={<Login />} />
                   <Route path="/login/wireframe" element={<LoginWireframe />} />
                   <Route path="/" element={<Layout><Navigate to="/dashboard" replace /></Layout>} />
@@ -90,12 +93,14 @@ const App = () => {
                   <Route path="/settings/workflows" element={<Layout><WorkflowAutomationPage /></Layout>} />
                   <Route path="/settings/notifications" element={<Layout><NotificationsManagementPage /></Layout>} />
                 </Routes>
-              </IntegrationsProvider>
-            </SettingsProvider>
-          </LeadProvider>
-        </DataProvider>
-      </AuthProvider>
-    </ToastProvider>
+                </IntegrationsProvider>
+              </SettingsProvider>
+            </LeadProvider>
+          </DataProvider>
+        </AuthProvider>
+      </ToastProvider>
+      {import.meta.env.DEV && <RoleSwitcher />}
+    </CurrentUserProvider>
   );
 };
 
