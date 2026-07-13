@@ -1,4 +1,5 @@
 import type { Lead, LeadActivity, LeadLifecycleStage } from '../types/lead';
+import type { AuditEvent } from './auditLog';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -20,7 +21,10 @@ export type TimelineEventKind =
   | 'follow_up_set'
   | 'converted'
   | 'disqualified'
-  | 'lost';
+  | 'lost'
+  | 'owner_changed'
+  | 'merged'
+  | 'score_feedback';
 
 export type TimelineEventCategory =
   | 'system'
@@ -45,7 +49,7 @@ export interface TimelineEvent {
     activityStatus?:   string;
     newStatus?:        string;
   };
-  source: 'system' | 'user';
+  source: 'system' | 'user' | 'audit';
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────────
@@ -303,6 +307,58 @@ export function buildLastTouchSummary(lead: Lead): string {
   }
 
   return parts.join(' · ');
+}
+
+// ── Public: auditEventsToTimelineEvents ──────────────────────────────────────
+
+const AUDIT_KIND_MAP: Record<string, TimelineEventKind> = {
+  status_changed: 'status_changed',
+  owner_changed:  'owner_changed',
+  converted:      'converted',
+  merged:         'merged',
+  disqualified:   'disqualified',
+  lost:           'lost',
+  score_feedback: 'score_feedback',
+};
+
+function auditTitle(event: AuditEvent): string {
+  const m = event.meta;
+  switch (m.type) {
+    case 'status_changed':
+      return `Status changed: ${fmtStatus(m.fromStatus)} → ${fmtStatus(m.toStatus)}`;
+    case 'owner_changed':
+      return `Owner changed${m.toOwnerName ? ` → ${m.toOwnerName}` : ` → ${m.toOwnerId}`}`;
+    case 'converted':
+      return `Converted → ${m.targetType === 'both' ? 'Contact & Deal' : m.targetType === 'contact' ? 'Contact' : 'Deal'}`;
+    case 'merged':
+      return `Merged · absorbed ${m.absorbedLeadName}`;
+    case 'disqualified':
+      return `Disqualified · ${fmtReason(m.reason)}`;
+    case 'lost':
+      return `Lost · ${fmtReason(m.reason)}`;
+    case 'score_feedback':
+      return `Score feedback: ${m.feedback.replace(/_/g, ' ')} (score ${m.score})`;
+  }
+}
+
+function auditBody(event: AuditEvent): string | undefined {
+  const m = event.meta;
+  const actor = `by ${event.actorName}`;
+  if (m.type === 'disqualified' && m.notes) return `${actor} · ${m.notes}`;
+  if (m.type === 'lost'         && m.notes) return `${actor} · ${m.notes}`;
+  return actor;
+}
+
+export function auditEventsToTimelineEvents(events: AuditEvent[]): TimelineEvent[] {
+  return events.map(e => ({
+    id:        `audit_${e.id}`,
+    kind:      AUDIT_KIND_MAP[e.type] ?? 'status_changed',
+    category:  'system' as TimelineEventCategory,
+    timestamp: e.timestamp,
+    title:     auditTitle(e),
+    body:      auditBody(e),
+    source:    'audit' as const,
+  }));
 }
 
 // ── Public: buildSalesMemory ──────────────────────────────────────────────────

@@ -3,14 +3,15 @@ import {
   Star, Zap, Mail, Phone, Calendar, FileText, MessageSquare,
   CheckCircle, XCircle, TrendingUp, TrendingDown, Clock,
   Send, CheckSquare, ArrowRight, ExternalLink, Plus, Activity,
+  UserCheck, GitMerge, ThumbsUp,
 } from 'lucide-react';
 import type { TimelineEvent, TimelineEventKind, TimelineEventCategory } from '../../utils/leadTimeline';
 
 // ── Chip config ───────────────────────────────────────────────────────────────
 
-type FilterId = 'all' | TimelineEventCategory;
+type FilterId = 'all' | TimelineEventCategory | 'audit';
 
-const CHIPS: { id: FilterId; label: string }[] = [
+const BASE_CHIPS: { id: FilterId; label: string }[] = [
   { id: 'all',      label: 'All'      },
   { id: 'system',   label: 'System'   },
   { id: 'email',    label: 'Email'    },
@@ -40,6 +41,9 @@ const EVENT_COLOR: Record<TimelineEventKind, string> = {
   converted:         'bg-green-100 text-green-600',
   disqualified:      'bg-red-100 text-red-500',
   lost:              'bg-red-100 text-red-500',
+  owner_changed:     'bg-indigo-100 text-indigo-600',
+  merged:            'bg-violet-100 text-violet-600',
+  score_feedback:    'bg-sky-100 text-sky-600',
 };
 
 // ── Relative time ─────────────────────────────────────────────────────────────
@@ -85,6 +89,9 @@ function EventIcon({ kind, sz }: { kind: TimelineEventKind; sz: number }) {
     case 'converted':         return <TrendingUp size={sz} />;
     case 'disqualified':      return <XCircle size={sz} />;
     case 'lost':              return <TrendingDown size={sz} />;
+    case 'owner_changed':     return <UserCheck size={sz} />;
+    case 'merged':            return <GitMerge size={sz} />;
+    case 'score_feedback':    return <ThumbsUp size={sz} />;
     default:                  return <Activity size={sz} />;
   }
 }
@@ -96,7 +103,7 @@ function EventRow({ event, compact }: { event: TimelineEvent; compact: boolean }
   const sz    = compact ? 10 : 12;
 
   return (
-    <div className={`flex items-start gap-3 ${compact ? 'py-2' : 'py-3'} border-b border-gray-50 last:border-0`}>
+    <div className={`flex items-start gap-3 ${compact ? 'py-2' : 'py-3'} border-b border-gray-100 last:border-0`}>
       <span className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${color}`}>
         <EventIcon kind={event.kind} sz={sz} />
       </span>
@@ -132,17 +139,32 @@ export default function ActivityTimeline({ events, onLogActivity, compact = fals
 
   const counts = events.reduce<Record<string, number>>((acc, e) => {
     acc.all = (acc.all ?? 0) + 1;
-    acc[e.category] = (acc[e.category] ?? 0) + 1;
+    // System chip excludes audit events — they have their own chip
+    if (e.source !== 'audit') acc[e.category] = (acc[e.category] ?? 0) + 1;
+    if (e.source === 'audit') acc.audit = (acc.audit ?? 0) + 1;
     return acc;
   }, { all: 0 });
 
-  const visible = filter === 'all' ? events : events.filter(e => e.category === filter);
+  const auditCount = counts.audit ?? 0;
+  // Only show chips that have at least one event; "All" always shows
+  const chips: { id: FilterId; label: string }[] = [
+    ...BASE_CHIPS.filter(c => c.id === 'all' || (counts[c.id] ?? 0) > 0),
+    ...(auditCount > 0 ? [{ id: 'audit' as FilterId, label: 'Audit' }] : []),
+  ];
+
+  const visible =
+    filter === 'all'   ? events :
+    filter === 'audit' ? events.filter(e => e.source === 'audit') :
+    // System filter excludes audit events so they don't bleed in
+    filter === 'system'
+      ? events.filter(e => e.category === 'system' && e.source !== 'audit')
+      : events.filter(e => e.category === filter);
 
   return (
     <div>
       {/* Filter chips */}
       <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3">
-        {CHIPS.map(chip => {
+        {chips.map(chip => {
           const cnt    = counts[chip.id] ?? 0;
           const active = filter === chip.id;
           return (
@@ -186,7 +208,7 @@ export default function ActivityTimeline({ events, onLogActivity, compact = fals
       {onLogActivity && (
         <button
           onClick={onLogActivity}
-          className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 border border-gray-300 rounded-lg bg-white text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors"
         >
           <Plus size={14} /> Log Activity
         </button>
