@@ -1,14 +1,26 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { requireTenantId } from '../middleware/tenant';
+
+// Verifies the parent lead exists AND belongs to the caller's tenant before a
+// sub-resource is attached to it. Without this, a caller could attach a note/
+// task/etc. to another tenant's lead by guessing its (small, sequential)
+// integer id — the sub-resource table's own tenant_id column alone doesn't
+// prevent that, since the FK to leads.id has no tenant awareness.
+const assertLeadInTenant = async (leadId: string, tenantId: string): Promise<boolean> => {
+  const result = await pool.query('SELECT id FROM leads WHERE id = $1 AND tenant_id = $2', [leadId, tenantId]);
+  return !!result.rows[0];
+};
 
 // ── Activities (uses existing `activities` table) ─────────────────────────────
 
 export const getActivities = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      'SELECT * FROM activities WHERE lead_id = $1 ORDER BY created_at DESC',
-      [req.params.leadId]
+      'SELECT * FROM activities WHERE lead_id = $1 AND tenant_id = $2 ORDER BY created_at DESC',
+      [req.params.leadId, tenantId]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -16,6 +28,10 @@ export const getActivities = async (req: AuthRequest, res: Response, next: NextF
 
 export const createActivity = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
+    if (!(await assertLeadInTenant(req.params.leadId, tenantId))) {
+      res.status(404).json({ success: false, message: 'Lead not found' }); return;
+    }
     const {
       type = 'note', direction, status = 'completed', subject,
       description, outcome, duration_minutes, scheduled_at, completed_at,
@@ -32,14 +48,14 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
     const result = await pool.query(
       `INSERT INTO activities
          (lead_id, subject, type, direction, status, description, outcome,
-          duration, scheduled_at, completed_at, created_by, assigned_to)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
+          duration, scheduled_at, completed_at, created_by, assigned_to, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12)
        RETURNING *`,
       [
         req.params.leadId, subject, safeType, direction || null, safeStatus,
         description || null, outcome || null,
         duration_minutes || null, scheduled_at || null, completed_at || null,
-        req.user?.id || '',
+        req.user?.id || '', tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -48,6 +64,7 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
 
 export const updateActivity = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const FIELDS = ['status', 'subject', 'description', 'outcome', 'completed_at', 'duration'];
     const sets: string[] = [];
     const params: any[] = [];
@@ -57,9 +74,9 @@ export const updateActivity = async (req: AuthRequest, res: Response, next: Next
     });
     if (!sets.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     sets.push(`updated_at = NOW()`);
-    params.push(req.params.activityId);
+    params.push(req.params.activityId, tenantId);
     const result = await pool.query(
-      `UPDATE activities SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params
+      `UPDATE activities SET ${sets.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Activity not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -70,10 +87,11 @@ export const updateActivity = async (req: AuthRequest, res: Response, next: Next
 
 export const getNotes = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      `SELECT * FROM lead_notes WHERE lead_id = $1 AND is_deleted = FALSE
+      `SELECT * FROM lead_notes WHERE lead_id = $1 AND tenant_id = $2 AND is_deleted = FALSE
        ORDER BY is_pinned DESC, created_at DESC`,
-      [req.params.leadId]
+      [req.params.leadId, tenantId]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -81,12 +99,16 @@ export const getNotes = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const createNote = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
+    if (!(await assertLeadInTenant(req.params.leadId, tenantId))) {
+      res.status(404).json({ success: false, message: 'Lead not found' }); return;
+    }
     const { content, is_pinned = false, is_private = false } = req.body;
     if (!content) { res.status(400).json({ success: false, message: 'content is required' }); return; }
     const result = await pool.query(
-      `INSERT INTO lead_notes (lead_id, content, is_pinned, is_private, created_by)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.params.leadId, content, is_pinned, is_private, req.user?.id || '']
+      `INSERT INTO lead_notes (lead_id, content, is_pinned, is_private, created_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.params.leadId, content, is_pinned, is_private, req.user?.id || '', tenantId]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
@@ -94,6 +116,7 @@ export const createNote = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateNote = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const sets: string[] = [];
     const params: any[] = [];
     let i = 1;
@@ -101,9 +124,9 @@ export const updateNote = async (req: AuthRequest, res: Response, next: NextFunc
     if (req.body.is_pinned !== undefined) { sets.push(`is_pinned = $${i++}`); params.push(req.body.is_pinned); }
     if (!sets.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     sets.push(`updated_at = NOW()`);
-    params.push(req.params.noteId);
+    params.push(req.params.noteId, tenantId);
     const result = await pool.query(
-      `UPDATE lead_notes SET ${sets.join(', ')} WHERE id = $${i} AND is_deleted = FALSE RETURNING *`, params
+      `UPDATE lead_notes SET ${sets.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} AND is_deleted = FALSE RETURNING *`, params
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Note not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -112,9 +135,10 @@ export const updateNote = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const deleteNote = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      `UPDATE lead_notes SET is_deleted = TRUE, deleted_at = NOW() WHERE id = $1 RETURNING id`,
-      [req.params.noteId]
+      `UPDATE lead_notes SET is_deleted = TRUE, deleted_at = NOW() WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+      [req.params.noteId, tenantId]
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Note not found' }); return; }
     res.json({ success: true, message: 'Note deleted' });
@@ -125,11 +149,12 @@ export const deleteNote = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const getTasks = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      `SELECT * FROM lead_tasks WHERE lead_id = $1
+      `SELECT * FROM lead_tasks WHERE lead_id = $1 AND tenant_id = $2
        ORDER BY CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
                 due_date ASC NULLS LAST`,
-      [req.params.leadId]
+      [req.params.leadId, tenantId]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -137,6 +162,10 @@ export const getTasks = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const createTask = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
+    if (!(await assertLeadInTenant(req.params.leadId, tenantId))) {
+      res.status(404).json({ success: false, message: 'Lead not found' }); return;
+    }
     const {
       title, description, task_type, priority = 'medium', status = 'open',
       due_date, assigned_to = '',
@@ -144,11 +173,11 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
     if (!title) { res.status(400).json({ success: false, message: 'title is required' }); return; }
     const result = await pool.query(
       `INSERT INTO lead_tasks
-         (lead_id, title, description, task_type, priority, status, due_date, assigned_to, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+         (lead_id, title, description, task_type, priority, status, due_date, assigned_to, created_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
         req.params.leadId, title, description || null, task_type || null,
-        priority, status, due_date || null, assigned_to, req.user?.id || '',
+        priority, status, due_date || null, assigned_to, req.user?.id || '', tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -157,6 +186,7 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateTask = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const FIELDS = ['title', 'description', 'priority', 'status', 'due_date', 'completed_at', 'assigned_to'];
     const sets: string[] = [];
     const params: any[] = [];
@@ -166,9 +196,9 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
     });
     if (!sets.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     sets.push(`updated_at = NOW()`);
-    params.push(req.params.taskId);
+    params.push(req.params.taskId, tenantId);
     const result = await pool.query(
-      `UPDATE lead_tasks SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params
+      `UPDATE lead_tasks SET ${sets.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Task not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -179,9 +209,10 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const getEmails = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      'SELECT * FROM lead_emails WHERE lead_id = $1 ORDER BY created_at DESC',
-      [req.params.leadId]
+      'SELECT * FROM lead_emails WHERE lead_id = $1 AND tenant_id = $2 ORDER BY created_at DESC',
+      [req.params.leadId, tenantId]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -189,6 +220,10 @@ export const getEmails = async (req: AuthRequest, res: Response, next: NextFunct
 
 export const logEmail = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
+    if (!(await assertLeadInTenant(req.params.leadId, tenantId))) {
+      res.status(404).json({ success: false, message: 'Lead not found' }); return;
+    }
     const {
       direction = 'outbound', from_email, to_emails = [], cc_emails = [],
       subject, body_text, body_html, template_id, sent_at, status = 'sent',
@@ -199,12 +234,12 @@ export const logEmail = async (req: AuthRequest, res: Response, next: NextFuncti
     const result = await pool.query(
       `INSERT INTO lead_emails
          (lead_id, direction, from_email, to_emails, cc_emails, subject,
-          body_text, body_html, template_id, sent_at, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+          body_text, body_html, template_id, sent_at, status, created_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
         req.params.leadId, direction, from_email, to_emails, cc_emails, subject,
         body_text || null, body_html || null, template_id || null,
-        sent_at || new Date().toISOString(), status, req.user?.id || '',
+        sent_at || new Date().toISOString(), status, req.user?.id || '', tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -215,9 +250,10 @@ export const logEmail = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const getCalls = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      'SELECT * FROM lead_calls WHERE lead_id = $1 ORDER BY created_at DESC',
-      [req.params.leadId]
+      'SELECT * FROM lead_calls WHERE lead_id = $1 AND tenant_id = $2 ORDER BY created_at DESC',
+      [req.params.leadId, tenantId]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -225,14 +261,18 @@ export const getCalls = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const logCall = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
+    if (!(await assertLeadInTenant(req.params.leadId, tenantId))) {
+      res.status(404).json({ success: false, message: 'Lead not found' }); return;
+    }
     const { direction = 'outbound', duration_seconds, outcome, disposition, notes, started_at, ended_at } = req.body;
     const result = await pool.query(
       `INSERT INTO lead_calls
-         (lead_id, direction, duration_seconds, outcome, disposition, notes, started_at, ended_at, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+         (lead_id, direction, duration_seconds, outcome, disposition, notes, started_at, ended_at, created_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [
         req.params.leadId, direction, duration_seconds || null, outcome || null,
-        disposition || null, notes || null, started_at || null, ended_at || null, req.user?.id || '',
+        disposition || null, notes || null, started_at || null, ended_at || null, req.user?.id || '', tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -243,9 +283,10 @@ export const logCall = async (req: AuthRequest, res: Response, next: NextFunctio
 
 export const getMeetings = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      'SELECT * FROM lead_meetings WHERE lead_id = $1 ORDER BY scheduled_at DESC',
-      [req.params.leadId]
+      'SELECT * FROM lead_meetings WHERE lead_id = $1 AND tenant_id = $2 ORDER BY scheduled_at DESC',
+      [req.params.leadId, tenantId]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -253,6 +294,10 @@ export const getMeetings = async (req: AuthRequest, res: Response, next: NextFun
 
 export const scheduleMeeting = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
+    if (!(await assertLeadInTenant(req.params.leadId, tenantId))) {
+      res.status(404).json({ success: false, message: 'Lead not found' }); return;
+    }
     const {
       title, description, meeting_type, scheduled_at, duration_minutes = 30,
       location, meeting_url, attendees = [], status = 'planned',
@@ -263,12 +308,12 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response, next: Nex
     const result = await pool.query(
       `INSERT INTO lead_meetings
          (lead_id, title, description, meeting_type, scheduled_at,
-          duration_minutes, location, meeting_url, attendees, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+          duration_minutes, location, meeting_url, attendees, status, created_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         req.params.leadId, title, description || null, meeting_type || null, scheduled_at,
         duration_minutes, location || null, meeting_url || null,
-        Array.isArray(attendees) ? attendees : [], status, req.user?.id || '',
+        Array.isArray(attendees) ? attendees : [], status, req.user?.id || '', tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -277,6 +322,7 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response, next: Nex
 
 export const updateMeeting = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const FIELDS = ['title', 'status', 'notes', 'outcome', 'next_steps', 'meeting_url'];
     const sets: string[] = [];
     const params: any[] = [];
@@ -286,9 +332,9 @@ export const updateMeeting = async (req: AuthRequest, res: Response, next: NextF
     });
     if (!sets.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     sets.push(`updated_at = NOW()`);
-    params.push(req.params.meetingId);
+    params.push(req.params.meetingId, tenantId);
     const result = await pool.query(
-      `UPDATE lead_meetings SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params
+      `UPDATE lead_meetings SET ${sets.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Meeting not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -296,23 +342,32 @@ export const updateMeeting = async (req: AuthRequest, res: Response, next: NextF
 };
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
+// NOTE: tags.name has a global UNIQUE constraint (pre-dates multi-tenancy).
+// tenant_id is now stamped on every row, but the constraint itself is not yet
+// tenant-scoped (would need UNIQUE(tenant_id, name)) — see summary for why
+// that DDL change was deliberately left out of this phase.
 
 export const getTags = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await pool.query('SELECT * FROM tags ORDER BY usage_count DESC, name ASC');
+    const tenantId = requireTenantId(req);
+    const result = await pool.query(
+      'SELECT * FROM tags WHERE tenant_id = $1 ORDER BY usage_count DESC, name ASC',
+      [tenantId]
+    );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
 };
 
 export const createTag = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { name, color, description, category } = req.body;
     if (!name) { res.status(400).json({ success: false, message: 'name is required' }); return; }
     const result = await pool.query(
-      `INSERT INTO tags (name, color, description, category)
-       VALUES ($1,$2,$3,$4)
+      `INSERT INTO tags (name, color, description, category, tenant_id)
+       VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color RETURNING *`,
-      [name, color || null, description || null, category || null]
+      [name, color || null, description || null, category || null, tenantId]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
@@ -322,10 +377,11 @@ export const createTag = async (req: AuthRequest, res: Response, next: NextFunct
 
 export const getViews = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
-      `SELECT * FROM lead_views WHERE is_public = TRUE OR created_by = $1
+      `SELECT * FROM lead_views WHERE tenant_id = $1 AND (is_public = TRUE OR created_by = $2)
        ORDER BY is_pinned DESC, view_order ASC, name ASC`,
-      [req.user?.id || '']
+      [tenantId, req.user?.id || '']
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -333,6 +389,7 @@ export const getViews = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const createView = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const {
       name, description, filters = {}, sort_by, sort_order = 'desc', columns = [], is_public = true,
       is_pinned = false, view_order = 0, visibility = 'private',
@@ -342,11 +399,11 @@ export const createView = async (req: AuthRequest, res: Response, next: NextFunc
     const result = await pool.query(
       `INSERT INTO lead_views
          (name, description, filters, sort_by, sort_order, columns, is_public, created_by,
-          is_pinned, view_order, visibility, search_query, view_mode, icon)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+          is_pinned, view_order, visibility, search_query, view_mode, icon, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [name, description || null, JSON.stringify(filters), sort_by || null,
        sort_order, columns, is_public, req.user?.id || '',
-       is_pinned, view_order, visibility, search_query, view_mode, icon]
+       is_pinned, view_order, visibility, search_query, view_mode, icon, tenantId]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
@@ -354,6 +411,7 @@ export const createView = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateView = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const FIELDS = [
       'name', 'description', 'sort_by', 'sort_order', 'is_default', 'is_public',
       'is_pinned', 'view_order', 'visibility', 'search_query', 'view_mode', 'icon',
@@ -368,9 +426,9 @@ export const updateView = async (req: AuthRequest, res: Response, next: NextFunc
     if (req.body.columns !== undefined) { sets.push(`columns = $${i++}`); params.push(req.body.columns); }
     if (!sets.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     sets.push(`updated_at = NOW()`);
-    params.push(req.params.viewId);
+    params.push(req.params.viewId, tenantId);
     const result = await pool.query(
-      `UPDATE lead_views SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, params
+      `UPDATE lead_views SET ${sets.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'View not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -379,7 +437,11 @@ export const updateView = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const deleteView = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await pool.query('DELETE FROM lead_views WHERE id = $1 RETURNING id', [req.params.viewId]);
+    const tenantId = requireTenantId(req);
+    const result = await pool.query(
+      'DELETE FROM lead_views WHERE id = $1 AND tenant_id = $2 RETURNING id',
+      [req.params.viewId, tenantId]
+    );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'View not found' }); return; }
     res.json({ success: true, message: 'View deleted' });
   } catch (error) { next(error); }
@@ -391,16 +453,17 @@ export const deleteView = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const enrichLead = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     // Fetch the current lead using the actual DB schema (INTEGER id, name column)
-    const leadResult = await pool.query('SELECT * FROM leads WHERE id = $1', [req.params.leadId]);
+    const leadResult = await pool.query('SELECT * FROM leads WHERE id = $1 AND tenant_id = $2', [req.params.leadId, tenantId]);
     if (!leadResult.rows[0]) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
     const lead = leadResult.rows[0];
 
     // Record enrichment in notes
     await pool.query(
-      `INSERT INTO lead_notes (lead_id, content, created_by)
-       VALUES ($1, $2, $3)`,
-      [req.params.leadId, `AI enrichment triggered on ${new Date().toLocaleDateString()}`, req.user?.id || 'system']
+      `INSERT INTO lead_notes (lead_id, content, created_by, tenant_id)
+       VALUES ($1, $2, $3, $4)`,
+      [req.params.leadId, `AI enrichment triggered on ${new Date().toLocaleDateString()}`, req.user?.id || 'system', tenantId]
     );
 
     res.json({

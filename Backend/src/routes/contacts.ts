@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { getContacts, createContact, updateContact, deleteContact } from '../controllers/contactsController';
+import { protect } from '../middleware/auth';
 
 const router = Router();
 
-// TODO: restore protect middleware after auth is wired on the frontend
+router.use(protect);
 router.get('/', getContacts);
 router.post('/', createContact);
 router.put('/:id', updateContact);

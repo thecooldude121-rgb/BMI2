@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { requireTenantId } from '../middleware/tenant';
 
 /**
  * GET /api/v1/forecast/snapshots?period=Q2+2026
@@ -8,6 +9,7 @@ import { AuthRequest } from '../middleware/auth';
  */
 export const getSnapshots = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { period } = req.query;
     if (!period) {
       res.status(400).json({ success: false, message: 'period query param is required (e.g. "Q2 2026")' });
@@ -17,9 +19,9 @@ export const getSnapshots = async (req: AuthRequest, res: Response, next: NextFu
       `SELECT id, period_label, snapshot_date, rep_name,
               pipeline, best_case, commit, closed, deal_count, created_at
        FROM forecast_snapshots
-       WHERE period_label = $1
+       WHERE period_label = $1 AND tenant_id = $2
        ORDER BY snapshot_date DESC, rep_name ASC`,
-      [period],
+      [period, tenantId],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -32,9 +34,13 @@ export const getSnapshots = async (req: AuthRequest, res: Response, next: NextFu
  * Captures the current pipeline state for each rep as a named snapshot for the period.
  * Upserts on (period_label, rep_name, snapshot_date) so re-running today overwrites,
  * but historical dates are preserved.
+ *
+ * NOTE: that UNIQUE constraint pre-dates multi-tenancy and is not yet
+ * tenant-scoped — see Phase 1 summary.
  */
 export const createSnapshot = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { period_label, reps } = req.body;
     if (!period_label || !Array.isArray(reps) || reps.length === 0) {
       res.status(400).json({ success: false, message: 'period_label and a non-empty reps array are required' });
@@ -50,8 +56,8 @@ export const createSnapshot = async (req: AuthRequest, res: Response, next: Next
         if (!rep_name) continue;
         const row = await client.query(
           `INSERT INTO forecast_snapshots
-             (period_label, rep_name, pipeline, best_case, commit, closed, deal_count)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+             (period_label, rep_name, pipeline, best_case, commit, closed, deal_count, tenant_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (period_label, rep_name, snapshot_date)
            DO UPDATE SET
              pipeline   = EXCLUDED.pipeline,
@@ -60,7 +66,7 @@ export const createSnapshot = async (req: AuthRequest, res: Response, next: Next
              closed     = EXCLUDED.closed,
              deal_count = EXCLUDED.deal_count
            RETURNING *`,
-          [period_label, rep_name, pipeline, best_case, commit, closed, deal_count],
+          [period_label, rep_name, pipeline, best_case, commit, closed, deal_count, tenantId],
         );
         inserted.push(row.rows[0]);
       }

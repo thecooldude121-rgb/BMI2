@@ -14,8 +14,7 @@ import {
 import { protect } from '../middleware/auth';
 
 const router = Router();
-// TODO: restore protect middleware after auth is wired on the frontend
-// router.use(protect);
+router.use(protect);
 
 // ── Core CRUD ─────────────────────────────────────────────────────────────────
 router.get('/',    getLeads);

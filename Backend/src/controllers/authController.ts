@@ -17,15 +17,24 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       res.status(400).json({ success: false, message: 'Email already in use' });
       return;
     }
+    // Phase 1 (single-tenant rollout): every new registration joins the one
+    // existing tenant. A real signup flow (create-org vs. join-org) is future
+    // work — see CRM_REMEDIATION_PLAN.md Phase 1.
+    const tenantResult = await pool.query('SELECT id FROM tenants ORDER BY created_at LIMIT 1');
+    const tenantId = tenantResult.rows[0]?.id;
+    if (!tenantId) {
+      res.status(500).json({ success: false, message: 'No tenant configured' });
+      return;
+    }
     const password_hash = await bcrypt.hash(password, 12);
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, role, department)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, first_name, last_name, role`,
-      [email, password_hash, first_name, last_name, role || 'sales', department]
+      `INSERT INTO users (email, password_hash, first_name, last_name, role, department, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, first_name, last_name, role, tenant_id`,
+      [email, password_hash, first_name, last_name, role || 'sales', department, tenantId]
     );
     const user = result.rows[0];
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id },
       getJwtSecret()
     );
     res.status(201).json({ success: true, token, user });
@@ -44,7 +53,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       return;
     }
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id },
       getJwtSecret()
     );
     const { password_hash: _, ...safeUser } = user;

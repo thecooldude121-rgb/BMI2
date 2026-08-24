@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { requireTenantId } from '../middleware/tenant';
 
 // Columns that exist in the leads table (matches migrate.ts schema).
 // The old controller used 'name', 'assigned_to', 'status', 'value' which
@@ -13,11 +14,12 @@ const UPDATABLE_FIELDS = [
 
 export const getLeads = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { stage, owner_id, search, limit = 50, offset = 0 } = req.query;
 
-    let query = `SELECT * FROM leads WHERE 1=1`;
-    const params: any[] = [];
-    let i = 1;
+    let query = `SELECT * FROM leads WHERE tenant_id = $1`;
+    const params: any[] = [tenantId];
+    let i = 2;
 
     if (stage)    { query += ` AND stage = $${i++}`;    params.push(stage); }
     if (owner_id) { query += ` AND owner_id = $${i++}`; params.push(owner_id); }
@@ -37,7 +39,8 @@ export const getLeads = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const getLeadById = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await pool.query('SELECT * FROM leads WHERE id = $1', [req.params.id]);
+    const tenantId = requireTenantId(req);
+    const result = await pool.query('SELECT * FROM leads WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
@@ -45,6 +48,7 @@ export const getLeadById = async (req: AuthRequest, res: Response, next: NextFun
 
 export const createLead = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const {
       first_name, last_name, email, phone, company, position,
       industry, stage, score, source, owner_id, notes, tags, custom_fields,
@@ -53,8 +57,9 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
     const result = await pool.query(
       `INSERT INTO leads
          (first_name, last_name, email, phone, company, position,
-          industry, stage, score, source, owner_id, notes, tags, custom_fields)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          industry, stage, score, source, owner_id, notes, tags, custom_fields,
+          tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [
         first_name, last_name,
@@ -68,6 +73,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
         notes    || null,
         tags         ? JSON.stringify(tags)         : '[]',
         custom_fields ? JSON.stringify(custom_fields) : '{}',
+        tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -76,6 +82,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateLead = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
@@ -94,10 +101,10 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
 
     // Always bump updated_at
     updates.push(`updated_at = NOW()`);
-    params.push(req.params.id);
+    params.push(req.params.id, tenantId);
 
     const result = await pool.query(
-      `UPDATE leads SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`,
+      `UPDATE leads SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`,
       params
     );
 
@@ -108,7 +115,8 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const deleteLead = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await pool.query('DELETE FROM leads WHERE id = $1 RETURNING id', [req.params.id]);
+    const tenantId = requireTenantId(req);
+    const result = await pool.query('DELETE FROM leads WHERE id = $1 AND tenant_id = $2 RETURNING id', [req.params.id, tenantId]);
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
     res.json({ success: true, message: 'Lead deleted' });
   } catch (error) { next(error); }

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { getUsers } from '../controllers/usersController';
+import { protect } from '../middleware/auth';
 
 const router = Router();
 
-// TODO: restore protect middleware after auth is wired on the frontend
+router.use(protect);
 router.get('/', getUsers);
 
 export default router;

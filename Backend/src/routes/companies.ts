@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { getCompanies, getCompanyById, createCompany, updateCompany, deleteCompany } from '../controllers/companiesController';
+import { protect } from '../middleware/auth';
 
 const router = Router();
 
-// TODO: restore protect middleware after auth is wired on the frontend
+router.use(protect);
 router.get('/', getCompanies);
 router.get('/:id', getCompanyById);
 router.post('/', createCompany);

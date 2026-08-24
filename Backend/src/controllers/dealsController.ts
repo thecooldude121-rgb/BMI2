@@ -1,9 +1,11 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { requireTenantId } from '../middleware/tenant';
 
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { stage, assigned_to, search, limit = 50, offset = 0, include_test } = req.query;
     // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
     // produce duplicate rows for the same deal.  Duplicate cards on the board
@@ -24,9 +26,9 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
       FROM deals d
       LEFT JOIN leads l ON d.lead_id = l.id
-      WHERE 1=1`;
-    const params: any[] = [];
-    let i = 1;
+      WHERE d.tenant_id = $1`;
+    const params: any[] = [tenantId];
+    let i = 2;
 
     if (include_test !== 'true') {
       query += ` AND d.is_test = false`;
@@ -44,13 +46,14 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
 
 export const getDealById = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const result = await pool.query(
       `SELECT d.*,
               l.name AS lead_name,
               l.email AS lead_email,
               GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
-       FROM deals d LEFT JOIN leads l ON d.lead_id = l.id WHERE d.id = $1`,
-      [req.params.id]
+       FROM deals d LEFT JOIN leads l ON d.lead_id = l.id WHERE d.id = $1 AND d.tenant_id = $2`,
+      [req.params.id, tenantId]
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Deal not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -59,6 +62,7 @@ export const getDealById = async (req: AuthRequest, res: Response, next: NextFun
 
 export const createDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const {
       name, title, lead_id, value, currency, base_amount_usd,
       pipeline_id, pipeline_name, deal_type,
@@ -101,9 +105,10 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           sales_drive_folder, agreement_url, account_module_setup, client_discovers,
           discovery_date,
           platform_fee, custom_fee, license_fee, onboarding_fee, white_labelling_fee,
-          exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry)
+          exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
+          tenant_id)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56)
        RETURNING *`,
       [
         id, dealName, title || dealName, lead_id, value,
@@ -132,6 +137,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         exchange_rate ?? 1, nr_margin ?? null,
         start_date ?? null, contract_end_date ?? null,
         country ?? null, account_industry ?? null,
+        tenantId,
       ]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
@@ -140,6 +146,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];
@@ -149,8 +156,8 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     let newValueHistory: any[] | null = null;
     if (req.body.value !== undefined) {
       const current = await pool.query(
-        'SELECT value, value_history FROM deals WHERE id = $1',
-        [req.params.id]
+        'SELECT value, value_history FROM deals WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId]
       );
       if (current.rows[0]) {
         const currentValue = Number(current.rows[0].value);
@@ -190,8 +197,8 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     }
     if (!updates.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     updates.push(`updated_at = NOW()`);
-    params.push(req.params.id);
-    const result = await pool.query(`UPDATE deals SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, params);
+    params.push(req.params.id, tenantId);
+    const result = await pool.query(`UPDATE deals SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params);
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Deal not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
@@ -199,7 +206,8 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
 
 export const deleteDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const result = await pool.query('DELETE FROM deals WHERE id = $1 RETURNING id', [req.params.id]);
+    const tenantId = requireTenantId(req);
+    const result = await pool.query('DELETE FROM deals WHERE id = $1 AND tenant_id = $2 RETURNING id', [req.params.id, tenantId]);
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Deal not found' }); return; }
     res.json({ success: true, message: 'Deal deleted' });
   } catch (error) { next(error); }

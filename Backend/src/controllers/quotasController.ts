@@ -1,18 +1,20 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { requireTenantId } from '../middleware/tenant';
 
 /** GET /api/v1/quotas?period=Q2+2026 */
 export const getQuotas = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { period } = req.query;
     if (!period) {
       res.status(400).json({ success: false, message: 'period query param is required (e.g. "Q2 2026")' });
       return;
     }
     const result = await pool.query(
-      'SELECT id, rep_name, period_label, quota_amount FROM quotas WHERE period_label = $1 ORDER BY rep_name ASC',
-      [period],
+      'SELECT id, rep_name, period_label, quota_amount FROM quotas WHERE period_label = $1 AND tenant_id = $2 ORDER BY rep_name ASC',
+      [period, tenantId],
     );
     res.json({ success: true, data: result.rows });
   } catch (error) { next(error); }
@@ -22,9 +24,13 @@ export const getQuotas = async (req: AuthRequest, res: Response, next: NextFunct
  * PUT /api/v1/quotas
  * Body: { rep_name: string, period_label: string, quota_amount: number }
  * Upserts — creates or replaces the quota for that rep/period pair.
+ *
+ * NOTE: the (rep_name, period_label) UNIQUE constraint pre-dates
+ * multi-tenancy and is not yet tenant-scoped — see Phase 1 summary.
  */
 export const upsertQuota = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    const tenantId = requireTenantId(req);
     const { rep_name, period_label, quota_amount } = req.body;
     if (!rep_name || !period_label || quota_amount === undefined) {
       res.status(400).json({ success: false, message: 'rep_name, period_label, and quota_amount are required' });
@@ -36,12 +42,12 @@ export const upsertQuota = async (req: AuthRequest, res: Response, next: NextFun
       return;
     }
     const result = await pool.query(
-      `INSERT INTO quotas (rep_name, period_label, quota_amount)
-       VALUES ($1, $2, $3)
+      `INSERT INTO quotas (rep_name, period_label, quota_amount, tenant_id)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (rep_name, period_label)
        DO UPDATE SET quota_amount = EXCLUDED.quota_amount, updated_at = NOW()
        RETURNING *`,
-      [rep_name, period_label, amount],
+      [rep_name, period_label, amount, tenantId],
     );
     res.json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }

@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
-  user?: { id: string; email: string; role: string };
+  user?: { id: string; email: string; role: string; tenant_id: string };
 }
 
 export const protect = (req: AuthRequest, res: Response, next: NextFunction): void => {
@@ -15,7 +15,7 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction): vo
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET is not configured');
     const decoded = jwt.verify(token, secret) as {
-      id: string; email: string; role: string;
+      id: string; email: string; role: string; tenant_id: string;
     };
     req.user = decoded;
     next();
