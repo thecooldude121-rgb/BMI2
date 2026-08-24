@@ -204,6 +204,133 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
   } catch (error) { next(error); }
 };
 
+/** Resolve the caller's display name, matching the convention in value_history. */
+const resolveActorName = async (req: AuthRequest): Promise<string> => {
+  if (req.user?.id) {
+    const row = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id]);
+    if (row.rows[0]) return `${row.rows[0].first_name} ${row.rows[0].last_name}`.trim();
+  }
+  return req.user?.email || 'Unknown';
+};
+
+/**
+ * POST /api/v1/deals/:id/stage-transition
+ * Body: { to_stage, probability?, reason_code?, note? }
+ *
+ * The dedicated path for stage changes, per CRM_REMEDIATION_PLAN Phase 3 and
+ * spec §3.2. A generic PATCH cannot express this: moving a deal has to write an
+ * audit row and derive a probability, and doing that inside the catch-all
+ * updateDeal would make every unrelated field update carry the same cost.
+ *
+ * Behaviour:
+ *   - Records a deal_stage_history row for every change.
+ *   - Sets probability from the matching pipeline stage's default, UNLESS the
+ *     caller passes one explicitly — then the override is stored and flagged, so
+ *     a rep's judgement stays distinguishable from the pipeline default.
+ *   - Stage and history are written in one transaction; a failed history write
+ *     must not leave a silently-moved deal.
+ *   - A no-op move (to_stage equals current) returns 200 without writing
+ *     history, so a dropped-then-replaced kanban card does not pollute the
+ *     audit trail.
+ */
+export const transitionDealStage = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const tenantId = requireTenantId(req);
+    const { to_stage, probability, reason_code, note } = req.body;
+
+    if (!to_stage || !String(to_stage).trim()) {
+      res.status(400).json({ success: false, message: 'to_stage is required' });
+      return;
+    }
+    if (probability !== undefined) {
+      const p = Number(probability);
+      if (!Number.isInteger(p) || p < 0 || p > 100) {
+        res.status(400).json({ success: false, message: 'probability must be an integer between 0 and 100' });
+        return;
+      }
+    }
+
+    await client.query('BEGIN');
+
+    // Lock the row so two concurrent moves cannot interleave and record a
+    // from_stage that was never actually the deal's stage.
+    const current = await client.query(
+      'SELECT id, stage, probability FROM deals WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+      [req.params.id, tenantId],
+    );
+    if (!current.rows[0]) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ success: false, message: 'Deal not found' });
+      return;
+    }
+
+    const fromStage = current.rows[0].stage as string | null;
+    if (fromStage === to_stage) {
+      await client.query('ROLLBACK');
+      res.json({ success: true, data: current.rows[0], message: 'Deal is already in that stage' });
+      return;
+    }
+
+    // Probability: explicit override wins; otherwise take the pipeline stage
+    // default. deals.stage holds slugs ('closed-won') while pipeline_stages
+    // holds display names ('Closed Won'), so match on a normalised form. When
+    // there is no match the existing probability is kept rather than guessed.
+    const isOverride = probability !== undefined;
+    let nextProbability: number | null = isOverride ? Number(probability) : null;
+    if (!isOverride) {
+      const stageRow = await client.query(
+        `SELECT probability FROM pipeline_stages
+         WHERE tenant_id = $1
+           AND lower(replace(name, ' ', '-')) = lower(replace($2, ' ', '-'))
+         LIMIT 1`,
+        [tenantId, to_stage],
+      );
+      nextProbability = stageRow.rows[0]?.probability ?? current.rows[0].probability ?? null;
+    }
+
+    const updated = await client.query(
+      `UPDATE deals SET stage = $1, probability = $2, updated_at = NOW()
+       WHERE id = $3 AND tenant_id = $4 RETURNING *`,
+      [to_stage, nextProbability, req.params.id, tenantId],
+    );
+
+    const changedBy = await resolveActorName(req);
+    await client.query(
+      `INSERT INTO deal_stage_history
+         (deal_id, from_stage, to_stage, probability, probability_override,
+          reason_code, note, changed_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [req.params.id, fromStage, to_stage, nextProbability, isOverride,
+       reason_code ?? null, note ?? null, changedBy, tenantId],
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, data: updated.rows[0] });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+/** GET /api/v1/deals/:id/stage-history */
+export const getDealStageHistory = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const result = await pool.query(
+      `SELECT id, from_stage, to_stage, probability, probability_override,
+              reason_code, note, changed_by, changed_at
+       FROM deal_stage_history
+       WHERE deal_id = $1 AND tenant_id = $2
+       ORDER BY changed_at DESC`,
+      [req.params.id, tenantId],
+    );
+    res.json({ success: true, data: result.rows, count: result.rowCount });
+  } catch (error) { next(error); }
+};
+
 export const deleteDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);

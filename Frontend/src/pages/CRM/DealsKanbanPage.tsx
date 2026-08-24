@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchDeals } from '../../utils/dealsApi';
+import { fetchDeals, updateDeal, transitionDealStage } from '../../utils/dealsApi';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
 import {
   formatDisplayDate,
@@ -603,6 +603,7 @@ const DealsKanbanPage: React.FC = () => {
     };
 
     destStage.deals.splice(destination.index, 0, updatedDeal);
+    // Optimistic: move the card immediately, then reconcile with the server.
     setStages(newStages);
 
     const isStageChange  = source.droppableId !== destination.droppableId;
@@ -611,20 +612,41 @@ const DealsKanbanPage: React.FC = () => {
       STAGES_REQUIRING_NEXT_STEP.includes(destStage.id) &&
       !updatedDeal.nextStep?.trim();
 
-    if (needsNextStep) {
-      setToast({
-        message: `"${updatedDeal.dealName}" moved to ${destStage.name} — add a next step to keep it on track`,
-        type: 'info',
-        actionLabel: 'Add now',
-        onAction: () => setSelectedDealId(updatedDeal.id),
-      });
-    } else {
-      // Not 'success': handleDragEnd only reorders local state — there is no
-      // updateDeal call, so the move is gone on refresh.
-      setToast({
-        message: `Deal moved to ${destStage.name} on your screen — not saved yet, so it will revert after a refresh.`,
-        type: 'info',
-      });
+    // PHASE 2: the move is now persisted. Only a same-column reorder skips the
+    // call — card order within a stage is not stored server-side.
+    if (isStageChange) {
+      transitionDealStage(updatedDeal.id, destStage.id)
+        .then(({ data }) => {
+          // Adopt the server's probability: it comes from the pipeline stage's
+          // default, so the card should not keep the old stage's number.
+          if (data?.probability != null) {
+            setStages(prev => prev.map(s => ({
+              ...s,
+              deals: s.deals.map(d =>
+                d.id === updatedDeal.id ? { ...d, probability: data.probability } : d),
+            })));
+          }
+          if (needsNextStep) {
+            setToast({
+              message: `"${updatedDeal.dealName}" moved to ${destStage.name} — add a next step to keep it on track`,
+              type: 'info',
+              actionLabel: 'Add now',
+              onAction: () => setSelectedDealId(updatedDeal.id),
+            });
+          } else {
+            setToast({ message: `Deal moved to ${destStage.name}`, type: 'success' });
+          }
+        })
+        .catch((err: Error) => {
+          // Roll the card back to where it came from. Leaving it in the new
+          // column after a failed save is how a user ends up trusting a move
+          // that never happened.
+          setStages(stages);
+          setToast({
+            message: `Could not move "${updatedDeal.dealName}" — ${err.message}. The card has been put back.`,
+            type: 'error',
+          });
+        });
     }
 
     setTimeout(() => setToast(null), 5000);
@@ -2032,12 +2054,58 @@ const DealsKanbanPage: React.FC = () => {
           stages={filteredStagesForList}
           totalPipelineDeals={stages.flatMap(s => s.deals).length}
           onDealClick={handleCardClick}
-          onStageChange={(_dealId, newStage) => notPersisted(`Moving this deal to ${newStage}`)}
+          onStageChange={(dealId, newStage) => {
+            transitionDealStage(dealId, newStage)
+              .then(() => {
+                setToast({ message: `Stage updated to ${newStage}`, type: 'success' });
+                triggerRefetch();
+              })
+              .catch((err: Error) =>
+                setToast({ message: `Could not update stage — ${err.message}`, type: 'error' }));
+          }}
+          // Bulk operations still have no endpoint: doing them client-side would
+          // be N sequential requests with no transaction and no partial-failure
+          // report. Needs a real bulk endpoint — see Phase 2 remaining work.
           onBulkAction={(action) => notPersisted(`Bulk "${action}"`)}
           availableOwners={Array.from(new Set(
             stages.flatMap(s => s.deals.map(d => d.owner)).filter(Boolean)
           ))}
-          onFieldUpdate={async (_dealId, field) => { notPersisted(`Editing ${field}`); }}
+          onFieldUpdate={async (dealId, field, value) => {
+            // Only fields with a real column are saved. `primaryCompetitor` and
+            // `secondaryCompetitors` are also routed here by the list view, but
+            // there is no deal_competitors table — saving them would 500, so
+            // they say so instead of failing silently.
+            const COLUMN_FIELDS: Record<string, string> = {
+              value: 'value',
+              stage: 'stage',
+              probability: 'probability',
+              closeDate: 'expected_close_date',
+              owner: 'assigned_to',
+              nextStep: 'next_step',
+              contactName: 'contact_name',
+              company: 'company_name',
+            };
+            if (field === 'stage') {
+              // Stage always goes through the audited endpoint.
+              try {
+                await transitionDealStage(dealId, String(value));
+                setToast({ message: `Stage updated to ${value}`, type: 'success' });
+                triggerRefetch();
+              } catch (err: any) {
+                setToast({ message: `Could not update stage — ${err.message}`, type: 'error' });
+              }
+              return;
+            }
+            const column = COLUMN_FIELDS[field];
+            if (!column) { notPersisted(`Editing ${field}`); return; }
+            try {
+              await updateDeal(dealId, { [column]: value } as any);
+              setToast({ message: 'Saved', type: 'success' });
+              triggerRefetch();
+            } catch (err: any) {
+              setToast({ message: `Could not save — ${err.message}`, type: 'error' });
+            }
+          }}
           currentUser={currentUserName}
           onAddNote={() => notPersisted('Adding a note')}
           onScheduleFollowUp={() => notPersisted('Scheduling a follow-up')}

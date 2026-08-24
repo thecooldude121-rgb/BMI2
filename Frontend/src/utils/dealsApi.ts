@@ -122,6 +122,54 @@ export async function createDeal(payload: DealPayload): Promise<{ success: boole
   return json;
 }
 
+/**
+ * Move a deal to a new stage.
+ *
+ * Stage changes go through their own endpoint, not updateDeal: every move writes
+ * a deal_stage_history row, and the server derives the probability from the
+ * pipeline stage's default unless `probability` is passed explicitly (in which
+ * case the override is recorded as such). Sending `stage` via updateDeal would
+ * change the column without any of that, so don't.
+ */
+export async function transitionDealStage(
+  id: string,
+  toStage: string,
+  opts: { probability?: number; reasonCode?: string; note?: string } = {},
+): Promise<{ success: boolean; data: any; message?: string }> {
+  const res = await fetch(`${API_BASE}/deals/${id}/stage-transition`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      to_stage: toStage,
+      probability: opts.probability,
+      reason_code: opts.reasonCode,
+      note: opts.note,
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to move deal');
+  return json;
+}
+
+export interface DealStageHistoryEntry {
+  id: string;
+  from_stage: string | null;
+  to_stage: string;
+  probability: number | null;
+  probability_override: boolean;
+  reason_code: string | null;
+  note: string | null;
+  changed_by: string | null;
+  changed_at: string;
+}
+
+export async function fetchDealStageHistory(id: string): Promise<DealStageHistoryEntry[]> {
+  const res = await fetch(`${API_BASE}/deals/${id}/stage-history`, { headers: getAuthHeaders() });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to load stage history');
+  return json.data ?? [];
+}
+
 export async function updateDeal(id: string, payload: Partial<DealPayload>): Promise<{ success: boolean; data: any }> {
   const res = await fetch(`${API_BASE}/deals/${id}`, {
     method: 'PUT',

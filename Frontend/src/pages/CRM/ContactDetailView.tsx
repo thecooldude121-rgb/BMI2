@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, Calendar, DollarSign, Edit, MoreVertical, ExternalLink, MapPin,
@@ -6,13 +6,29 @@ import {
   CheckCircle, Clock, Sparkles, Users, BarChart3, Zap, Play, Share2, Globe, Star,
   User, MessageSquare, Send, Download
 } from 'lucide-react';
-import { sampleContacts } from '../../utils/sampleContacts';
+import { fetchContactById } from '../../utils/contactsApi';
+import type { Contact } from '../../types/contact';
 import ActiveDealsSection from '../../components/Contact/ActiveDealsSection';
 
 const ContactDetailView: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const contact = sampleContacts.find(c => c.id === id);
+
+  // PHASE 2: was `sampleContacts.find(...)`. Now loads the real contact.
+  const [contact, setContact] = useState<Contact | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true);
+    fetchContactById(id)
+      .then(c => { if (!cancelled) { setContact(c); setLoadError(null); } })
+      .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load contact'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
 
   // State management for modals and forms
   const [showMoreOptions, setShowMoreOptions] = useState(false);
@@ -26,6 +42,29 @@ const ContactDetailView: React.FC = () => {
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [emailScheduleMode, setEmailScheduleMode] = useState<'now' | 'later' | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-sm text-gray-500">Loading contact…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center space-y-4">
+        <p className="text-lg text-gray-900">Could not load this contact</p>
+        <p className="max-w-md text-center text-sm text-gray-600">{loadError}</p>
+        <button
+          onClick={() => navigate('/crm/contacts')}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+        >
+          Back to Contacts
+        </button>
+      </div>
+    );
+  }
 
   if (!contact) {
     return (
