@@ -75,7 +75,7 @@ interface LeadContextType {
   getLeadNotes: (leadId: string) => Promise<LeadNote[]>;
   createNote: (note: Partial<LeadNote>) => Promise<LeadNote | null>;
   updateNote: (id: string, updates: Partial<LeadNote>) => Promise<boolean>;
-  deleteNote: (id: string) => Promise<boolean>;
+  deleteNote: (id: string, leadId: string) => Promise<boolean>;
 
   getLeadTasks: (leadId: string) => Promise<LeadTask[]>;
   createTask: (task: Partial<LeadTask>) => Promise<LeadTask | null>;
@@ -225,10 +225,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     return updateNoteViaAPI(updates.lead_id, id, updates);
   };
 
-  const deleteNote = async (id: string, leadId?: string): Promise<boolean> => {
-    if (!leadId) return false;
-    return deleteNoteViaAPI(leadId, id);
-  };
+  const deleteNote = (id: string, leadId: string): Promise<boolean> => deleteNoteViaAPI(leadId, id);
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
   const getLeadTasks = (leadId: string) => fetchTasksFromAPI(leadId);

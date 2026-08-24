@@ -155,6 +155,60 @@ const runMigrations = async () => {
     CREATE INDEX IF NOT EXISTS idx_lead_views_tenant_id          ON lead_views(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_tags_tenant_id                ON tags(tenant_id);
   `);
+  // Migration 009: tenant-scope the quotas/forecast_snapshots uniqueness
+  // constraints — see Backend/migrations/009_scope_quota_forecast_uniqueness_to_tenant.sql
+  await pool.query(`
+    ALTER TABLE quotas DROP CONSTRAINT IF EXISTS quotas_rep_name_period_label_key;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'quotas_tenant_rep_period_key'
+      ) THEN
+        ALTER TABLE quotas
+          ADD CONSTRAINT quotas_tenant_rep_period_key UNIQUE (tenant_id, rep_name, period_label);
+      END IF;
+    END $$;
+
+    ALTER TABLE forecast_snapshots DROP CONSTRAINT IF EXISTS forecast_snapshots_period_label_rep_name_snapshot_date_key;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'forecast_snapshots_tenant_period_rep_date_key'
+      ) THEN
+        ALTER TABLE forecast_snapshots
+          ADD CONSTRAINT forecast_snapshots_tenant_period_rep_date_key
+            UNIQUE (tenant_id, period_label, rep_name, snapshot_date);
+      END IF;
+    END $$;
+  `);
+  // Migration 010: tenant-scope the remaining global UNIQUE constraints — see
+  // Backend/migrations/010_scope_remaining_uniques_to_tenant.sql. tags_name_key
+  // in particular made createTag a cross-tenant read/write.
+  await pool.query(`
+    ALTER TABLE tags DROP CONSTRAINT IF EXISTS tags_name_key;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'tags_tenant_name_key') THEN
+        ALTER TABLE tags ADD CONSTRAINT tags_tenant_name_key UNIQUE (tenant_id, name);
+      END IF;
+    END $$;
+
+    ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_email_key;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contacts_tenant_email_key') THEN
+        ALTER TABLE contacts ADD CONSTRAINT contacts_tenant_email_key UNIQUE (tenant_id, email);
+      END IF;
+    END $$;
+
+    ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_email_key;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'leads_tenant_email_key') THEN
+        ALTER TABLE leads ADD CONSTRAINT leads_tenant_email_key UNIQUE (tenant_id, email);
+      END IF;
+    END $$;
+  `);
 };
 
 const start = async () => {

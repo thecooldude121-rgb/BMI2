@@ -559,7 +559,7 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     const hrmsAccounts = accounts.filter(acc => acc.source === 'hrms' || acc.hrmsConnection?.hasConnection).length;
 
     return {
-      totalAccounts: 89,
+      totalAccounts: accounts.length,
       activeAccounts: activeAccounts.length,
       newAccountsThisMonth: newThisMonth.length,
       newAccountsLastMonth: newLastMonth.length,
@@ -570,13 +570,13 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
         return daysSince <= 30;
       }).length,
       accountsAtRisk: accounts.filter(acc => (acc.healthScore || 0) < 50).length,
-      averageHealthScore: accounts.reduce((sum, acc) => sum + (acc.healthScore || 0), 0) / accounts.length,
-      averageEngagementScore: accounts.reduce((sum, acc) => sum + (acc.engagementScore || 0), 0) / accounts.length,
+      averageHealthScore: accounts.reduce((sum, acc) => sum + (acc.healthScore || 0), 0) / (accounts.length || 1),
+      averageEngagementScore: accounts.reduce((sum, acc) => sum + (acc.engagementScore || 0), 0) / (accounts.length || 1),
       averageDealValue: totalRevenue / (totalDeals || 1),
-      totalDeals: 45,
-      totalRevenue: 2400000,
-      totalContacts: 147,
-      hrmsAccounts: 12,
+      totalDeals,
+      totalRevenue,
+      totalContacts,
+      hrmsAccounts,
       topAccountsByRevenue: accounts
         .filter(acc => acc.annualRevenue)
         .sort((a, b) => (b.annualRevenue || 0) - (a.annualRevenue || 0))

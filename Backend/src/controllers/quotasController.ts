@@ -23,10 +23,8 @@ export const getQuotas = async (req: AuthRequest, res: Response, next: NextFunct
 /**
  * PUT /api/v1/quotas
  * Body: { rep_name: string, period_label: string, quota_amount: number }
- * Upserts — creates or replaces the quota for that rep/period pair.
- *
- * NOTE: the (rep_name, period_label) UNIQUE constraint pre-dates
- * multi-tenancy and is not yet tenant-scoped — see Phase 1 summary.
+ * Upserts — creates or replaces the quota for that rep/period pair, scoped
+ * to the caller's tenant (see migration 009).
  */
 export const upsertQuota = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -44,7 +42,7 @@ export const upsertQuota = async (req: AuthRequest, res: Response, next: NextFun
     const result = await pool.query(
       `INSERT INTO quotas (rep_name, period_label, quota_amount, tenant_id)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (rep_name, period_label)
+       ON CONFLICT (tenant_id, rep_name, period_label)
        DO UPDATE SET quota_amount = EXCLUDED.quota_amount, updated_at = NOW()
        RETURNING *`,
       [rep_name, period_label, amount, tenantId],

@@ -22,11 +22,19 @@ export const getContacts = async (req: AuthRequest, res: Response, next: NextFun
 export const createContact = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { account_id, first_name, last_name, email, phone, mobile, position, department, linkedin_url, is_primary } = req.body;
+    const { company_id, first_name, last_name, email, phone, mobile, position, department, linkedin_url, is_primary } = req.body;
+    if (!first_name || !last_name || !email) {
+      res.status(400).json({ success: false, message: 'first_name, last_name, and email are required' });
+      return;
+    }
+    // contacts.id is a CT001-style varchar with no DB default — generate it here,
+    // matching the D001 scheme in dealsController.
+    const maxResult = await pool.query(`SELECT MAX(CAST(SUBSTRING(id, 3) AS INTEGER)) AS max_num FROM contacts WHERE id ~ '^CT[0-9]+$'`);
+    const id = `CT${String((maxResult.rows[0].max_num || 0) + 1).padStart(3, '0')}`;
     const result = await pool.query(
-      `INSERT INTO contacts (account_id, first_name, last_name, email, phone, mobile, position, department, linkedin_url, is_primary, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [account_id, first_name, last_name, email, phone, mobile, position, department, linkedin_url, is_primary || false, tenantId]
+      `INSERT INTO contacts (id, company_id, first_name, last_name, email, phone, mobile, position, department, linkedin_url, is_primary, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [id, company_id, first_name, last_name, email, phone, mobile, position, department, linkedin_url, is_primary || false, tenantId]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }

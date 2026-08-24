@@ -12,7 +12,7 @@ import ActiveDealsSection from '../../components/Contact/ActiveDealsSection';
 const ContactDetailView: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const contact = sampleContacts.find(c => c.id === id) || sampleContacts[0];
+  const contact = sampleContacts.find(c => c.id === id);
 
   // State management for modals and forms
   const [showMoreOptions, setShowMoreOptions] = useState(false);
@@ -27,20 +27,19 @@ const ContactDetailView: React.FC = () => {
   const [emailScheduleMode, setEmailScheduleMode] = useState<'now' | 'later' | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
 
-  const mockContact = {
-    name: 'John Smith',
-    title: 'VP Sales',
-    company: 'Acme Corp',
-    email: 'john@acme.com',
-    phone: '+1 555-0123',
-    linkedin: '/in/johnsmith',
-    location: 'San Francisco, CA',
-    source: 'Lead Gen (Apollo.io)',
-    added: 'Nov 15, 2025',
-    tags: ['VIP', 'Decision Maker', 'Hot'],
-    aiEnriched: true,
-    enrichedDataPoints: 12
-  };
+  if (!contact) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center space-y-4">
+        <p className="text-lg text-gray-700">Contact not found.</p>
+        <button
+          onClick={() => navigate('/crm/contacts')}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+        >
+          Back to Contacts
+        </button>
+      </div>
+    );
+  }
 
   const mockData = {
     engagement: {
@@ -176,7 +175,7 @@ const ContactDetailView: React.FC = () => {
 
   const handleCreateDeal = () => {
     setShowDealForm(true);
-    console.log('Open deal creation form with contact:', mockContact.name);
+    console.log('Open deal creation form with contact:', contact.name);
   };
 
   const handleSendEmail = (mode: 'now' | 'later') => {
@@ -208,12 +207,12 @@ const ContactDetailView: React.FC = () => {
   };
 
   const handleSearchHRMS = () => {
-    navigate(`/hrms/search?company=${encodeURIComponent(mockContact.company)}`);
+    navigate(`/hrms/search?company=${encodeURIComponent(contact.company)}`);
   };
 
   const handleAddRecruitmentTarget = () => {
     console.log('Add to recruitment target list');
-    alert(`${mockContact.company} added to recruitment target list`);
+    alert(`${contact.company} added to recruitment target list`);
   };
 
   const handleViewTranscript = () => {
@@ -277,7 +276,7 @@ const ContactDetailView: React.FC = () => {
         <button onClick={() => navigate('/crm/contacts')} className="flex items-center space-x-2 text-gray-600 hover:text-gray-900">
           <ArrowLeft className="h-4 w-4" /><span className="text-sm">Contacts</span>
         </button>
-        <div className="mt-2 text-sm text-gray-500">Contacts &gt; <span className="text-gray-900 font-medium">{mockContact.name}</span></div>
+        <div className="mt-2 text-sm text-gray-500">Contacts &gt; <span className="text-gray-900 font-medium">{contact.name}</span></div>
       </div>
 
       {/* Hero Header */}
@@ -290,35 +289,30 @@ const ContactDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <h1 className="text-4xl font-bold text-gray-900 flex items-center space-x-3">
-                  <span>{mockContact.name}</span>
-                  {mockContact.tags.includes('VIP') && <span className="text-2xl">⭐</span>}
+                  <span>{contact.name}</span>
+                  {contact.tags.includes('VIP') && <span className="text-2xl">⭐</span>}
                 </h1>
-                <p className="text-xl text-gray-600 mt-1">{mockContact.title} at {mockContact.company}</p>
-                <div className="flex items-center space-x-2 text-gray-500 mt-2">
-                  <MapPin className="h-4 w-4" /><span>{mockContact.location}</span>
-                </div>
+                <p className="text-xl text-gray-600 mt-1">{contact.position} at {contact.company}</p>
               </div>
               <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                 <div className="flex items-center space-x-2">
                   <Mail className="h-4 w-4 text-blue-600" />
-                  <a href={`mailto:${mockContact.email}`} className="text-blue-600 hover:underline">{mockContact.email}</a>
+                  <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Phone className="h-4 w-4 text-green-600" />
-                  <a href={`tel:${mockContact.phone}`} className="text-gray-700 hover:underline">{mockContact.phone}</a>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Linkedin className="h-4 w-4 text-blue-700" />
-                  <a href="#" className="text-blue-700 hover:underline">{mockContact.linkedin}</a>
-                </div>
+                {contact.phone && (
+                  <div className="flex items-center space-x-2">
+                    <Phone className="h-4 w-4 text-green-600" />
+                    <a href={`tel:${contact.phone}`} className="text-gray-700 hover:underline">{contact.phone}</a>
+                  </div>
+                )}
                 <div className="flex items-center space-x-2 text-gray-600">
-                  <Cake className="h-4 w-4" /><span>Added: {mockContact.added}</span>
+                  <Cake className="h-4 w-4" /><span>Added: {contact.createdAt}</span>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-600 font-medium">Tags:</span>
                 <div className="flex flex-wrap gap-2">
-                  {mockContact.tags.map((tag, idx) => {
+                  {contact.tags.map((tag, idx) => {
                     const colors: Record<string, string> = {
                       VIP: 'bg-yellow-100 text-yellow-800 border-yellow-300',
                       'Decision Maker': 'bg-blue-100 text-blue-800 border-blue-300',
@@ -335,12 +329,12 @@ const ContactDetailView: React.FC = () => {
               <div className="flex items-center space-x-4 text-sm">
                 <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
                   <Target className="h-4 w-4 text-blue-600" />
-                  <span className="text-blue-700 font-medium">🎯 Source: {mockContact.source}</span>
+                  <span className="text-blue-700 font-medium">🎯 Source: {contact.source}</span>
                 </div>
-                {mockContact.aiEnriched && (
+                {contact.aiEnriched && (
                   <div className="flex items-center space-x-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-lg">
                     <Sparkles className="h-4 w-4 text-purple-600" />
-                    <span className="text-purple-700 font-medium">🤖 AI Enriched: +{mockContact.enrichedDataPoints} data points</span>
+                    <span className="text-purple-700 font-medium">🤖 AI Enriched: +{contact.enrichedDataPoints} data points</span>
                   </div>
                 )}
               </div>
@@ -475,11 +469,10 @@ const ContactDetailView: React.FC = () => {
                 </button>
               </div>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between"><span className="text-gray-600">Company:</span><span className="font-semibold">{mockContact.company}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Industry:</span><span>SaaS, Project Management</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Size:</span><span>75 employees</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Revenue:</span><span>$12M annually (estimated)</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">Location:</span><span>{mockContact.location}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Company:</span><span className="font-semibold">{contact.company}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Industry:</span><span>{contact.enrichmentData?.industry || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Size:</span><span>{contact.enrichmentData?.companySize || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Revenue:</span><span>{contact.enrichmentData?.companyRevenue || '—'}</span></div>
               </div>
               <div className="mt-6 p-4 bg-orange-50 border-2 border-orange-300 rounded-lg">
                 <h3 className="font-bold text-orange-900 mb-2 flex items-center space-x-2">

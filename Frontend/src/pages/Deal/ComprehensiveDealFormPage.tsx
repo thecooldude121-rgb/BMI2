@@ -17,7 +17,7 @@ import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPane
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
-import { createDeal, updateDeal, fetchDeals } from '../../utils/dealsApi';
+import { createDeal, updateDeal, fetchDeals, getDeal } from '../../utils/dealsApi';
 import { useData } from '../../contexts/DataContext';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
@@ -36,6 +36,9 @@ import { MobileHealthScoreBar } from '../../components/Deal/DealForm/MobileHealt
 import { MobileDealPreview } from '../../components/Deal/DealForm/MobileDealPreview';
 import { MobileAIRecommendations } from '../../components/Deal/DealForm/MobileAIRecommendations';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
+
+// Postgres DATE columns come back as full ISO timestamps; <input type="date"> needs yyyy-MM-dd.
+const toDateInput = (value: string | null | undefined): string => (value ? String(value).slice(0, 10) : '');
 
 export const ComprehensiveDealFormPage: React.FC = () => {
   const { id } = useParams();
@@ -218,60 +221,89 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   }, [formData.product, formData.contractTerm, formData.currency, dealValueUserEdited]);
 
   const loadDealData = async (dealId: string) => {
-    // Mock loading existing deal data - Acme Corp deal
-    const mockDeal = {
-      dealName: 'Acme Corp - Enterprise Plan',
-      dealValue: '50000',
-      currency: 'USD',
-      closeDate: '2026-03-15',
-      stage: 'proposal',
-      probability: 67,
-      accountId: 'acc-1',
-      accountName: 'Acme Corp',
-      primaryContactId: 'con-2',
-      primaryContactName: 'John Smith',
-      contactRole: 'Champion',
-      additionalContacts: [],
-      owner: 'current-user',
-      source: 'lead-gen-apollo',
-      hrmsConnection: null,
-      priority: 'High',
-      tags: ['VIP', 'Enterprise', 'Hot Lead'],
-      product: 'Enterprise Plan',
-      contractTerm: 'Annual',
-      paymentTerms: 'Net 30',
-      description: '',
-      nextSteps: '',
-    };
+    try {
+      const { data: deal } = await getDeal(dealId);
+      if (!deal) throw new Error('Deal not found');
 
-    // Set selected account and contact for edit mode
-    const mockAccount = {
-      id: 'acc-1',
-      type: 'account',
-      name: 'Acme Corp',
-      employees: '75 employees',
-      industry: 'SaaS',
-      revenue: '$12M revenue',
-      primaryContact: 'John Smith (VP Sales)',
-      avgDealSize: 50000,
-      winRate: 68
-    };
+      const stakeholders = Array.isArray(deal.stakeholders) ? deal.stakeholders : [];
+      const primary = stakeholders.find((s: any) => s.isPrimary);
+      const additional = stakeholders.filter((s: any) => !s.isPrimary);
+      const pipeline = getPipeline(deal.pipeline_id || DEFAULT_PIPELINE.id);
 
-    const mockContact = {
-      id: 'con-2',
-      type: 'contact',
-      name: 'John Smith',
-      title: 'VP Sales',
-      company: 'Acme Corp',
-      email: 'john@acme.com',
-      phone: '+1 555-0123'
-    };
+      setFormData(prev => ({
+        ...prev,
+        dealName: deal.name ?? deal.title ?? '',
+        dealValue: deal.value != null ? String(deal.value) : '',
+        currency: deal.currency || BASE_CURRENCY_CODE,
+        closeDate: toDateInput(deal.expected_close_date),
+        pipelineId: pipeline.id,
+        pipelineName: pipeline.name,
+        dealType: deal.deal_type || DEFAULT_DEAL_TYPE.id,
+        stage: deal.stage || pipeline.stages[0].id,
+        probability: deal.probability ?? 0,
+        accountName: deal.company_name ?? '',
+        primaryContactId: primary?.id ?? '',
+        primaryContactName: deal.contact_name ?? primary?.name ?? '',
+        contactEmail: deal.contact_email ?? '',
+        contactRole: deal.contact_title || primary?.role || DEFAULT_CONTACT_ROLE.id,
+        primaryContactSentiment: primary?.sentiment ?? 'neutral',
+        additionalContacts: additional as StakeholderContact[],
+        competitors: (Array.isArray(deal.competitors) ? deal.competitors : []) as Competitor[],
+        forecastCategory: deal.forecast_category ?? '',
+        owner: deal.assigned_to ?? '',
+        source: deal.source ?? '',
+        priority: deal.priority || 'Medium',
+        tags: Array.isArray(deal.tags) ? deal.tags : [],
+        product: deal.product ?? '',
+        contractTerm: deal.contract_term ?? '',
+        paymentTerms: deal.payment_terms ?? '',
+        description: deal.description ?? '',
+        nextSteps: deal.next_step ?? '',
+        closeDateOverrideReason: deal.close_date_override_reason ?? '',
+        salesDriveFolder: deal.sales_drive_folder ?? '',
+        agreementUrl: deal.agreement_url ?? '',
+        accountModuleSetup: deal.account_module_setup ?? '',
+        clientDiscovers: deal.client_discovers ?? '',
+        discoveryDate: toDateInput(deal.discovery_date),
+      }));
 
-    setFormData(mockDeal as any);
-    setSelectedAccount(mockAccount);
-    setSelectedContact(mockContact);
-    setShowSmartSearch(false);
-    showToast('success', 'Loaded deal: Acme Corp - Enterprise Plan');
+      // Saved values are authoritative in edit mode — suppress the auto-generators
+      // that would otherwise overwrite the name, value, and forecast category.
+      setDealNameUserEdited(true);
+      setDealValueUserEdited(true);
+      setForecastCategoryUserSet(!!deal.forecast_category);
+
+      if (deal.win_prob_override_reason) {
+        setWinProbOverrideEnabled(true);
+        setWinProbOverrideValue(deal.probability ?? '');
+        setWinProbOverrideReason(deal.win_prob_override_reason);
+      }
+
+      if (deal.company_name) {
+        setSelectedAccount({
+          id: deal.company_name,
+          type: 'account',
+          name: deal.company_name,
+          industry: deal.account_industry ?? undefined,
+        });
+      }
+      if (deal.contact_name) {
+        setSelectedContact({
+          id: primary?.id ?? deal.contact_name,
+          type: 'contact',
+          name: deal.contact_name,
+          title: deal.contact_title ?? undefined,
+          company: deal.company_name ?? undefined,
+          email: deal.contact_email ?? undefined,
+        });
+      }
+      setShowSmartSearch(false);
+      setHasUnsavedChanges(false);
+      setAutoSaveStatus('saved');
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to load deal');
+      navigate('/deals');
+    }
   };
 
   const checkForDuplicates = async () => {

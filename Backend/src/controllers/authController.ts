@@ -9,9 +9,13 @@ const getJwtSecret = (): string => {
   return secret;
 };
 
+// Cast: jsonwebtoken types expiresIn as a `StringValue` template literal that an
+// env-var string cannot narrow to.
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'];
+
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { email, password, first_name, last_name, role, department } = req.body;
+    const { email, password, first_name, last_name, department } = req.body;
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
       res.status(400).json({ success: false, message: 'Email already in use' });
@@ -27,15 +31,19 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       return;
     }
     const password_hash = await bcrypt.hash(password, 12);
+    // Self-registration always gets the baseline 'sales' role — elevated roles
+    // (admin/manager/hr) can only be granted by an existing admin, never by
+    // the signup payload itself.
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, first_name, last_name, role, department, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, first_name, last_name, role, tenant_id`,
-      [email, password_hash, first_name, last_name, role || 'sales', department, tenantId]
+       VALUES ($1, $2, $3, $4, 'sales', $5, $6) RETURNING id, email, first_name, last_name, role, tenant_id`,
+      [email, password_hash, first_name, last_name, department, tenantId]
     );
     const user = result.rows[0];
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id },
-      getJwtSecret()
+      getJwtSecret(),
+      { expiresIn: JWT_EXPIRES_IN }
     );
     res.status(201).json({ success: true, token, user });
   } catch (error) {
@@ -54,7 +62,8 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     }
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, tenant_id: user.tenant_id },
-      getJwtSecret()
+      getJwtSecret(),
+      { expiresIn: JWT_EXPIRES_IN }
     );
     const { password_hash: _, ...safeUser } = user;
     res.json({ success: true, token, user: safeUser });
