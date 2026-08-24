@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -22,7 +22,7 @@ import {
   Columns
 } from 'lucide-react';
 import { Contact, ContactFilters } from '../../types/contact';
-import { sampleContacts } from '../../utils/sampleContacts';
+import { fetchContacts } from '../../utils/contactsApi';
 import ContactForm from '../../components/CRM/ContactForm';
 import ImportContactsModal from '../../components/CRM/ImportContactsModal';
 import ContactActionMenu from '../../components/CRM/ContactActionMenu';
@@ -32,7 +32,21 @@ type ViewMode = 'list' | 'grid' | 'kanban';
 
 const ContactsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [contacts, setContacts] = useState<Contact[]>(sampleContacts);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // PHASE 2: contacts now come from /api/v1/contacts, which has had full CRUD
+  // all along. Errors are surfaced rather than swallowed into an empty list.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchContacts()
+      .then(rows => { if (!cancelled) { setContacts(rows); setLoadError(null); } })
+      .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load contacts'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [expandedContact, setExpandedContact] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -52,16 +66,18 @@ const ContactsPage: React.FC = () => {
     sortOrder: 'desc'
   });
 
-  // Calculate stats - showing mock totals for demo
-  const stats = useMemo(() => {
-    return {
-      total: 147,
-      activeDeals: 23,
-      fromLeadGen: 45,
-      fromHRMS: 12,
-      vip: 8
-    };
-  }, []);
+  // PHASE 2: these were the literals 147 / 23 / 45 / 12 / 8, shown above a table
+  // of 6 sample records. Now derived from the contacts actually loaded.
+  // activeDeals / fromLeadGen / fromHRMS stay 0 until contacts carry deal links
+  // and a source column — reporting a number with no data behind it is what
+  // Phase 0 removed everywhere else.
+  const stats = useMemo(() => ({
+    total: contacts.length,
+    activeDeals: contacts.filter(c => c.activeDeal).length,
+    fromLeadGen: contacts.filter(c => c.source === 'lead-gen').length,
+    fromHRMS: contacts.filter(c => c.source === 'hrms').length,
+    vip: contacts.filter(c => c.tags?.includes('VIP')).length,
+  }), [contacts]);
 
   // Filter and sort contacts
   const filteredContacts = useMemo(() => {
@@ -111,8 +127,8 @@ const ContactsPage: React.FC = () => {
           break;
         case 'lastContact':
         default:
-          aVal = a.lastContact.date;
-          bVal = b.lastContact.date;
+          aVal = a.lastContact?.date ?? '';
+          bVal = b.lastContact?.date ?? '';
       }
 
       if (filters.sortOrder === 'asc') {
@@ -477,7 +493,29 @@ const ContactsPage: React.FC = () => {
       {/* Contacts Table */}
       <div className="px-8 py-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* An error must not look like an empty list — that is precisely how the
+              broken lead endpoints stayed hidden. Loading, failed and genuinely
+              empty are three different states and read differently here. */}
+          {loadError && (
+            <div className="border-b border-red-200 bg-red-50 px-6 py-4">
+              <p className="text-sm font-medium text-red-800">Could not load contacts</p>
+              <p className="mt-1 text-sm text-red-700">{loadError}</p>
+            </div>
+          )}
+          {loading && !loadError && (
+            <div className="px-6 py-10 text-center text-sm text-gray-500">Loading contacts…</div>
+          )}
+          {!loading && !loadError && filteredContacts.length === 0 && (
+            <div className="px-6 py-10 text-center">
+              <p className="text-sm font-medium text-gray-900">No contacts yet</p>
+              <p className="mt-1 text-sm text-gray-600">
+                {contacts.length === 0
+                  ? 'Add your first contact to get started.'
+                  : 'No contacts match the current filters.'}
+              </p>
+            </div>
+          )}
+          <div className="overflow-x-auto" hidden={loading || !!loadError || filteredContacts.length === 0}>
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -551,9 +589,9 @@ const ContactsPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-4">
                         <div className="space-y-1">
-                          <div className="text-sm font-semibold text-gray-900">{contact.lastContact.date}</div>
-                          <div className="text-xs text-gray-600 capitalize">{contact.lastContact.type}</div>
-                          {contact.lastContact.details?.includes('AI Notes') && (
+                          <div className="text-sm font-semibold text-gray-900">{contact.lastContact?.date ?? '—'}</div>
+                          <div className="text-xs text-gray-600 capitalize">{contact.lastContact?.type ?? 'no activity recorded'}</div>
+                          {contact.lastContact?.details?.includes('AI Notes') && (
                             <div className="text-xs text-purple-600 font-medium flex items-center space-x-1">
                               <span>🤖</span>
                               <span>AI Notes</span>
@@ -623,7 +661,9 @@ const ContactsPage: React.FC = () => {
                             <div className="flex items-center space-x-2 text-sm">
                               <span className="text-gray-600 font-medium">Last contact:</span>
                               <span className="text-gray-700">
-                                {contact.lastContact.date} ({contact.lastContact.details || contact.lastContact.type})
+                                {contact.lastContact
+                                  ? `${contact.lastContact.date} (${contact.lastContact.details || contact.lastContact.type})`
+                                  : 'no activity recorded'}
                               </span>
                             </div>
 

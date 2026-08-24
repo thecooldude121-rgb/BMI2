@@ -6,6 +6,8 @@ export interface EnhancedAccount {
   type: 'prospect' | 'customer' | 'partner' | 'vendor' | 'competitor';
   industry: string;
   subIndustry?: string;
+  /** companies.domain — a real column, previously missing from this type. */
+  domain?: string;
   accountSize: '1-10' | '11-50' | '51-200' | '201-500' | '501-1000' | '1001-5000' | '5000+';
   annualRevenue?: number;
   revenueCurrency: string;

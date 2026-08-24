@@ -35,10 +35,35 @@ export const createCompany = async (req: AuthRequest, res: Response, next: NextF
   try {
     const tenantId = requireTenantId(req);
     const { id, name, domain, industry, size, revenue, website, phone, description, street, city, state, country, zip_code } = req.body;
+
+    if (!name || !String(name).trim()) {
+      res.status(400).json({ success: false, message: 'name is required' });
+      return;
+    }
+    // companies.size has a CHECK constraint; validate rather than emit a raw 500.
+    const VALID_SIZES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+', 'unknown'];
+    if (size && !VALID_SIZES.includes(size)) {
+      res.status(400).json({ success: false, message: `size must be one of: ${VALID_SIZES.join(', ')}` });
+      return;
+    }
+
+    // companies.id is a NOT NULL varchar with no default. It used to be taken
+    // straight from the request body, so any POST without an id was a raw 23502
+    // — and a client generating its own id can collide. Generate it here when
+    // absent, matching the existing C001 style and the D001/CT001 schemes in
+    // dealsController/contactsController.
+    let companyId = id;
+    if (!companyId) {
+      const maxResult = await pool.query(
+        `SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM companies WHERE id ~ '^C[0-9]+$'`
+      );
+      companyId = `C${String((maxResult.rows[0].max_num || 0) + 1).padStart(3, '0')}`;
+    }
+
     const result = await pool.query(
       `INSERT INTO companies (id, name, domain, industry, size, revenue, website, phone, description, street, city, state, country, zip_code, tenant_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [id, name, domain, industry, size, revenue, website, phone, description, street, city, state, country, zip_code, tenantId]
+      [companyId, name, domain, industry, size, revenue, website, phone, description, street, city, state, country, zip_code, tenantId]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }

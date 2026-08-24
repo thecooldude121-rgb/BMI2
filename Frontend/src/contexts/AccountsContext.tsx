@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import {
   EnhancedAccount,
   AccountActivity,
@@ -16,9 +16,20 @@ import {
   AccountWorkflow
 } from '../types/accounts';
 import { generateSampleAccounts } from '../utils/sampleAccountsData';
+import {
+  fetchAccounts,
+  createAccountViaAPI,
+  updateAccountViaAPI,
+  deleteAccountViaAPI,
+} from '../utils/accountsApi';
 
 interface AccountsContextType {
   accounts: EnhancedAccount[];
+  /** True while accounts are being fetched. Show a skeleton, not an empty list. */
+  loading: boolean;
+  /** Non-null when the fetch failed. Distinguish "broken" from "no accounts". */
+  error: string | null;
+  refreshAccounts: () => Promise<void>;
   filteredAccounts: EnhancedAccount[];
   selectedAccountIds: string[];
   currentFilter: AccountFilter;
@@ -94,9 +105,18 @@ interface AccountsProviderProps {
 }
 
 export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) => {
+  // MOCK DATA — still the source for the sub-entities below (activities, notes,
+  // documents, accountContacts, accountDeals, views, workflows). Those have no
+  // backend: there is no API for account activities/notes/documents, and the
+  // account<->contact and account<->deal links are not modelled server-side.
+  // Accounts themselves are now loaded from /api/v1/companies.
   const sampleData = generateSampleAccounts();
 
-  const [accounts, setAccounts] = useState<EnhancedAccount[]>(sampleData.accounts);
+  // Accounts start empty and are filled by the fetch below. Seeding from sample
+  // data would flash five fake companies before the real ones arrive.
+  const [accounts, setAccounts] = useState<EnhancedAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activities, setActivities] = useState<AccountActivity[]>(sampleData.activities);
   const [notes, setNotes] = useState<AccountNote[]>(sampleData.notes);
   const [documents, setDocuments] = useState<AccountDocument[]>(sampleData.documents);
@@ -109,6 +129,22 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
   const [currentFilter, setCurrentFilter] = useState<AccountFilter>({});
   const [currentView, setCurrentView] = useState<AccountView | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+
+  const refreshAccounts = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      setAccounts(await fetchAccounts());
+    } catch (e: any) {
+      // Surface the failure. Returning [] here is what hid the broken lead
+      // endpoints for so long — an error must not look like an empty list.
+      setError(e?.message ?? 'Could not load accounts');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refreshAccounts(); }, [refreshAccounts]);
 
   const filterAccounts = useCallback((filter: AccountFilter): EnhancedAccount[] => {
     return accounts.filter(account => {
@@ -200,27 +236,28 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     return hierarchy;
   }, [accounts, getAccountById]);
 
-  const createAccount = async (accountData: Omit<EnhancedAccount, 'id' | 'createdAt' | 'updatedAt'>): Promise<EnhancedAccount> => {
-    const newAccount: EnhancedAccount = {
-      ...accountData,
-      id: `acc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  // ── Accounts: real persistence via /api/v1/companies ──────────────────────
+  // These four used to be setState-only, so every create/edit/delete was lost
+  // on refresh. The interface is unchanged — it already returned Promises — so
+  // no consumer needed touching.
 
-    setAccounts(prev => [...prev, newAccount]);
-    return newAccount;
+  const createAccount = async (
+    accountData: Omit<EnhancedAccount, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<EnhancedAccount> => {
+    const created = await createAccountViaAPI(accountData);
+    setAccounts(prev => [...prev, created]);
+    return created;
   };
 
   const updateAccount = async (id: string, updates: Partial<EnhancedAccount>): Promise<void> => {
-    setAccounts(prev => prev.map(acc =>
-      acc.id === id
-        ? { ...acc, ...updates, updatedAt: new Date().toISOString() }
-        : acc
-    ));
+    const saved = await updateAccountViaAPI(id, updates);
+    // Merge rather than replace: the server only knows the columns it stores, so
+    // a wholesale swap would discard any richer client-side state on the record.
+    setAccounts(prev => prev.map(acc => (acc.id === id ? { ...acc, ...saved } : acc)));
   };
 
   const deleteAccount = async (id: string): Promise<void> => {
+    await deleteAccountViaAPI(id);
     setAccounts(prev => prev.filter(acc => acc.id !== id));
   };
 
@@ -228,6 +265,13 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     const primaryAccount = getAccountById(request.primaryAccountId);
     if (!primaryAccount) throw new Error('Primary account not found');
 
+    // Merge is delete-the-losers only; it does not yet move contacts, deals or
+    // activities onto the primary account, because those relationships have no
+    // API. Deleting the secondaries server-side at least makes the outcome real
+    // and consistent with what the UI shows.
+    for (const secondaryId of request.secondaryAccountIds) {
+      await deleteAccountViaAPI(secondaryId);
+    }
     setAccounts(prev => prev.filter(acc => !request.secondaryAccountIds.includes(acc.id)));
 
     return primaryAccount;
@@ -617,6 +661,9 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
 
   const value: AccountsContextType = {
     accounts,
+    loading,
+    error,
+    refreshAccounts,
     filteredAccounts,
     selectedAccountIds,
     currentFilter,

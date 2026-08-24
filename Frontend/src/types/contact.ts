@@ -9,7 +9,19 @@ export interface Contact {
   sourceDetails?: string;
   tags: string[];
   status: 'active' | 'inactive';
-  lastContact: {
+
+  // Real columns on the contacts table, previously missing from this type.
+  companyId?: string;
+  department?: string;
+  linkedinUrl?: string;
+  isPrimary?: boolean;
+
+  /**
+   * Now OPTIONAL. There is no activity data for contacts — no column, no API —
+   * so a record loaded from the server genuinely has no last-contact date.
+   * Making it required forced callers to invent one. Guard before reading.
+   */
+  lastContact?: {
     date: string;
     type: 'meeting' | 'email' | 'call' | 'note';
     details?: string;
