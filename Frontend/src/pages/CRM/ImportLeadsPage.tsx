@@ -205,7 +205,7 @@ const ImportLeadsPage: React.FC = () => {
   const handleConfirmDisconnect = () => {
     setShowDisconnectModal(false);
     setTimeout(() => {
-      alert(`${selectedIntegration?.name} has been disconnected. Auto-sync has been stopped.`);
+      alert(`Disconnecting ${selectedIntegration?.name} is not available yet — nothing was disconnected and no sync was stopped.`);
     }, 100);
   };
 
@@ -219,7 +219,10 @@ const ImportLeadsPage: React.FC = () => {
           clearInterval(interval);
           setImporting(false);
           setImportSuccess(true);
-          setImportedCount(25);
+          // PHASE 0: was setImportedCount(25) — a literal, reported as
+          // "Successfully imported 25 new leads" for any integration. Nothing
+          // is fetched or created; there is no integration backend at all.
+          setImportedCount(0);
           return 100;
         }
         return prev + 10;
@@ -235,14 +238,14 @@ const ImportLeadsPage: React.FC = () => {
   const handleSaveConfig = () => {
     setShowConfigModal(false);
     setTimeout(() => {
-      alert('✅ Configuration saved successfully!');
+      alert('Saving integration configuration is not available yet — nothing was saved.');
     }, 100);
   };
 
   const handleCompleteConnection = () => {
     setShowConnectModal(false);
     setTimeout(() => {
-      alert(`✅ ${selectedIntegration?.name} connected successfully! You can now start importing leads.`);
+      alert(`Connecting ${selectedIntegration?.name} is not available yet — there is no OAuth flow behind this, so nothing was connected.`);
     }, 100);
   };
 
@@ -675,11 +678,16 @@ const ImportLeadsPage: React.FC = () => {
                   <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                     <Check className="h-8 w-8 text-green-600" />
                   </div>
+                  {/* PHASE 0: said "Import Complete! Successfully imported 25 new
+                      leads" off a fake progress bar. There is no integration
+                      backend, so nothing was fetched or created. The working CSV
+                      importer on this page is the separate ImportWizard below. */}
                   <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    Import Complete!
+                    Nothing was imported
                   </h3>
                   <p className="text-gray-600 mb-4">
-                    Successfully imported <span className="font-bold text-green-600">{importedCount} new leads</span> from {selectedIntegration?.name}
+                    Importing from {selectedIntegration?.name} is not available yet — this screen
+                    cannot connect to it. To load leads from a file, use <span className="font-semibold">Import from CSV</span> instead.
                   </p>
                 </div>
 

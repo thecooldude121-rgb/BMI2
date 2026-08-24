@@ -327,7 +327,7 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
       baseId: baseId ?? newId,
       isSharedWithBuyer: false,
     }]);
-    showToast('success', `${name} uploaded successfully!`);
+    showToast('warning', `${name} was NOT uploaded — attaching files to a deal is not available yet.`);
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -110,7 +110,7 @@ const ReportDetailView: React.FC = () => {
       format: scheduleFormat,
     });
     setShowScheduleModal(false);
-    setSuccessToastMessage('Report scheduled successfully!');
+    setSuccessToastMessage('Scheduling reports is not available yet — nothing was scheduled.');
     setShowSuccessToast(true);
     setTimeout(() => setShowSuccessToast(false), 3000);
   };

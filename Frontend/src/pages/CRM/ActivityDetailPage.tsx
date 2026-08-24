@@ -3197,7 +3197,7 @@ const ActivityDetailPage: React.FC = () => {
               <button onClick={() => setShowFileUpload(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
                 Cancel
               </button>
-              <button onClick={() => { alert('File uploaded!'); setShowFileUpload(false); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+              <button onClick={() => { alert('Nothing was uploaded — attaching files is not available yet.'); setShowFileUpload(false); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
                 Upload
               </button>
             </div>
@@ -3717,7 +3717,7 @@ const ActivityDetailPage: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  alert('Activity deleted!');
+                  alert('This activity was NOT deleted — deleting activities is not available yet.');
                   navigate('/crm/activities');
                 }}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"

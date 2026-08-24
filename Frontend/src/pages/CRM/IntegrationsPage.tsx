@@ -168,7 +168,7 @@ const IntegrationsPage: React.FC = () => {
   const handleConfirmDisconnect = () => {
     setShowDisconnectModal(false);
     setTimeout(() => {
-      alert(`${selectedIntegration?.name} has been disconnected. Auto-sync has been stopped.`);
+      alert(`Disconnecting ${selectedIntegration?.name} is not available yet — nothing was disconnected and no sync was stopped.`);
     }, 100);
   };
 
@@ -182,7 +182,7 @@ const IntegrationsPage: React.FC = () => {
   const handleCompleteConnection = () => {
     setShowConnectModal(false);
     setTimeout(() => {
-      alert(`${selectedIntegration?.name} connected successfully! You can now start importing leads.`);
+      alert(`Connecting ${selectedIntegration?.name} is not available yet — there is no OAuth flow behind this, so nothing was connected.`);
     }, 100);
   };
 

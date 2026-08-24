@@ -541,7 +541,7 @@ const AddEditContactPage: React.FC = () => {
         alert('✅ Contact saved! Opening campaign selector...');
         console.log('📢 Opening campaign selector...');
       } else {
-        alert('✅ Contact saved successfully!');
+        alert('This contact was NOT saved — saving contacts is not available yet on this screen.');
         if (isEditMode) {
           navigate(`/crm/contacts/${id}`);
         } else {

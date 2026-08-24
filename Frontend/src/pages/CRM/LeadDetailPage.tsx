@@ -241,8 +241,9 @@ const LeadDetailPage: React.FC = () => {
     setTerminalModalAction(null);
   };
 
+  // PHASE 0: this never read the file input — it only toasted success.
   const handleFileUpload = () => {
-    showToast('File uploaded successfully');
+    showToast('Attaching files to a lead is not available yet — nothing was uploaded');
     setShowFileUpload(false);
   };
 

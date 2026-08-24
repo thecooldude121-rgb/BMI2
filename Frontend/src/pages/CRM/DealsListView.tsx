@@ -4036,7 +4036,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const name = scheduleFollowUpDeal.dealName;
                   setScheduleFollowUpDeal(null);
-                  showBulkToast(`Follow-up scheduled for "${name}"`);
+                  showBulkToast(`Follow-up for "${name}" is not saved yet — it will be gone after a refresh`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Schedule
@@ -4103,7 +4103,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const name = createTaskDeal.dealName;
                   setCreateTaskDeal(null);
-                  showBulkToast(`Task created for "${name}"`);
+                  showBulkToast(`Task for "${name}" is not saved yet — it will be gone after a refresh`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Create task
@@ -4176,7 +4176,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const name = logMeetingDeal.dealName;
                   setLogMeetingDeal(null);
-                  showBulkToast(`Meeting outcome logged for "${name}"`);
+                  showBulkToast(`Meeting outcome for "${name}" is not saved yet — it will be gone after a refresh`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Log outcome
@@ -4230,7 +4230,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const seq = STUB_SEQUENCES.find(s => s.id === selectedSequence);
                   setAddSequenceDeal(null);
-                  showBulkToast(`Added "${addSequenceDeal.dealName}" to "${seq?.name}"`);
+                  showBulkToast(`Adding "${addSequenceDeal.dealName}" to "${seq?.name}" is not available yet — nothing was changed`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Add to sequence
@@ -4324,7 +4324,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   onClick={() => {
                     onBulkAction?.('delete', [deleteConfirmDeal.id]);
                     setDeleteConfirmDeal(null);
-                    showBulkToast(`"${deleteConfirmDeal.dealName}" deleted`);
+                    showBulkToast(`"${deleteConfirmDeal.dealName}" was NOT deleted — deleting deals is not available yet`);
                   }}
                   className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                 >
@@ -4401,7 +4401,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setBulkDeleteConfirm(false);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`${count} deal${count !== 1 ? 's' : ''} deleted`);
+                      showBulkToast(`No deals were deleted — deleting deals is not available yet`);
                     }}
                     className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                   >
@@ -4635,7 +4635,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setOpenPopover(null);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`Stage updated for ${count} deal${count !== 1 ? 's' : ''}`);
+                      showBulkToast(`Stage changed on screen for ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                     }}
                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors"
                   >
@@ -4672,7 +4672,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setOpenPopover(null);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`Owner updated for ${count} deal${count !== 1 ? 's' : ''}`);
+                      showBulkToast(`Owner changed on screen for ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                     }}
                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors"
                   >
@@ -4713,7 +4713,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         setSelectedDeals([]);
                         lastSelectedIndex.current = null;
                         setTagInput('');
-                        showBulkToast(`Tag added to ${count} deal${count !== 1 ? 's' : ''}`);
+                        showBulkToast(`Tag added on screen to ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                       }
                       if (e.key === 'Escape') setOpenPopover(null);
                     }}
@@ -4727,7 +4727,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
                       setTagInput('');
-                      showBulkToast(`Tag added to ${count} deal${count !== 1 ? 's' : ''}`);
+                      showBulkToast(`Tag added on screen to ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                     }}
                     className="px-2.5 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
                   >

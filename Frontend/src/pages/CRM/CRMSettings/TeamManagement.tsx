@@ -144,19 +144,19 @@ const TeamManagement: React.FC = () => {
       showToast('Redirecting to contact sales...', 'info');
       setTimeout(() => {
         setShowUpgradePlanModal(false);
-        showToast('Sales team will contact you within 24 hours', 'success');
+        showToast('Contacting sales is not available yet — no request was sent', 'warning');
       }, 1500);
     } else if (plan === 'business') {
       showToast(`Upgrading to Business plan (${billingCycle})...`, 'info');
       setTimeout(() => {
         setShowUpgradePlanModal(false);
-        showToast('Plan upgraded successfully! Your new seats are now available.', 'success');
+        showToast('Changing your plan is not available yet — nothing was upgraded or charged', 'warning');
       }, 2000);
     } else if (plan === 'add-seat') {
       showToast('Adding seat to your plan...', 'info');
       setTimeout(() => {
         setShowUpgradePlanModal(false);
-        showToast('Seat added successfully! You now have 1 additional seat.', 'success');
+        showToast('Adding a seat is not available yet — nothing was added or charged', 'warning');
       }, 1500);
     }
   };
@@ -172,7 +172,7 @@ const TeamManagement: React.FC = () => {
       setTeamMembersState(prev => prev.filter(m => m.id !== updatedMember.id));
       setShowEditModal(false);
       setSelectedMember(null);
-      showToast(`${updatedMember.name} has been permanently deleted`, 'success');
+      showToast(`${updatedMember.name} was NOT deleted — deleting users is not available yet`, 'warning');
       return;
     }
 
@@ -194,18 +194,20 @@ const TeamManagement: React.FC = () => {
         timestamp: new Date().toISOString()
       });
 
-      // Build notification message
-      let notificationMessage = `${updatedMember.name} has been updated`;
+      // PHASE 0: this reported "<name> has been updated (Role: Admin)" off a
+      // console.log. Editing a user's role is a permission change — claiming it
+      // succeeded is the most consequential false confirmation on this page.
+      let notificationMessage = `${updatedMember.name} was NOT updated — editing users is not available yet`;
 
-      if (changes.status) {
-        notificationMessage += ` (Status: ${changes.status.to})`;
-      } else if (changes.role) {
-        notificationMessage += ` (Role: ${changes.role.to})`;
+      if (changes.role) {
+        notificationMessage += ` (role is still ${changes.role.from})`;
+      } else if (changes.status) {
+        notificationMessage += ` (status is still ${changes.status.from})`;
       }
 
-      showToast(notificationMessage, 'success');
+      showToast(notificationMessage, 'warning');
     } else if (changes.deactivated) {
-      showToast(`${updatedMember.name} has been deactivated`, 'success');
+      showToast(`${updatedMember.name} was NOT deactivated — this is not available yet`, 'warning');
     } else {
       showToast('No changes were made', 'info');
     }
@@ -244,7 +246,7 @@ const TeamManagement: React.FC = () => {
       timestamp: new Date().toISOString()
     });
 
-    showToast(`Password reset email sent to ${selectedMember.email}`, 'success');
+    showToast('Password reset is not available yet — no email was sent', 'warning');
   };
 
   const handleSendWelcomeEmail = (member: TeamMember) => {
@@ -271,7 +273,7 @@ const TeamManagement: React.FC = () => {
       timestamp: new Date().toISOString()
     });
 
-    showToast(`Email sent to ${selectedMember.name}`, 'success');
+    showToast('Sending email is not available yet — nothing was sent', 'warning');
     setShowEmailComposerModal(false);
     setSelectedMember(null);
   };
@@ -313,7 +315,7 @@ const TeamManagement: React.FC = () => {
       timestamp: new Date().toISOString()
     });
 
-    showToast(`Account unlocked for ${member.name}`, 'success');
+    showToast(`${member.name}'s account was NOT unlocked — this is not available yet`, 'warning');
   };
 
   const handleViewActivityLog = (member: TeamMember) => {
@@ -359,9 +361,9 @@ const TeamManagement: React.FC = () => {
 
     // Show appropriate toast
     if (data.sendNotification) {
-      showToast(`${selectedMember.name} has been deactivated. Notification email sent.`, 'success');
+      showToast(`${selectedMember.name} was NOT deactivated and no email was sent — this is not available yet`, 'warning');
     } else {
-      showToast(`${selectedMember.name} has been deactivated`, 'success');
+      showToast(`${selectedMember.name} was NOT deactivated — this is not available yet`, 'warning');
     }
   };
 
@@ -398,7 +400,7 @@ const TeamManagement: React.FC = () => {
       recoverable: 'NO'
     });
 
-    showToast(`${selectedMember.name} has been permanently deleted`, 'success');
+    showToast(`${selectedMember.name} was NOT deleted — deleting users is not available yet`, 'warning');
 
     // Scroll to top after deletion
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -870,7 +872,7 @@ const TeamManagement: React.FC = () => {
                               : m
                           )
                         );
-                        showToast(`${member.name} has been reactivated`, 'success');
+                        showToast(`${member.name} was NOT reactivated — this is not available yet`, 'warning');
                         console.log('User Reactivated:', {
                           action: 'User Reactivated',
                           user: member.name,

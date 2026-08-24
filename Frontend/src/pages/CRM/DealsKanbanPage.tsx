@@ -547,6 +547,27 @@ const DealsKanbanPage: React.FC = () => {
   // A soft coaching prompt is shown when a deal lands here without one.
   const STAGES_REQUIRING_NEXT_STEP: string[] = ['proposal', 'negotiation'];
 
+  /**
+   * PHASE 0: the deals board's write path is not wired to the API. Every handler
+   * below used to be a `console.log` while DealsListView fired success toasts off
+   * them — "N deals deleted", "Stage updated for N deals", "Owner updated".
+   * Because the deals themselves ARE loaded from the real API, the board looked
+   * live and the user had every reason to believe the write landed.
+   *
+   * Until Phase 2 wires these to PUT /deals/:id and a stage-transition endpoint,
+   * say plainly that the change is local. Never claim success here.
+   */
+  const notPersisted = (action: string) => {
+    setToast({
+      message: `${action} is not saved yet — the change is only on your screen and will be gone after a refresh.`,
+      type: 'info',
+    });
+    setTimeout(() => setToast(null), 6000);
+  };
+
+  // Was hardcoded to "Sarah Chen" while AuthContext was already imported.
+  const currentUserName = user?.name ?? 'Unknown user';
+
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
@@ -598,7 +619,12 @@ const DealsKanbanPage: React.FC = () => {
         onAction: () => setSelectedDealId(updatedDeal.id),
       });
     } else {
-      setToast({ message: `Deal moved to ${destStage.name}`, type: 'success' });
+      // Not 'success': handleDragEnd only reorders local state — there is no
+      // updateDeal call, so the move is gone on refresh.
+      setToast({
+        message: `Deal moved to ${destStage.name} on your screen — not saved yet, so it will revert after a refresh.`,
+        type: 'info',
+      });
     }
 
     setTimeout(() => setToast(null), 5000);
@@ -2006,21 +2032,15 @@ const DealsKanbanPage: React.FC = () => {
           stages={filteredStagesForList}
           totalPipelineDeals={stages.flatMap(s => s.deals).length}
           onDealClick={handleCardClick}
-          onStageChange={(dealId, newStage) => {
-            console.log('Stage change:', dealId, newStage);
-          }}
-          onBulkAction={(action, dealIds, payload) => {
-            console.log('[BulkAction]', action, dealIds, payload);
-          }}
+          onStageChange={(_dealId, newStage) => notPersisted(`Moving this deal to ${newStage}`)}
+          onBulkAction={(action) => notPersisted(`Bulk "${action}"`)}
           availableOwners={Array.from(new Set(
             stages.flatMap(s => s.deals.map(d => d.owner)).filter(Boolean)
           ))}
-          onFieldUpdate={async (dealId, field, value) => {
-            console.log('[FieldUpdate]', dealId, field, value);
-          }}
-          currentUser="Sarah Chen"
-          onAddNote={(dealId) => console.log('[onAddNote]', dealId)}
-          onScheduleFollowUp={(dealId) => console.log('[onScheduleFollowUp]', dealId)}
+          onFieldUpdate={async (_dealId, field) => { notPersisted(`Editing ${field}`); }}
+          currentUser={currentUserName}
+          onAddNote={() => notPersisted('Adding a note')}
+          onScheduleFollowUp={() => notPersisted('Scheduling a follow-up')}
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
           columnOrder={columnOrder}
