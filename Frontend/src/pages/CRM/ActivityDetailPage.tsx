@@ -1046,7 +1046,17 @@ NEXT STEPS:
     },
   };
 
-  return activityData[id] || activityData['ACT-2025-006']; // Default to note
+  // PHASE 2: this used to fall back to a fixture for ANY unknown id, so every
+  // real activity opened as a fabricated one — and now that the timeline is
+  // wired to the API, the ids reaching this page are real 32-char activity ids.
+  // Returning null instead lets the page say so rather than invent a record.
+  //
+  // This page reads 47 distinct fields off `activity` — aiInsights, emailTracking,
+  // recording, attendees, riskAlert, checklist, engagementScore and the rest —
+  // almost none of which have a column. Rendering it from the API needs the page
+  // rebuilt around the data that exists, not a field-by-field mapping. Until
+  // then only the five demo fixtures below resolve.
+  return activityData[id] ?? null;
 };
 
 const ActivityDetailPage: React.FC = () => {
@@ -1091,6 +1101,7 @@ const ActivityDetailPage: React.FC = () => {
   const activity = getMockActivity(id || 'ACT-2025-006');
 
   React.useEffect(() => {
+    if (!activity) return;
     if (activity.agenda) {
       setAgendaItems(activity.agenda);
     }
@@ -1167,6 +1178,32 @@ const ActivityDetailPage: React.FC = () => {
   };
 
   const color = getActivityColor(activity.type);
+
+  // Everything below reads fields that only the demo fixtures carry. A real
+  // activity from the API has none of them, so say so instead of crashing or
+  // rendering someone else's meeting.
+  if (!activity) {
+    return (
+      <div className="min-h-screen bg-gray-50 px-6 py-16">
+        <div className="mx-auto max-w-xl text-center">
+          <h1 className="text-xl font-semibold text-gray-900">Activity detail is not available yet</h1>
+          <p className="mt-3 text-sm text-gray-600">
+            The activity list is live, but this detail view has not been rebuilt against the
+            API — it was written around demo data that included call recordings, email
+            tracking and AI summaries, none of which are stored yet. Showing you one of those
+            fixtures instead of your activity would be worse than showing nothing.
+          </p>
+          <button
+            onClick={() => navigate('/crm/activities')}
+            className="mt-6 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Back to Activities
+          </button>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="min-h-screen bg-gray-50">
