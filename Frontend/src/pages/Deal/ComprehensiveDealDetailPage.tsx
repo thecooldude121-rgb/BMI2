@@ -29,8 +29,9 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import type { DealValueHistoryEntry } from '../../types/dealManagement';
-import { computeMomentum } from '../../utils/dealMomentum';
-import type { MomentumInput } from '../../utils/dealMomentum';
+// computeMomentum / MomentumInput imports removed in Phase 0 — the engine is
+// sound but had no real inputs. Re-import them when actual activity data exists
+// to feed it (see the note beside `momentumResult` below).
 import type { RevenueSchedule } from '../../components/Deal/RevenueTimeline';
 
 const TABS = [
@@ -254,20 +255,19 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     ? deal.daysInStage
     : undefined;
 
-  // Demo Accelerating — replace these values to show Decelerating:
-  // responseTimesHours:[12,24,48], daysSinceLastTwoWay:6, newStakeholdersLast14Days:0,
-  // stageDaysVsBenchmark:5, stageBenchmark:12, activitiesLast7Days:1, activitiesPrior7Days:4
-  const momentumInput: MomentumInput = {
-    responseTimesHours:       [48, 24, 12],
-    daysSinceLastTwoWay:      2,
-    newStakeholdersLast14Days: 1,
-    stageDaysVsBenchmark:     -3,
-    stageBenchmark:           12,
-    activitiesLast7Days:      4,
-    activitiesPrior7Days:     2,
-  };
-
-  const momentumResult = useMemo(() => computeMomentum(momentumInput), []);
+  // PHASE 0: the momentum badge was computed from a hardcoded demo fixture —
+  // the block here was literally commented "Demo Accelerating — replace these
+  // values to show Decelerating". Every deal in the product therefore displayed
+  // the same invented momentum, and it was written back to the database (see
+  // the removed effect below).
+  //
+  // `computeMomentum` itself is sound; it has no real inputs. To restore this,
+  // feed it from actual data: response times from the email/activity log,
+  // daysSinceLastTwoWay from the last inbound activity, stakeholder counts from
+  // a deal_stakeholders table, and stage benchmarks from historical stage
+  // durations. Until those exist, the badge is hidden rather than faked —
+  // DealHeroSection guards on `momentumResult &&`, so undefined omits it.
+  const momentumResult = undefined;
 
   // Revenue schedule seed data — branched by deal ID
   // TODO: replace with API field once revenueSchedule is persisted in the DB
@@ -305,11 +305,17 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     setActiveTab('overview');
   };
 
-  // Silently persist computed momentum_score to the DB
-  useEffect(() => {
-    if (!id) return;
-    updateDeal(id, { momentum_score: momentumResult.level }).catch(() => {});
-  }, [id, momentumResult.level]);
+  // PHASE 0: removed an effect that silently persisted the demo-derived
+  // momentum level to the database on every page view:
+  //
+  //     updateDeal(id, { momentum_score: momentumResult.level }).catch(() => {});
+  //
+  // Three separate problems. It wrote fabricated data to real records; it fired
+  // a PUT on every view of every deal; and because `momentum_score` is not a
+  // column in the live schema, the request 500'd every time — swallowed by the
+  // empty catch, so nobody ever saw it fail. Any future write belongs in an
+  // explicit user action or a server-side computation, never an unconditional
+  // effect with a silenced error handler.
 
   // Global keyboard shortcuts — fires when focus is NOT in an input/textarea/select
   useEffect(() => {

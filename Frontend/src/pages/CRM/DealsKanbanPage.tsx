@@ -316,48 +316,28 @@ const DealsKanbanPage: React.FC = () => {
               } catch { return 0; }
             })(),
             createdAt: d.created_at || '',
-            // Mock data — replace with backend values when stakeholder API is available
-            ...(() => {
-              const hash = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const bucket = hash % 10;
-              // Distribution: 0-3 (40%) strong, 4-6 (30%) fair, 7-8 (20%) weak, 9 (10%) very strong
-              if (bucket <= 3) return { stakeholderCount: 2, hasChampion: true,  lastMeetingDaysAgo: 8  };
-              if (bucket <= 6) return { stakeholderCount: 1, hasChampion: false, lastMeetingDaysAgo: 20 };
-              if (bucket <= 8) return { stakeholderCount: 0, hasChampion: false, lastMeetingDaysAgo: null };
-              return               { stakeholderCount: 3, hasChampion: true,  lastMeetingDaysAgo: 3  };
-            })(),
-            // Mock competitor data — replace with backend deal_competitors join table when available
-            ...(() => {
-              const hash2 = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const bucket2 = (hash2 * 7 + 3) % 20;
-              if (bucket2 <= 6)  return { primaryCompetitor: 'Salesforce',         secondaryCompetitors: ['HubSpot'] };
-              if (bucket2 <= 10) return { primaryCompetitor: 'HubSpot',            secondaryCompetitors: [] };
-              if (bucket2 <= 13) return { primaryCompetitor: 'Microsoft Dynamics', secondaryCompetitors: ['Oracle', 'SAP'] };
-              if (bucket2 <= 16) return { primaryCompetitor: 'Zoho',               secondaryCompetitors: ['Pipedrive'] };
-              return { primaryCompetitor: undefined, secondaryCompetitors: undefined };
-            })(),
-            // Some deals intentionally have missing data for pipeline hygiene demo purposes
-            ...(() => {
-              const h = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const b = (h * 11 + 7) % 25;
-              if (b === 0) return { owner: 'Unassigned', nextStep: '' };    // missing owner + next step
-              if (b === 1) return { closeDate: '' };                         // missing close date
-              if (b === 2) return { contactName: '', nextStep: '' };         // missing contact and next step
-              if (b === 3) return { closeDate: '2025-09-30' };              // overdue ghost
-              if (b === 4) return { owner: 'Unassigned' };                  // missing owner only
-              return {};
-            })(),
-            // Mock multi-currency — replace with backend currency field when available
-            ...(() => {
-              const hash3 = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const bucket3 = (hash3 * 3 + 5) % 20;
-              const usdValue = parseFloat(d.value) || 0;
-              if (bucket3 <= 7)  return {};  // ~40% USD (no override)
-              if (bucket3 <= 11) return { currency: 'EUR', amount: Math.round(usdValue * 0.92), baseAmountUsd: usdValue };  // ~20% EUR
-              if (bucket3 <= 14) return { currency: 'GBP', amount: Math.round(usdValue * 0.79), baseAmountUsd: usdValue };  // ~15% GBP
-              if (bucket3 <= 16) return { currency: 'INR', amount: Math.round(usdValue * 83.12), baseAmountUsd: usdValue }; // ~10% INR
-              return { currency: 'SGD', amount: Math.round(usdValue * 1.34), baseAmountUsd: usdValue };                     // ~15% SGD
-            })(),
+            // PHASE 0: four blocks of fabricated fields were removed from here.
+            // They derived values from `id.charCodeAt()` sums and spliced them
+            // onto real database rows, so every downstream feature — relationship
+            // risk, competitive intel, the data-quality drawer, the currency
+            // selector — was scoring invented data while looking live:
+            //
+            //   1. stakeholderCount / hasChampion / lastMeetingDaysAgo
+            //      → needs a deal_stakeholders table + activity join
+            //   2. primaryCompetitor / secondaryCompetitors
+            //      → needs a deal_competitors join table
+            //   3. a block that blanked owner/closeDate/contactName on ~20% of
+            //      REAL rows, labelled "for pipeline hygiene demo purposes".
+            //      This overwrote correct data and made the DQ drawer flag
+            //      healthy deals. Deleted outright — it has no replacement.
+            //   4. currency/amount/baseAmountUsd at hardcoded FX rates
+            //      → deals.currency and base_amount_usd already exist; read
+            //        those instead of inventing a rate.
+            //
+            // All four fields are optional in the Deal type and every consumer
+            // guards with `??` / truthiness, so these now render as "no data",
+            // which is the truth. Do not reintroduce placeholder values here:
+            // populate them from the API or leave them absent.
           }));
         // Hard invariant: deduplicate by id before committing to state.
         const seen = new Set<string>();
@@ -591,10 +571,14 @@ const DealsKanbanPage: React.FC = () => {
 
     // Both splices now operate on the copied deals arrays, never on state.
     const [movedDeal] = sourceStage.deals.splice(source.index, 1);
+    // PHASE 0: aiScore was jittered by `Math.floor(Math.random() * 10) - 3` on
+    // every drop, so a deal's score visibly changed because the user dragged its
+    // card. Moving a deal between stages should not alter its score at all —
+    // and when a real model exists, a recomputation belongs in the API response
+    // to the stage-transition call, not in a drag handler.
     const updatedDeal = {
       ...movedDeal,
-      stage:   destStage.id,
-      aiScore: Math.max(0, Math.min(100, movedDeal.aiScore + Math.floor(Math.random() * 10) - 3)),
+      stage: destStage.id,
     };
 
     destStage.deals.splice(destination.index, 0, updatedDeal);

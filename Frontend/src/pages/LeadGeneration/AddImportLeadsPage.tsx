@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { NotAvailable } from '../../components/common/NotAvailable';
 import {
   X,
   FileText,
@@ -239,32 +240,49 @@ const AddImportLeadsPage: React.FC = () => {
     if (file) {
       setCSVData({ ...csvData, file });
       setCSVStep(2);
-      alert(`File uploaded: ${file.name}`);
+      // "uploaded" was a lie — the file never leaves the browser. It is only selected.
+      alert(`File selected: ${file.name}`);
     }
   };
 
+  // This one needed no backend, so it is now real rather than disabled: build the
+  // template in the browser and hand it to the user.
   const handleDownloadTemplate = () => {
-    alert('Downloading CSV template with example data...');
+    const headers = ['first_name', 'last_name', 'email', 'phone', 'company', 'position', 'source'];
+    const example = ['Ada', 'Lovelace', 'ada@example.com', '+1 555 0100', 'Analytical Engines', 'CTO', 'Website'];
+    const csv = `${headers.join(',')}\n${example.join(',')}\n`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bmi-leads-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
+  /**
+   * PHASE 0: CSV import is disabled because it never worked.
+   *
+   * The previous implementation never read the selected file — no FileReader, no
+   * parser, no request. It ran a setInterval progress bar and then reported
+   * "Import completed! 245 leads created successfully" and navigated to a list
+   * that did not contain them. The 245 and the "250 rows detected" shown in the
+   * step-2 summary were string literals, identical for every file.
+   *
+   * Implementing this for real needs two things that do not exist yet:
+   *   - a working POST /api/v1/leads (currently 500s — the controller targets
+   *     columns the live schema does not have; fixed in Phase 1)
+   *   - a bulk-import endpoint, so a 5,000-row file is one transaction with a
+   *     per-row error report, not 5,000 sequential requests
+   *
+   * Until then this must not claim success. See Phase 2.
+   */
   const handleCSVImport = () => {
-    setImporting(true);
-    setImportProgress(0);
-
-    const interval = setInterval(() => {
-      setImportProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setImporting(false);
-          setTimeout(() => {
-            alert('Import completed! 245 leads created successfully. Click OK to view imported leads.');
-            navigate('/lead-generation/leads?filter=source:csv-import');
-          }, 500);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 500);
+    alert(
+      'CSV import is not available yet.\n\n' +
+      'Nothing has been imported. This screen could not read your file, so it has ' +
+      'been disabled rather than report a result that did not happen. Ask your ' +
+      'administrator to load leads directly for now.'
+    );
   };
 
   const toggleApolloLead = (id: string) => {
@@ -846,8 +864,11 @@ const AddImportLeadsPage: React.FC = () => {
             {csvStep === 2 && (
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Step 2 of 3: Map Columns</h3>
+                {/* Was hardcoded "leads_export.csv (250 rows detected)" regardless of
+                    the actual file. Show the real filename; the row count is unknown
+                    because the file is never parsed (see handleCSVImport). */}
                 <p className="text-sm text-gray-600 mb-6">
-                  File: leads_export.csv (250 rows detected)
+                  File: {csvData.file?.name ?? 'none selected'}
                 </p>
 
                 <div className="mb-6">
@@ -1034,35 +1055,15 @@ const AddImportLeadsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <p className="text-sm font-medium text-gray-900 mb-2">Import Summary:</p>
-                  <ul className="space-y-1 text-sm text-gray-700">
-                    <li>• Total Rows: 250</li>
-                    <li className="text-green-700">• Valid Leads: 245 ✅</li>
-                    <li className="text-yellow-700">• Duplicates: 5 (will be skipped) ⚠️</li>
-                    <li>• Invalid: 0 ❌</li>
-                  </ul>
-                </div>
-
-                {importing && (
-                  <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-                    <p className="text-sm font-medium text-gray-900 mb-2">
-                      Importing... {Math.floor((importProgress / 100) * 245)} of 245 leads ({importProgress}%)
-                    </p>
-                    <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
-                      <div
-                        className="bg-blue-600 h-3 rounded-full transition-all"
-                        style={{ width: `${importProgress}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p>✅ {Math.floor((importProgress / 100) * 245)} leads created</p>
-                      <p>🔄 5 leads enriching...</p>
-                      <p>⏳ {245 - Math.floor((importProgress / 100) * 245)} leads remaining</p>
-                      <p className="font-medium">Estimated time: 2 minutes</p>
-                    </div>
-                  </div>
-                )}
+                {/* PHASE 0: an "Import Summary" of Total 250 / Valid 245 / Duplicates 5
+                    used to sit here, and a fake progress panel counting up to 245.
+                    Every number was a literal, shown for any file. Replaced with the
+                    truth until the file is actually parsed. */}
+                <NotAvailable
+                  className="mb-6"
+                  feature="Importing leads from a file"
+                  detail="This screen cannot read your file yet, so it cannot tell you how many rows are valid or import any of them. Use the template download above to prepare your data, and ask your administrator to load it for now."
+                />
 
                 <div className="flex justify-end space-x-3">
                   <button
@@ -1081,8 +1082,10 @@ const AddImportLeadsPage: React.FC = () => {
                   </button>
                   <button
                     onClick={handleCSVImport}
-                    disabled={importing}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+                    disabled
+                    aria-disabled
+                    title="Importing leads from a file is not available yet"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium opacity-50 cursor-not-allowed"
                   >
                     Start Import
                   </button>
