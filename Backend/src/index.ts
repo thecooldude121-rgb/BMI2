@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { connectDB } from './config/database';
-import { runMigrations } from './config/runMigrations';
+import { runMigrations, getMigrationStatus } from './config/runMigrations';
 import routes from './routes';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
@@ -37,7 +37,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // Report the schema state too. In development the server boots even when a
+  // migration failed (see runMigrations), so "the API is up" is not by itself
+  // enough to know the database is what the code expects.
+  const migrations = getMigrationStatus();
+  res.status(migrations.ok ? 200 : 503).json({
+    status: migrations.ok ? 'ok' : 'degraded',
+    migrations,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use('/api/v1', routes);

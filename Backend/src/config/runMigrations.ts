@@ -72,12 +72,79 @@ const databaseIsPopulated = async (): Promise<boolean> => {
   return rows.length > 0;
 };
 
+/**
+ * WHAT HAPPENS WHEN A MIGRATION FAILS
+ *
+ * In production a bad schema is not something to run on: the process refuses to
+ * start, loudly, so a deploy fails instead of serving requests against a
+ * half-expected database.
+ *
+ * In development that same hard exit kills the dev server every time someone
+ * writes a migration with a typo — which happened twice while building this
+ * remediation, each time taking the running API down and making the failure
+ * look like a server crash rather than a bad SQL file. Since every migration
+ * runs in its own transaction and rolls back atomically, a failure leaves the
+ * database consistent and simply missing that migration. So in development the
+ * runner reports the failure prominently, stops applying anything further, and
+ * lets the server boot so the file can be fixed and saved again.
+ *
+ * Override with MIGRATIONS_FAIL_FAST=true|false when the default is wrong —
+ * for example to get production behaviour locally before a deploy.
+ */
+const failFast = (): boolean => {
+  const override = process.env.MIGRATIONS_FAIL_FAST;
+  if (override === 'true') return true;
+  if (override === 'false') return false;
+  return process.env.NODE_ENV === 'production';
+};
+
+export interface MigrationStatus {
+  ok: boolean;
+  applied: number;
+  /** The migration that failed, if any. Everything after it was skipped. */
+  failed?: { filename: string; error: string };
+  /** Migrations that exist but were not applied because an earlier one failed. */
+  skipped: string[];
+}
+
+/** Last run's outcome, so /health can report a degraded schema. */
+let lastStatus: MigrationStatus = { ok: true, applied: 0, skipped: [] };
+export const getMigrationStatus = (): MigrationStatus => lastStatus;
+
+const banner = (lines: string[]): void => {
+  const width = Math.max(...lines.map(l => l.length)) + 4;
+  const rule = '!'.repeat(width);
+  console.error(`\n${rule}`);
+  lines.forEach(l => console.error(`! ${l.padEnd(width - 4)} !`));
+  console.error(`${rule}\n`);
+};
+
+/** Abort in production; in development report and keep going. */
+const abort = (message: string, detail?: string): void => {
+  if (failFast()) {
+    console.error(`FATAL: ${message}`);
+    if (detail) console.error(detail);
+    process.exit(1);
+  }
+  banner([
+    'MIGRATION PROBLEM — the server is starting anyway (development).',
+    '',
+    ...message.split('\n'),
+    ...(detail ? ['', ...detail.split('\n').slice(0, 4)] : []),
+    '',
+    'The database was NOT left half-migrated: each migration runs in its own',
+    'transaction. Fix the .sql file and restart, or run `npm run db:migrate`.',
+    'Set MIGRATIONS_FAIL_FAST=true to get production behaviour here.',
+  ]);
+};
+
 export const runMigrations = async (): Promise<void> => {
   await ensureLedger();
 
   if (!fs.existsSync(MIGRATIONS_DIR)) {
-    console.error(`FATAL: migrations directory not found at ${MIGRATIONS_DIR}`);
-    process.exit(1);
+    abort(`migrations directory not found at ${MIGRATIONS_DIR}`);
+    lastStatus = { ok: false, applied: 0, skipped: [], failed: { filename: '(directory)', error: 'not found' } };
+    return;
   }
 
   const files = fs
@@ -91,11 +158,12 @@ export const runMigrations = async (): Promise<void> => {
     const prefix = f.slice(0, 3);
     const prior = seen.get(prefix);
     if (prior && !FOLDED_INTO_BASELINE.has(f)) {
-      console.error(
-        `FATAL: duplicate migration number ${prefix} — "${prior}" and "${f}". ` +
+      abort(
+        `duplicate migration number ${prefix} — "${prior}" and "${f}".\n` +
         `Renumber one of them; ordering is otherwise undefined.`
       );
-      process.exit(1);
+      lastStatus = { ok: false, applied: 0, skipped: [], failed: { filename: f, error: `duplicate number ${prefix}` } };
+      return;
     }
     if (!prior) seen.set(prefix, f);
   }
@@ -125,12 +193,13 @@ export const runMigrations = async (): Promise<void> => {
         continue;
       }
       if (previous !== sum) {
-        console.error(
-          `FATAL: ${filename} was already applied but its contents have changed ` +
-          `(recorded ${previous}, now ${sum}). Never edit an applied migration — ` +
-          `add a new one instead. Refusing to start.`
+        abort(
+          `${filename} was already applied but its contents have changed\n` +
+          `(recorded ${previous}, now ${sum}). Never edit an applied migration —\n` +
+          `add a new one instead.`
         );
-        process.exit(1);
+        lastStatus = { ok: false, applied: ran, skipped: [], failed: { filename, error: 'checksum mismatch' } };
+        return;
       }
       continue;
     }
@@ -165,13 +234,19 @@ export const runMigrations = async (): Promise<void> => {
       ran++;
     } catch (err) {
       await client.query('ROLLBACK');
-      console.error(`FATAL: migration ${filename} failed and was rolled back:`, err);
-      process.exit(1);
+      const detail = err instanceof Error ? err.message : String(err);
+      abort(`migration ${filename} failed and was rolled back.`, detail);
+      // Everything after a failure is skipped: applying later migrations over a
+      // missing one is how schemas drift apart.
+      const remaining = files.slice(files.indexOf(filename) + 1);
+      lastStatus = { ok: false, applied: ran, skipped: remaining, failed: { filename, error: detail } };
+      return;
     } finally {
       client.release();
     }
   }
 
+  lastStatus = { ok: true, applied: ran, skipped: [] };
   console.log(
     ran > 0
       ? `✅ migrations: ${ran} applied, ${files.length - ran} already up to date`
@@ -180,11 +255,27 @@ export const runMigrations = async (): Promise<void> => {
 };
 
 // Allow `npm run db:migrate` to run this standalone.
+//
+// Run as an explicit command, a failed migration must exit non-zero regardless
+// of NODE_ENV — the dev-server leniency above exists so a typo does not take the
+// running API down, not so a migration command can fail quietly. CI and deploy
+// scripts read this exit code.
 if (require.main === module) {
   runMigrations()
-    .then(() => pool.end())
-    .catch(err => {
+    .then(async () => {
+      const status = getMigrationStatus();
+      await pool.end();
+      if (!status.ok) {
+        console.error(
+          `\nMigration failed: ${status.failed?.filename}` +
+          (status.skipped.length ? ` (${status.skipped.length} later migration(s) not attempted)` : '')
+        );
+        process.exit(1);
+      }
+    })
+    .catch(async err => {
       console.error(err);
+      await pool.end().catch(() => {});
       process.exit(1);
     });
 }
