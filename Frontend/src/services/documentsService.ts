@@ -1,4 +1,26 @@
-import { supabase } from '../lib/supabase';
+/**
+ * Documents service.
+ *
+ * PHASE 2 REWRITE — this used to talk to SUPABASE, a second backend with no
+ * credentials configured. `lib/supabase.ts` falls back to
+ * `https://placeholder.supabase.co` when VITE_SUPABASE_URL is unset, and there
+ * is no .env in Frontend/, so every call failed at runtime. DocumentsLibrary
+ * then swallowed the error and rendered MOCK_DOCUMENTS — with an explicit
+ * `setError(null); // Don't show error when using mock data`.
+ *
+ * Documents now live in Postgres with the rest of the data, behind
+ * /api/v1/documents, with the same tenancy rules as every other table.
+ *
+ * WHAT IS NOT IMPLEMENTED, AND WHY
+ * uploadDocument / downloadDocument / shareDocument all need somewhere for the
+ * file BYTES to live. That is an infrastructure decision — object storage,
+ * local disk, or a bytea column — with real consequences for backups, memory
+ * and deployment, and it has not been made. Rather than fake it, those three
+ * throw a clear error that the UI surfaces. `file_url` is stored and returned
+ * so whatever gets chosen can populate it without another migration.
+ */
+
+const API_BASE = 'http://localhost:5001/api/v1';
 
 export interface Document {
   id: string;
@@ -55,397 +77,187 @@ export interface UploadDocumentRequest {
   tags?: string[];
 }
 
+/** Raw row from /documents. */
+interface DocumentRow {
+  id: string;
+  name: string;
+  file_url: string | null;
+  file_size: number | null;
+  file_type: string | null;
+  module: string | null;
+  record_id: string | null;
+  category: string | null;
+  description: string | null;
+  tags: string[] | null;
+  version: number | null;
+  uploaded_by: string | null;
+  is_starred: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { headers: getAuthHeaders(), ...init });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((json as any).message || `${init?.method ?? 'GET'} ${path} failed (HTTP ${res.status})`);
+  }
+  return json as T;
+}
+
+function mapRow(row: DocumentRow): Document {
+  return {
+    id: row.id,
+    // The table has no separate human-readable document number; the id serves.
+    document_id: row.id,
+    name: row.name,
+    file_type: row.file_type ?? '',
+    file_size: row.file_size ?? 0,
+    file_url: row.file_url ?? undefined,
+    category: row.category ?? 'uncategorized',
+    description: row.description ?? undefined,
+    uploaded_by: row.uploaded_by ?? '',
+    owner_name: row.uploaded_by ?? '',
+    is_starred: row.is_starred,
+    starred: row.is_starred,
+    related_entity_type: row.module ?? undefined,
+    related_entity_id: row.record_id ?? undefined,
+    created_at: row.created_at,
+    updated_at: row.updated_at ?? row.created_at,
+    modified_at: row.updated_at ?? row.created_at,
+    version: row.version ?? 1,
+    // No download tracking table exists, so this is genuinely 0 rather than a
+    // plausible-looking number.
+    access_count: 0,
+    // Absent by design: related_entity_name, activity_id, last_accessed_at,
+    // folder_id — no columns behind them.
+  };
+}
+
+/** Thrown by the operations that need file storage, so callers can special-case them. */
+export class StorageNotConfiguredError extends Error {
+  constructor(action: string) {
+    super(
+      `${action} is not available yet: the CRM has no file storage configured, ` +
+      `so there is nowhere to put or read the file. Document records can still be ` +
+      `created and organised.`,
+    );
+    this.name = 'StorageNotConfiguredError';
+  }
+}
+
 export const documentsService = {
   async loadDocuments(filters: DocumentFilters = {}) {
-    const {
-      page = 1,
-      limit = 25,
-      owner,
-      category,
-      search,
-      starred,
-      entity_type,
-      entity_id,
-    } = filters;
+    const { page = 1, limit = 25, category, search, starred, entity_type, entity_id } = filters;
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('offset', String((page - 1) * limit));
+    if (category && category !== 'all') params.set('category', category);
+    if (search) params.set('search', search);
+    if (starred) params.set('starred', 'true');
+    if (entity_type) params.set('module', entity_type);
+    if (entity_id) params.set('record_id', entity_id);
 
-    let query = supabase
-      .from('documents')
-      .select('*', { count: 'exact' })
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
-
-    if (owner) {
-      query = query.eq('owner_name', owner);
-    }
-
-    if (category) {
-      query = query.eq('category', category);
-    }
-
-    if (starred) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: favorites } = await supabase
-          .from('document_favorites')
-          .select('document_id')
-          .eq('user_id', user.id);
-
-        if (favorites && favorites.length > 0) {
-          const docIds = favorites.map(f => f.document_id);
-          query = query.in('id', docIds);
-        } else {
-          return { data: [], count: 0 };
-        }
-      }
-    }
-
-    if (entity_type && entity_id) {
-      query = query
-        .eq('related_entity_type', entity_type)
-        .eq('related_entity_id', entity_id);
-    }
-
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
-    }
-
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
-    query = query.range(from, to);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return { data: data || [], count: count || 0 };
+    const json = await request<{ data: DocumentRow[]; count: number }>(`/documents?${params}`);
+    return { data: (json.data ?? []).map(mapRow), count: json.count ?? 0 };
   },
 
-  async uploadDocument(request: UploadDocumentRequest, onProgress?: (progress: number) => void) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    onProgress?.(10);
-
-    const fileExt = request.file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const filePath = `documents/${user.id}/${fileName}`;
-
-    onProgress?.(30);
-
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(filePath, request.file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-    if (uploadError) {
-      throw new Error(`Upload failed: ${uploadError.message}`);
-    }
-
-    onProgress?.(60);
-
-    const { data: urlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(filePath);
-
-    onProgress?.(80);
-
-    const documentId = `doc_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-    const { data, error } = await supabase
-      .from('documents')
-      .insert({
-        document_id: documentId,
-        name: request.name,
-        file_type: fileExt || 'unknown',
-        file_size: request.file.size,
-        file_url: urlData.publicUrl,
-        category: request.category,
-        description: request.description,
-        uploaded_by: user.id,
-        owner_name: request.owner_name,
-        related_entity_type: request.related_entity_type,
-        related_entity_id: request.related_entity_id,
-        related_entity_name: request.related_entity_name,
-        activity_id: request.activity_id,
-        version: 1,
-        access_count: 0,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    if (request.tags && request.tags.length > 0) {
-      await this.addTags(data.id, request.tags);
-    }
-
-    await this.logActivity(data.id, user.id, 'uploaded');
-
-    onProgress?.(100);
-
-    return data;
+  async getDocumentById(documentId: string): Promise<Document> {
+    const json = await request<{ data: DocumentRow }>(`/documents/${encodeURIComponent(documentId)}`);
+    return mapRow(json.data);
   },
 
-  async deleteDocuments(documentIds: string[]) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    const { data: documents } = await supabase
-      .from('documents')
-      .select('id, file_url, uploaded_by')
-      .in('id', documentIds);
-
-    if (!documents) {
-      throw new Error('Documents not found');
-    }
-
-    const ownedDocs = documents.filter(doc => doc.uploaded_by === user.id);
-    if (ownedDocs.length !== documentIds.length) {
-      throw new Error('You can only delete your own documents');
-    }
-
-    const { error } = await supabase
-      .from('documents')
-      .update({ deleted_at: new Date().toISOString() })
-      .in('id', documentIds);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    for (const doc of ownedDocs) {
-      await this.logActivity(doc.id, user.id, 'deleted');
-    }
-
-    return { success: true, deleted: documentIds.length };
-  },
-
-  async shareDocument(documentId: string, request: DocumentShareRequest) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    const { data: document } = await supabase
-      .from('documents')
-      .select('uploaded_by')
-      .eq('id', documentId)
-      .single();
-
-    if (!document || document.uploaded_by !== user.id) {
-      throw new Error('You can only share your own documents');
-    }
-
-    const shares = request.user_ids.map(userId => ({
-      document_id: documentId,
-      shared_with_user_id: userId,
-      shared_by: user.id,
-      permission: request.permission || 'view',
-    }));
-
-    const { error } = await supabase
-      .from('document_shares')
-      .insert(shares);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    await this.logActivity(documentId, user.id, 'shared', {
-      shared_with: request.user_ids,
+  /**
+   * Creates the document RECORD. It does not move any bytes — see the note at
+   * the top of this file.
+   */
+  async createDocumentRecord(input: {
+    name: string;
+    category?: string;
+    description?: string;
+    file_type?: string;
+    file_size?: number;
+    file_url?: string;
+    module?: string;
+    record_id?: string;
+    tags?: string[];
+  }): Promise<Document> {
+    const json = await request<{ data: DocumentRow }>('/documents', {
+      method: 'POST',
+      body: JSON.stringify(input),
     });
-
-    return { success: true, shared_with: request.user_ids.length };
+    return mapRow(json.data);
   },
 
-  async downloadDocument(documentId: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    const { data: document } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', documentId)
-      .single();
-
-    if (!document) {
-      throw new Error('Document not found');
-    }
-
-    await supabase
-      .from('documents')
-      .update({
-        access_count: (document.access_count || 0) + 1,
-        last_accessed_at: new Date().toISOString(),
-      })
-      .eq('id', documentId);
-
-    await this.logActivity(documentId, user.id, 'downloaded');
-
-    return document.file_url;
+  async updateDocument(documentId: string, updates: Partial<Document>): Promise<Document> {
+    const payload: Record<string, unknown> = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.category !== undefined) payload.category = updates.category;
+    if (updates.description !== undefined) payload.description = updates.description;
+    if (updates.related_entity_type !== undefined) payload.module = updates.related_entity_type;
+    if (updates.related_entity_id !== undefined) payload.record_id = updates.related_entity_id;
+    const json = await request<{ data: DocumentRow }>(`/documents/${encodeURIComponent(documentId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    return mapRow(json.data);
   },
 
-  async toggleFavorite(documentId: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    const { data: existing } = await supabase
-      .from('document_favorites')
-      .select('id')
-      .eq('document_id', documentId)
-      .eq('user_id', user.id)
-      .single();
-
-    if (existing) {
-      const { error } = await supabase
-        .from('document_favorites')
-        .delete()
-        .eq('id', existing.id);
-
-      if (error) throw new Error(error.message);
-      return { is_starred: false };
-    } else {
-      const { error } = await supabase
-        .from('document_favorites')
-        .insert({
-          document_id: documentId,
-          user_id: user.id,
-        });
-
-      if (error) throw new Error(error.message);
-      return { is_starred: true };
-    }
+  /** One transactional statement; reports how many of the requested ids matched. */
+  async deleteDocuments(documentIds: string[]) {
+    return request<{ success: boolean; deleted: number; requested: number; message?: string }>(
+      '/documents',
+      { method: 'DELETE', body: JSON.stringify({ ids: documentIds }) },
+    );
   },
 
-  async getUserFavorites() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return new Set<string>();
+  async toggleFavorite(documentId: string): Promise<boolean> {
+    const json = await request<{ is_starred: boolean }>(
+      `/documents/${encodeURIComponent(documentId)}/favorite`,
+      { method: 'POST' },
+    );
+    return json.is_starred;
+  },
 
-    const { data } = await supabase
-      .from('document_favorites')
-      .select('document_id')
-      .eq('user_id', user.id);
-
-    return new Set(data?.map(f => f.document_id) || []);
+  /** Ids of the requesting user's starred documents. */
+  async getUserFavorites(): Promise<string[]> {
+    const json = await request<{ data: DocumentRow[] }>('/documents?starred=true&limit=500');
+    return (json.data ?? []).map(d => d.id);
   },
 
   async searchDocuments(query: string, category?: string) {
-    let searchQuery = supabase
-      .from('documents')
-      .select('*')
-      .is('deleted_at', null)
-      .or(`name.ilike.%${query}%,description.ilike.%${query}%`)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (category) {
-      searchQuery = searchQuery.eq('category', category);
-    }
-
-    const { data, error } = await searchQuery;
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return data || [];
-  },
-
-  async getDocumentById(documentId: string) {
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', documentId)
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await this.logActivity(documentId, user.id, 'viewed');
-    }
-
+    const { data } = await this.loadDocuments({ search: query, category, limit: 100 });
     return data;
   },
 
-  async updateDocument(documentId: string, updates: Partial<Document>) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    const { data, error } = await supabase
-      .from('documents')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', documentId)
-      .eq('uploaded_by', user.id)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    await this.logActivity(documentId, user.id, 'edited');
-
-    return data;
+  async addTags(documentId: string, tags: string[]): Promise<Document> {
+    const json = await request<{ data: DocumentRow }>(`/documents/${encodeURIComponent(documentId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ tags }),
+    });
+    return mapRow(json.data);
   },
 
-  async addTags(documentId: string, tags: string[]) {
-    for (const tagName of tags) {
-      let { data: tag } = await supabase
-        .from('document_tags')
-        .select('id')
-        .eq('name', tagName)
-        .single();
+  // ── Blocked on a file-storage decision ────────────────────────────────────
 
-      if (!tag) {
-        const { data: newTag } = await supabase
-          .from('document_tags')
-          .insert({ name: tagName })
-          .select()
-          .single();
-        tag = newTag;
-      }
-
-      if (tag) {
-        await supabase
-          .from('document_tag_assignments')
-          .insert({
-            document_id: documentId,
-            tag_id: tag.id,
-          });
-      }
-    }
+  async uploadDocument(_request: UploadDocumentRequest, _onProgress?: (progress: number) => void): Promise<Document> {
+    throw new StorageNotConfiguredError('Uploading files');
   },
 
-  async logActivity(documentId: string, userId: string, action: string, metadata: any = {}) {
-    await supabase
-      .from('document_activity_log')
-      .insert({
-        document_id: documentId,
-        user_id: userId,
-        action,
-        metadata,
-      });
+  async downloadDocument(_documentId: string): Promise<never> {
+    throw new StorageNotConfiguredError('Downloading files');
+  },
+
+  async shareDocument(_documentId: string, _request: DocumentShareRequest): Promise<never> {
+    // Needs a document_shares table and a way to notify people; neither exists.
+    throw new StorageNotConfiguredError('Sharing documents');
   },
 };

@@ -398,10 +398,16 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
       setUploadedDocuments(uploadedDocs);
 
       const failedCount = validFiles.length - uploadedDocs.length;
-      if (failedCount > 0) {
+      if (failedCount > 0 && uploadedDocs.length === 0) {
+        // Don't lead with "0 uploaded successfully" when nothing uploaded.
+        showToast(
+          `Nothing was uploaded — all ${failedCount} file(s) failed`,
+          'error'
+        );
+      } else if (failedCount > 0) {
         showToast(
           `${uploadedDocs.length} document(s) uploaded successfully, ${failedCount} failed`,
-          uploadedDocs.length > 0 ? 'success' : 'error'
+          'success'
         );
       } else {
         showToast(`${uploadedDocs.length} document(s) uploaded successfully`, 'success');
