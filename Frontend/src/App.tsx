@@ -1,5 +1,6 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import { AuthProvider } from './contexts/AuthContext';
 import { CurrentUserProvider } from './contexts/CurrentUserContext';
 import RoleSwitcher from './components/Dev/RoleSwitcher';
@@ -10,33 +11,76 @@ import { ToastProvider } from './contexts/ToastContext';
 import { IntegrationsProvider } from './contexts/IntegrationsContext';
 import Sidebar from './components/Layout/Sidebar';
 import TopBar from './components/Layout/TopBar';
-import Dashboard from './pages/Dashboard';
-import CRMModule from './pages/CRM/CRMModule';
-import AccountsModule from './pages/Accounts';
-import HRMSModule from './pages/HRMS/HRMSModule';
-import Analytics from './pages/Analytics/Analytics';
-import Calendar from './pages/Calendar/Calendar';
-import LeadGenerationModule from './pages/LeadGeneration/LeadGenerationModule';
-import DisqualificationDemo from './pages/LeadGeneration/DisqualificationDemo';
-import RateLimitDemo from './pages/LeadGeneration/RateLimitDemo';
-import InvalidAPIKeyDemo from './pages/LeadGeneration/InvalidAPIKeyDemo';
-import NetworkConnectionErrorDemo from './pages/LeadGeneration/NetworkConnectionErrorDemo';
-import PartialEnrichmentDemo from './pages/LeadGeneration/PartialEnrichmentDemo';
-import DataConflictDemo from './pages/LeadGeneration/DataConflictDemo';
-import { RealTimeProgressDemo } from './pages/LeadGeneration/RealTimeProgressDemo';
-import FieldLevelActionsDemo from './pages/LeadGeneration/FieldLevelActionsDemo';
-import SettingsPage from './pages/Settings/SettingsPage';
 import Login from './pages/Auth/Login';
-import LoginWireframe from './pages/Auth/LoginWireframe';
-import SequencesAutomationPage from './pages/Sequences';
-import IntegrationsPage from './pages/Settings/IntegrationsPage';
-import WorkflowAutomationPage from './pages/Settings/WorkflowAutomationPage';
-import NotificationsManagementPage from './pages/Settings/NotificationsManagementPage';
-import { IntegrationsHub } from './pages/Integrations';
-import { TeamPerformancePage, TeamMemberDetailPage } from './pages/Team';
-import { CampaignWizardStep1Demo } from './pages/LeadGeneration/CampaignWizardStep1Demo';
-import CampaignWizardStep2Demo from './pages/LeadGeneration/CampaignWizardStep2Demo';
-import CampaignWizardStep3Demo from './pages/LeadGeneration/CampaignWizardStep3Demo';
+
+
+/**
+ * Route components are code-split.
+ *
+ * The build was one 5.6 MB JavaScript chunk (1.13 MB gzipped) — every route,
+ * every module, all ~213k lines of component code, downloaded and parsed before
+ * the first screen could paint. Vite warns about it on every build.
+ *
+ * Providers, the layout chrome and Login stay EAGER on purpose: they are needed
+ * for the first paint either way, and a spinner in front of the login form is
+ * worse than shipping it in the initial chunk.
+ */
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const CRMModule = lazy(() => import('./pages/CRM/CRMModule'));
+const AccountsModule = lazy(() => import('./pages/Accounts'));
+const HRMSModule = lazy(() => import('./pages/HRMS/HRMSModule'));
+const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
+const Calendar = lazy(() => import('./pages/Calendar/Calendar'));
+const LeadGenerationModule = lazy(() => import('./pages/LeadGeneration/LeadGenerationModule'));
+const DisqualificationDemo = lazy(() => import('./pages/LeadGeneration/DisqualificationDemo'));
+const RateLimitDemo = lazy(() => import('./pages/LeadGeneration/RateLimitDemo'));
+const InvalidAPIKeyDemo = lazy(() => import('./pages/LeadGeneration/InvalidAPIKeyDemo'));
+const NetworkConnectionErrorDemo = lazy(() => import('./pages/LeadGeneration/NetworkConnectionErrorDemo'));
+const PartialEnrichmentDemo = lazy(() => import('./pages/LeadGeneration/PartialEnrichmentDemo'));
+const DataConflictDemo = lazy(() => import('./pages/LeadGeneration/DataConflictDemo'));
+const FieldLevelActionsDemo = lazy(() => import('./pages/LeadGeneration/FieldLevelActionsDemo'));
+const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'));
+const LoginWireframe = lazy(() => import('./pages/Auth/LoginWireframe'));
+const SequencesAutomationPage = lazy(() => import('./pages/Sequences'));
+const IntegrationsPage = lazy(() => import('./pages/Settings/IntegrationsPage'));
+const WorkflowAutomationPage = lazy(() => import('./pages/Settings/WorkflowAutomationPage'));
+const NotificationsManagementPage = lazy(() => import('./pages/Settings/NotificationsManagementPage'));
+const CampaignWizardStep2Demo = lazy(() => import('./pages/LeadGeneration/CampaignWizardStep2Demo'));
+const CampaignWizardStep3Demo = lazy(() => import('./pages/LeadGeneration/CampaignWizardStep3Demo'));
+
+// These modules export their page as a NAMED export, so it has to be remapped
+// to `default` — React.lazy only accepts a module whose default is a component.
+const RealTimeProgressDemo = lazy(() => import('./pages/LeadGeneration/RealTimeProgressDemo').then(m => ({ default: m.RealTimeProgressDemo })));
+const IntegrationsHub = lazy(() => import('./pages/Integrations').then(m => ({ default: m.IntegrationsHub })));
+const TeamPerformancePage = lazy(() => import('./pages/Team').then(m => ({ default: m.TeamPerformancePage })));
+const TeamMemberDetailPage = lazy(() => import('./pages/Team').then(m => ({ default: m.TeamMemberDetailPage })));
+const CampaignWizardStep1Demo = lazy(() => import('./pages/LeadGeneration/CampaignWizardStep1Demo').then(m => ({ default: m.CampaignWizardStep1Demo })));
+
+
+/** Shown while a route's chunk downloads. Deliberately quiet — a full-page
+ *  spinner on every navigation reads as slower than it is. */
+const RouteFallback = () => (
+  <div className="flex min-h-[50vh] items-center justify-center">
+    <div className="flex items-center gap-3 text-sm text-gray-500">
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+      Loading…
+    </div>
+  </div>
+);
+
+/**
+ * Wraps every route: the boundary contains a render error to the page that threw
+ * instead of blanking the app, and Suspense covers the chunk download. Keyed on
+ * pathname so navigating away clears a previous failure.
+ */
+const RouteShell = ({ children }: { children: React.ReactNode }) => {
+  const { pathname } = useLocation();
+  return (
+    <ErrorBoundary resetKey={pathname} label={pathname}>
+      <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+};
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -45,7 +89,9 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <div className="flex flex-col flex-1 min-w-0">
         <TopBar />
         <main className="flex-1 overflow-y-auto px-4 pb-4 lg:px-6 lg:pb-6">
-          {children}
+          {/* Inside Layout on purpose: a page-level error must not take the
+              sidebar and top bar down with it — the user needs to navigate away. */}
+          <RouteShell>{children}</RouteShell>
         </main>
       </div>
     </div>
@@ -63,8 +109,8 @@ const App = () => {
               <SettingsProvider>
                 <IntegrationsProvider>
                   <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/login/wireframe" element={<LoginWireframe />} />
+                  <Route path="/login" element={<RouteShell><Login /></RouteShell>} />
+                  <Route path="/login/wireframe" element={<RouteShell><LoginWireframe /></RouteShell>} />
                   <Route path="/" element={<Layout><Navigate to="/dashboard" replace /></Layout>} />
                   <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
                   <Route path="/crm/*" element={<Layout><CRMModule /></Layout>} />
