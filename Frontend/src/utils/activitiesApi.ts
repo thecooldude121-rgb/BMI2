@@ -96,6 +96,17 @@ export async function fetchActivities(q: ActivityQuery = {}): Promise<ActivityRe
   return json.data ?? [];
 }
 
+/** Returns null when the id does not exist, so callers can show a not-found state. */
+export async function fetchActivityById(id: string): Promise<ActivityRecord | null> {
+  const res = await fetch(`${API_BASE}/activities/${encodeURIComponent(id)}`, {
+    headers: getAuthHeaders(),
+  });
+  if (res.status === 404) return null;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as any).message || `Failed to load activity (HTTP ${res.status})`);
+  return (json as any).data ?? null;
+}
+
 export async function createActivity(
   parent: ActivityParent,
   activity: {
