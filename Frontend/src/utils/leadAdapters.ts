@@ -18,18 +18,38 @@ function mapStatus(status: string): LeadStatus {
   return status as LeadStatus;
 }
 
+/**
+ * Maps a lead's status onto a marketing lifecycle stage.
+ *
+ * LEGACY VALUES ARE NOT OPTIONAL HERE. types/lead.ts documents a migration that
+ * was never applied:
+ *   UPDATE leads SET status = 'attempting_contact' WHERE status IN ('contacted','working');
+ *   UPDATE leads SET status = 'nurture'            WHERE status = 'nurturing';
+ *   UPDATE leads SET status = 'disqualified'       WHERE status = 'unqualified';
+ * The live database still contains 'contacted' — it is in the leads_stage_check
+ * constraint today. Without these aliases every legacy row fell through to
+ * `default` and was reported as a plain 'lead', silently understating how far
+ * along it was.
+ */
 function mapLifecycleStage(status: string): LifecycleStage {
   switch (status) {
     case 'new':
     case 'assigned':           return 'lead';
     case 'enriching':
     case 'attempting_contact':
+    case 'contacted':          // legacy alias for attempting_contact
+    case 'working':            // legacy alias for attempting_contact
     case 'engaged':            return 'mql';
     case 'qualified':
     case 'sales_accepted':     return 'sql';
-    case 'converted':          return 'customer';
-    case 'nurture':            return 'subscriber';
+    case 'converted':
+    case 'won':                // legacy: leads_stage_check still allows 'won'
+                               return 'customer';
+    case 'nurture':
+    case 'nurturing':          // legacy alias for nurture
+                               return 'subscriber';
     case 'disqualified':
+    case 'unqualified':        // legacy alias for disqualified
     case 'lost':               return 'lead';
     default:                   return 'lead';
   }

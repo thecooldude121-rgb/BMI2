@@ -12,7 +12,7 @@ import type { LeadSLAResult } from './leadSla';
 import { computeConversionReadiness } from './conversionReadiness';
 import type { ConversionReadinessState } from './conversionReadiness';
 import { computeMultiFactorScore } from './leadScoring/multiFactorScore';
-import { findDuplicates, computeRisk } from './leadDuplicates';
+import { findDuplicates, computeRisk, emailDomain } from './leadDuplicates';
 import type { DuplicateRisk } from './leadDuplicates';
 
 const READY_STATES = new Set<ConversionReadinessState>([
@@ -86,12 +86,32 @@ export function evaluateCondition(
   }
 
   if (fieldId === 'duplicate_risk') {
+    /**
+     * Two independent duplicate signals, and this branch used only one of them.
+     *
+     * `candidateMap` is the full four-signal detection (email, phone, domain,
+     * name+company). `duplicateEmailDomainSet` is the cheaper domain-level
+     * signal, built by buildDomainSet() over the whole list. The parameter was
+     * threaded through evaluateCondition, matchesGroup and applyAdvancedFilter
+     * and never read, so filtering by duplicate risk found nothing whenever the
+     * expensive candidate map had not been computed — which is the common case,
+     * because it is O(n^2). leadSorting's 'highest_duplicate_risk' has always
+     * used the domain set, so the two disagreed.
+     *
+     * Either signal now counts as risk.
+     */
     const candidates = candidateMap?.get(lead.id);
-    const risk: DuplicateRisk | 'none' = candidates && candidates.length > 0
-      ? computeRisk(candidates as import('./leadDuplicates').DuplicateCandidate[])
-      : 'none';
-    // Legacy boolean operators
+    const domainRisk = duplicateEmailDomainSet.has(emailDomain(lead.email));
+    const risk: DuplicateRisk | 'none' =
+      candidates && candidates.length > 0
+        ? computeRisk(candidates as import('./leadDuplicates').DuplicateCandidate[])
+        // A shared non-generic domain on its own is a weak signal, so 'low'.
+        : domainRisk ? 'low' : 'none';
+
+    // Boolean operators. 'is_false' was simply missing — it fell through to
+    // `return false`, so the filter silently matched nothing.
     if (operator === 'is_true')  return risk !== 'none';
+    if (operator === 'is_false') return risk === 'none';
     if (operator === 'is_not')   return risk === 'none';
     // Risk-level operators
     if (operator === 'is')       return risk === (value as string);

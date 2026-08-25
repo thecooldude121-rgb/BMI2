@@ -145,20 +145,38 @@ export function priorityScore(lead: Lead): number {
   );
 }
 
+/**
+ * Pipeline rank — lower is closer to qualification.
+ *
+ * The legacy aliases matter: types/lead.ts documents a status migration that was
+ * never applied, and the live database still contains 'contacted' (it is in the
+ * leads_stage_check constraint today). Without them 'contacted' fell through to
+ * `default` and ranked 12 — BEHIND 'lost' — so "Closest to Qualification" put
+ * contacted leads at the very bottom, which is the opposite of the intent.
+ */
 function statusOrder(status: string | undefined): number {
   switch (status) {
-    case 'sales_accepted':    return 1;
-    case 'qualified':         return 2;
-    case 'engaged':           return 3;
-    case 'attempting_contact': return 4;
-    case 'enriching':         return 5;
-    case 'assigned':          return 6;
-    case 'new':               return 7;
-    case 'nurture':           return 8;
-    case 'converted':         return 9;
-    case 'disqualified':      return 10;
-    case 'lost':              return 11;
-    default:                  return 12;
+    case 'sales_accepted':     return 1;
+    case 'qualified':          return 2;
+    case 'engaged':            return 3;
+    case 'attempting_contact':
+    case 'contacted':          // legacy alias
+    case 'working':            // legacy alias
+                               return 4;
+    case 'enriching':          return 5;
+    case 'assigned':           return 6;
+    case 'new':                return 7;
+    case 'nurture':
+    case 'nurturing':          // legacy alias
+                               return 8;
+    case 'converted':
+    case 'won':                // legacy: still allowed by leads_stage_check
+                               return 9;
+    case 'disqualified':
+    case 'unqualified':        // legacy alias
+                               return 10;
+    case 'lost':               return 11;
+    default:                   return 12;
   }
 }
 

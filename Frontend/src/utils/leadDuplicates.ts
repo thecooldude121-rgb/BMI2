@@ -57,7 +57,12 @@ function normPhone(p: string | undefined): string {
   return (p ?? '').replace(/\D/g, '');
 }
 
-function emailDomain(email: string | undefined): string {
+/**
+ * Canonical email-domain extraction. Exported because leadFilterEngine and
+ * leadSorting both need it — leadSorting was hand-rolling
+ * `email?.split('@')[1]`, which differs on case and on an email with no '@'.
+ */
+export function emailDomain(email: string | undefined): string {
   if (!email) return '';
   const at = email.indexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : '';
