@@ -371,6 +371,9 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     const newLink: AccountContact = {
       id: `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       accountId,
+      // The flat shape everything else uses carries a display name; a link
+      // created from a bare contactId has none until it is resolved.
+      name: data.name ?? '',
       contactId,
       relationshipType: data.relationshipType || 'business',
       isPrimary: data.isPrimary || false,
@@ -596,7 +599,9 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
 
     const totalDeals = accounts.reduce((sum, acc) => sum + (acc.relatedDeals?.length || 0), 0);
     const totalRevenue = accounts.reduce((sum, acc) => {
-      const dealsRevenue = acc.relatedDeals?.reduce((dealSum, deal) => dealSum + deal.amount, 0) || 0;
+      // `?? 0`: deal.amount is optional, and one missing amount used to turn the
+      // whole revenue figure into NaN.
+      const dealsRevenue = acc.relatedDeals?.reduce((dealSum, deal) => dealSum + (deal.amount ?? 0), 0) || 0;
       return sum + dealsRevenue;
     }, 0);
     const totalContacts = accounts.reduce((sum, acc) => sum + (acc.relatedContacts?.length || 0), 0);

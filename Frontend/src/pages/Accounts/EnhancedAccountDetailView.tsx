@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Building2, Mail, Phone, Globe, MapPin, TrendingUp,
@@ -8,6 +8,9 @@ import {
   Upload, ChevronDown, ChevronRight, GitMerge, Trash2, Copy, Archive
 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
+import { fetchContacts } from '../../utils/contactsApi';
+import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
+import type { Contact } from '../../types/contact';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import AIAccountInsightsPanel from '../../components/Accounts/AIAccountInsightsPanel';
 import HRMSIntelligencePanel from '../../components/Accounts/HRMSIntelligencePanel';
@@ -26,7 +29,7 @@ type TabType = 'overview' | 'contacts' | 'deals' | 'activities' | 'hrms' | 'docs
 const EnhancedAccountDetailView: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
-  const { getAccountById, getAccountContacts, getAccountDeals } = useAccounts();
+  const { getAccountById, getAccountDeals, deleteAccount } = useAccounts();
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showOrgChart, setShowOrgChart] = useState(true);
@@ -35,8 +38,32 @@ const EnhancedAccountDetailView: React.FC = () => {
   const [showActionsMenu, setShowActionsMenu] = useState(false);
 
   const account = accountId ? getAccountById(accountId) : undefined;
-  const contacts = accountId ? getAccountContacts(accountId) : [];
   const deals = accountId ? getAccountDeals(accountId) : [];
+
+  // PHASE 2: contacts and activities for this account come from the API now.
+  // getAccountContacts() reads the sample-backed account<->contact join, which
+  // has no table behind it; /contacts?account_id= and /activities?company_id=
+  // are real.
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [accountActivities, setAccountActivities] = useState<ActivityRecord[]>([]);
+  const [relatedError, setRelatedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accountId) return;
+    let cancelled = false;
+    Promise.all([
+      fetchContacts({ companyId: accountId, limit: 200 }),
+      fetchActivities({ company_id: accountId, limit: 200 }),
+    ])
+      .then(([c, a]) => {
+        if (cancelled) return;
+        setContacts(c);
+        setAccountActivities(a);
+        setRelatedError(null);
+      })
+      .catch(e => { if (!cancelled) setRelatedError(e?.message ?? 'Could not load related records'); });
+    return () => { cancelled = true; };
+  }, [accountId]);
 
   const handleCreateDeal = () => {
     navigate(`/crm/deals/create?accountId=${accountId}&accountName=${account?.name}`);
@@ -55,7 +82,7 @@ const EnhancedAccountDetailView: React.FC = () => {
   };
 
   const handleUploadDocument = () => {
-    alert('Document upload functionality coming soon');
+    alert('Attaching documents to an account is not available yet — nothing was uploaded.');
   };
 
   const handleViewHRMSDetails = () => {
@@ -76,21 +103,28 @@ const EnhancedAccountDetailView: React.FC = () => {
     navigate(`/crm/accounts/${accountId}/merge`);
   };
 
-  const handleDeleteAccount = () => {
-    if (window.confirm(`Are you sure you want to delete "${account?.name}"?`)) {
-      alert('Delete functionality will be implemented with backend integration');
+  // PHASE 2: this alerted "will be implemented with backend integration" and
+  // then navigated away as if it had worked — while AccountsContext.deleteAccount
+  // was sitting there unused. It deletes for real now.
+  const handleDeleteAccount = async () => {
+    if (!accountId) return;
+    if (!window.confirm(`Delete "${account?.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteAccount(accountId);
       navigate('/crm/accounts');
+    } catch (e: any) {
+      alert(`Could not delete this account: ${e?.message ?? 'unknown error'}`);
     }
   };
 
   const handleDuplicateAccount = () => {
-    alert('Duplicate account functionality coming soon');
+    alert('Duplicating an account is not available yet — nothing was created.');
   };
 
+  // Accounts have no is_archived column (deals gained one in migration 018;
+  // companies did not). Say so rather than claim it happened.
   const handleArchiveAccount = () => {
-    if (window.confirm(`Are you sure you want to archive "${account?.name}"?`)) {
-      alert('Archive functionality will be implemented with backend integration');
-    }
+    alert('Archiving accounts is not available yet — nothing was archived.');
   };
 
   const handleSearchLinkedIn = () => {
@@ -99,7 +133,7 @@ const EnhancedAccountDetailView: React.FC = () => {
   };
 
   const handleAskForIntro = () => {
-    alert('Request introduction functionality coming soon');
+    alert('Requesting an introduction is not available yet — no request was sent.');
   };
 
   const handleExpandOrgChart = () => {
@@ -107,7 +141,7 @@ const EnhancedAccountDetailView: React.FC = () => {
   };
 
   const handleFindMissingContacts = () => {
-    alert('Find missing contacts functionality coming soon');
+    alert('Finding missing contacts is not available yet — this needs a contact-enrichment source, which is not configured.');
   };
 
   const handleViewAllActivities = () => {
@@ -115,7 +149,7 @@ const EnhancedAccountDetailView: React.FC = () => {
   };
 
   const handleLogActivity = () => {
-    alert('Log activity functionality coming soon');
+    alert('Logging an activity from here is not available yet. Activities can be logged from the Activities page.');
   };
 
   if (!account) {
@@ -158,105 +192,87 @@ const EnhancedAccountDetailView: React.FC = () => {
     return `$${amount}`;
   };
 
-  // Mock metrics - Replace with real data
+  /**
+   * PHASE 2: these tiles mixed real derivations with invented numbers —
+   * meetingsThisQuarter: 12, responseRate: 85, 'Prob Avg': '61%',
+   * 'Decision Makers': '1', 'Avg Response': '3.2hrs', and '+5%' / '+12%'
+   * trends. Only what can actually be computed is shown now.
+   *
+   * Meetings this quarter is real: it counts activities of type 'meeting' on
+   * this account since the start of the current quarter, which the activities
+   * API can now answer.
+   *
+   * Removed with no replacement, because nothing stores them: response rate and
+   * average response time (no email tracking), contact influence tiers (no
+   * such field on contacts), per-stage meeting counts, weighted-pipeline
+   * probability averages, and every trend arrow — a period-over-period
+   * comparison needs a second query, and an invented percentage is what Phase 0
+   * spent its time deleting.
+   */
+  const meetingsThisQuarter = useMemo(() => {
+    const now = new Date();
+    const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    return accountActivities.filter(a => {
+      if (a.type !== 'meeting') return false;
+      const when = a.completed_at ?? a.scheduled_at ?? a.created_at;
+      return new Date(when) >= quarterStart;
+    }).length;
+  }, [accountActivities]);
+
   const metrics = {
     totalPipeline: deals?.reduce((sum, deal) => sum + (deal.amount || 0), 0) || 0,
     activeDeals: deals?.length || 0,
-    contacts: contacts?.length || 0,
-    meetingsThisQuarter: 12,
-    responseRate: 85
+    contacts: contacts.length,
+    meetingsThisQuarter,
   };
 
   const enhancedMetrics = [
     {
       title: 'Total Pipeline',
       value: formatRevenue(metrics.totalPipeline),
-      details: [
-        { label: 'Deal 1', value: deals?.[0] ? formatRevenue(deals[0].amount) : '-' },
-        { label: 'Deal 2', value: deals?.[1] ? formatRevenue(deals[1].amount) : '-' }
-      ],
-      trend: { direction: 'up' as const, value: '+5%' }
+      details: (deals ?? []).slice(0, 2).map((d, i) => ({
+        label: d.name ?? `Deal ${i + 1}`,
+        value: formatRevenue(d.amount),
+      })),
     },
     {
       title: 'Active Deals',
       value: metrics.activeDeals.toString(),
-      details: [
-        { label: 'Weighted', value: formatRevenue(metrics.totalPipeline * 0.67) },
-        { label: 'Prob Avg', value: '61%' }
-      ]
+      details: [],
     },
     {
       title: 'Contacts',
       value: metrics.contacts.toString(),
-      details: [
-        { label: 'Decision Makers', value: '1' },
-        { label: 'Influencers', value: '2' },
-        { label: 'Missing', value: '2' }
-      ]
+      details: [],
     },
     {
       title: 'Meetings This Qtr',
       value: metrics.meetingsThisQuarter.toString(),
-      details: [
-        { label: 'Discovery', value: '3' },
-        { label: 'Demo', value: '4' },
-        { label: 'Proposal', value: '3' },
-        { label: 'Negotiation', value: '2' }
-      ]
+      details: [],
     },
-    {
-      title: 'Response Rate',
-      value: `${metrics.responseRate}%`,
-      details: [
-        { label: 'Avg Response', value: '3.2hrs' },
-        { label: 'Trend', value: '+12%' }
-      ],
-      trend: { direction: 'up' as const, value: '+12%' }
-    }
   ];
 
-  const similarAccounts = [
-    {
-      id: 'similar-1',
-      name: 'FinnovateX',
-      similarity: 87,
-      industry: 'FinTech',
-      employeeCount: 50,
-      hasHRMSConnection: true,
-      recruitedCount: 2,
-      dealValue: 55000,
-      daysToClose: 35,
-      keySuccess: 'CEO intro from recruited employee'
-    },
-    {
-      id: 'similar-2',
-      name: 'BankTech Solutions',
-      similarity: 82,
-      industry: 'Banking Software',
-      employeeCount: 40,
-      hasHRMSConnection: true,
-      recruitedCount: 1,
-      dealValue: 48000,
-      daysToClose: 40,
-      keySuccess: 'Strong HRMS relationship'
-    }
-  ];
-
-  const dataSources = [
-    { name: 'LinkedIn', status: 'active' as const, lastUpdated: '2 hours ago', url: 'https://linkedin.com' },
-    { name: 'Crunchbase', status: 'active' as const, lastUpdated: '2 hours ago', url: 'https://crunchbase.com' },
-    { name: 'Clearbit', status: 'active' as const, lastUpdated: '2 hours ago' },
-    { name: 'HRMS Module', status: 'active' as const, lastUpdated: '2 hours ago' },
-    { name: 'Google News', status: 'active' as const, lastUpdated: '2 hours ago' }
-  ];
+  // PHASE 2: `similarAccounts` (two invented lookalike companies with
+  // similarity scores, "keySuccess" narratives and deal values) and
+  // `dataSources` (LinkedIn, Crunchbase, Clearbit, HRMS and Google News, all
+  // reported "active, updated 2 hours ago") were deleted here.
+  //
+  // The data-source panel was the worst of the two: it told the user five
+  // external enrichment integrations were live and syncing. None of them exists.
+  // There is no similarity engine either. Both are empty until something
+  // real backs them; the panels below guard on length.
+  const similarAccounts: never[] = [];
+  const dataSources: never[] = [];
 
   // Mock data for new components
   const mockDeals = deals?.map(deal => ({
     id: deal.id,
-    name: deal.name,
+    name: deal.name ?? 'Untitled deal',
     stage: deal.stage || 'Qualification',
     value: deal.amount || 0,
-    closeDate: new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    closeDate: deal.closeDate
+      ? new Date(deal.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'No close date',
     probability: 70,
     health: 'good' as const,
     lastActivity: '2 days ago',
@@ -267,10 +283,15 @@ const EnhancedAccountDetailView: React.FC = () => {
   const mockContacts = contacts?.map((contact, idx) => ({
     id: contact.id,
     name: contact.name,
-    title: contact.title || 'Contact',
+    // Contact.position is the real column; `title` did not exist on it.
+    title: contact.position || 'Contact',
     email: contact.email,
     phone: contact.phone,
-    role: idx === 0 ? 'decision-maker' as const : idx === 1 ? 'champion' as const : 'influencer' as const,
+    // PHASE 2: role was assigned BY ARRAY INDEX — the first contact was always
+    // labelled the decision maker, the second the champion. Contacts carry no
+    // influence or buying-role field, so everyone is 'influencer' (the neutral
+    // member of this union) until one exists.
+    role: 'influencer' as const,
     isHRMSConnection: account.hrmsConnection?.hasConnection && idx === 1,
     engagementScore: idx === 0 ? 95 : idx === 1 ? 90 : 75,
     lastContactDate: '3 days ago',
@@ -695,7 +716,7 @@ const EnhancedAccountDetailView: React.FC = () => {
                 {/* Recent Activities Timeline */}
                 <RecentActivitiesTimeline
                   activities={mockActivities}
-                  onActivityClick={(id) => console.log('Activity clicked:', id)}
+                  onActivityClick={(id) => navigate(`/crm/activities/${id}`)}
                   onViewAll={handleViewAllActivities}
                   onLogActivity={handleLogActivity}
                   maxItems={10}
@@ -746,7 +767,7 @@ const EnhancedAccountDetailView: React.FC = () => {
                               </div>
                               <div className="flex flex-wrap gap-2 mt-3">
                                 <button
-                                  onClick={() => alert('HRMS profile integration coming soon')}
+                                  onClick={() => alert('There is no HRMS integration — nothing was opened.')}
                                   className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                                 >
                                   View Employee Profile in HRMS
@@ -863,13 +884,13 @@ const EnhancedAccountDetailView: React.FC = () => {
 
                     <div className="flex flex-wrap gap-3 mt-6">
                       <button
-                        onClick={() => alert('Full HRMS report will open in new tab')}
+                        onClick={() => alert('There is no HRMS integration, so there is no report to open.')}
                         className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
                       >
                         View Full HRMS Report
                       </button>
                       <button
-                        onClick={() => alert('Add recruitment target functionality coming soon')}
+                        onClick={() => alert('Recruitment targets are not available yet — nothing was added.')}
                         className="px-4 py-2 border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50"
                       >
                         Add Recruitment Target
@@ -917,11 +938,11 @@ const EnhancedAccountDetailView: React.FC = () => {
                               <div>
                                 <p className="text-gray-600">Close Date</p>
                                 <p className="font-medium text-gray-900">
-                                  {new Date(deal.closeDate).toLocaleDateString('en-US', {
+                                  {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString('en-US', {
                                     month: 'short',
                                     day: 'numeric',
                                     year: 'numeric'
-                                  })}
+                                  }) : 'No close date'}
                                 </p>
                               </div>
                               <div>
@@ -1018,7 +1039,7 @@ const EnhancedAccountDetailView: React.FC = () => {
                             </div>
                             <div className="flex-1">
                               <h3 className="text-lg font-bold text-gray-900">{contact.name}</h3>
-                              <p className="text-sm text-gray-600">{contact.role}</p>
+                              <p className="text-sm text-gray-600">{contact.position || '—'}</p>
                               <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
                                 <a href={`mailto:${contact.email}`} className="flex items-center hover:text-blue-600">
                                   <Mail className="h-4 w-4 mr-1" />
@@ -1385,11 +1406,11 @@ const EnhancedAccountDetailView: React.FC = () => {
                             <div>
                               <p className="text-sm text-gray-600">Close Date</p>
                               <p className="font-medium text-gray-900">
-                                {new Date(deal.closeDate).toLocaleDateString('en-US', {
+                                {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString('en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                   year: 'numeric'
-                                })}
+                                }) : 'No close date'}
                               </p>
                             </div>
                             <div>
@@ -1729,7 +1750,7 @@ const EnhancedAccountDetailView: React.FC = () => {
                         This account doesn't have any recruitment relationship with your company yet.
                       </p>
                       <button
-                        onClick={() => alert('HRMS database search functionality coming soon')}
+                        onClick={() => alert('There is no HRMS database to search.')}
                         className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
                       >
                         Check HRMS Database
@@ -1987,9 +2008,9 @@ const EnhancedAccountDetailView: React.FC = () => {
                 sources={dataSources}
                 dataQuality={96}
                 lastEnrichment="2 hours ago"
-                onReEnrich={() => console.log('Re-enriching...')}
-                onVerifyData={() => console.log('Verifying data...')}
-                onReportIssue={() => console.log('Reporting issue...')}
+                onReEnrich={() => alert('Re-enriching is not available yet — no enrichment provider is configured, so no data was refreshed.')}
+                onVerifyData={() => alert('Data verification is not available yet — nothing was verified.')}
+                onReportIssue={() => alert('Reporting an issue is not available yet — no report was filed.')}
               />
             </div>
           )}

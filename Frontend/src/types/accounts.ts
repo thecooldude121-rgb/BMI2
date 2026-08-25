@@ -96,19 +96,37 @@ export interface AccountHierarchy {
   path: string[];
 }
 
+/**
+ * A contact shown against an account.
+ *
+ * PHASE 2: this described a normalised join row (contactId, relationshipType,
+ * influenceLevel, createdAt/updatedAt) while every value in the codebase is a
+ * FLAT record — `{ id, accountId, name, role, email, isPrimary }`. The type and
+ * the data had never agreed, which is why sampleAccountsData.ts and three
+ * account pages carried permanent type errors that everyone had learned to
+ * ignore. The type now describes the data that exists.
+ *
+ * There is no account<->contact join table. Real contacts for an account come
+ * from GET /contacts?account_id=, typed as `Contact`.
+ */
 export interface AccountContact {
   id: string;
   accountId: string;
-  contactId: string;
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  isPrimary?: boolean;
+  /** Only present on the normalised shape, which nothing produces yet. */
+  contactId?: string;
   contact?: Contact;
-  relationshipType: 'business' | 'technical' | 'billing' | 'executive' | 'other';
-  isPrimary: boolean;
+  relationshipType?: 'business' | 'technical' | 'billing' | 'executive' | 'other';
   title?: string;
   department?: string;
-  influenceLevel: 'low' | 'medium' | 'high' | 'decision_maker';
+  influenceLevel?: 'low' | 'medium' | 'high' | 'decision_maker';
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Contact {
@@ -125,13 +143,26 @@ export interface Contact {
   status: 'active' | 'inactive' | 'bounced' | 'unsubscribed';
 }
 
+/**
+ * A deal shown against an account. Same story as AccountContact: the declared
+ * join shape (dealId, isPrimaryAccount) never matched the flat records the code
+ * actually passes around — `{ id, accountId, name, amount, stage, closeDate,
+ * probability }` — so `deal.amount` and `deal.name` were type errors everywhere
+ * despite being the real fields.
+ */
 export interface AccountDeal {
   id: string;
   accountId: string;
-  dealId: string;
+  name?: string;
+  amount?: number;
+  stage?: string;
+  closeDate?: string;
+  probability?: number;
+  /** Only present on the normalised shape, which nothing produces yet. */
+  dealId?: string;
   deal?: Deal;
-  isPrimaryAccount: boolean;
-  createdAt: string;
+  isPrimaryAccount?: boolean;
+  createdAt?: string;
 }
 
 export interface Deal {
