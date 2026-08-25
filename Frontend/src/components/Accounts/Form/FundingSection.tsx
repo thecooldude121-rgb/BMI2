@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, X, TrendingUp } from 'lucide-react';
+import { X, TrendingUp } from 'lucide-react';
 
 interface FundingSectionProps {
   formData: any;

@@ -12,12 +12,7 @@
  * Blocker role: blocker-detractor — presence is a risk, not a gap.
  */
 
-import {
-  CONTACT_ROLES,
-  getContactRole,
-  type ContactRole,
-  type StakeholderContact,
-} from '../config/contactRoles';
+import { getContactRole, type ContactRole, type StakeholderContact } from '../config/contactRoles';
 
 // ── Role groupings ────────────────────────────────────────────────────────────
 

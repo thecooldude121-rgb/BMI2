@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, MapPin, DollarSign, TrendingUp } from 'lucide-react';
+import { MapPin, DollarSign } from 'lucide-react';
 
 interface PreviewPanelProps {
   formData: any;

@@ -1,12 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Grid, Search, Filter, Download, Upload, Save, X, Check,
-  AlertTriangle, Info, Eye, Edit, Trash2, Lock, Unlock,
-  Copy, Layers, ChevronDown, ChevronRight, RotateCcw, Zap,
-  Settings, Shield, CheckSquare, Square, MinusSquare, HelpCircle
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Grid, Search, Download, Upload, Save, X, AlertTriangle, Info, Eye, Edit, Trash2, Copy, Layers, ChevronDown, ChevronRight, RotateCcw, Zap, Shield, CheckSquare, Square, MinusSquare, HelpCircle } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
-import { SystemRole } from '../../types/settings';
 
 type PermissionType = 'read' | 'write' | 'delete' | 'export' | 'import' | 'hide';
 

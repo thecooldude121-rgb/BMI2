@@ -3,7 +3,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Sparkles, Calendar, Info, GitBranch } from 'lucide-react';
 import { SUPPORTED_CURRENCIES, getCurrency, BASE_CURRENCY_CODE } from '../../../config/currencies';
-import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, validateDealValue, getRateToUsdDisplay, RATES_SNAPSHOT_DATE } from '../../../utils/currencyUtils';
+import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, getRateToUsdDisplay, RATES_SNAPSHOT_DATE } from '../../../utils/currencyUtils';
 import { PIPELINES, getPipeline, stageButtonClasses } from '../../../config/pipelines';
 import { DEAL_TYPES } from '../../../config/dealTypes';
 import {

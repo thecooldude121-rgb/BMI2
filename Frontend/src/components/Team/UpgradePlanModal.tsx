@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, ChevronRight, Zap, Users, Shield, Headphones, Settings, TrendingUp } from 'lucide-react';
+import { X, Check, ChevronRight, Zap, Users, Shield, Headphones, TrendingUp } from 'lucide-react';
 
 interface UpgradePlanModalProps {
   isOpen: boolean;

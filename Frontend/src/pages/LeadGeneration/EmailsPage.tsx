@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Mail, Plus, Search, Filter, Download, Upload, Eye, Edit,
-  Trash2, Send, Archive, Star, Clock, Users, TrendingUp,
-  Tag, Calendar, MoreHorizontal, X, Settings, RefreshCw,
-  Paperclip, Reply, Forward, CheckCircle, AlertCircle, ArrowLeft
-} from 'lucide-react';
+import { Mail, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Send, Archive, MoreHorizontal, X, Paperclip, Reply, Forward, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Email } from '../../types/leadGeneration';
 

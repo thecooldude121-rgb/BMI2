@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  AlertTriangle, CheckCircle, XCircle, Download, Users,
-  Shield, TrendingUp, TrendingDown, FileText, X, Play
-} from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Download, Users, Shield, X, Play } from 'lucide-react';
 
 interface ChangeImpact {
   type: 'added' | 'removed' | 'modified' | 'conflict';

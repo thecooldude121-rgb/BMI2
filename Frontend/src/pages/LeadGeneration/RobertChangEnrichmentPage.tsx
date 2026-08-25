@@ -1,15 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  robertChangEnrichmentData,
-  robertChangFields,
-  robertChangEnrichmentHistory,
-  alternativeEnrichmentOptions,
-  getContactFields,
-  getCompanyFields,
-  getProfessionalFields,
-  type RobertChangField
-} from '../../utils/robertChangEnrichmentData';
+import { robertChangEnrichmentData, robertChangEnrichmentHistory, alternativeEnrichmentOptions, getContactFields, getCompanyFields, getProfessionalFields, type RobertChangField } from '../../utils/robertChangEnrichmentData';
 import { useToast } from '../../contexts/ToastContext';
 
 export default function RobertChangEnrichmentPage() {

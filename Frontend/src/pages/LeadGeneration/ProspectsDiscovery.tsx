@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Search, Filter, Download, Upload, Save, Star, TrendingUp, Building2,
-  MapPin, Briefcase, Code, Globe, Linkedin, Mail, Phone, Users, Calendar,
-  Eye, Edit, Trash2, Plus, X, CheckCircle, AlertCircle, Clock, Zap,
-  Target, DollarSign, BarChart3, RefreshCw, Sparkles, ChevronDown, ChevronUp,
-  ExternalLink, Copy, Share2, FileText, Settings, SlidersHorizontal
-} from 'lucide-react';
+import { Search, Download, Upload, Save, Star, TrendingUp, MapPin, Linkedin, Mail, Users, Eye, Edit, Plus, X, CheckCircle, Zap, Target, Sparkles, ChevronDown, ChevronUp, Copy, SlidersHorizontal } from 'lucide-react';
 
 interface Prospect {
   id: string;

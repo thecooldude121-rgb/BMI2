@@ -1,44 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Save,
-  X,
-  Mail,
-  Share2,
-  Linkedin,
-  RefreshCw,
-  Calendar,
-  Target,
-  Users,
-  Settings,
-  CheckCircle,
-  Sparkles,
-  TrendingUp,
-  Zap,
-  AlertTriangle,
-  Lightbulb,
-  Plus,
-  Search,
-  UserCircle,
-  MoreVertical,
-  ChevronDown,
-  ChevronUp,
-  Trash2,
-  Copy,
-  Link,
-  Paperclip,
-  Type,
-  Clock,
-  Check,
-  MapPin,
-  Edit2,
-  BarChart3,
-  Rocket,
-  FileText,
-  Send,
-  DollarSign
-} from 'lucide-react';
+import { ArrowLeft, Save, X, Mail, Share2, Linkedin, RefreshCw, Calendar, Target, Users, Settings, CheckCircle, Sparkles, TrendingUp, Zap, AlertTriangle, Lightbulb, Plus, Search, UserCircle, MoreVertical, ChevronDown, ChevronUp, Trash2, Copy, Link, Paperclip, Type, Clock, Check, Edit2, BarChart3, Rocket, FileText, Send } from 'lucide-react';
 
 type CampaignStep = 1 | 2 | 3 | 4 | 5 | 6;
 type CampaignGoalType = 'meetings' | 'demos' | 'trials' | 'opportunities' | '';

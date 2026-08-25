@@ -1,9 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Shield, Lock, Globe, Smartphone, Monitor, AlertTriangle, CheckCircle,
-  XCircle, Eye, EyeOff, Info, Plus, X, Trash2, Download, Save, RefreshCw,
-  Activity, Clock, MapPin, Users, Key, Bell, FileText, TrendingUp, Zap
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Lock, Globe, Smartphone, Monitor, AlertTriangle, CheckCircle, Plus, X, Trash2, Download, Save, RefreshCw, Activity, Clock, MapPin, Key } from 'lucide-react';
 
 interface PasswordPolicy {
   minLength: number;

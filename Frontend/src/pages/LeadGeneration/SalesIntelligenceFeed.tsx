@@ -1,31 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Bell,
-  Settings,
-  Search,
-  DollarSign,
-  Users,
-  Rocket,
-  Globe,
-  Plus,
-  Eye,
-  BellOff,
-  MoreHorizontal,
-  ExternalLink,
-  Undo,
-  TrendingUp,
-  Filter,
-  X,
-  Calendar,
-  Star,
-  Share2,
-  AlertTriangle,
-  Clock,
-  CheckCircle,
-  BarChart3,
-  ChevronDown
-} from 'lucide-react';
+import { Bell, Settings, Search, DollarSign, Users, Rocket, Globe, Plus, Eye, BellOff, MoreHorizontal, ExternalLink, Undo, TrendingUp, X, Star, Share2, AlertTriangle, Clock, BarChart3, ChevronDown } from 'lucide-react';
 import { getAllIntelligenceSignals, type IntelligenceSignal } from '../../utils/intelligenceSignalMockData';
 
 type SignalType = 'funding' | 'hiring' | 'product' | 'expansion';

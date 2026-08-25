@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, TrendingUp, Target, Trophy, Building2, Search, Download, ChevronDown, X, ExternalLink, AlertCircle } from 'lucide-react';
+import { Users, TrendingUp, Target, Trophy, Building2, Search, Download, X, ExternalLink } from 'lucide-react';
 
 type Role = 'CEO' | 'VP' | 'Manager' | 'Rep' | 'Admin' | 'Analyst' | 'Support';
 

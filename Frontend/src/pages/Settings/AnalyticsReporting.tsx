@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  BarChart, LineChart, PieChart, TrendingUp, Target, Users, DollarSign,
-  Activity, Download, Upload, Plus, Settings, Eye, Edit, Trash2, Copy,
-  Share2, Filter, Search, Calendar, RefreshCw, Play, Save, X, Zap,
-  AlertCircle, CheckCircle, Clock, Globe, MapPin, Smartphone, Code
-} from 'lucide-react';
+import { BarChart, LineChart, PieChart, TrendingUp, Target, Download, Upload, Plus, Eye, Edit, Copy, Share2, Play, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Dashboard {
   id: string;

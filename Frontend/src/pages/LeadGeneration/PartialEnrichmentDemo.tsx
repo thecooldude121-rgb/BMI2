@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { PartialEnrichmentModal } from '../../components/LeadGeneration/PartialEnrichmentModal';
 import { partialEnrichmentData, getCategoryTotals } from '../../utils/partialEnrichmentMockData';
 

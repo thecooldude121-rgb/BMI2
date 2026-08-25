@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatDisplayDate } from '../../utils/dateUtils';
-import {
-  ArrowLeft, Edit, Mail, Plus, MoreHorizontal, ChevronDown, ChevronUp,
-  User, Building, Calendar, DollarSign, Target, Phone, Video, FileText,
-  Paperclip, Clock, Activity, MessageSquare, Star, Globe, Briefcase,
-  Settings, Save, X, Check, AlertCircle, TrendingUp, Users, Tag,
-  Download, Share, Copy, Eye, Trash2, Archive, Flag, Zap, Bot
-} from 'lucide-react';
+import { ArrowLeft, Edit, Mail, Plus, MoreHorizontal, ChevronDown, ChevronUp, User, Building, DollarSign, Target, Phone, Video, FileText, Paperclip, Clock, Activity, MessageSquare, Globe, Briefcase, Save, X, Check, Download, Eye, Trash2, Flag } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
 interface DealDetailPageProps {

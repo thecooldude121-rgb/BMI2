@@ -1,15 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, 
-  Target, 
-  DollarSign, 
-  TrendingUp,
-  Calendar,
-  CheckSquare,
-  AlertCircle,
-  Clock
-} from 'lucide-react';
+import { Users, Target, DollarSign, TrendingUp, Calendar, CheckSquare, AlertCircle } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import StatCard from '../components/Dashboard/StatCard';
 import RecentActivity from '../components/Dashboard/RecentActivity';

@@ -1,11 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Cloud, Check, X, AlertCircle, RefreshCw, Settings, Plus,
-  ArrowLeft, Zap, Link as LinkIcon, Clock, Activity, TrendingUp,
-  Database, Play, Pause, ChevronRight
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { Cloud, Check, X, AlertCircle, RefreshCw, Settings, Plus, ArrowLeft, Link as LinkIcon, Clock, Activity, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { CRMIntegration, CRMProvider, IntegrationStatus, SyncFrequency } from '../../types/workflowAutomation';
+import type { CRMIntegration, CRMProvider, IntegrationStatus } from '../../types/workflowAutomation';
 
 const IntegrationsPage: React.FC = () => {
   const navigate = useNavigate();

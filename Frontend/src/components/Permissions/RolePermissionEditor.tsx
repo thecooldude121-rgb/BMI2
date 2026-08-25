@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Check, Square, MinusSquare, ChevronDown, ChevronRight,
-  Save, X, AlertCircle, CheckCircle, Eye, Lock
-} from 'lucide-react';
+import { Check, MinusSquare, ChevronDown, ChevronRight, Save, X, AlertCircle, CheckCircle, Eye, Lock } from 'lucide-react';
 
 interface PermissionState {
   read: boolean;

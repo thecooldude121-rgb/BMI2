@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Zap, Plus, Play, Pause, Edit, Trash2, Copy, BarChart3,
-  Users, Mail, Clock, TrendingUp, Eye, Settings, Filter,
-  Search, Download, Upload, Star, Target, ArrowRight,
-  CheckCircle, AlertCircle, Calendar, MessageSquare, Phone, CheckSquare, ArrowLeft
-} from 'lucide-react';
+import { Zap, Plus, Play, Pause, Edit, Trash2, Copy, BarChart3, Users, Mail, Clock, TrendingUp, Eye, Filter, Search, Download, Upload, Target, ArrowRight, CheckCircle, MessageSquare, Phone, CheckSquare, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { EmailSequence } from '../../types/leadGeneration';
 

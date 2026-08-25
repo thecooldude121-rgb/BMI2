@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Share2, Shield, Users, Lock, Eye, Edit, Settings, Plus, Trash2, Copy,
-  CheckCircle, XCircle, AlertTriangle, Search, Filter, Download, Upload,
-  Save, RefreshCw, ChevronRight, ChevronDown, Play, Pause, Info, Zap
-} from 'lucide-react';
+import { Share2, Shield, Users, Lock, Eye, Edit, Plus, Trash2, Copy, CheckCircle, Search, Filter, Download, Save, RefreshCw, ChevronRight, Play, Pause, Info, Zap } from 'lucide-react';
 
 interface OrgWideDefault {
   module: string;

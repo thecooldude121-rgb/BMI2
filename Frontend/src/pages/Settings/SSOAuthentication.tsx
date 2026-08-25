@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Key, Shield, Users, CheckCircle, XCircle, AlertTriangle, Download, Upload,
-  Save, RefreshCw, Settings, Globe, Lock, Cloud, Server, Smartphone, FileText,
-  Copy, Eye, EyeOff, Plus, Trash2, Edit, X, TestTube, Zap, Activity
-} from 'lucide-react';
+import { Key, Shield, CheckCircle, Download, Save, RefreshCw, Settings, Globe, Lock, Cloud, Server, Smartphone, FileText, Plus, Trash2, Edit, TestTube, Zap, Activity } from 'lucide-react';
 
 interface SAMLConfig {
   id: string;

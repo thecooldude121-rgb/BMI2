@@ -1,31 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Search,
-  Download,
-  Share2,
-  Highlighter,
-  Copy,
-  ChevronDown,
-  DollarSign,
-  Calendar,
-  Plug,
-  Users,
-  CheckCircle,
-  Clock,
-  TrendingUp,
-  AlertCircle,
-  Sparkles,
-  FileText,
-  X,
-  BarChart3
-} from 'lucide-react';
+import { ArrowLeft, Search, Download, Share2, Highlighter, Copy, DollarSign, Calendar, Plug, Users, CheckCircle, TrendingUp, Sparkles, FileText } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useToast } from '../../contexts/ToastContext';
 import DownloadTranscriptModal, { DownloadOptions } from '../../components/Meeting/DownloadTranscriptModal';
 import ShareTranscriptModal, { ShareOptions } from '../../components/Meeting/ShareTranscriptModal';
-import { AIDetectionModal, SentimentModal, SpeakerTooltip } from '../../components/Meeting/TranscriptDetailModals';
+import { AIDetectionModal, SentimentModal } from '../../components/Meeting/TranscriptDetailModals';
 import TextSelectionMenu from '../../components/Meeting/TextSelectionMenu';
 import { acmeCorpTranscript, TranscriptSegment } from '../../utils/meetingTranscriptMockData';
 

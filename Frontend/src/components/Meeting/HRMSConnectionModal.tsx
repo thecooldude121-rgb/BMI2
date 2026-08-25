@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { X, Building2, TrendingUp, Calendar, ArrowRight, Lightbulb } from 'lucide-react';
 
 interface HRMSConnectionModalProps {

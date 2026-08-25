@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Clock, User, Shield, Filter, Search, Download, RefreshCw,
-  ChevronDown, X, Calendar, Activity, FileText, Eye, ArrowRight,
-  AlertCircle, CheckCircle, Trash2, Copy, Plus, Edit
-} from 'lucide-react';
+import { Clock, User, Shield, Filter, Search, Download, RefreshCw, X, Activity, FileText, Eye, CheckCircle, Trash2, Copy, Plus, Edit } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 

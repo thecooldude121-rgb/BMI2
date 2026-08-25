@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { X, User, Zap, AlertCircle } from 'lucide-react';
 import {
   formatFieldTimestamp,

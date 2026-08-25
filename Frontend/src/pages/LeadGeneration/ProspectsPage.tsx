@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Users, Search, Filter, Plus, Download, Upload, Eye, Edit, ArrowLeft,
-  MoreHorizontal, Star, Mail, Phone, MessageSquare, Calendar,
-  Target, Zap, Tag, Globe, Building, MapPin, Clock, TrendingUp,
-  CheckSquare, X, Settings, RefreshCw, ArrowUpDown, Columns
-} from 'lucide-react';
+import { Users, Search, Filter, Plus, Download, Upload, Eye, ArrowLeft, MoreHorizontal, Star, Mail, Phone, Target, Zap, Globe, TrendingUp, X, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Prospect } from '../../types/leadGeneration';
 

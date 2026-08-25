@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Plus, Search, Edit, Trash2, Copy, Users, Shield,
-  ChevronRight, X, Check, AlertTriangle, Package
-} from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Copy, Users, X, Check, AlertTriangle, Package } from 'lucide-react';
 import { PermissionSetBuilder } from '../../components/Permissions/PermissionSetBuilder';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 

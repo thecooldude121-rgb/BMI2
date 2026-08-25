@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Play, RotateCcw, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { RealTimeEnrichmentProgress } from '../../components/LeadGeneration/RealTimeEnrichmentProgress';

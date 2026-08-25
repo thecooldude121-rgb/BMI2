@@ -1,10 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Plus, Upload, Search, ChevronDown, CheckCircle, Mail, Phone, Eye,
-  UserPlus, Link as LinkIcon, X, BookmarkCheck,
-  Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal,
-} from 'lucide-react';
+import { Plus, Upload, Search, ChevronDown, CheckCircle, UserPlus, Link as LinkIcon, X, BookmarkCheck, Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
@@ -116,8 +112,6 @@ const getAgingDays = (lead: Lead): number => {
   const ref = lead.stage_entered_at ?? lead.created_at;
   return Math.floor((Date.now() - new Date(ref).getTime()) / 86_400_000);
 };
-
-
 
 // Modals not yet implemented — show a toast instead of opening a stub modal
 const STUB_MODALS = new Set<ModalId>(['assignOwner', 'addTag', 'enrichLead', 'editLead']);
@@ -279,7 +273,6 @@ const LeadsPage: React.FC = () => {
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   // ── Single-lead modal actions (triggered from row ⋯ menu) ─────────────────
-
 
   const handleSingleDelete = () => {
     if (activeLead) {

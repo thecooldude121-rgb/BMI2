@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Bell, Mail, MessageSquare, Smartphone, Globe, Settings, Plus, Edit, Trash2,
-  Eye, EyeOff, Search, Filter, Clock, TrendingUp, Activity, CheckCircle,
-  AlertTriangle, Info, Send, Code, Copy, Download, Upload, RefreshCw,
-  X, Save, TestTube, BarChart, Users, Zap, Target, Calendar, Pause, Play
-} from 'lucide-react';
+import { Bell, Mail, MessageSquare, Smartphone, Globe, Settings, Plus, Edit, Trash2, Eye, Clock, TrendingUp, Send, Code, Copy, Save, TestTube, BarChart, Zap, Pause, Play } from 'lucide-react';
 
 interface NotificationTemplate {
   id: string;

@@ -12,7 +12,7 @@ import type { LeadSLAResult } from './leadSla';
 import { computeConversionReadiness } from './conversionReadiness';
 import type { ConversionReadinessState } from './conversionReadiness';
 import { computeMultiFactorScore } from './leadScoring/multiFactorScore';
-import { findDuplicates, computeRisk, emailDomain } from './leadDuplicates';
+import { computeRisk, emailDomain } from './leadDuplicates';
 import type { DuplicateRisk } from './leadDuplicates';
 
 const READY_STATES = new Set<ConversionReadinessState>([

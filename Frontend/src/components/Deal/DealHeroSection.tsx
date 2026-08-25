@@ -7,7 +7,7 @@ import {
   StickyNote, ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { daysFromNowLabel, closeDateUrgencyClass } from '../../utils/dateUtils';
+import { closeDateUrgencyClass } from '../../utils/dateUtils';
 import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 import { getUsers } from '../../utils/dealsApi';
 import type { DealOwnerInfo, DealValueHistoryEntry } from '../../types/dealManagement';

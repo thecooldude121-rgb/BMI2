@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  List, Plus, Search, Filter, Download, Upload, Eye, Edit,
-  Trash2, Copy, Users, Target, Clock, TrendingUp, Star,
-  Zap, Tag, Calendar, MoreHorizontal, X, Settings, Play,
-  Pause, CheckCircle, AlertCircle, Globe, Building, ArrowLeft
-} from 'lucide-react';
+import { List, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Copy, Users, Target, Zap, MoreHorizontal, X, Globe, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { LeadList } from '../../types/leadGeneration';
 

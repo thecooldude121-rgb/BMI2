@@ -1,23 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, X, Search, Globe, Linkedin, Twitter, MapPin, Building2, TrendingUp, DollarSign, Users, Zap, Tag, FileText, Upload } from 'lucide-react';
+import { Save, X, Globe, Linkedin, Twitter, Building2 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
 import { useToast } from '../../contexts/ToastContext';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
-import {
-  validateURL,
-  formatURL,
-  formatLinkedInURL,
-  formatPhoneNumber,
-  formatCurrency,
-  calculateCompanyAge,
-  calculateGrowthRate,
-  calculateTotalFunding,
-  saveToLocalStorage,
-  loadFromLocalStorage,
-  clearLocalStorage
-} from '../../utils/accountFormUtils';
+import { validateURL, formatURL, formatLinkedInURL, formatPhoneNumber, calculateCompanyAge, calculateGrowthRate, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage } from '../../utils/accountFormUtils';
 import AIEnrichmentSection from '../../components/Accounts/Form/AIEnrichmentSection';
 import PreviewPanel from '../../components/Accounts/Form/PreviewPanel';
 import DataQualityPanel from '../../components/Accounts/Form/DataQualityPanel';

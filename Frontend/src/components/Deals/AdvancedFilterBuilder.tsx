@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, X } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

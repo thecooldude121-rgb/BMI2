@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Filter, Download } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Target, Filter, Download } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { aiEngine } from '../../utils/aiEngine';
 

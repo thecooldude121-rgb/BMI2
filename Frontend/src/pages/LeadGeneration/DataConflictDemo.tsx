@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { DataConflictModal } from '../../components/LeadGeneration/DataConflictModal';
 import { DataConflict, dataConflictData, getConflictSummary } from '../../utils/dataConflictMockData';
 

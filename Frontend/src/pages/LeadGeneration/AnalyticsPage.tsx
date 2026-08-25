@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  BarChart3, TrendingUp, Users, Mail, Calendar, Target,
-  Download, Filter, RefreshCw, Eye, Settings, Clock,
-  DollarSign, Zap, Star, Globe, ArrowUpRight, Activity, ArrowLeft
-} from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Mail, Target, Download, Filter, RefreshCw, Eye, DollarSign, Star, Globe, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AnalyticsMetrics, PerformanceMetrics } from '../../types/leadGeneration';
 

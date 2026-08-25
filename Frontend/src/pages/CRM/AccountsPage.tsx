@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Eye, Edit, Trash2, Users, DollarSign, Calendar, Tag, ExternalLink, Briefcase, Target, UserPlus, X, Copy, UserCog, FileText, GitMerge } from 'lucide-react';
+import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertTriangle, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, Target, UserPlus, X, UserCog, FileText, GitMerge } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
 import { EnhancedAccount } from '../../types/accounts';
 import CRMNavigation from '../../components/CRM/CRMNavigation';

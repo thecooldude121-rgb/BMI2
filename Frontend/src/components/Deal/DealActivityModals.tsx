@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, Video, FileText, Share2, Calendar, Loader, Send } from 'lucide-react';
+import { X, Mail, FileText, Share2, Calendar } from 'lucide-react';
 
 interface EmailDetailModalProps {
   isOpen: boolean;

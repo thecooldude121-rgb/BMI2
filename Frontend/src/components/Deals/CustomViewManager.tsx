@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import { 
-  X, Plus, Eye, Edit, Trash2, Save, Star, Users, 
-  Lock, Globe, Search, Filter, Settings 
-} from 'lucide-react';
-import { CustomView, DealFilters, DealColumn } from '../../types/deals';
+import { X, Plus, Eye, Edit, Trash2, Star, Users, Lock, Globe, Filter, Settings } from 'lucide-react';
+import { CustomView } from '../../types/deals';
 
 interface CustomViewManagerProps {
   views: CustomView[];

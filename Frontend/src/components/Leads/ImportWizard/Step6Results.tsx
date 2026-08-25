@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { CheckCircle, XCircle, GitMerge, AlertTriangle, Zap, ExternalLink, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { ImportProgress, ImportResult } from './types';

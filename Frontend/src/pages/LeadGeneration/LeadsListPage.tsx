@@ -1,12 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import {
-  Search, Filter, Download, Upload, Plus, MoreVertical, Mail, Phone,
-  Calendar, FileText, Zap, CheckCircle, XCircle, ArrowRight,
-  ChevronDown, ChevronUp, TrendingUp, Target, Users, Activity,
-  Trash2, Copy, Clock, UserPlus, Edit,
-  Eye, Grid, List, Columns, RefreshCw, Share2, Archive
-} from 'lucide-react';
+import { Search, Download, Plus, MoreVertical, Mail, Zap, CheckCircle, ChevronDown, ChevronUp, TrendingUp, Target, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 
 interface LeadDetail {

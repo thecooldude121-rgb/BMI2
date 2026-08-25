@@ -479,7 +479,6 @@ function EnrichedFieldCard({
   );
 }
 
-
 function DataSourceDetailsModal({ source, onClose }: { source: DataSource; onClose: () => void }) {
   const fieldsList = source.name === 'Apollo.io'
     ? ['Email', 'LinkedIn URL', 'Mobile Phone', 'Company Size', 'Industry', 'Total Funding', 'Company Website', 'International Presence', 'Job Title', 'Department', 'Education', 'Previous Companies']

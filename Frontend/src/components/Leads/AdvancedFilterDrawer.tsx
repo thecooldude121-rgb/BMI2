@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Plus, Trash2, GripVertical, ChevronDown, Copy, Pencil, Check } from 'lucide-react';
-import type {
-  AdvancedFilter, FilterGroup, FilterCondition,
-  FilterFieldId, FilterOperator, FilterValue, GroupLogic,
-} from '../../types/leadFilter';
+import type { AdvancedFilter, FilterGroup, FilterCondition, FilterFieldId, FilterOperator, FilterValue } from '../../types/leadFilter';
 import {
   FILTER_FIELDS, FILTER_FIELD_CATEGORIES,
   OPERATOR_FULL_LABELS,

@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Mail, Phone, Edit, Plus, Linkedin, MapPin, Building,
-  Globe, ExternalLink, Calendar, Clock, TrendingUp, MessageSquare,
-  FileText, Activity, Target, Zap, CheckCircle, Eye, BarChart3
-} from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Edit, Plus, Linkedin, MapPin, Building, Globe, ExternalLink, Calendar, Clock, TrendingUp, MessageSquare, FileText, Activity, Target, CheckCircle, Eye } from 'lucide-react';
 
 interface Prospect {
   id: string;

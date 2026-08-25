@@ -1,40 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Edit3,
-  Trash2,
-  Phone,
-  Mail,
-  Calendar,
-  Star,
-  TrendingUp,
-  Activity,
-  MessageSquare,
-  FileText,
-  Clock,
-  User,
-  Building,
-  Tag,
-  Target,
-  Zap,
-  ChevronDown,
-  MoreHorizontal,
-  Linkedin,
-  Globe,
-  Users,
-  TrendingDown,
-  Plus,
-  Upload,
-  Send,
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle,
-  ExternalLink,
-  RefreshCw,
-  Bell,
-  X,
-} from 'lucide-react';
+import { Edit3, Trash2, Phone, Mail, Calendar, TrendingUp, Activity, MessageSquare, FileText, User, Building, Target, Zap, MoreHorizontal, Linkedin, Globe, Users, TrendingDown, Plus, Upload, AlertCircle, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, Bell, X } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
@@ -224,7 +190,6 @@ const LeadDetailPage: React.FC = () => {
   };
 
   const handleConvert = () => setShowConvertModal(true);
-
 
   const handleTerminalConfirm = async (reason: string, notes: string) => {
     if (!lead || !terminalModalAction) return;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Mail, Phone, Linkedin, Star, Building2, TrendingUp, MessageSquare, Calendar, ExternalLink } from 'lucide-react';
+import { Users, Mail, Phone, Linkedin, Star, Building2, MessageSquare, Calendar, ExternalLink } from 'lucide-react';
 
 export interface Contact {
   id: string;

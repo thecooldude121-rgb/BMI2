@@ -1,14 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LayoutGrid, List, Plus, Settings, Filter, Search, Download, 
-  Upload, RefreshCw, Eye, Edit, Trash2, MoreHorizontal, 
-  ChevronDown, ChevronUp, X, Check, AlertCircle, Users,
-  DollarSign, TrendingUp, Target, Calendar, Star, Zap,
-  ArrowUpDown, Columns, Save, Share, Copy, FileText,
-  Mail, Phone, Video, CheckSquare, Clock, Building
-} from 'lucide-react';
+import { LayoutGrid, List, Plus, Filter, Search, Download, RefreshCw, Eye, Edit, Trash2, MoreHorizontal, ChevronDown, ChevronUp, X, AlertCircle, DollarSign, TrendingUp, Target, Star, Columns } from 'lucide-react';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
-import { Deal, Pipeline, DealFilters, DealColumn, CustomView, BulkAction, DEFAULT_DEAL_COLUMNS, SAMPLE_PIPELINES } from '../../types/deals';
+import { Deal, Pipeline, DealFilters, DealColumn, CustomView, DEFAULT_DEAL_COLUMNS, SAMPLE_PIPELINES } from '../../types/deals';
 import { generateSampleDeals, SAMPLE_ACCOUNTS, SAMPLE_CONTACTS, SAMPLE_USERS } from '../../utils/sampleDealsData';
 import DealKanban from './DealKanban';
 import CreateDealForm from './CreateDealForm';

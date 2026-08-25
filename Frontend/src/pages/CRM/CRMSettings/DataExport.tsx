@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, FileText } from 'lucide-react';
+import { Download } from 'lucide-react';
 
 const DataExport: React.FC = () => {
   return (

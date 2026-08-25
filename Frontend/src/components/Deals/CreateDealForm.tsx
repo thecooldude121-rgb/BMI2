@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, Save, User, Building, DollarSign, Calendar, Target, 
-  ArrowRight, ArrowLeft, Check, AlertCircle, Search, Plus,
-  FileText, Tag, Globe, Briefcase, CreditCard, Settings,
-  Zap, Lightbulb, Bot, Sparkles, Info
-} from 'lucide-react';
+import { X, Save, DollarSign, Calendar, Target, ArrowRight, ArrowLeft, Check, AlertCircle, FileText, Tag, Briefcase, Lightbulb, Bot, Sparkles } from 'lucide-react';
 import { Deal, Pipeline } from '../../types/deals';
 
 interface CreateDealFormProps {

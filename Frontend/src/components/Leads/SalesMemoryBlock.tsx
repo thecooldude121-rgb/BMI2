@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Brain, Clock } from 'lucide-react';
 import type { Lead, LeadActivity } from '../../types/lead';
 import { buildSalesMemory } from '../../utils/leadTimeline';

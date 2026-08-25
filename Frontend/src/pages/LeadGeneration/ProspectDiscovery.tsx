@@ -1,18 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, Filter, Download, Upload, Eye, Plus, Target, Users, 
-  Building, Globe, MapPin, DollarSign, TrendingUp, Star, Zap,
-  ArrowLeft, Settings, RefreshCw, Database, Bot, Sparkles,
-  ChevronDown, ChevronUp, X, Save, Play, Pause, CheckCircle,
-  AlertCircle, Clock, Mail, Phone, Calendar, Tag, Briefcase,
-  Award, Code, Cpu, Shield, Heart, Banknote, Factory, GraduationCap,
-  Home, Car, Plane, Ship, Truck, Wrench, Palette, Music, Camera,
-  Book, Coffee, Gamepad2, Headphones, Monitor, Smartphone, Tablet,
-  Wifi, Cloud, Server, HardDrive, Lock, Key, UserCheck, FileText,
-  BarChart3, PieChart, LineChart, Activity, Layers, Grid, List,
-  Columns, Rows, Table, Archive, Folder, FolderOpen, File,
-  Image, Video, Mic, Speaker, Volume2, VolumeX, Bell, BellOff
-} from 'lucide-react';
+import { Search, Filter, Download, Eye, Plus, Target, Users, Building, Globe, MapPin, TrendingUp, Zap, ArrowLeft, Database, Bot, Sparkles, ChevronDown, ChevronUp, X, Save, CheckCircle, Mail, Phone, Cpu, Heart, Banknote, Factory, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface SearchFilters {

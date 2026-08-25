@@ -1,12 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, TrendingUp,
-  Users, DollarSign, Calendar, Edit, MoreVertical, ExternalLink,
-  Plus, Star, Target, Briefcase, FileText, MessageSquare,
-  TrendingDown, AlertCircle, CheckCircle2, Eye, Download,
-  Upload, ChevronDown, ChevronRight, GitMerge, Trash2, Copy, Archive
-} from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, Globe, MapPin, TrendingUp, Users, DollarSign, Calendar, Edit, MoreVertical, Plus, Star, Target, FileText, MessageSquare, Eye, Download, Upload, ChevronDown, ChevronRight, GitMerge, Trash2, Copy, Archive } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
 import { fetchContacts } from '../../utils/contactsApi';
 import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';

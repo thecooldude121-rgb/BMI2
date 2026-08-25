@@ -1,12 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  ArrowLeft, Edit, Mail, Phone, Video, Calendar, FileText, 
-  DollarSign, User, Building, Clock, Tag, Paperclip, Activity,
-  MoreHorizontal, Star, TrendingUp, Globe, Target, Settings,
-  Plus, Download, Share, Copy, Eye, Trash2, Archive, Flag,
-  CheckCircle, AlertCircle, X, Save, ChevronDown, ChevronUp,
-  Briefcase
-} from 'lucide-react';
+import { ArrowLeft, Edit, Mail, Phone, Video, Calendar, FileText, DollarSign, User, Building, Clock, Tag, Paperclip, Activity, MoreHorizontal, TrendingUp, Globe, Target, Plus, Download, Eye, CheckCircle, AlertCircle, X, Save, ChevronDown, ChevronUp, Briefcase } from 'lucide-react';
 import { Deal, Pipeline } from '../../types/deals';
 
 interface DealDetailPageProps {

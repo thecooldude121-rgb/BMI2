@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, XCircle, AlertCircle, AlertTriangle, User, Search } from 'lucide-react';
+import { X, XCircle, AlertCircle, AlertTriangle, Search } from 'lucide-react';
 import { disqualificationConfig } from '../../utils/disqualificationMockData';
 
 interface DisqualifyLeadModalProps {

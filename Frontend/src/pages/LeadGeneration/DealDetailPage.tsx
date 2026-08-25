@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, DollarSign, User, Building, Calendar, Target, 
-  Edit, Share, Download, Eye, Settings, Activity, Mail,
-  Phone, Video, CheckSquare, Clock, Star, TrendingUp,
-  ChevronDown, ChevronUp, Plus, Tag, FileText
-} from 'lucide-react';
+import { ArrowLeft, DollarSign, Target, Edit, Activity, Mail, Phone, Video, CheckSquare, Clock, TrendingUp, ChevronDown, ChevronUp, Plus, Tag } from 'lucide-react';
 
 const DealDetailPage: React.FC = () => {
   const { id } = useParams();

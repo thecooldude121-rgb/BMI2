@@ -1,37 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import {
-  Eye,
-  Download,
-  Share2,
-  Edit,
-  Trash2,
-  ChevronRight,
-  FileText,
-  Calendar,
-  User,
-  Tag,
-  Folder,
-  Clock,
-  TrendingUp,
-  MoreVertical,
-  Briefcase,
-  Building2,
-  Mail,
-  Phone,
-  Upload,
-  RotateCcw,
-  Send,
-  X,
-  Check,
-  CheckCircle2,
-  Archive,
-  Paperclip,
-  UserPlus,
-  Plus,
-  Sparkles
-} from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Eye, Download, Share2, Edit, Trash2, ChevronRight, FileText, Calendar, User, Clock, Briefcase, Building2, Mail, Phone, Upload, RotateCcw, Send, X, CheckCircle2, Archive, Paperclip, Plus, Sparkles } from 'lucide-react';
+
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import ShareDocumentModal from '../../components/Documents/ShareDocumentModal';

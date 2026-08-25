@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, ChevronRight, Check, AlertTriangle } from 'lucide-react';
+import { X, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 
 interface PermissionSetBuilderProps {
   isOpen: boolean;

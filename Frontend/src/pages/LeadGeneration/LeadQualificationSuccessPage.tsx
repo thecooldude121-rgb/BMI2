@@ -1,22 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  CheckCircle,
-  ArrowLeft,
-  ExternalLink,
-  Mail,
-  Calendar,
-  FileText,
-  Sparkles,
-  TrendingUp,
-  DollarSign,
-  Target,
-  Clock,
-  User,
-  Building2,
-  Lightbulb,
-  Download
-} from 'lucide-react';
+import { CheckCircle, ArrowLeft, ExternalLink, Mail, Calendar, FileText, Target, Lightbulb } from 'lucide-react';
 import {
   getQualificationSuccessData,
   formatCurrency,

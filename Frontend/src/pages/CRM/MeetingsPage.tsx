@@ -1,35 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Calendar,
-  Plus,
-  MoreVertical,
-  Video,
-  Phone,
-  Users,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  Zap,
-  BarChart3,
-  Target,
-  Search,
-  Filter,
-  Download,
-  List,
-  Play,
-  FileText,
-  MapPin,
-  Building2,
-  DollarSign,
-  Sparkles,
-  AlertCircle,
-  ChevronRight,
-  Edit,
-  Trash2,
-  Share2,
-  X
-} from 'lucide-react';
+import { Calendar, Plus, MoreVertical, Video, Phone, Users, Clock, CheckCircle, Zap, BarChart3, Target, Search, Download, List, Play, FileText, MapPin, Building2, DollarSign, Sparkles, ChevronRight, Edit, Trash2, Share2, X } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { sampleMeetings, meetingStats, aiInsights } from '../../utils/sampleMeetingsData';
 import { Meeting, MeetingFilters } from '../../types/meeting';

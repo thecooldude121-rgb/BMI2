@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Eye, EyeOff, Save } from 'lucide-react';
+import { Lock, Eye, EyeOff } from 'lucide-react';
 
 const PasswordSettings: React.FC = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);

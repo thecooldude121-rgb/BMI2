@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { AssignmentResult } from '../../utils/assignmentRules/types';
-import { COMPANY_SIZE_OPTIONS, SOURCE_OPTIONS, WEEKDAY_LABELS } from '../../utils/assignmentRules/types';
+import { COMPANY_SIZE_OPTIONS, SOURCE_OPTIONS } from '../../utils/assignmentRules/types';
 import { evaluateAssignmentRules } from '../../utils/assignmentRules/evaluationEngine';
 import { getRules } from '../../utils/assignmentRules/rulesStore';
 import { getTerritories } from '../../utils/assignmentRules/territoryStore';
-import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
 
 interface MockLead {
   source: string;

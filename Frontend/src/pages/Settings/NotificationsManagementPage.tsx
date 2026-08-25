@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Bell, Plus, Trash2, Edit, ArrowLeft, MessageSquare, Mail,
-  Webhook, Check, X, Activity, TrendingUp, Clock, Zap
-} from 'lucide-react';
+import { Bell, Plus, Trash2, Edit, ArrowLeft, Check, X, Activity, TrendingUp, Clock, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { NotificationConfiguration, NotificationChannel } from '../../types/workflowAutomation';
 

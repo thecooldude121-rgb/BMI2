@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, ChevronRight, Mail, Phone, Calendar, TrendingUp, DollarSign, Target, Clock, AlertCircle } from 'lucide-react';
+import { Users, ChevronRight, Mail, Phone, Calendar, TrendingUp, DollarSign, Target, Clock } from 'lucide-react';
 
 interface DirectReport {
   id: string;

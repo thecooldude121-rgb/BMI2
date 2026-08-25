@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { partialEnrichmentData, formatFieldName, getCategoryTotals } from '../../utils/partialEnrichmentMockData';
 
 interface PartialEnrichmentModalProps {

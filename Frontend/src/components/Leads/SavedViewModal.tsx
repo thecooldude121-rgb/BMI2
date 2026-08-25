@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Pin, Trash2, Edit2, Check, AlertTriangle } from 'lucide-react';
 import type { LeadView } from '../../types/lead';
 

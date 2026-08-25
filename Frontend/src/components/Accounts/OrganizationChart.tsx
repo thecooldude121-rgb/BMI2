@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Building2, ChevronDown, ChevronRight, Mail, Phone } from 'lucide-react';
+import { Building2, ChevronDown, ChevronRight, Mail, Phone } from 'lucide-react';
 
 export interface OrgNode {
   id: string;

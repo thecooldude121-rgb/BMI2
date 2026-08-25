@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { TerritoryDefinition } from '../../utils/assignmentRules/types';
 import { getTerritories, upsertTerritory, deleteTerritory, resetTerritoriesToDefaults } from '../../utils/assignmentRules/territoryStore';
 

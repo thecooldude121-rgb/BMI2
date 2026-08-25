@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useLeads } from '../../../contexts/LeadContext';
 import { buildInitialMappings } from './columnMapper';
@@ -9,11 +9,7 @@ import Step3Validation from './Step3Validation';
 import Step4Rules from './Step4Rules';
 import Step5Confirm from './Step5Confirm';
 import Step6Results from './Step6Results';
-import type {
-  ImportStep, ParsedCSV, ColumnMapping, ParsedRow,
-  ImportRules, ImportProgress, ImportResult, DEFAULT_RULES,
-} from './types';
-import { DEFAULT_RULES as DEFAULT_RULES_VALUE } from './types';
+import type { ImportStep, ParsedCSV, ColumnMapping, ParsedRow, ImportRules, ImportProgress, ImportResult } from './types';
 
 // ── Step metadata ─────────────────────────────────────────────────────────────
 

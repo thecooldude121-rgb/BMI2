@@ -1,14 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Trophy, Star, Zap, Target, TrendingUp, Award, Crown, Flame,
-  Users, DollarSign, Phone, Mail, Calendar, CheckSquare, Plus,
-  ChevronRight, ChevronUp, ChevronDown, Sparkles, Gift, Clock,
-  BarChart3, Activity, MessageSquare, Video, FileText, Bot,
-  Lightbulb, Rocket, Shield, Diamond, Heart, ThumbsUp, Eye,
-  ArrowUp, ArrowDown, PlayCircle, PauseCircle, RefreshCw,
-  Bell, Settings, Share2, Download, Filter, Search, X, Check
-} from 'lucide-react';
+import { Trophy, Star, Zap, Target, TrendingUp, Award, Crown, Flame, Users, DollarSign, Phone, Mail, Calendar, CheckSquare, Plus, ChevronRight, Sparkles, Gift, BarChart3, Activity, MessageSquare, Bot, Lightbulb, Heart, Eye, ArrowUp, ArrowDown, RefreshCw, X } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
 // Enhanced TypeScript Interfaces for Gamification

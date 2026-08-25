@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { AlertTriangle, Save, LogOut, X } from 'lucide-react';
 
 interface UnsavedChangesModalProps {

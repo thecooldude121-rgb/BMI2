@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle, Clock, Loader2, XCircle, Zap, RotateCcw, Edit3, CheckCircle as VerifyIcon, History, XOctagon } from 'lucide-react';
 import type { EnrichmentProgressState, EnrichedFieldData } from '../../types/enrichmentProgress';
 

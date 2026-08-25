@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Users, ChevronDown, ChevronRight, Plus, Copy, Trash2, Edit2,
-  Save, X, Search, AlertCircle, CheckCircle, Shield, Clock,
-  User, Calendar, FileText, Eye, EyeOff, Info, Move, List, GitBranch, ArrowLeft
-} from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Plus, Copy, Trash2, Edit2, Save, X, Search, AlertCircle, Shield, Clock, User, Calendar, FileText, Eye, EyeOff, List, GitBranch, ArrowLeft } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import { SystemRole } from '../../types/settings';
 import { RolePermissionEditor } from '../../components/Permissions/RolePermissionEditor';

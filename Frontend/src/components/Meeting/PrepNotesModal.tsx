@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { X, Users, DollarSign, Clock, FileText, Lightbulb, CheckSquare, Download } from 'lucide-react';
 
 interface PrepNotesModalProps {

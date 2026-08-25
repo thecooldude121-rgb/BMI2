@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, TrendingUp, Users, X } from 'lucide-react';
+import { Building2, X } from 'lucide-react';
 
 interface CompanyDetailsSectionProps {
   formData: any;

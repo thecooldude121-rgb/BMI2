@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, CreditCard, Download, Target } from 'lucide-react';
+import { Check, CreditCard, Target } from 'lucide-react';
 
 interface Invoice {
   date: string;

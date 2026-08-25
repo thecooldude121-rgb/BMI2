@@ -5,68 +5,16 @@ import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchDeals, updateDeal, transitionDealStage, bulkUpdateDeals } from '../../utils/dealsApi';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
-import {
-  formatDisplayDate,
-  formatRelativeTime,
-  formatCloseDate,
-  daysFromNow,
-  daysFromNowLabel,
-  isWithinDays,
-  parseDateMs,
-  normalizeDateField,
-} from '../../utils/dateUtils';
+import { formatRelativeTime, formatCloseDate, daysFromNow, isWithinDays, parseDateMs, normalizeDateField } from '../../utils/dateUtils';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { getStageChartColor } from '../../config/stageColors';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import {
-  Plus,
-  Search,
-  Filter,
-  Download,
-  Settings,
-  TrendingUp,
-  AlertTriangle,
-  Clock,
-  DollarSign,
-  Target,
-  Building2,
-  User,
-  Calendar,
-  Sparkles,
-  CheckCircle2,
-  XCircle,
-  BarChart3,
-  MoreVertical,
-  MoreHorizontal,
-  FileDown,
-  Upload,
-  Archive,
-  Columns,
-  LayoutList,
-  AlignJustify,
-  RotateCcw,
-  X as XIcon,
-  Eye,
-  ShieldAlert,
-  ChevronDown,
-  ArrowUpDown,
-  Check,
-  Bookmark,
-  Pencil,
-  Trash2,
-} from 'lucide-react';
+import { Plus, Search, Filter, Download, Settings, TrendingUp, AlertTriangle, Target, Building2, Calendar, CheckCircle2, XCircle, MoreVertical, MoreHorizontal, FileDown, Upload, Archive, Columns, LayoutList, AlignJustify, RotateCcw, X as XIcon, Eye, ShieldAlert, ChevronDown, ArrowUpDown, Check, Bookmark, Pencil, Trash2 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
 import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
 import DealSlideoutPanel from '../../components/Deal/DealSlideoutPanel';
-import {
-  SAVED_VIEWS,
-  findView,
-  getActiveFilterPills,
-  isAnyFilterActive,
-  type SavedView,
-  type UserSavedView,
-} from '../../utils/dealViews';
+import { SAVED_VIEWS, findView, getActiveFilterPills, type SavedView, type UserSavedView } from '../../utils/dealViews';
 import { type ColumnKey, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 import ManagerInspectionBar from '../../components/Deal/ManagerInspectionBar';

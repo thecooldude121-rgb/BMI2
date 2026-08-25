@@ -1,34 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Video,
-  Phone,
-  Users,
-  Calendar,
-  Clock,
-  CheckCircle,
-  Sparkles,
-  Play,
-  Download,
-  Share2,
-  Edit,
-  MoreVertical,
-  FileText,
-  DollarSign,
-  Building2,
-  Mail,
-  PhoneCall,
-  ChevronRight,
-  Target,
-  TrendingUp,
-  AlertCircle,
-  Plus,
-  Trash2,
-  BarChart3,
-  X
-} from 'lucide-react';
+import { Video, Phone, Users, Calendar, CheckCircle, Sparkles, Play, Download, Share2, Edit, MoreVertical, FileText, DollarSign, Building2, Mail, ChevronRight, TrendingUp, Plus, Trash2, BarChart3, X } from 'lucide-react';
 import { sampleMeetings } from '../../utils/sampleMeetingsData';
-import { Meeting, MeetingActionItem } from '../../types/meeting';
+import { MeetingActionItem } from '../../types/meeting';
 import { useToast } from '../../contexts/ToastContext';
 
 export default function MeetingDetailPage() {

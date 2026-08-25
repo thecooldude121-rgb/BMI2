@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Search, Star, Play, Edit, Copy, Trash2, Share2, FolderOpen,
-  ArrowLeft, Grid3X3, List, MoreVertical, CheckSquare, X,
-  Download, Move, Users, Calendar, Filter, Plus, Sparkles
-} from 'lucide-react';
+import { Search, Star, Play, Copy, Trash2, ArrowLeft, Grid3X3, List, Download, Move, Calendar, Plus, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface SavedSearch {

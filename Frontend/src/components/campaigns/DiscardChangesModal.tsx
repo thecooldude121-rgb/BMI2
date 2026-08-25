@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { AlertTriangle, Save, Trash2, X } from 'lucide-react';
 
 interface DiscardChangesModalProps {

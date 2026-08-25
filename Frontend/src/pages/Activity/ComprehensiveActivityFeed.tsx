@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Activity, Calendar, Phone, Mail, FileText, User, DollarSign,
-  Download, Search, ChevronDown, TrendingUp, CheckCircle,
-  Clock, AlertCircle, ExternalLink, ChevronRight, Smile,
-  Target, Upload, Bot
-} from 'lucide-react';
+import { Activity, Calendar, Phone, Mail, FileText, User, DollarSign, Download, Search, ChevronDown, CheckCircle, AlertCircle, ExternalLink, ChevronRight, Upload, Bot } from 'lucide-react';
 
 interface ActivityItem {
   id: string;

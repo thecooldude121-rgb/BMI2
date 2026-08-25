@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Sparkles, Upload, Download, Play, Pause, CheckCircle,
-  AlertCircle, Clock, Users, Building, Mail, Phone,
-  Globe, Target, TrendingUp, Eye, Settings, Filter,
-  Search, Plus, X, RefreshCw, BarChart3, Zap, ArrowLeft
-} from 'lucide-react';
+import { Sparkles, Upload, Download, Play, Pause, CheckCircle, AlertCircle, Clock, Users, Building, Mail, Phone, Globe, Target, TrendingUp, Eye, Settings, Search, Plus, X, RefreshCw, Zap, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DataEnrichmentJob } from '../../types/leadGeneration';
 

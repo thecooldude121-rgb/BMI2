@@ -1,36 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  Plus,
-  Settings,
-  ChevronDown,
-  Linkedin,
-  ExternalLink,
-  RefreshCw,
-  CheckCircle,
-  TrendingUp,
-  Building,
-  Users,
-  Target,
-  Zap,
-  FileText,
-  Upload,
-  DollarSign,
-  Calendar,
-  AlertCircle,
-  Bell,
-  Star,
-  Edit3,
-  Trash2,
-  Download,
-  X,
-  Search,
-  BarChart3,
-  Activity
-} from 'lucide-react';
+import { Mail, Phone, Plus, Settings, ChevronDown, Linkedin, ExternalLink, RefreshCw, CheckCircle, TrendingUp, Building, Users, Target, Zap, FileText, Upload, Star, Edit3, Trash2, Download, X, BarChart3, Activity } from 'lucide-react';
 import { sarahLeeMockData } from '../../utils/sarahLeeMockData';
 
 const LeadDetailPage: React.FC = () => {

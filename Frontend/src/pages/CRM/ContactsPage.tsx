@@ -1,26 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Users,
-  Plus,
-  Upload,
-  Search,
-  ChevronDown,
-  Mail,
-  Phone,
-  Eye,
-  Target,
-  Building2,
-  Globe,
-  Edit,
-  CheckSquare,
-  Download,
-  Trash2,
-  Tag,
-  Grid,
-  List,
-  Columns
-} from 'lucide-react';
+import { Users, Plus, Upload, Search, ChevronDown, Mail, Phone, Eye, Target, Building2, Globe, Edit, Download, Trash2, Tag, Grid, List, Columns } from 'lucide-react';
 import { Contact, ContactFilters } from '../../types/contact';
 import { fetchContacts } from '../../utils/contactsApi';
 import ContactForm from '../../components/CRM/ContactForm';

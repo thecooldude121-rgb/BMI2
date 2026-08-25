@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Building2, User, Eye, Search, Plus, X, AlertTriangle, Users, CheckCircle2 } from 'lucide-react';
+import { User, Eye, Search, Plus, X, AlertTriangle, Users, CheckCircle2 } from 'lucide-react';
 import {
   CONTACT_ROLES,
   DEFAULT_CONTACT_ROLE,

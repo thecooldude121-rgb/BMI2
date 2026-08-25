@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Calendar, Plus, Search, Filter, Download, Upload, Eye, Edit,
-  Trash2, Video, Phone, MapPin, Clock, Users, TrendingUp,
-  Tag, MoreHorizontal, X, Settings, RefreshCw, CheckCircle,
-  AlertCircle, Play, Pause, ArrowLeft
-} from 'lucide-react';
+import { Calendar, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Video, Clock, Users, TrendingUp, MoreHorizontal, X, RefreshCw, CheckCircle, AlertCircle, Play, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Meeting } from '../../types/leadGeneration';
 

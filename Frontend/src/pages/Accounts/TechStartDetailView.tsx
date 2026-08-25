@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Building2, Mail, Phone, Globe, MapPin, TrendingUp,
-  Users, DollarSign, Calendar, Edit, MoreVertical, ExternalLink,
-  Plus, Star, Target, Briefcase, FileText, MessageSquare,
-  Sparkles, Clock, Activity, Video, FileCheck
-} from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, DollarSign, Calendar, Edit, MoreVertical, Plus, Star, Target, FileText, Sparkles, Clock, Activity, Video } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { techstartMockData } from '../../utils/techstartMockData';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Info } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUtils';
 import { formatDisplayDate, daysFromNowLabel } from '../../../utils/dateUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
@@ -44,7 +44,6 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
   };
   const stageEmoji = stageObj ? (stageColorDot[stageObj.color] ?? '📊') : '📊';
   const stageName = stageObj?.name ?? 'Unknown';
-
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">

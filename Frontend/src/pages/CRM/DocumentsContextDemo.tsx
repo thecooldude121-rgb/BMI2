@@ -1,15 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import {
-  Upload, Search, Download, Trash2, FileText, Image as ImageIcon,
-  FileSpreadsheet, Video, File, Star, Users, Calendar, FolderOpen,
-  ChevronDown, ChevronRight, Filter, MoreVertical, Eye, Share2, Edit2,
-  Briefcase, CheckSquare, Square, Clock, TrendingUp, AlertCircle, Link2,
-  Grid3x3, List, Phone, Mail, Building2, Zap, UserCheck, Play, Menu, X, Plus, XCircle
-} from 'lucide-react';
-import { useToast } from '../../contexts/ToastContext';
-import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import UploadDocumentModal from '../../components/Documents/UploadDocumentModal';
-import DragDropOverlay from '../../components/Documents/DragDropOverlay';
+import React from 'react';
+import { FileText, Calendar, ChevronRight, Briefcase, Mail, Building2, Zap, UserCheck, Play } from 'lucide-react';
+
+import { useNavigate } from 'react-router-dom';
+
 import { documentsService, Document as ServiceDocument } from '../../services/documentsService';
 
 const DocumentsContextDemo: React.FC = () => {

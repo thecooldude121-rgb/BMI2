@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, AlertTriangle, ChevronLeft, ChevronRight, Merge, CheckSquare, Square } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { DuplicateCandidate } from '../../utils/leadDuplicates';

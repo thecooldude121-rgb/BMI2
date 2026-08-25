@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Workflow, Plus, Play, Pause, Trash2, Copy, Settings,
-  ArrowLeft, Zap, Clock, TrendingUp, Activity, Edit,
-  Mail, Phone, MessageSquare, Calendar, Target, Tag, User
-} from 'lucide-react';
+import { Workflow, Plus, Play, Pause, Trash2, Copy, ArrowLeft, Zap, Clock, TrendingUp, Activity, Edit, Mail, MessageSquare, Calendar, Target, Tag, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { WorkflowAutomation, WorkflowTriggerType, WorkflowActionType } from '../../types/workflowAutomation';
 

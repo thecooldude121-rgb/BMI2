@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Target, TrendingUp, Building2, Sparkles, DollarSign,
-  Calendar, FileText, Settings, Upload, PlusCircle,
-  Bell, ArrowRight, Clock, User, Search, X, MoreVertical,
-  Mail, UserPlus, Trash2, CheckCircle
-} from 'lucide-react';
+import { Target, Sparkles, FileText, Settings, Upload, PlusCircle, Bell, ArrowRight, Clock, User, Search, X, MoreVertical, Mail, UserPlus, Trash2, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import {

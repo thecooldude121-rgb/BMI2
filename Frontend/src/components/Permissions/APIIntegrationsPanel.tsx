@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Key, Webhook, Link as LinkIcon, Copy, Check, Plus, Trash2, Edit,
-  Eye, EyeOff, Power, AlertCircle, ExternalLink, Code, FileText,
-  Settings, RefreshCw, Activity, X
-} from 'lucide-react';
+import { Key, Webhook, Link as LinkIcon, Copy, Check, Plus, Trash2, Power, ExternalLink, Code, FileText, Settings, RefreshCw, Activity, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface APIKey {

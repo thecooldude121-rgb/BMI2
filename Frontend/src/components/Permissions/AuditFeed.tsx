@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Clock, User, Shield, Edit, Trash2, Plus, CheckCircle, XCircle,
-  MessageSquare, AtSign, Filter, Download, RefreshCw, Search, ChevronDown
-} from 'lucide-react';
+import { Clock, Shield, Edit, Trash2, Plus, CheckCircle, XCircle, MessageSquare, AtSign, Download, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface AuditEntry {

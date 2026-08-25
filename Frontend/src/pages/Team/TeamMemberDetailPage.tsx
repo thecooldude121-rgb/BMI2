@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Building2, Users, Phone, MessageSquare, CheckCircle, ExternalLink, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, Send, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
+import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Building2, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
 import { TeamEmailComposerModal } from '../../components/Team/TeamEmailComposerModal';

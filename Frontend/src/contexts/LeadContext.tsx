@@ -31,24 +31,7 @@ import {
   enrichLeadViaAPI,
 } from '../utils/leadsApi';
 import { useAuth } from './AuthContext';
-import {
-  Lead,
-  LeadActivity,
-  LeadNote,
-  LeadTask,
-  LeadEmail,
-  LeadCall,
-  LeadMeeting,
-  Tag,
-  LeadPipeline,
-  LeadPipelineStage,
-  LeadView,
-  LeadAIInsight,
-  LeadFilters,
-  BulkOperation,
-  LeadEnrichmentRequest,
-  LeadEnrichmentResponse
-} from '../types/lead';
+import { Lead, LeadActivity, LeadNote, LeadTask, LeadEmail, LeadCall, LeadMeeting, Tag, LeadPipeline, LeadView, LeadAIInsight, LeadFilters, BulkOperation, LeadEnrichmentRequest, LeadEnrichmentResponse } from '../types/lead';
 
 interface LeadContextType {
   leads: Lead[];

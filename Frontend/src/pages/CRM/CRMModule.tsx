@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AccountsProvider } from '../../contexts/AccountsContext';
 import CRMDashboard from './CRMDashboard';
@@ -6,7 +6,7 @@ import LeadsPage from './LeadsPage';
 import ContactsPage from './ContactsPage';
 import ContactDetailView from './ContactDetailView';
 import AddEditContactPage from './AddEditContactPage';
-import CompaniesPage from './CompaniesPage';
+
 import DealsKanbanPage from './DealsKanbanPage';
 import ForecastPage from './ForecastPage';
 import ActivitiesPage from './ActivitiesPage';
@@ -15,7 +15,7 @@ import AddLeadPage from './AddLeadPage';
 import LeadDetailPage from './LeadDetailPage';
 import GamificationPage from './GamificationPage';
 import GamificationLeaderboard from './GamificationLeaderboard';
-import DealDetailPage from '../../components/Deal/DealDetailPage';
+
 import ComprehensiveDealDetailPage from '../Deal/ComprehensiveDealDetailPage';
 import ComprehensiveDealFormPage from '../Deal/ComprehensiveDealFormPage';
 import { ComprehensiveActivityFeed } from '../Activity';

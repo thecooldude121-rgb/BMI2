@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, AlertCircle, CheckCircle2, Search, Mail, Phone, Video } from 'lucide-react';
+import { X, Clock, CheckCircle2, Search } from 'lucide-react';
 
 interface MoreOptionsDropdownProps {
   isOpen: boolean;

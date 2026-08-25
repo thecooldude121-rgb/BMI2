@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Workflow, Play, Pause, Edit, Trash2, Copy, Download, Upload, Plus, X,
-  GitBranch, Clock, Zap, CheckCircle, AlertTriangle, Activity, BarChart,
-  Users, Mail, Database, FileText, Settings, Filter, Search, Eye, Save,
-  RefreshCw, Target, TrendingUp, MessageSquare, Calendar, Share2, Bell
-} from 'lucide-react';
+import { Workflow, Play, Pause, Edit, Copy, Upload, Plus, X, GitBranch, Clock, Zap, CheckCircle, Activity, BarChart, Filter, Search, Eye, Target, TrendingUp } from 'lucide-react';
 
 interface WorkflowDefinition {
   id: string;

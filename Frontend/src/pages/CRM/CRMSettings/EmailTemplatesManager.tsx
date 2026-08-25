@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Pencil, Trash2, Check, Info } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 interface EmailTemplate {
   id: string;

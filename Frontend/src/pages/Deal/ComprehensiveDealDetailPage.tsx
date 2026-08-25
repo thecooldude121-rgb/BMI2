@@ -4,7 +4,7 @@ import { getDeal, updateDeal, createDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
-import { ChevronRight, X, Keyboard, MoreVertical } from 'lucide-react';
+import { X, Keyboard, MoreVertical } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
 import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
 import { DealDetailsPanel } from '../../components/Deal/DealDetailsPanel';

@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft, Mail, Phone, Calendar, DollarSign, Edit, MoreVertical, ExternalLink, MapPin,
-  Building2, Linkedin, Cake, Plus, FileText, Upload, Target, TrendingUp, AlertTriangle,
-  CheckCircle, Clock, Sparkles, Users, BarChart3, Zap, Play, Share2, Globe, Star,
-  User, MessageSquare, Send, Download
-} from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, DollarSign, Edit, MoreVertical, ExternalLink, Building2, Cake, Target, AlertTriangle, CheckCircle, Sparkles, Users, Play, Share2, Star } from 'lucide-react';
 import { fetchContactById } from '../../utils/contactsApi';
 import type { Contact } from '../../types/contact';
 import ActiveDealsSection from '../../components/Contact/ActiveDealsSection';

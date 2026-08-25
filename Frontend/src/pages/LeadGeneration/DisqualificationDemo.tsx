@@ -1,13 +1,7 @@
 import React, { useState } from 'react';
-import { XCircle, CheckCircle, Clock, TrendingDown, Users, FileText, AlertCircle } from 'lucide-react';
+import { XCircle, CheckCircle, Clock, TrendingDown, Users, AlertCircle } from 'lucide-react';
 import DisqualifyLeadModal, { DisqualificationData } from '../../components/LeadQualification/DisqualifyLeadModal';
-import {
-  sampleLeads,
-  exampleDisqualifications,
-  getDisqualificationStats,
-  getReasonById,
-  getCompetitorById
-} from '../../utils/disqualificationMockData';
+import { sampleLeads, exampleDisqualifications, getDisqualificationStats, getCompetitorById } from '../../utils/disqualificationMockData';
 import { simulateDisqualification } from '../../services/disqualificationService';
 
 const DisqualificationDemo: React.FC = () => {

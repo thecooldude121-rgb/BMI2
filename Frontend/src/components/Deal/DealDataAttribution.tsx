@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, Target, CheckCircle2, RefreshCw, ChevronDown } from 'lucide-react';
+import { Database, CheckCircle2, RefreshCw, ChevronDown } from 'lucide-react';
 import { DataVerificationModal } from './DealActivityModals';
 import { useToast } from '../../contexts/ToastContext';
 

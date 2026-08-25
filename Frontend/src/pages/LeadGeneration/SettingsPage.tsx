@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Settings, User, Mail, Calendar, Zap, Database, Shield,
-  Bell, Globe, Download, Upload, Save, RefreshCw, Eye,
-  Lock, Key, Smartphone, Monitor, Palette, Languages, ArrowLeft
-} from 'lucide-react';
+import { Settings, User, Mail, Calendar, Zap, Database, Shield, Bell, Globe, Download, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const SettingsPage: React.FC = () => {

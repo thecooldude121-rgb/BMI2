@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Mail, Linkedin, Workflow, Check, Lock, AlertTriangle, Info, Sparkles } from 'lucide-react';
 
 export type CampaignType = 'email' | 'linkedin' | 'multi-channel' | null;

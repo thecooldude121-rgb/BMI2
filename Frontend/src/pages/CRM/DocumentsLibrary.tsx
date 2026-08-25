@@ -1,11 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import {
-  Upload, Search, Download, Trash2, FileText, Image as ImageIcon,
-  FileSpreadsheet, Video, File, Star, Users, Calendar, FolderOpen,
-  ChevronDown, ChevronRight, Filter, MoreVertical, Eye, Share2, Edit2,
-  Briefcase, CheckSquare, Square, Clock, TrendingUp, AlertCircle, Link2,
-  Grid3x3, List, Phone, Mail, Building2, Zap, UserCheck, Play, Menu, X, Plus, XCircle
-} from 'lucide-react';
+import { Upload, Search, Download, Trash2, FileText, Image as ImageIcon, FileSpreadsheet, File, Star, Users, Calendar, FolderOpen, ChevronDown, ChevronRight, Filter, MoreVertical, Eye, Share2, Edit2, Briefcase, CheckSquare, Square, AlertCircle, Link2, Grid3x3, List, Phone, Mail, Building2, Zap, UserCheck, Play, Menu, X, Plus, XCircle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import UploadDocumentModal from '../../components/Documents/UploadDocumentModal';
@@ -178,7 +172,6 @@ const RECENT_DOCUMENTS_MOCK = [
     file_url: "/storage/documents/case_study.pdf"
   }
 ];
-
 
 // Owner filter options. The per-owner `count` values are display-only leftovers
 // from the fixture era and are not derived from the loaded documents — the list

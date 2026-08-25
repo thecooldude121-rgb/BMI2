@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, Building, Globe, MapPin, Users, DollarSign, 
-  TrendingUp, Star, Target, Zap, Plus, ChevronDown, ChevronUp,
-  Clock, Activity, FileText, Mail, Phone, Calendar, Tag,
-  Edit, Share, Download, Eye, Settings, Sparkles, Bot
-} from 'lucide-react';
+import { ArrowLeft, Building, Globe, MapPin, Users, DollarSign, TrendingUp, Star, Target, Zap, Plus, ChevronDown, ChevronUp, Clock, Activity, Mail, Calendar, Tag, Edit, Share, Settings, Sparkles, Bot } from 'lucide-react';
 import { Company } from '../../types/leadGeneration';
 
 const CompanyDetailPage: React.FC = () => {

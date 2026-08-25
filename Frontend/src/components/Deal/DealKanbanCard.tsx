@@ -29,12 +29,7 @@
  */
 
 import React, { useState } from 'react';
-import {
-  Building2, Sparkles,
-  CheckCircle2, AlertTriangle, XCircle,
-  Mail, Activity, Edit2, MoreHorizontal,
-  Diamond, ArrowRight, Clock,
-} from 'lucide-react';
+import { Building2, Sparkles, CheckCircle2, AlertTriangle, Mail, Activity, Edit2, MoreHorizontal, ArrowRight } from 'lucide-react';
 import {
   formatCloseDate,
   formatRelativeTime,

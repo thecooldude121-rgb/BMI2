@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  X, Users, Trash2, Edit, Mail, Tag, Archive, 
-  Target, DollarSign, Calendar, AlertTriangle, Check 
-} from 'lucide-react';
+import { X, Users, Trash2, Mail, Tag, Archive, Target, AlertTriangle, Check } from 'lucide-react';
 import { Pipeline } from '../../types/deals';
 
 interface BulkActionsBarProps {

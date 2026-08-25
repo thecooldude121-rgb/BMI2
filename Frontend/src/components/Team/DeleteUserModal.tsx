@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, AlertTriangle, XCircle } from 'lucide-react';
+import { X, AlertTriangle, XCircle } from 'lucide-react';
 
 interface TeamMember {
   id: string;

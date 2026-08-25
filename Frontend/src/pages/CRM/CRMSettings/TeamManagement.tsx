@@ -1,48 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Users,
-  UserPlus,
-  Download,
-  Upload,
-  Search,
-  Edit,
-  MoreVertical,
-  Mail,
-  Phone,
-  User,
-  Calendar,
-  Clock,
-  BarChart3,
-  DollarSign,
-  Briefcase,
-  Shield,
-  Activity,
-  TrendingUp,
-  FileText,
-  Lock,
-  CheckCircle,
-  ChevronRight,
-  AlertCircle,
-  RefreshCw,
-  MapPin,
-  Globe,
-  Building,
-  X,
-  Trash2
-} from 'lucide-react';
-import {
-  mockTeamMembers,
-  mockTeamCapacity,
-  mockRoleDefinitions,
-  mockDepartments,
-  mockAuditLog,
-  getRoleDisplayName,
-  getStatusBadgeClass,
-  getStatusIcon,
-  type TeamMember,
-  type UserRole,
-  type UserStatus
-} from '../../../utils/teamManagementMockData';
+import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, Phone, User, Calendar, Clock, BarChart3, DollarSign, Briefcase, Shield, Activity, TrendingUp, FileText, Lock, CheckCircle, ChevronRight, RefreshCw, MapPin, Globe, X, Trash2 } from 'lucide-react';
+import { mockTeamMembers, mockTeamCapacity, getRoleDisplayName, getStatusBadgeClass, getStatusIcon, type TeamMember } from '../../../utils/teamManagementMockData';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
 import ForbiddenAccess from '../../../components/common/ForbiddenAccess';

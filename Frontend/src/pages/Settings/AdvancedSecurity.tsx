@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Shield, AlertTriangle, Globe, Smartphone, Lock, Eye, Activity, FileText,
-  Search, Filter, Download, Upload, RefreshCw, CheckCircle, XCircle, Clock,
-  MapPin, Wifi, Key, User, Database, Settings, TrendingUp, BarChart, Target,
-  Zap, AlertCircle, Info, Play, Pause, Trash2, Edit, Plus, X, Save, Bell,
-  Fingerprint, Cpu, Monitor, HardDrive, Chrome, Server, GitBranch, Users
-} from 'lucide-react';
+import { Shield, AlertTriangle, Globe, Smartphone, Lock, Eye, FileText, Search, Filter, Download, RefreshCw, CheckCircle, XCircle, Clock, MapPin, Database, AlertCircle, Trash2, Edit, Plus, Fingerprint, Monitor } from 'lucide-react';
 
 interface ThreatEvent {
   id: string;

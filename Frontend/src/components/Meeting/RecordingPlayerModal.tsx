@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Play, Pause, SkipBack, SkipForward, Volume2, Settings, Maximize2, Download, Share2 } from 'lucide-react';
 
 interface RecordingPlayerModalProps {

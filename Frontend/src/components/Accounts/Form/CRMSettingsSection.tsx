@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Tag, X, Users } from 'lucide-react';
+import { Settings, Tag, X } from 'lucide-react';
 
 interface CRMSettingsSectionProps {
   formData: any;

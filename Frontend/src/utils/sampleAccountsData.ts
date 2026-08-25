@@ -1,13 +1,4 @@
-import {
-  EnhancedAccount,
-  AccountActivity,
-  AccountNote,
-  AccountDocument,
-  AccountContact,
-  AccountDeal,
-  AccountView,
-  AccountWorkflow
-} from '../types/accounts';
+import { EnhancedAccount, AccountView } from '../types/accounts';
 
 export const generateSampleAccounts = () => {
   const accounts: EnhancedAccount[] = [

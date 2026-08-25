@@ -1,38 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  DollarSign,
-  Users,
-  Rocket,
-  Globe,
-  Plus,
-  BellOff,
-  Star,
-  MoreHorizontal,
-  ExternalLink,
-  Bell,
-  Share2,
-  Download,
-  Clock,
-  Building2,
-  TrendingUp,
-  Mail,
-  Phone,
-  Linkedin,
-  Globe as WebIcon,
-  Twitter,
-  FileText,
-  Target,
-  CheckCircle,
-  Copy,
-  Check,
-  X,
-  Calendar,
-  ChevronDown,
-  AlertCircle
-} from 'lucide-react';
-import { getIntelligenceSignalById, type IntelligenceSignal, type DecisionMaker } from '../../utils/intelligenceSignalMockData';
+import { ArrowLeft, DollarSign, Users, Rocket, Globe, Plus, BellOff, Star, MoreHorizontal, ExternalLink, Bell, Share2, Download, Building2, Mail, Phone, Linkedin, Globe as WebIcon, Twitter, FileText, Target, CheckCircle, Copy, Check, X, AlertCircle } from 'lucide-react';
+import { getIntelligenceSignalById, type DecisionMaker } from '../../utils/intelligenceSignalMockData';
 import { useToast } from '../../contexts/ToastContext';
 
 type SignalType = 'funding' | 'hiring' | 'product' | 'expansion';

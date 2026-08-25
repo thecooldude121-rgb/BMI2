@@ -1,32 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
-import {
-  SystemRole,
-  SystemPermission,
-  RolePermission,
-  PermissionSet,
-  SystemProfile,
-  FieldPermission,
-  ModulePermission,
-  SharingRule,
-  UserGroup,
-  TemporaryAccess,
-  SecurityPolicy,
-  PasswordPolicy,
-  IPRestriction,
-  SessionSettings,
-  SSOConfiguration,
-  APIToken,
-  AuditLog,
-  ActivityFeed,
-  LoginHistory,
-  PermissionChange,
-  SecurityMetrics,
-  RoleFilters,
-  AuditLogFilters,
-  BulkRoleOperation
-} from '../types/settings';
+import { SystemRole, SystemPermission, SystemProfile, FieldPermission, ModulePermission, SharingRule, UserGroup, TemporaryAccess, SecurityPolicy, PasswordPolicy, IPRestriction, SessionSettings, SSOConfiguration, APIToken, AuditLog, ActivityFeed, LoginHistory, PermissionChange, SecurityMetrics, RoleFilters, AuditLogFilters, BulkRoleOperation } from '../types/settings';
 
 interface SettingsContextType {
   // State

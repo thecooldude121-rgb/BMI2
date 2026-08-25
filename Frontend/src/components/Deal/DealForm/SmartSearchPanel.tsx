@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, Building2, User, Briefcase, Loader2 } from 'lucide-react';
+import { Search, X, Building2, User, Loader2 } from 'lucide-react';
 import { searchCompanies, searchContacts } from '../../../utils/dealsApi';
 
 interface SmartSearchPanelProps {

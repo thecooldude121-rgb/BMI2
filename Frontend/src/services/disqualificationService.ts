@@ -1,10 +1,5 @@
 import { DisqualificationData } from '../components/LeadQualification/DisqualifyLeadModal';
-import {
-  DisqualificationRecord,
-  calculateReEngagementDate,
-  getReasonById,
-  getCompetitorById
-} from '../utils/disqualificationMockData';
+import { DisqualificationRecord, calculateReEngagementDate } from '../utils/disqualificationMockData';
 
 export interface DisqualifyLeadParams {
   leadId: string;

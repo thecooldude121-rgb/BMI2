@@ -1,27 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
-  Building2, User, Sparkles, Mail, Phone, Eye, MoreHorizontal,
-  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical, Archive,
-  StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX,
-  Pencil, ArrowLeftRight, UserCog, Zap, FileText,
-  CheckSquare, ClipboardList, Workflow, Link2,
-  AlignJustify, LayoutList, Columns2, ListFilter, Swords, AlertCircle, Search,
-  TrendingUp, TrendingDown,
-} from 'lucide-react';
-import {
-  formatAmountUSD, formatAmountCompact,
-  SUPPORTED_REPORTING_CURRENCIES, type SupportedCurrency, CURRENCY_SYMBOLS,
-  getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency,
-} from '../../utils/currencyUtils';
+import { Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Building2, User, Sparkles, Mail, Phone, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Copy, Trash2, Archive, StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX, Pencil, ArrowLeftRight, UserCog, Zap, FileText, CheckSquare, ClipboardList, Workflow, Link2, ListFilter, Swords, AlertCircle, Search, TrendingUp, TrendingDown } from 'lucide-react';
+import { formatAmountUSD, formatAmountCompact, type SupportedCurrency, CURRENCY_SYMBOLS, getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency } from '../../utils/currencyUtils';
 import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
 import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
-import { AdvancedFilterBuilder } from '../../components/Deals/AdvancedFilterBuilder';
+
 import type { FilterCondition, Conjunction } from '../../components/Deals/AdvancedFilterBuilder';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
 import { getNextBestAction } from '../../utils/dealNextBestAction';
@@ -726,7 +713,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const formatDate = formatCloseDate;
 
-
   const getStageName = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);
     return stage ? stage.name : stageId;
@@ -736,7 +722,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
     return `${stageOrder.indexOf(stageId) + 1} of ${stageOrder.length}`;
   };
-
 
   const getInitials = (name: string): string => {
     if (!name) return '?';
@@ -3120,7 +3105,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       </div>
 
-
       </div>{/* end sticky KPI + stage wrapper */}
 
       {/* ── Filter Bar ──────────────────────────────────────────────────────── */}
@@ -3631,7 +3615,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           </div>
         )}
       </div>
-
 
       {/* ── Table + Card List ────────────────────────────────────────────────── */}
       <div className="-mx-6 py-0">

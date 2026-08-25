@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronRight, Search, X, Building2, User, Sparkles, CheckCircle2, AlertTriangle, Briefcase, Target, Calendar } from 'lucide-react';
+import { Sparkles, Briefcase } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { SmartSearchPanel } from '../../components/Deal/DealForm/SmartSearchPanel';
 import { DealFormBasicInfo } from '../../components/Deal/DealForm/DealFormBasicInfo';
@@ -27,7 +27,7 @@ import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
 import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
 import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
-import { getSuggestedDealValue, valueMatchesSuggestion, PriceResult } from '../../utils/productPricingEngine';
+import { getSuggestedDealValue, PriceResult } from '../../utils/productPricingEngine';
 import { DealFormAttachments } from '../../components/Deal/DealForm/DealFormAttachments';
 import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
 import { DealFormCommercialDocs } from '../../components/Deal/DealForm/DealFormCommercialDocs';

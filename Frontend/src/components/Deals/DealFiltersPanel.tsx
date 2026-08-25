@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Filter, Calendar, DollarSign, Users, Target, Tag, RefreshCw } from 'lucide-react';
+import { X, Filter, Tag, RefreshCw } from 'lucide-react';
 import { DealFilters, Pipeline } from '../../types/deals';
 
 interface DealFiltersPanelProps {

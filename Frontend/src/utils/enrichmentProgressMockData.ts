@@ -1,4 +1,4 @@
-import type { EnrichmentProgressState, EnrichedFieldData, FieldCategory } from '../types/enrichmentProgress';
+import type { EnrichmentProgressState, EnrichedFieldData } from '../types/enrichmentProgress';
 
 export const initialEnrichmentState: EnrichmentProgressState = {
   totalFields: 20,

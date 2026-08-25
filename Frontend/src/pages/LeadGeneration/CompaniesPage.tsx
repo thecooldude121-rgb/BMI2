@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Building, Search, Filter, Plus, Download, Upload, Eye, Edit, ArrowLeft,
-  MoreHorizontal, Globe, MapPin, Users, DollarSign, TrendingUp,
-  Target, Star, Zap, Tag, Calendar, ArrowUpDown, X, Settings
-} from 'lucide-react';
+import { Building, Search, Filter, Plus, Download, Upload, Eye, ArrowLeft, MoreHorizontal, Globe, MapPin, Users, DollarSign, TrendingUp, Target, Star, ArrowUpDown, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Company } from '../../types/leadGeneration';
 

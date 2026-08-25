@@ -56,7 +56,7 @@ import {
 } from '../../utils/dateUtils';
 import { resolveDealState, STATE_TOKENS } from '../../utils/dealState';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
-import { computeCommitteeCoverage, REQUIRED_ROLE_IDS } from '../../utils/dealCommittee';
+import { computeCommitteeCoverage } from '../../utils/dealCommittee';
 import { getContactRole, roleChipClasses, type StakeholderContact } from '../../config/contactRoles';
 import type { DealCard } from './DealKanbanCard';
 

@@ -1,38 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Calendar,
-  Download,
-  Share2,
-  Star,
-  Clock,
-  Filter,
-  RefreshCw,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Users,
-  Target,
-  Activity,
-  Building2,
-  Home,
-  ChevronRight,
-  ChevronDown,
-  Mail,
-  Printer,
-  FileSpreadsheet,
-  FileText,
-  BarChart3,
-  PieChart,
-  LineChart,
-  Table,
-  Eye,
-  ExternalLink,
-  Info,
-  AlertCircle,
-  CheckCircle,
-} from 'lucide-react';
+import { ArrowLeft, Calendar, Download, Share2, Star, Clock, Filter, RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Activity, Home, ChevronRight, ChevronDown, Mail, FileSpreadsheet, FileText, BarChart3, PieChart, LineChart, Table, Eye, Info, CheckCircle } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 
 const ReportDetailView: React.FC = () => {

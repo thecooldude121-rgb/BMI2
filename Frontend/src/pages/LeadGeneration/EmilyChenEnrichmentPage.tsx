@@ -1,13 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  emilyChenEnrichmentData,
-  emilyChenEnrichedFields,
-  emilyChenEnrichmentHistory,
-  getEmilyChenLowConfidenceFields,
-  getEmilyChenHighConfidenceFields,
-  type EmilyChenEnrichedField
-} from '../../utils/emilyChenEnrichmentData';
+import { emilyChenEnrichmentData, emilyChenEnrichmentHistory, getEmilyChenLowConfidenceFields, getEmilyChenHighConfidenceFields, type EmilyChenEnrichedField } from '../../utils/emilyChenEnrichmentData';
 import { useToast } from '../../contexts/ToastContext';
 
 export default function EmilyChenEnrichmentPage() {

@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Save, User, Building, Mail, Phone, DollarSign, Tag,
-  Globe, MapPin, Target, AlertTriangle, Lightbulb, ChevronDown, ChevronUp,
-} from 'lucide-react';
+import { ArrowLeft, Save, User, Building, Mail, Phone, DollarSign, Tag, Globe, MapPin, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLeads } from '../../contexts/LeadContext';
 import { suggestOwner, TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
 import type { Lead } from '../../types/lead';

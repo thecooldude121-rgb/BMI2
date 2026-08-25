@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import type { AssignmentRule } from '../../utils/assignmentRules/types';
 import { getRules, toggleRule, deleteRule, reorderRules } from '../../utils/assignmentRules/rulesStore';

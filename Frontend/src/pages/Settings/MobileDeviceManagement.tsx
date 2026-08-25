@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Smartphone, Tablet, Monitor, Shield, Lock, Wifi, Battery, Signal,
-  CheckCircle, XCircle, AlertTriangle, Clock, MapPin, Download, Upload,
-  Settings, Eye, Edit, Trash2, RefreshCw, Search, Filter, Plus, X,
-  Power, Zap, Globe, Bell, Activity, BarChart, TrendingUp, Users,
-  Key, Database, FileText, Save, Play, Pause, RotateCcw, QrCode
-} from 'lucide-react';
+import { Smartphone, Tablet, Monitor, Shield, Lock, Battery, Signal, CheckCircle, XCircle, AlertTriangle, Clock, MapPin, Download, Upload, Settings, Eye, Edit, Trash2, RefreshCw, Search, Filter, Plus, X, Zap, Globe, Bell, Activity, BarChart, TrendingUp, Users, Database, QrCode } from 'lucide-react';
 
 interface MobileDevice {
   id: string;

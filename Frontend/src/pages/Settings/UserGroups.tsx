@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Users, Plus, Edit, Trash2, Search, Filter, ChevronRight, ChevronDown,
-  Building, GitBranch, Globe, Award, Shield, Calendar, TrendingUp, Activity,
-  Settings, Copy, Download, Upload, RefreshCw, CheckCircle, AlertCircle,
-  Eye, UserPlus, UserMinus, Target, BarChart, Layers, Share2, Bell, X
-} from 'lucide-react';
+import { Users, Plus, Edit, Search, ChevronRight, ChevronDown, Building, GitBranch, Globe, Award, Shield, TrendingUp, UserPlus, UserMinus, Target, BarChart, Layers, X } from 'lucide-react';
 
 interface UserGroup {
   id: string;

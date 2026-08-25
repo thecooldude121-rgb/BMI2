@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
 import { useNavigate } from 'react-router-dom';
-import {
-  Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar,
-  Users, BarChart3, Building2, Search, Filter, Download, Upload, Settings,
-  Phone, Mail, Video, CheckCircle, Clock, FileText, Target
-} from 'lucide-react';
+import { Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
 
 interface Activity {
   id: string;

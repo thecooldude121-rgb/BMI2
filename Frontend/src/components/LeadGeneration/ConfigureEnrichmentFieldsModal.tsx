@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Lightbulb, DollarSign, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
-import {
-  enrichmentFieldsConfig,
-  calculateEnrichmentCost,
-  getSelectedFieldsCount,
-  getTotalFieldsCount,
-  type EnrichmentField as ConfigField,
-} from '../../utils/enrichmentFieldsConfig';
+import { X, Settings, Lightbulb, DollarSign, ChevronDown, ChevronRight, AlertTriangle, Info } from 'lucide-react';
+import { enrichmentFieldsConfig, calculateEnrichmentCost } from '../../utils/enrichmentFieldsConfig';
 
 interface EnrichmentField {
   id: string;

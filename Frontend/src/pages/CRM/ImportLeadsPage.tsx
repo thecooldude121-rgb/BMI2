@@ -1,25 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImportWizard from '../../components/Leads/ImportWizard';
-import {
-  Upload,
-  Check,
-  Settings,
-  Calendar,
-  TrendingUp,
-  Zap,
-  Download,
-  ExternalLink,
-  Clock,
-  Users,
-  AlertCircle,
-  FileText,
-  Link as LinkIcon,
-  X,
-  ArrowLeft,
-  Loader2,
-  ChevronRight
-} from 'lucide-react';
+import { Upload, Check, Settings, Calendar, TrendingUp, Zap, Download, AlertCircle, X, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface Integration {
   id: string;
@@ -49,7 +31,6 @@ interface ImportHistory {
   failed: number;
   duplicates?: number;
 }
-
 
 const ImportLeadsPage: React.FC = () => {
   const navigate = useNavigate();

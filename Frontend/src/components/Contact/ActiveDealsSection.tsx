@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, TrendingUp, Calendar, User, ExternalLink, AlertCircle } from 'lucide-react';
+import { DollarSign, Calendar, User, ExternalLink, AlertCircle } from 'lucide-react';
 
 interface ActiveDealsSectionProps {
   deal: any;

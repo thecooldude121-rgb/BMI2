@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  ChevronRight, Save, Play, X, BarChart3, Table2, PieChart,
-  LineChart, TrendingUp, Lightbulb, Copy, GripVertical, Plus,
-  Sparkles, ChevronDown, AlertTriangle
-} from 'lucide-react';
+import { ChevronRight, X, BarChart3, Table2, PieChart, LineChart, TrendingUp, Copy, GripVertical, Plus, Sparkles, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 
 interface ReportField {

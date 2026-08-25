@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, AlertCircle, ChevronDown, ChevronRight, User, Briefcase, DollarSign, Calendar, TrendingUp } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, ChevronDown, ChevronRight, User, Briefcase, Calendar, TrendingUp } from 'lucide-react';
 import { crmSyncConfig } from '../../utils/crmSyncMockData';
 
 interface LeadInfo {

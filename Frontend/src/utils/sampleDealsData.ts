@@ -1,5 +1,5 @@
 // Sample Deals Data for Enterprise CRM
-import { Deal, DealActivity, DealEmail, DealAttachment, StageHistoryEntry } from '../types/deals';
+import { Deal } from '../types/deals';
 
 export const generateSampleDeals = (): Deal[] => {
   const baseDate = new Date('2024-01-01');

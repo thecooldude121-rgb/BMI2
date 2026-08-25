@@ -1,11 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Package, X, Search, Plus, Swords } from 'lucide-react';
-import {
-  COMPETITORS,
-  POPULAR_COMPETITORS,
-  Competitor,
-  getCompetitorById,
-} from '../../../config/competitors';
+import { COMPETITORS, POPULAR_COMPETITORS, Competitor } from '../../../config/competitors';
 
 // ─── CompetitorMultiSelect ────────────────────────────────────────────────────
 

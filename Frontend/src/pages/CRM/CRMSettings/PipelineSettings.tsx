@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, Save } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, Save } from 'lucide-react';
 
 interface DealStage {
   id: string;

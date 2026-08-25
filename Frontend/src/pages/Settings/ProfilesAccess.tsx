@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Plus, Search, Filter, Users, Mail, Building, Shield,
-  ChevronDown, X, Check, AlertTriangle, Edit, Trash2,
-  Download, Power, Clock, Globe, Calendar, ArrowLeft
-} from 'lucide-react';
+import { Plus, Search, Users, Building, Shield, X, Check, AlertTriangle, Edit, Power, Clock, Globe, Calendar, ArrowLeft } from 'lucide-react';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 
 interface User {

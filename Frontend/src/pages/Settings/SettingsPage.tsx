@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Settings, Shield, Users, Lock, Activity, Key, Globe,
-  Database, Bell, FileText, Workflow, UserCheck, Zap,
-  Search, ChevronRight, AlertTriangle, CheckCircle, Info, ArrowLeft,
-  Plus, Edit, Trash2, Eye, X, Webhook, MessageSquare, TrendingUp, Smartphone
-} from 'lucide-react';
+import { Settings, Shield, Users, Lock, Activity, Key, Globe, Database, Bell, FileText, Workflow, UserCheck, Zap, Search, ChevronRight, AlertTriangle, CheckCircle, Info, ArrowLeft, X, Webhook, MessageSquare, TrendingUp, Smartphone } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import RolesManagement from './RolesManagement';
 import PermissionMatrix from './PermissionMatrix';
@@ -21,9 +16,7 @@ import WorkflowAutomation from './WorkflowAutomation';
 import AnalyticsReporting from './AnalyticsReporting';
 import MobileAPI from './MobileAPI';
 import MobileDeviceManagement from './MobileDeviceManagement';
-import { WhatIfSimulator } from '../../components/Permissions/WhatIfSimulator';
-import { SharingRuleBuilder } from '../../components/Permissions/SharingRuleBuilder';
-import { UserGroupManagement } from '../../components/Permissions/UserGroupManagement';
+
 import { AuditFeed } from '../../components/Permissions/AuditFeed';
 import { APIIntegrationsPanel } from '../../components/Permissions/APIIntegrationsPanel';
 import AuditTrail from './AuditTrail';

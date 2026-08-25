@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Zap, Webhook, Globe, Database, RefreshCw, CheckCircle, XCircle, AlertTriangle,
-  Plus, Trash2, Edit, Play, Pause, Copy, Eye, EyeOff, Download, Upload, Settings,
-  Search, Filter, Clock, TrendingUp, Activity, Mail, MessageSquare, BarChart,
-  Cloud, DollarSign, Share2, HelpCircle, Code, Link, Save, TestTube, X, Info,
-  ArrowRight, Package, Star, Users, Shield, ChevronRight, ExternalLink
-} from 'lucide-react';
+import { Zap, Webhook, Globe, RefreshCw, Plus, Trash2, Edit, Play, Pause, Settings, Search, TrendingUp, Mail, MessageSquare, BarChart, Cloud, DollarSign, Share2, HelpCircle, TestTube, Package, Star, ExternalLink } from 'lucide-react';
 
 interface Webhook {
   id: string;

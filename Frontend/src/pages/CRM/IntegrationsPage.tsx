@@ -1,14 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Check,
-  Settings,
-  Zap,
-  Link as LinkIcon,
-  X,
-  ArrowLeft,
-  AlertCircle
-} from 'lucide-react';
+import { Check, Link as LinkIcon, X, ArrowLeft, AlertCircle } from 'lucide-react';
 
 interface Integration {
   id: string;

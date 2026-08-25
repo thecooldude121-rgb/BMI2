@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, AlertTriangle, Lightbulb, Star, Target, AlertCircle } from 'lucide-react';
+import { TrendingUp, Lightbulb, Star, Target, AlertCircle } from 'lucide-react';
 
 interface AIAccountInsightsPanelProps {
   accountId: string;

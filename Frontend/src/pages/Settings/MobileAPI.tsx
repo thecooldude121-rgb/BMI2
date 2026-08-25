@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Smartphone, Code, Key, Globe, Zap, Shield, Book, Download, Copy, Eye,
-  CheckCircle, AlertCircle, Activity, BarChart, Users, Settings, RefreshCw,
-  Lock, Server, Database, Webhook, MessageSquare, Bell, Calendar, FileText
-} from 'lucide-react';
+import { Smartphone, Code, Key, Zap, Shield, Book, Download, Copy, CheckCircle, AlertCircle, Activity, BarChart, Users, RefreshCw, Lock, Database, Webhook, Bell, Calendar, FileText } from 'lucide-react';
 
 const MobileAPI: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'mobile' | 'api' | 'docs' | 'monitoring'>('mobile');

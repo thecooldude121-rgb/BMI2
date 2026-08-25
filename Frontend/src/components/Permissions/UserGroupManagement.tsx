@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Users, Plus, Edit, Trash2, Search, Grid as GridIcon, List,
-  ChevronRight, X, UserPlus, UserMinus, Filter, Check, AlertCircle
-} from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Search, Grid as GridIcon, List, ChevronRight, X, UserPlus, UserMinus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface UserGroup {

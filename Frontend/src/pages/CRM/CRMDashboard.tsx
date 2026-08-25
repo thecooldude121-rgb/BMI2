@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Users, TrendingUp, DollarSign, Target, AlertTriangle,
-  Lightbulb, Calendar, Phone, Mail, Video, Star
-} from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Target, AlertTriangle, Lightbulb, Phone, Mail, Video, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useToast } from '../../contexts/ToastContext';

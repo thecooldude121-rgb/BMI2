@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, TrendingUp, Globe, Users, Zap, UserCheck, Linkedin, Mail,

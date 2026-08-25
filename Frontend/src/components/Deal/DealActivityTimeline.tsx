@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Clock, Mail, Phone, Video, FileText, TrendingUp, User, Sparkles, CheckCircle2, Calendar, Eye, MessageSquare, Share2, Plus, Filter } from 'lucide-react';
+import { Clock, Mail, Phone, Video, FileText, TrendingUp, Sparkles, CheckCircle2, Eye, MessageSquare, Share2, Plus } from 'lucide-react';
 import { computeWeeklyBuckets } from '../../utils/contactEngagement';
 import { EmailDetailModal, ShareSummaryModal, LogActivityModal } from './DealActivityModals';
 import { MeetingSchedulerModal } from './DealModals';

@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Info,
-  Globe, Activity, Sparkles, Rocket, Shield, Award, Users, Zap
-} from 'lucide-react';
+import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Info, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface FormErrors {

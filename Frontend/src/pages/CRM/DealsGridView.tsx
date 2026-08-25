@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { formatDisplayDate, formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
+import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-import {
-  Filter, Download, Settings, BarChart3, ChevronDown,
-  Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal,
-  CheckCircle2, AlertTriangle, TrendingUp, Clock, Target, X, Edit, Copy, Trash2,
-  FileText
-} from 'lucide-react';
+import { Download, Settings, BarChart3, Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, FileText } from 'lucide-react';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
@@ -102,7 +97,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
   const formatDate = formatCloseDate; // formatCloseDate returns "No close date" for missing values
   const getDaysAway = daysFromNow;
-
 
   const getStageName = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);

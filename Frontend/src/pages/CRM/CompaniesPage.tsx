@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Building, Globe, Users, DollarSign, Filter, Download } from 'lucide-react';
+import { Plus, Search, Building, Globe, Users, DollarSign, Download } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import CompanyForm from '../../components/CRM/CompanyForm';
 import CRMNavigation from '../../components/CRM/CRMNavigation';

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, CheckCircle, Settings, XCircle, FileText, Upload, Activity } from 'lucide-react';
+import { ExternalLink, CheckCircle, XCircle, FileText, Upload, Activity } from 'lucide-react';
 
 interface ConnectedIntegration {
   id: string;
