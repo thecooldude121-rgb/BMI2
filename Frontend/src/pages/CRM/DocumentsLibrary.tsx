@@ -573,16 +573,19 @@ const DocumentsLibrary: React.FC = () => {
     try {
       setDownloadProgress({ current: 0, total: selectedDocs.size });
 
+      // downloadDocument now fetches the bytes (the route needs an auth header,
+      // so a plain link would 401) and hands them to the browser itself.
       let current = 0;
+      const failures: string[] = [];
       for (const docId of Array.from(selectedDocs)) {
         const doc = documents.find(d => d.document_id === docId);
         if (doc?.id) {
-          const url = await documentsService.downloadDocument(doc.id);
-          if (url) {
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = doc.document_name || doc.name || 'document';
-            link.click();
+          try {
+            await documentsService.downloadDocument(doc.id);
+          } catch (e: any) {
+            // Keep going: one missing file should not abandon the rest of the
+            // selection. Report exactly which ones failed.
+            failures.push(`${doc.name || doc.id}: ${e?.message ?? 'failed'}`);
           }
         }
         current++;
@@ -590,7 +593,14 @@ const DocumentsLibrary: React.FC = () => {
       }
 
       setTimeout(() => setDownloadProgress(null), 2000);
-      showToast(`${selectedDocs.size} document(s) downloaded`, 'success');
+      const ok = selectedDocs.size - failures.length;
+      if (failures.length === 0) {
+        showToast(`${ok} document(s) downloaded`, 'success');
+      } else if (ok === 0) {
+        showToast(`Nothing downloaded — ${failures[0]}`, 'error');
+      } else {
+        showToast(`${ok} downloaded, ${failures.length} failed — ${failures[0]}`, 'warning');
+      }
     } catch (error: any) {
       showToast(error.message || 'Failed to download documents', 'error');
       setDownloadProgress(null);

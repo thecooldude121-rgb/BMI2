@@ -11,13 +11,15 @@
  * Documents now live in Postgres with the rest of the data, behind
  * /api/v1/documents, with the same tenancy rules as every other table.
  *
- * WHAT IS NOT IMPLEMENTED, AND WHY
- * uploadDocument / downloadDocument / shareDocument all need somewhere for the
- * file BYTES to live. That is an infrastructure decision — object storage,
- * local disk, or a bytea column — with real consequences for backups, memory
- * and deployment, and it has not been made. Rather than fake it, those three
- * throw a clear error that the UI surfaces. `file_url` is stored and returned
- * so whatever gets chosen can populate it without another migration.
+ * FILE STORAGE
+ * Files are stored on local disk, served only through the authenticated
+ * /documents/:id/content route — never off the filesystem directly. Uploading
+ * and downloading work. See Backend/src/config/fileStorage.ts for the storage
+ * decision and the hazards it guards against (path traversal, stored XSS,
+ * cross-tenant reads).
+ *
+ * shareDocument is still unimplemented: it needs a document_shares table and a
+ * way to notify people, neither of which exists.
  */
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -142,14 +144,10 @@ function mapRow(row: DocumentRow): Document {
   };
 }
 
-/** Thrown by the operations that need file storage, so callers can special-case them. */
+/** Still thrown by shareDocument, which has no backing table. */
 export class StorageNotConfiguredError extends Error {
   constructor(action: string) {
-    super(
-      `${action} is not available yet: the CRM has no file storage configured, ` +
-      `so there is nowhere to put or read the file. Document records can still be ` +
-      `created and organised.`,
-    );
+    super(`${action} is not available yet.`);
     this.name = 'StorageNotConfiguredError';
   }
 }
@@ -246,14 +244,93 @@ export const documentsService = {
     return mapRow(json.data);
   },
 
-  // ── Blocked on a file-storage decision ────────────────────────────────────
+  /**
+   * Uploads the file and creates its record in one request.
+   *
+   * XMLHttpRequest rather than fetch, purely because fetch cannot report upload
+   * progress and the modal shows a per-file bar. The 25 MB cap is enforced
+   * server-side; it is checked here too so a large file fails instantly instead
+   * of after being sent.
+   */
+  async uploadDocument(
+    request: UploadDocumentRequest,
+    onProgress?: (progress: number) => void,
+  ): Promise<Document> {
+    const MAX_BYTES = 25 * 1024 * 1024;
+    if (request.file.size > MAX_BYTES) {
+      throw new Error(
+        `"${request.file.name}" is ${(request.file.size / 1024 / 1024).toFixed(1)} MB. The limit is 25 MB.`,
+      );
+    }
 
-  async uploadDocument(_request: UploadDocumentRequest, _onProgress?: (progress: number) => void): Promise<Document> {
-    throw new StorageNotConfiguredError('Uploading files');
+    const form = new FormData();
+    form.append('file', request.file);
+    form.append('name', request.name);
+    if (request.category) form.append('category', request.category);
+    if (request.description) form.append('description', request.description);
+    // The server's polymorphic parent pair; both or neither.
+    if (request.related_entity_type && request.related_entity_id) {
+      form.append('module', request.related_entity_type);
+      form.append('record_id', request.related_entity_id);
+    }
+    if (request.tags?.length) form.append('tags', JSON.stringify(request.tags));
+
+    const token = localStorage.getItem('authToken');
+
+    return new Promise<Document>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/documents/upload`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      // Content-Type is deliberately NOT set: the browser must add the
+      // multipart boundary itself.
+
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        let body: any = {};
+        try { body = JSON.parse(xhr.responseText); } catch { /* non-JSON error page */ }
+        if (xhr.status >= 200 && xhr.status < 300 && body?.data) resolve(mapRow(body.data));
+        else reject(new Error(body?.message || `Upload failed (HTTP ${xhr.status})`));
+      };
+      xhr.onerror = () => reject(new Error('Upload failed — the server could not be reached.'));
+      xhr.onabort = () => reject(new Error('Upload cancelled.'));
+      xhr.send(form);
+    });
   },
 
-  async downloadDocument(_documentId: string): Promise<never> {
-    throw new StorageNotConfiguredError('Downloading files');
+  /**
+   * Fetches the bytes and hands them to the browser as a download.
+   *
+   * Goes through fetch rather than pointing the browser at the URL, because the
+   * route requires an Authorization header — a plain link would 401.
+   */
+  async downloadDocument(documentId: string): Promise<void> {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(documentId)}/content`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let message = `Download failed (HTTP ${res.status})`;
+      try { message = (await res.json()).message ?? message; } catch { /* body may not be JSON */ }
+      throw new Error(message);
+    }
+
+    // Recover the filename the server set, falling back to the record's name.
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+    const ascii = /filename="([^"]+)"/i.exec(disposition);
+    const filename = utf8 ? decodeURIComponent(utf8[1]) : ascii?.[1] ?? 'download';
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    // Revoke on the next tick; revoking synchronously can cancel the download
+    // in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   },
 
   async shareDocument(_documentId: string, _request: DocumentShareRequest): Promise<never> {

@@ -2,24 +2,26 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import {
+  buildStorageKey,
+  writeFile,
+  readStream,
+  deleteFile,
+  statFile,
+  streamHeaders,
+} from '../config/fileStorage';
 
 /**
  * Documents — metadata only.
  *
- * SCOPE, DELIBERATELY LIMITED
- * This controller manages document RECORDS: name, type, size, category,
- * description, the record a document belongs to, tags, and per-user favourites.
- * It does NOT store or serve file bytes.
+ * Manages document RECORDS (name, type, size, category, description, the record
+ * a document belongs to, tags, per-user favourites) AND their bytes, which are
+ * stored on local disk — see config/fileStorage.ts for the storage decision and
+ * the hazards it guards against.
  *
- * Uploading and downloading need a decision about where files live — object
- * storage, local disk, or a bytea column — which has not been made. Each has
- * real consequences for backups, memory and deployment. Guessing would produce
- * a second half-built subsystem, which is the pattern this remediation exists
- * to undo. `file_url` is stored and returned as-is so that whatever is chosen
- * can populate it without another migration.
- *
- * Until then a document row is a reference to a file held elsewhere, and the
- * UI says so rather than offering a download that cannot work.
+ * Bytes never leave through a static file handler; only through
+ * GET /:id/content, which checks tenant ownership first and forces an
+ * attachment download.
  */
 
 const resolveActorName = async (req: AuthRequest): Promise<string> => {
@@ -176,10 +178,22 @@ export const deleteDocuments = async (req: AuthRequest, res: Response, next: Nex
     // One statement, one transaction — a partial bulk delete with no report is
     // exactly the failure mode the deals bulk actions are still waiting on an
     // endpoint to avoid.
+    // RETURNING storage_key so the files can be removed after the rows are
+    // gone. Order matters: if the delete is rolled back the files are still
+    // there, whereas deleting files first would lose bytes for rows that
+    // survive.
     const result = await pool.query(
-      'DELETE FROM documents WHERE id = ANY($1::uuid[]) AND tenant_id = $2 RETURNING id',
+      'DELETE FROM documents WHERE id = ANY($1::uuid[]) AND tenant_id = $2 RETURNING id, storage_key',
       [ids, tenantId],
     );
+    for (const row of result.rows) {
+      if (row.storage_key) {
+        // A failure here leaves an orphaned file, not a broken response — the
+        // record is already gone and the user's intent is satisfied.
+        await deleteFile(row.storage_key).catch(err =>
+          console.error(`[documents] could not delete file ${row.storage_key}:`, err?.message));
+      }
+    }
     res.json({
       success: true,
       deleted: result.rowCount,
@@ -220,5 +234,141 @@ export const toggleFavorite = async (req: AuthRequest, res: Response, next: Next
       [req.params.id, userId, tenantId],
     );
     res.json({ success: true, is_starred: true });
+  } catch (error) { next(error); }
+};
+
+/**
+ * POST /api/v1/documents/upload  (multipart/form-data)
+ * Fields: file (required), plus name, category, description, module, record_id,
+ *         tags (JSON array string)
+ *
+ * Writes the bytes to disk, then creates the record. If the record insert fails
+ * the file just written is removed, so a failed upload cannot leave an orphan.
+ */
+export const uploadDocument = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const file = (req as any).file as
+    | { originalname: string; mimetype: string; size: number; buffer: Buffer }
+    | undefined;
+
+  if (!file) {
+    res.status(400).json({ success: false, message: 'A file is required (multipart field "file")' });
+    return;
+  }
+
+  let storageKey: string | null = null;
+  try {
+    const tenantId = requireTenantId(req);
+    const { name, category, description, module, record_id, tags } = req.body ?? {};
+
+    if (module && !VALID_MODULES.includes(module)) {
+      res.status(400).json({ success: false, message: `module must be one of: ${VALID_MODULES.join(', ')}` });
+      return;
+    }
+    if ((module && !record_id) || (record_id && !module)) {
+      res.status(400).json({ success: false, message: 'module and record_id must be supplied together' });
+      return;
+    }
+
+    // The client filename is metadata only. The path comes from the tenant id
+    // and a generated uuid — see buildStorageKey.
+    storageKey = buildStorageKey(tenantId, file.originalname);
+    const { checksum, bytes } = await writeFile(storageKey, file.buffer);
+
+    let parsedTags: string[] = [];
+    if (typeof tags === 'string' && tags.trim()) {
+      try {
+        const t = JSON.parse(tags);
+        if (Array.isArray(t)) parsedTags = t.map(String);
+      } catch {
+        // A malformed tags field should not fail the upload; the file matters.
+      }
+    } else if (Array.isArray(tags)) {
+      parsedTags = tags.map(String);
+    }
+
+    const uploadedBy = await resolveActorName(req);
+    const displayName = (name && String(name).trim()) || file.originalname;
+
+    const result = await pool.query(
+      `INSERT INTO documents
+         (name, file_url, file_size, file_type, module, record_id,
+          category, description, tags, version, uploaded_by,
+          storage_key, checksum_sha256, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13)
+       RETURNING *`,
+      [
+        displayName,
+        null, // set below, once the id exists
+        bytes,
+        file.mimetype || null,
+        module || null, record_id || null,
+        category || null, description || null,
+        JSON.stringify(parsedTags),
+        uploadedBy,
+        storageKey, checksum, tenantId,
+      ],
+    );
+
+    const doc = result.rows[0];
+    // file_url points at the authenticated route, never at the filesystem.
+    const withUrl = await pool.query(
+      'UPDATE documents SET file_url = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *',
+      [`/api/v1/documents/${doc.id}/content`, doc.id, tenantId],
+    );
+
+    storageKey = null; // committed — do not clean up
+    res.status(201).json({ success: true, data: withUrl.rows[0] });
+  } catch (error) {
+    // Never leave bytes on disk with no row pointing at them.
+    if (storageKey) {
+      await deleteFile(storageKey).catch(() => {});
+    }
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/documents/:id/content
+ *
+ * Tenant ownership is checked in the database BEFORE any path is resolved, so a
+ * guessed id from another tenant is a 404 and never touches the filesystem.
+ * Always an attachment download — see streamHeaders for why.
+ */
+export const downloadDocument = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const result = await pool.query(
+      'SELECT name, file_type, storage_key FROM documents WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, tenantId],
+    );
+    const doc = result.rows[0];
+    if (!doc) { res.status(404).json({ success: false, message: 'Document not found' }); return; }
+    if (!doc.storage_key) {
+      res.status(409).json({
+        success: false,
+        message: 'This document record has no file attached — it was created as metadata only.',
+      });
+      return;
+    }
+
+    const stat = await statFile(doc.storage_key);
+    if (!stat) {
+      // The row says there is a file and there is not. Report it rather than
+      // streaming an empty body that looks like a valid download.
+      res.status(410).json({
+        success: false,
+        message: 'The stored file is missing from disk. The record still exists but its contents are gone.',
+      });
+      return;
+    }
+
+    res.set({ ...streamHeaders(doc.name, doc.file_type), 'Content-Length': String(stat.size) });
+    const stream = readStream(doc.storage_key);
+    stream.on('error', err => {
+      // Headers may already be sent, so destroy rather than trying to respond.
+      console.error('[documents] stream error:', (err as Error)?.message);
+      res.destroy();
+    });
+    stream.pipe(res);
   } catch (error) { next(error); }
 };

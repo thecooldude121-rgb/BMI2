@@ -34,3 +34,7 @@ shared/
 server/
 *.local
 *.log
+
+# Uploaded document files (local-disk storage — see Backend/src/config/fileStorage.ts).
+# Never commit user content; the storage root is configurable via FILE_STORAGE_PATH.
+Backend/storage/
