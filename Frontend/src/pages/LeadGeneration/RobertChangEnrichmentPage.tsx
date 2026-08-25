@@ -825,7 +825,7 @@ function ManualGuideModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-4">
             <div className="border border-blue-300 bg-blue-50 rounded-lg p-4">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">1</span>
+                <span className="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">1</span>
                 <span>Search LinkedIn</span>
               </h3>
               <ul className="text-sm text-gray-700 space-y-2 ml-8">
@@ -839,7 +839,7 @@ function ManualGuideModal({ onClose }: { onClose: () => void }) {
 
             <div className="border border-blue-300 bg-blue-50 rounded-lg p-4">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">2</span>
+                <span className="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">2</span>
                 <span>Visit Company Website</span>
               </h3>
               <ul className="text-sm text-gray-700 space-y-2 ml-8">
@@ -853,7 +853,7 @@ function ManualGuideModal({ onClose }: { onClose: () => void }) {
 
             <div className="border border-blue-300 bg-blue-50 rounded-lg p-4">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">3</span>
+                <span className="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">3</span>
                 <span>Check Crunchbase (if available)</span>
               </h3>
               <ul className="text-sm text-gray-700 space-y-2 ml-8">
@@ -866,7 +866,7 @@ function ManualGuideModal({ onClose }: { onClose: () => void }) {
 
             <div className="border border-blue-300 bg-blue-50 rounded-lg p-4">
               <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">4</span>
+                <span className="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-sm">4</span>
                 <span>Add Information to CRM</span>
               </h3>
               <ul className="text-sm text-gray-700 space-y-2 ml-8">
@@ -1255,7 +1255,7 @@ function ConfigureSearchModal({
                   onChange={(e) => setConfig({ ...config, emailVariations: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
               </label>
             </div>
 
@@ -1273,7 +1273,7 @@ function ConfigureSearchModal({
                   onChange={(e) => setConfig({ ...config, nameVariations: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
               </label>
             </div>
 
@@ -1291,7 +1291,7 @@ function ConfigureSearchModal({
                   onChange={(e) => setConfig({ ...config, companyVariations: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
               </label>
             </div>
 
@@ -1309,7 +1309,7 @@ function ConfigureSearchModal({
                   onChange={(e) => setConfig({ ...config, fuzzyMatching: e.target.checked })}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
               </label>
             </div>
 

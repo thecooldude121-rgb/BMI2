@@ -47,7 +47,7 @@ export default function ActionItemsPanel({ isOpen, onClose, actionItems, meeting
             </div>
             <div className="mt-2 h-2 bg-blue-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-600 rounded-full transition-all"
+                className="h-full bg-brand-600 rounded-full transition-all"
                 style={{ width: `${(completedCount / actionItems.length) * 100}%` }}
               />
             </div>

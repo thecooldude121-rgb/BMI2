@@ -663,7 +663,7 @@ const LeadDetailPage: React.FC = () => {
                     <span className="text-xs font-bold text-gray-900">{lead.aiLeadScore.engagementScore}/100</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${lead.aiLeadScore.engagementScore}%` }}></div>
+                    <div className="bg-brand-600 h-2 rounded-full" style={{ width: `${lead.aiLeadScore.engagementScore}%` }}></div>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">{lead.aiLeadScore.engagementReason}</p>
                 </div>
@@ -945,7 +945,7 @@ const LeadDetailPage: React.FC = () => {
               <input type="file" id="fileInput" className="hidden" />
               <label
                 htmlFor="fileInput"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer inline-block"
+                className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 cursor-pointer inline-block"
               >
                 Choose File
               </label>

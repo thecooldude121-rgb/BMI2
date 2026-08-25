@@ -73,11 +73,11 @@ export default function RecordingPlayerModal({ isOpen, onClose, meeting }: Recor
           <div className="space-y-3">
             <div className="relative h-2 bg-gray-200 rounded-full cursor-pointer">
               <div
-                className="absolute inset-y-0 left-0 bg-blue-600 rounded-full transition-all"
+                className="absolute inset-y-0 left-0 bg-brand-600 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
               <div
-                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-blue-600 rounded-full shadow-lg transition-all"
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-600 rounded-full shadow-lg transition-all"
                 style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
               />
             </div>
@@ -132,7 +132,7 @@ export default function RecordingPlayerModal({ isOpen, onClose, meeting }: Recor
                   </span>
                   <span className="flex-1 text-sm text-gray-700">{moment.label}</span>
                   {moment.isKey && (
-                    <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-brand-600 text-white px-2 py-0.5 rounded-full">
                       Key
                     </span>
                   )}

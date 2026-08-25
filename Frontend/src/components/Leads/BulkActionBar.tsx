@@ -178,7 +178,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       >
         {/* ── Select-all banner ─────────────────────────────────────────── */}
         {isPageFullySelected && !areAllFiltered && totalFiltered > count && (
-          <div className="bg-blue-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg flex items-center gap-2 whitespace-nowrap">
+          <div className="bg-brand-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg flex items-center gap-2 whitespace-nowrap">
             <span>All {count} on this page selected.</span>
             <button
               onClick={onSelectAllFiltered}
@@ -189,7 +189,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
           </div>
         )}
         {areAllFiltered && totalFiltered > 0 && (
-          <div className="bg-blue-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg whitespace-nowrap">
+          <div className="bg-brand-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg whitespace-nowrap">
             All {totalFiltered} filtered lead{totalFiltered !== 1 ? 's' : ''} selected.
           </div>
         )}

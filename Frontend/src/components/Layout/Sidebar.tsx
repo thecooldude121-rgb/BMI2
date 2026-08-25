@@ -88,7 +88,7 @@ const Sidebar: React.FC = () => {
             className="flex items-center gap-2 cursor-pointer overflow-hidden"
             onClick={() => navigate('/crm/dashboard')}
           >
-            <div className="flex items-center justify-center w-7 h-7 bg-blue-600 rounded-lg shrink-0">
+            <div className="flex items-center justify-center w-7 h-7 bg-brand-600 rounded-lg shrink-0">
               <Building2 className="h-4 w-4 text-white" />
             </div>
             <span className="text-sm font-bold text-white tracking-tight whitespace-nowrap">
@@ -172,7 +172,7 @@ const Sidebar: React.FC = () => {
                                   className={({ isActive }) =>
                                     `flex items-center gap-3 pl-10 pr-4 py-2 text-sm transition-colors ${
                                       isActive
-                                        ? 'text-white bg-blue-600/20 border-l-2 border-blue-500'
+                                        ? 'text-white bg-brand-600/20 border-l-2 border-blue-500'
                                         : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                                     }`
                                   }
@@ -201,7 +201,7 @@ const Sidebar: React.FC = () => {
                           collapsed ? 'justify-center px-0' : 'gap-3 px-4'
                         } ${
                           isActive
-                            ? 'text-white bg-blue-600 border-l-2 border-blue-400'
+                            ? 'text-white bg-brand-600 border-l-2 border-blue-400'
                             : 'text-gray-400 hover:text-white hover:bg-gray-800'
                         }`
                       }
@@ -229,7 +229,7 @@ const Sidebar: React.FC = () => {
               collapsed ? 'justify-center px-0' : 'gap-3 px-4'
             } ${
               isActive
-                ? 'text-white bg-blue-600'
+                ? 'text-white bg-brand-600'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
             }`
           }

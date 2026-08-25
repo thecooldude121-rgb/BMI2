@@ -558,7 +558,7 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
                 label="Replied"
                 value={breakdownContact.engagementBreakdown.emailsReplied}
                 total={breakdownContact.engagementBreakdown.emailsSent}
-                colorClass="bg-blue-600"
+                colorClass="bg-brand-600"
               />
             </div>
 

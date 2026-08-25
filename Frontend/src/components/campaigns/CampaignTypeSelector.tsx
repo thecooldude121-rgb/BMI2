@@ -171,7 +171,7 @@ export const CampaignTypeSelector: React.FC<CampaignTypeSelectorProps> = ({
 
               {isSelected && !isLocked && (
                 <div className="absolute top-3 right-3">
-                  <div className="bg-blue-600 text-white rounded-full p-1.5 animate-scale-in">
+                  <div className="bg-brand-600 text-white rounded-full p-1.5 animate-scale-in">
                     <Check className="w-3 h-3 stroke-[3px]" />
                   </div>
                 </div>

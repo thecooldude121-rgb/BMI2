@@ -32,7 +32,7 @@ export default function Step6Results({ progress, result, onClose, onImportAnothe
           <div className="space-y-3">
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
               <div
-                className="h-3 bg-blue-600 rounded-full transition-all duration-150"
+                className="h-3 bg-brand-600 rounded-full transition-all duration-150"
                 style={{ width: `${pct}%` }}
               />
             </div>

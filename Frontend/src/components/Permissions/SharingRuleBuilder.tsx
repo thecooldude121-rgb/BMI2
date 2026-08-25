@@ -242,7 +242,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
               {rule.conditions.map((condition, index) => (
                 <div key={condition.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start space-x-3">
-                    <span className="flex items-center justify-center w-6 h-6 bg-blue-600 text-white text-xs font-bold rounded-full mt-2">
+                    <span className="flex items-center justify-center w-6 h-6 bg-brand-600 text-white text-xs font-bold rounded-full mt-2">
                       {index + 1}
                     </span>
                     <div className="flex-1 grid grid-cols-3 gap-3">
@@ -371,7 +371,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                 >
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      rule.accessLevel[key as keyof typeof rule.accessLevel] ? 'bg-blue-600' : 'bg-gray-300'
+                      rule.accessLevel[key as keyof typeof rule.accessLevel] ? 'bg-brand-600' : 'bg-gray-300'
                     }`}>
                       <Check className="h-5 w-5 text-white" />
                     </div>
@@ -497,7 +497,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                 <div className="flex flex-col items-center">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                     currentStep === step.number
-                      ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                      ? 'bg-brand-600 text-white ring-4 ring-blue-100'
                       : currentStep > step.number
                       ? 'bg-green-600 text-white'
                       : 'bg-gray-200 text-gray-600'

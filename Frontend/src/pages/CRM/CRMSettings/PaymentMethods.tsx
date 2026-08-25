@@ -25,7 +25,7 @@ const PaymentMethods: React.FC = () => {
                 <div className="text-sm text-gray-600">Expires 12/25</div>
               </div>
             </div>
-            <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded">Default</span>
+            <span className="px-2 py-1 bg-brand-600 text-white text-xs rounded">Default</span>
           </div>
         </div>
       </div>

@@ -234,7 +234,7 @@ export default function ImportWizard({ onClose }: Props) {
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                     isComplete ? 'bg-blue-500 text-white'
-                    : isActive ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                    : isActive ? 'bg-brand-600 text-white ring-4 ring-blue-100'
                     : 'bg-gray-100 text-gray-400'
                   }`}>
                     {isComplete ? <Check className="h-3.5 w-3.5" /> : s.id}

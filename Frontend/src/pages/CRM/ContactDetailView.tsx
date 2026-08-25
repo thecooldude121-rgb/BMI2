@@ -652,7 +652,7 @@ const ContactDetailView: React.FC = () => {
                     <span className="text-lg font-bold text-blue-700">{mockData.predictions.closeProbability}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${mockData.predictions.closeProbability}%` }}></div>
+                    <div className="bg-brand-600 h-2 rounded-full" style={{ width: `${mockData.predictions.closeProbability}%` }}></div>
                   </div>
                 </div>
                 <div className="p-3 bg-white rounded-lg">

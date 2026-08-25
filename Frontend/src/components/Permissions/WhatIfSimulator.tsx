@@ -84,7 +84,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
+            <div className="p-2 bg-brand-600 rounded-lg">
               <Play className="h-6 w-6 text-white" />
             </div>
             <div>

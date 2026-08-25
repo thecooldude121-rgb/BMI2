@@ -234,7 +234,7 @@ const AuditTrail: React.FC = () => {
               <Filter className="h-4 w-4 mr-2" />
               Filters
               {hasActiveFilters && (
-                <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                <span className="ml-2 px-2 py-0.5 bg-brand-600 text-white text-xs rounded-full">
                   {[searchQuery, selectedActionType !== 'all', selectedEntityType !== 'all',
                     selectedUser !== 'all', dateFrom, dateTo].filter(Boolean).length}
                 </span>

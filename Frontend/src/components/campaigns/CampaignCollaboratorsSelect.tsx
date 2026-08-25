@@ -243,7 +243,7 @@ export default function CampaignCollaboratorsSelect({
                           w-5 h-5 rounded border-2 flex items-center justify-center
                           flex-shrink-0 transition-all duration-200
                           ${isSelected
-                            ? 'bg-blue-600 border-blue-600'
+                            ? 'bg-brand-600 border-brand-600'
                             : 'border-gray-300 bg-white'
                           }
                         `}

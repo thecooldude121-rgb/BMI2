@@ -332,7 +332,7 @@ const Analytics: React.FC = () => {
                         <span className="text-sm text-gray-900">{member.conversionRate.toFixed(1)}%</span>
                         <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
                           <div
-                            className="bg-blue-600 h-2 rounded-full"
+                            className="bg-brand-600 h-2 rounded-full"
                             style={{ width: `${Math.min(100, member.conversionRate)}%` }}
                           ></div>
                         </div>

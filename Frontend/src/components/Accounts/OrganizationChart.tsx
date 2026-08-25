@@ -136,7 +136,7 @@ const OrgNode: React.FC<OrgNodeProps> = ({
                 {node.name}
               </h4>
               {node.isContact && (
-                <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs font-bold">
+                <span className="px-2 py-0.5 bg-brand-600 text-white rounded text-xs font-bold">
                   Contact
                 </span>
               )}

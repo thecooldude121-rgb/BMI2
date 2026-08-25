@@ -107,7 +107,7 @@ const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
               dataQuality >= 90
                 ? 'bg-green-600'
                 : dataQuality >= 70
-                ? 'bg-blue-600'
+                ? 'bg-brand-600'
                 : dataQuality >= 50
                 ? 'bg-yellow-600'
                 : 'bg-red-600'

@@ -452,7 +452,7 @@ const AnalyticsReporting: React.FC = () => {
             <div className="space-y-4">
               <div className="border border-blue-200 rounded-lg p-6 bg-blue-50">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1">

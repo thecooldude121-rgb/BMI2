@@ -156,8 +156,8 @@ function StepIndicator({ current }: { current: WizardStep }) {
         <React.Fragment key={s}>
           <div className="flex flex-col items-center gap-1">
             <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-              s < current  ? 'bg-blue-600 text-white'
-              : s === current ? 'bg-blue-600 text-white ring-2 ring-blue-200'
+              s < current  ? 'bg-brand-600 text-white'
+              : s === current ? 'bg-brand-600 text-white ring-2 ring-blue-200'
               : 'bg-gray-100 text-gray-400'
             }`}>
               {s < current ? <Check size={10} /> : s}

@@ -76,7 +76,7 @@ const CHANNEL_ICONS: Record<Channel, React.ReactNode> = {
 };
 
 const CHANNEL_ACCENT: Record<Channel, string> = {
-  email:    'bg-blue-600 hover:bg-blue-700',
+  email:    'bg-brand-600 hover:bg-brand-700',
   call:     'bg-green-600 hover:bg-green-700',
   whatsapp: 'bg-emerald-600 hover:bg-emerald-700',
   meeting:  'bg-purple-600 hover:bg-purple-700',
@@ -85,7 +85,7 @@ const CHANNEL_ACCENT: Record<Channel, string> = {
 };
 
 const CHANNEL_ACTIVE: Record<Channel, string> = {
-  email:    'bg-blue-600 text-white',
+  email:    'bg-brand-600 text-white',
   call:     'bg-green-600 text-white',
   whatsapp: 'bg-emerald-600 text-white',
   meeting:  'bg-purple-600 text-white',

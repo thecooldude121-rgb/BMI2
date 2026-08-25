@@ -79,7 +79,7 @@ const DataQualityPanel: React.FC<DataQualityPanelProps> = ({ formData }) => {
               score >= 90
                 ? 'bg-green-600'
                 : score >= 70
-                ? 'bg-blue-600'
+                ? 'bg-brand-600'
                 : score >= 50
                 ? 'bg-yellow-600'
                 : 'bg-red-600'

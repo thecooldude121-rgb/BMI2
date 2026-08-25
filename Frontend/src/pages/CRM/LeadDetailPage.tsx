@@ -1168,7 +1168,7 @@ const LeadDetailPage: React.FC = () => {
               <p className="text-gray-600 mb-2">Drag and drop your file here</p>
               <p className="text-sm text-gray-500 mb-4">or</p>
               <input type="file" id="fileInput" className="hidden" />
-              <label htmlFor="fileInput" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer inline-block">
+              <label htmlFor="fileInput" className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 cursor-pointer inline-block">
                 Choose File
               </label>
             </div>

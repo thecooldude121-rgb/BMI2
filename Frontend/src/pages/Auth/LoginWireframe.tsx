@@ -20,7 +20,7 @@ const LoginWireframe: React.FC = () => {
           <div className="space-y-6">
             {/* Step 1 */}
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+              <div className="flex-shrink-0 w-10 h-10 bg-brand-600 text-white rounded-full flex items-center justify-center font-bold">
                 1
               </div>
               <div className="flex-1">
@@ -36,7 +36,7 @@ const LoginWireframe: React.FC = () => {
 
             {/* Step 2 */}
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+              <div className="flex-shrink-0 w-10 h-10 bg-brand-600 text-white rounded-full flex items-center justify-center font-bold">
                 2
               </div>
               <div className="flex-1">
@@ -54,7 +54,7 @@ const LoginWireframe: React.FC = () => {
 
             {/* Step 3 */}
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+              <div className="flex-shrink-0 w-10 h-10 bg-brand-600 text-white rounded-full flex items-center justify-center font-bold">
                 3
               </div>
               <div className="flex-1">
@@ -71,7 +71,7 @@ const LoginWireframe: React.FC = () => {
 
             {/* Step 4 */}
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+              <div className="flex-shrink-0 w-10 h-10 bg-brand-600 text-white rounded-full flex items-center justify-center font-bold">
                 4
               </div>
               <div className="flex-1">
@@ -88,7 +88,7 @@ const LoginWireframe: React.FC = () => {
 
             {/* Step 5 */}
             <div className="flex items-start space-x-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
+              <div className="flex-shrink-0 w-10 h-10 bg-brand-600 text-white rounded-full flex items-center justify-center font-bold">
                 5
               </div>
               <div className="flex-1">

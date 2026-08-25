@@ -53,7 +53,7 @@ const LastInteractionBar: React.FC<LastInteractionBarProps> = ({
                 engagementScore >= 80
                   ? 'bg-green-600'
                   : engagementScore >= 60
-                  ? 'bg-blue-600'
+                  ? 'bg-brand-600'
                   : engagementScore >= 40
                   ? 'bg-yellow-600'
                   : 'bg-red-600'

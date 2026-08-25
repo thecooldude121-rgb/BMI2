@@ -91,7 +91,7 @@ export const TemplateCard: React.FC<TemplateCardProps> = ({
     >
       {/* Checkmark badge when selected */}
       {isSelected && (
-        <div className="absolute top-4 right-4 w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+        <div className="absolute top-4 right-4 w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center">
           <Check className="w-5 h-5 text-white" />
         </div>
       )}

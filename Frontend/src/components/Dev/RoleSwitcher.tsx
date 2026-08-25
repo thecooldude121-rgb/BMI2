@@ -4,7 +4,7 @@ import type { Role } from '../../utils/permissions';
 
 const ROLES: Array<{ role: Role; label: string; activeCls: string }> = [
   { role: 'sdr',        label: 'SDR',     activeCls: 'bg-gray-600 text-white'   },
-  { role: 'senior_sdr', label: 'Sr. SDR', activeCls: 'bg-blue-600 text-white'   },
+  { role: 'senior_sdr', label: 'Sr. SDR', activeCls: 'bg-brand-600 text-white'   },
   { role: 'manager',    label: 'Manager', activeCls: 'bg-purple-600 text-white'  },
   { role: 'admin',      label: 'Admin',   activeCls: 'bg-green-600 text-white'   },
 ];

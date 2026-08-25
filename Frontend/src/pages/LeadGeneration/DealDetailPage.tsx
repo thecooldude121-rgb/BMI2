@@ -324,7 +324,7 @@ const DealDetailPage: React.FC = () => {
                         <p className="text-3xl font-bold text-blue-700">{deal.probability}%</p>
                         <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                           <div
-                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            className="bg-brand-600 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${deal.probability}%` }}
                           />
                         </div>

@@ -839,7 +839,7 @@ const AddImportLeadsPage: React.FC = () => {
                   />
                   <label
                     htmlFor="csvFileInput"
-                    className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer font-medium"
+                    className="inline-block px-6 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 cursor-pointer font-medium"
                   >
                     Browse Files
                   </label>

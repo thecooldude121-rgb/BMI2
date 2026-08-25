@@ -45,7 +45,7 @@ export function PartialEnrichmentModal({
   const getButtonConfig = () => {
     const configs: Record<string, { label: string; icon: string; color: string }> = {
       accept: { label: 'Accept & Continue', icon: '✅', color: 'bg-green-600 hover:bg-green-700' },
-      retry: { label: 'Retry Failed', icon: '🔄', color: 'bg-blue-600 hover:bg-blue-700' },
+      retry: { label: 'Retry Failed', icon: '🔄', color: 'bg-brand-600 hover:bg-brand-700' },
       manual: { label: 'Manual Entry', icon: '✏️', color: 'bg-purple-600 hover:bg-purple-700' },
       discard: { label: 'Discard', icon: '❌', color: 'bg-red-600 hover:bg-red-700' }
     };

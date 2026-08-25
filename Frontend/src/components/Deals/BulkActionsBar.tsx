@@ -60,7 +60,7 @@ const BulkActionsBar: React.FC<BulkActionsBarProps> = ({
       id: 'transfer',
       label: 'Transfer Owner',
       icon: Users,
-      color: 'bg-blue-600 hover:bg-blue-700',
+      color: 'bg-brand-600 hover:bg-brand-700',
       onClick: () => setShowTransferModal(true)
     },
     {

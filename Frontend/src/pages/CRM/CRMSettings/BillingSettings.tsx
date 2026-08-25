@@ -255,7 +255,7 @@ const BillingSettings: React.FC = () => {
                 <span className="text-sm font-semibold text-gray-900">3 / 5 used</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="bg-blue-600 h-full rounded-full" style={{ width: '60%' }}></div>
+                <div className="bg-brand-600 h-full rounded-full" style={{ width: '60%' }}></div>
               </div>
               <p className="text-xs text-gray-600 mt-1">60%</p>
             </div>
@@ -291,7 +291,7 @@ const BillingSettings: React.FC = () => {
                 <span className="text-sm font-semibold text-gray-900">12,456 / 100,000 per month</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="bg-blue-600 h-full rounded-full" style={{ width: '12%' }}></div>
+                <div className="bg-brand-600 h-full rounded-full" style={{ width: '12%' }}></div>
               </div>
               <p className="text-xs text-gray-600 mt-1">12%</p>
             </div>

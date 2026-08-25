@@ -324,7 +324,7 @@ export const CampaignWizardStep1: React.FC<CampaignWizardStep1Props> = ({
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-2">
             <div className="flex items-center">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+              <div className="w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold">
                 1
               </div>
               <div className="ml-2 text-sm font-medium text-gray-900">Basic Info</div>

@@ -1110,7 +1110,7 @@ export default function MeetingDetailPage() {
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-gray-600">00:00</span>
                     <div className="flex-1 h-2 bg-gray-200 rounded-full cursor-pointer">
-                      <div className="h-2 bg-blue-600 rounded-full" style={{ width: '35%' }} />
+                      <div className="h-2 bg-brand-600 rounded-full" style={{ width: '35%' }} />
                     </div>
                     <span className="text-sm text-gray-600">{meeting.duration}:00</span>
                   </div>
@@ -1167,7 +1167,7 @@ export default function MeetingDetailPage() {
                 {meeting.attendees.map((attendee) => (
                   <div key={attendee.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start space-x-3">
-                      <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      <div className="w-12 h-12 bg-brand-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                         {attendee.name.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div className="flex-1">

@@ -35,7 +35,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({ formData }) => {
 
       <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 mb-4">
         <div className="flex items-start space-x-3">
-          <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
+          <div className="w-12 h-12 bg-brand-600 rounded-lg flex items-center justify-center text-white font-bold">
             {formData.companyName ? getInitials(formData.companyName) : 'AA'}
           </div>
           <div className="flex-1 min-w-0">

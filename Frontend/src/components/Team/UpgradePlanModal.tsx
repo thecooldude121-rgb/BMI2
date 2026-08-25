@@ -125,7 +125,7 @@ const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
             {/* Business Plan */}
             <div className="border-2 border-blue-600 rounded-xl p-6 bg-gradient-to-br from-blue-50 to-white relative">
               <div className="absolute top-4 right-4">
-                <span className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full">
+                <span className="px-3 py-1 bg-brand-600 text-white text-xs font-bold rounded-full">
                   POPULAR
                 </span>
               </div>

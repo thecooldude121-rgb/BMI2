@@ -704,7 +704,7 @@ const MobileDeviceManagement: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Theme Color:</span>
                     <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                      <div className="w-4 h-4 bg-brand-600 rounded"></div>
                       <span className="font-semibold text-gray-900">#2563eb</span>
                     </div>
                   </div>
@@ -822,7 +822,7 @@ const MobileDeviceManagement: React.FC = () => {
                       <span className="text-sm font-bold text-gray-900">50%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '50%' }} />
+                      <div className="bg-brand-600 h-2 rounded-full" style={{ width: '50%' }} />
                     </div>
                   </div>
                   <div>
@@ -847,7 +847,7 @@ const MobileDeviceManagement: React.FC = () => {
                       <span className="text-sm font-bold text-gray-900">25%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '25%' }} />
+                      <div className="bg-brand-600 h-2 rounded-full" style={{ width: '25%' }} />
                     </div>
                   </div>
                   <div>

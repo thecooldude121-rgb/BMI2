@@ -911,7 +911,7 @@ const ActivitiesPage: React.FC = () => {
               <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 My Open Tasks
-                <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">8</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">8</span>
               </button>
               <button className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-100 text-sm font-medium flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />
@@ -921,12 +921,12 @@ const ActivitiesPage: React.FC = () => {
               <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
                 <Video className="w-4 h-4" />
                 Today's Meetings
-                <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">12</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">12</span>
               </button>
               <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 This Week
-                <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">32</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">32</span>
               </button>
               <button className="px-3 py-1.5 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium flex items-center gap-2">
                 <Building2 className="w-4 h-4" />

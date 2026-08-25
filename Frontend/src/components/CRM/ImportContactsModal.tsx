@@ -124,7 +124,7 @@ const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClo
                   Drag and drop your CSV file here
                 </p>
                 <p className="text-sm text-gray-600">or</p>
-                <label className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium cursor-pointer">
+                <label className="inline-block px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium cursor-pointer">
                   Browse Files
                   <input
                     type="file"

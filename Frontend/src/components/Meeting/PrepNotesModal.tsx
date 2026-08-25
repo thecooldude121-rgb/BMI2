@@ -53,7 +53,7 @@ export default function PrepNotesModal({ isOpen, onClose, meeting }: PrepNotesMo
             <div className="space-y-2">
               {meeting.attendees.map((attendee, index) => (
                 <div key={index} className="flex items-start gap-2">
-                  <div className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-600 flex-shrink-0" />
+                  <div className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-600 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-gray-900">{attendee.name}</p>
                     <p className="text-sm text-gray-600">{attendee.title}</p>

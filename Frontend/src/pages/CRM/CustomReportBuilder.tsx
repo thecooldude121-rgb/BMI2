@@ -1811,7 +1811,7 @@ export default function CustomReportBuilder() {
 
                   <div className="mb-6">
                     <div className="w-full bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                      <div className="bg-blue-600 h-6 rounded-full flex items-center justify-end pr-3" style={{ width: '78%' }}>
+                      <div className="bg-brand-600 h-6 rounded-full flex items-center justify-end pr-3" style={{ width: '78%' }}>
                         <span className="text-xs font-semibold text-white">78% of goal</span>
                       </div>
                     </div>
@@ -2019,7 +2019,7 @@ export default function CustomReportBuilder() {
             <div className="w-full mt-2">
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                  className="bg-brand-600 h-2 rounded-full transition-all duration-300 ease-out"
                   style={{ width: `${loadingProgress}%` }}
                 ></div>
               </div>

@@ -190,7 +190,7 @@ export const CampaignWizardStep2: React.FC<CampaignWizardStep2Props> = ({
             </div>
             <div className="w-16 h-0.5 bg-blue-500"></div>
             <div className="flex items-center">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+              <div className="w-8 h-8 rounded-full bg-brand-600 text-white flex items-center justify-center text-sm font-semibold">
                 2
               </div>
               <div className="ml-2 text-sm font-medium text-gray-900">Select Template</div>

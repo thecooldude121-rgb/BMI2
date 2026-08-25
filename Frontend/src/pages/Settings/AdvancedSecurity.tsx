@@ -356,7 +356,7 @@ const AdvancedSecurity: React.FC = () => {
             </div>
             <div className="text-sm font-medium text-gray-700">Security Score</div>
             <div className="w-full bg-blue-200 rounded-full h-1.5 mt-2">
-              <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${securityScore}%` }} />
+              <div className="bg-brand-600 h-1.5 rounded-full" style={{ width: `${securityScore}%` }} />
             </div>
           </div>
 

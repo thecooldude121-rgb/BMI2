@@ -125,7 +125,7 @@ function OwnerPopover({ name }: { name: string }) {
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+        <div className="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
           {initials}
         </div>
         <div className="min-w-0">

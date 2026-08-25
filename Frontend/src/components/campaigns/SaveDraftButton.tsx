@@ -125,7 +125,7 @@ export default function SaveDraftButton({
   const getButtonStyles = () => {
     switch (saveState) {
       case 'saving':
-        return 'bg-blue-600 text-white border-blue-600';
+        return 'bg-brand-600 text-white border-brand-600';
       case 'saved':
         return 'bg-green-600 text-white border-green-600';
       case 'error':

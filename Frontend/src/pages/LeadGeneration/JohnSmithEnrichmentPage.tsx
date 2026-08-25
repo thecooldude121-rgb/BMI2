@@ -179,7 +179,7 @@ export default function JohnSmithEnrichmentPage() {
               <div className="max-w-md mx-auto">
                 <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                   <div
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                    className="bg-brand-600 h-3 rounded-full transition-all duration-300"
                     style={{ width: `${enrichProgress}%` }}
                   />
                 </div>
@@ -239,7 +239,7 @@ function DataSourceCard({
             <div className="mt-2">
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  className="bg-brand-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${source.progress}%` }}
                 />
               </div>

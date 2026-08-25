@@ -1779,7 +1779,7 @@ const EnhancedAccountDetailView: React.FC = () => {
                       <span className="text-sm font-medium text-gray-900">24.5 MB / 100 MB</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '24.5%' }}></div>
+                      <div className="bg-brand-600 h-2 rounded-full" style={{ width: '24.5%' }}></div>
                     </div>
                   </div>
 
