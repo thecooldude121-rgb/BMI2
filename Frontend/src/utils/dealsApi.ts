@@ -151,6 +151,45 @@ export async function transitionDealStage(
   return json;
 }
 
+export type BulkDealAction = 'stage' | 'owner' | 'tag' | 'archive' | 'unarchive' | 'delete';
+
+export interface BulkDealResult {
+  success: boolean;
+  action: BulkDealAction;
+  /** How many deals actually changed. */
+  affected: number;
+  requested: number;
+  /** Ids that are not in this tenant — reported, not treated as a failure. */
+  not_found: string[];
+  /** Present only when affected !== requested; already phrased for the user. */
+  message?: string;
+}
+
+/**
+ * Apply one action to many deals in a single server-side transaction.
+ *
+ * Not N requests from the browser: 40 independent calls can half-succeed with
+ * no way to report which ones did. The server either applies the batch or rolls
+ * it back, and reports exactly what changed.
+ *
+ * A 'stage' action writes deal_stage_history per deal, so a bulk move is as
+ * auditable as an individual one.
+ */
+export async function bulkUpdateDeals(
+  action: BulkDealAction,
+  dealIds: string[],
+  payload?: { stage?: string; owner?: string; tag?: string },
+): Promise<BulkDealResult> {
+  const res = await fetch(`${API_BASE}/deals/bulk`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ action, deal_ids: dealIds, payload }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || `Bulk ${action} failed`);
+  return json;
+}
+
 export interface DealStageHistoryEntry {
   id: string;
   from_stage: string | null;

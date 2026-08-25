@@ -6,6 +6,7 @@ import {
   updateDeal,
   deleteDeal,
   transitionDealStage,
+  bulkUpdateDeals,
   getDealStageHistory,
 } from '../controllers/dealsController';
 import { protect } from '../middleware/auth';
@@ -19,8 +20,13 @@ router.post('/', createDeal);
 router.put('/:id', updateDeal);
 router.delete('/:id', deleteDeal);
 
-// Stage changes go through their own endpoint so every move is audited — see
-// transitionDealStage. Declared after /:id so they cannot shadow it.
+// Multi-deal operations run server-side in one transaction — see
+// bulkUpdateDeals for why this is not N requests from the browser.
+// Safe next to POST '/' because Express matches on method AND path, and there
+// is no POST '/:id' that could capture "bulk".
+router.post('/bulk', bulkUpdateDeals);
+
+// Stage changes have their own endpoint so every move is audited.
 router.post('/:id/stage-transition', transitionDealStage);
 router.get('/:id/stage-history', getDealStageHistory);
 

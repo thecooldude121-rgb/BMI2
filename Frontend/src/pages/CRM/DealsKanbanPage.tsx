@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchDeals, updateDeal, transitionDealStage } from '../../utils/dealsApi';
+import { fetchDeals, updateDeal, transitionDealStage, bulkUpdateDeals } from '../../utils/dealsApi';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
 import {
   formatDisplayDate,
@@ -2063,10 +2063,24 @@ const DealsKanbanPage: React.FC = () => {
               .catch((err: Error) =>
                 setToast({ message: `Could not update stage — ${err.message}`, type: 'error' }));
           }}
-          // Bulk operations still have no endpoint: doing them client-side would
-          // be N sequential requests with no transaction and no partial-failure
-          // report. Needs a real bulk endpoint — see Phase 2 remaining work.
-          onBulkAction={(action) => notPersisted(`Bulk "${action}"`)}
+          onBulkAction={(action, dealIds, payload) => {
+            // 'export' is built client-side from data already loaded, so there
+            // is nothing to send.
+            if (action === 'export') return;
+            bulkUpdateDeals(action, dealIds, payload)
+              .then(result => {
+                setToast({
+                  // The server phrases the partial case itself ("2 of 3
+                  // updated; 1 not found"), so pass it straight through rather
+                  // than rounding it up to a clean success.
+                  message: result.message ?? `${result.affected} deal${result.affected === 1 ? '' : 's'} updated`,
+                  type: result.message ? 'info' : 'success',
+                });
+                triggerRefetch();
+              })
+              .catch((err: Error) =>
+                setToast({ message: `Bulk ${action} failed — ${err.message}`, type: 'error' }));
+          }}
           availableOwners={Array.from(new Set(
             stages.flatMap(s => s.deals.map(d => d.owner)).filter(Boolean)
           ))}

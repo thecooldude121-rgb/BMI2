@@ -34,6 +34,12 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
       query += ` AND d.is_test = false`;
     }
 
+    // Archived deals are out of the working pipeline by default, same treatment
+    // as is_test. Pass include_archived=true for an archive view.
+    if (req.query.include_archived !== 'true') {
+      query += ` AND d.is_archived = false`;
+    }
+
     if (stage)       { query += ` AND d.stage = $${i++}`;             params.push(stage); }
     if (assigned_to) { query += ` AND d.assigned_to = $${i++}`;       params.push(assigned_to); }
     if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${search}%`); i++; }
@@ -307,6 +313,198 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
 
     await client.query('COMMIT');
     res.json({ success: true, data: updated.rows[0] });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * POST /api/v1/deals/bulk
+ * Body: { action: 'stage'|'owner'|'tag'|'archive'|'unarchive'|'delete',
+ *         deal_ids: string[], payload?: { stage?, owner?, tag? } }
+ *
+ * Why this exists as one endpoint rather than N requests from the browser:
+ * selecting 40 deals and changing their owner should either happen or not. Done
+ * client-side it is 40 independent requests that can half-succeed, with no way
+ * to report which ones did — and the UI would have to guess what to show. The
+ * deals board reported these as done while calling console.log; Phase 0 made it
+ * admit nothing was saved; this makes it true.
+ *
+ * Semantics:
+ *   - Everything runs in ONE transaction. Any error rolls the whole batch back.
+ *   - Ids that do not exist in the caller's tenant do NOT abort the batch. They
+ *     are reported in `not_found`, because one stale id in a selection should
+ *     not discard 39 legitimate changes.
+ *   - 'stage' writes a deal_stage_history row per deal, exactly like the single
+ *     transition endpoint, so a bulk move is as auditable as an individual one.
+ */
+const BULK_ACTIONS = ['stage', 'owner', 'tag', 'archive', 'unarchive', 'delete'] as const;
+type BulkAction = typeof BULK_ACTIONS[number];
+
+export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const tenantId = requireTenantId(req);
+    const { action, deal_ids, payload } = req.body as {
+      action: BulkAction;
+      deal_ids: string[];
+      payload?: { stage?: string; owner?: string; tag?: string };
+    };
+
+    if (!BULK_ACTIONS.includes(action)) {
+      res.status(400).json({ success: false, message: `action must be one of: ${BULK_ACTIONS.join(', ')}` });
+      return;
+    }
+    if (!Array.isArray(deal_ids) || deal_ids.length === 0) {
+      res.status(400).json({ success: false, message: 'deal_ids must be a non-empty array' });
+      return;
+    }
+    // A selection large enough to time out should be rejected, not attempted.
+    if (deal_ids.length > 500) {
+      res.status(400).json({ success: false, message: 'A bulk action is limited to 500 deals at a time' });
+      return;
+    }
+    if (action === 'stage' && !payload?.stage) {
+      res.status(400).json({ success: false, message: 'payload.stage is required for the stage action' });
+      return;
+    }
+    if (action === 'owner' && !payload?.owner) {
+      res.status(400).json({ success: false, message: 'payload.owner is required for the owner action' });
+      return;
+    }
+    if (action === 'tag' && !payload?.tag?.trim()) {
+      res.status(400).json({ success: false, message: 'payload.tag is required for the tag action' });
+      return;
+    }
+
+    await client.query('BEGIN');
+
+    // Resolve which ids actually belong to this tenant, and lock them.
+    const existing = await client.query(
+      'SELECT id, stage, probability FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 FOR UPDATE',
+      [deal_ids, tenantId],
+    );
+    const found = existing.rows;
+    const foundIds = found.map(r => r.id);
+    const notFound = deal_ids.filter(id => !foundIds.includes(id));
+
+    if (foundIds.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({
+        success: false,
+        message: 'None of those deals exist in your account',
+        affected: 0, requested: deal_ids.length, not_found: notFound,
+      });
+      return;
+    }
+
+    let affected = 0;
+
+    switch (action) {
+      case 'delete': {
+        const r = await client.query(
+          'DELETE FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 RETURNING id',
+          [foundIds, tenantId],
+        );
+        affected = r.rowCount ?? 0;
+        break;
+      }
+
+      case 'archive':
+      case 'unarchive': {
+        const r = await client.query(
+          `UPDATE deals SET is_archived = $1, updated_at = NOW()
+           WHERE id = ANY($2::varchar[]) AND tenant_id = $3 RETURNING id`,
+          [action === 'archive', foundIds, tenantId],
+        );
+        affected = r.rowCount ?? 0;
+        break;
+      }
+
+      case 'owner': {
+        const r = await client.query(
+          `UPDATE deals SET assigned_to = $1, updated_at = NOW()
+           WHERE id = ANY($2::varchar[]) AND tenant_id = $3 RETURNING id`,
+          [payload!.owner, foundIds, tenantId],
+        );
+        affected = r.rowCount ?? 0;
+        break;
+      }
+
+      case 'tag': {
+        // Append without duplicating. deals.tags is text[].
+        const r = await client.query(
+          `UPDATE deals
+           SET tags = CASE WHEN $1 = ANY(COALESCE(tags, '{}')) THEN tags
+                           ELSE array_append(COALESCE(tags, '{}'), $1) END,
+               updated_at = NOW()
+           WHERE id = ANY($2::varchar[]) AND tenant_id = $3 RETURNING id`,
+          [payload!.tag!.trim(), foundIds, tenantId],
+        );
+        affected = r.rowCount ?? 0;
+        break;
+      }
+
+      case 'stage': {
+        const toStage = payload!.stage!;
+        // Same probability rule as the single-deal transition: the pipeline
+        // stage default, or the deal's existing value when there is no match.
+        const stageRow = await client.query(
+          `SELECT probability FROM pipeline_stages
+           WHERE tenant_id = $1
+             AND lower(replace(name, ' ', '-')) = lower(replace($2, ' ', '-'))
+           LIMIT 1`,
+          [tenantId, toStage],
+        );
+        const stageDefault: number | null = stageRow.rows[0]?.probability ?? null;
+        const changedBy = await resolveActorName(req);
+
+        // Deals already in the target stage are left alone, so a bulk move does
+        // not write no-op history rows.
+        const moving = found.filter(d => d.stage !== toStage);
+        for (const deal of moving) {
+          const nextProbability = stageDefault ?? deal.probability ?? null;
+          await client.query(
+            `UPDATE deals SET stage = $1, probability = $2, updated_at = NOW()
+             WHERE id = $3 AND tenant_id = $4`,
+            [toStage, nextProbability, deal.id, tenantId],
+          );
+          await client.query(
+            `INSERT INTO deal_stage_history
+               (deal_id, from_stage, to_stage, probability, probability_override,
+                reason_code, changed_by, tenant_id)
+             VALUES ($1,$2,$3,$4,false,'bulk-update',$5,$6)`,
+            [deal.id, deal.stage, toStage, nextProbability, changedBy, tenantId],
+          );
+        }
+        affected = moving.length;
+        break;
+      }
+    }
+
+    await client.query('COMMIT');
+
+    const skipped = foundIds.length - affected;
+    res.json({
+      success: true,
+      action,
+      affected,
+      requested: deal_ids.length,
+      not_found: notFound,
+      // Say plainly when the number touched is not the number asked for, rather
+      // than letting the UI report a round "N deals updated".
+      ...(notFound.length || skipped
+        ? {
+            message:
+              `${affected} of ${deal_ids.length} updated` +
+              (notFound.length ? `; ${notFound.length} not found in your account` : '') +
+              (skipped ? `; ${skipped} already in that state` : ''),
+          }
+        : {}),
+    });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     next(error);
