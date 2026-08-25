@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
-import { Clock, Shield, Edit, Trash2, Plus, CheckCircle, XCircle, MessageSquare, AtSign, Download, RefreshCw, Search } from 'lucide-react';
+import { AtSign, CheckCircle, Clock, Download, Edit, MessageSquare, Plus, RefreshCw, Search, Shield, Trash2, X, XCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface AuditEntry {

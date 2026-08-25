@@ -1765,10 +1765,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         <span>Closed-Lost</span>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
-                      <div>Total: 40 days in pipeline</div>
-                      <div>Avg cycle: {avgDaysCycle} days</div>
-                    </div>
+                    {/* Stage-duration summary removed. "Total: 40 days in pipeline"
+                        was a hardcoded literal, and `avgDaysCycle` was never
+                        declared anywhere in this file — it rendered as nothing.
+                        The type checker could not report it while the Sequences
+                        parse error was suppressing all semantic errors.
+                        Restore it from deal_stage_history (migration 014), which
+                        now records the transitions needed to compute a real
+                        cycle time. */}
                   </div>
                 )}
               </div>

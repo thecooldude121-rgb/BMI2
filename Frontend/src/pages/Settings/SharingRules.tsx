@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
-import { Share2, Shield, Users, Lock, Eye, Edit, Plus, Trash2, Copy, CheckCircle, Search, Filter, Download, Save, RefreshCw, ChevronRight, Play, Pause, Info, Zap } from 'lucide-react';
+import { CheckCircle, ChevronRight, Copy, Download, Edit, Eye, Filter, Info, Lock, Pause, Play, Plus, RefreshCw, Save, Search, Share2, Shield, Trash2, Users, X, Zap } from 'lucide-react';
 
 interface OrgWideDefault {
   module: string;

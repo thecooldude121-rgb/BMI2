@@ -22,6 +22,23 @@ interface GamificationUser {
   lastActivity: string;
 }
 
+/**
+ * `Achievement` was referenced by the interface below but never defined or
+ * imported anywhere — a TS2304 the type checker could not report while the
+ * Sequences parse error suppressed all semantic errors.
+ *
+ * Shaped from the real gamification_achievements table (id, employee_id,
+ * badge_id, earned_at), which exists in Postgres with no controller and no API.
+ * Every `achievements` value in this file is `[]`, so nothing populates it yet —
+ * the type is here to be honest about the shape, not to imply the feature works.
+ */
+interface Achievement {
+  id: string;
+  employeeId: string;
+  badgeId: string;
+  earnedAt: string;
+}
+
 interface Badge {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
-import { Calendar, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Video, Clock, Users, TrendingUp, MoreHorizontal, X, RefreshCw, CheckCircle, AlertCircle, Play, ArrowLeft } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Calendar, CheckCircle, Clock, Download, Edit, Eye, FileText, Filter, MoreHorizontal, Play, Plus, RefreshCw, Search, Trash2, TrendingUp, Upload, Users, Video, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Meeting } from '../../types/leadGeneration';
 

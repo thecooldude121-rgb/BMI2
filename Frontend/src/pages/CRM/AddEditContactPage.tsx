@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, X, User, Briefcase, MapPin, Tag, FileText, Sparkles, CheckCircle, AlertTriangle, Linkedin, Building2, Link as LinkIcon, ExternalLink, Plus, Lightbulb, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Briefcase, Building2, CheckCircle, ChevronDown, ChevronRight, ExternalLink, FileText, Lightbulb, Link as LinkIcon, Linkedin, MapPin, Plus, Save, Sparkles, Tag, User, X, Zap } from 'lucide-react';
 
 interface ContactFormData {
   firstName: string;

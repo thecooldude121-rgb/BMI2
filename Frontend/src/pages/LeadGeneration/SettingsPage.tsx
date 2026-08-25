@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
-import { Settings, User, Mail, Calendar, Zap, Database, Shield, Bell, Globe, Download, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Bell, Calendar, Database, Download, Globe, Mail, Settings, Shield, Target, User, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const SettingsPage: React.FC = () => {

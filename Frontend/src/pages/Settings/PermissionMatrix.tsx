@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
-import { Grid, Search, Download, Upload, Save, X, AlertTriangle, Info, Eye, Edit, Trash2, Copy, Layers, ChevronDown, ChevronRight, RotateCcw, Zap, Shield, CheckSquare, Square, MinusSquare, HelpCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, CheckSquare, ChevronDown, ChevronRight, Copy, Download, Edit, Eye, Grid, HelpCircle, Info, Layers, MinusSquare, Plus, RotateCcw, Save, Search, Shield, Square, Trash2, Upload, X, Zap } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 
 type PermissionType = 'read' | 'write' | 'delete' | 'export' | 'import' | 'hide';

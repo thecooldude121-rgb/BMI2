@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
-import { Zap, Plus, Play, Pause, Edit, Trash2, Copy, BarChart3, Users, Mail, Clock, TrendingUp, Eye, Filter, Search, Download, Upload, Target, ArrowRight, CheckCircle, MessageSquare, Phone, CheckSquare, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BarChart3, CheckCircle, CheckSquare, Clock, Copy, Download, Edit, Eye, Filter, Mail, MessageSquare, Pause, Phone, Play, Plus, Search, Target, Trash2, TrendingUp, Upload, Users, X, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { EmailSequence } from '../../types/leadGeneration';
 

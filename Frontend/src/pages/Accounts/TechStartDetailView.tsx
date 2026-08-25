@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, DollarSign, Calendar, Edit, MoreVertical, Plus, Star, Target, FileText, Sparkles, Clock, Activity, Video } from 'lucide-react';
+import { Activity, ArrowLeft, Building2, Calendar, CheckCircle2, Clock, DollarSign, Edit, Eye, FileText, Globe, Mail, MapPin, MoreVertical, Phone, Plus, Sparkles, Star, Target, Upload, Users, Video } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { techstartMockData } from '../../utils/techstartMockData';
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../../ui/Button';
 import { X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useLeads } from '../../../contexts/LeadContext';
+import { DEFAULT_RULES as DEFAULT_RULES_VALUE } from './types';
 import { buildInitialMappings } from './columnMapper';
 import { buildValidatedRows } from './importValidator';
 import Step1Upload from './Step1Upload';
