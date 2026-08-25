@@ -818,19 +818,19 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             <div
               style={{ flex: 1 }}
               className={weightedCardClass}
-              title={`Weighted forecast: ${probability}% win probability × ${formatCurrencyCompact(dealAmount)}`}
+              title={`Weighted forecast: ${probability}% win probability × ${formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}`}
             >
               {deal.stage === 'closed-won' ? (
                 <>
                   <div className="text-xs font-semibold text-emerald-500 uppercase tracking-wide mb-1">Final Value</div>
-                  <div className="text-2xl font-bold text-emerald-700 mb-1 leading-none">{formatCurrencyCompact(dealAmount)}</div>
+                  <div className="text-2xl font-bold text-emerald-700 mb-1 leading-none">{formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}</div>
                   <div className="text-xs text-emerald-500 font-medium">🎉 Deal Won</div>
                 </>
               ) : (
                 <>
                   <div className="text-xs font-semibold text-violet-500 uppercase tracking-wide mb-1">Weighted Value</div>
-                  <div className="text-2xl font-bold text-violet-700 mb-1 leading-none">{formatCurrencyCompact(weightedValue)}</div>
-                  <div className="text-xs text-violet-400">{probability}% of {formatCurrencyCompact(dealAmount)}</div>
+                  <div className="text-2xl font-bold text-violet-700 mb-1 leading-none">{formatCurrencyCompact(weightedValue, deal.currency || BASE_CURRENCY_CODE)}</div>
+                  <div className="text-xs text-violet-400">{probability}% of {formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}</div>
                 </>
               )}
             </div>

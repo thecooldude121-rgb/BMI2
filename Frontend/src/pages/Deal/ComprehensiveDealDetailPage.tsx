@@ -1143,7 +1143,10 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             actions.find(a => a.priority === 'high') ??
             actions.find(a => a.priority === 'medium') ??
             null;
-          if (!top || top.priority === 'low') return null;
+          // The `top.priority === 'low'` guard that was here is dead code: the two
+          // find() calls above only ever match 'high' or 'medium', so `top` is
+          // already narrowed to those and the comparison can never be true.
+          if (!top) return null;
           return {
             priority: top.priority as 'high' | 'medium',
             title: top.title,

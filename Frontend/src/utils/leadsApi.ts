@@ -42,7 +42,11 @@ export function mapRowToLead(row: any): Lead {
     company:    row.company    || undefined,
     position:   row.position   || undefined,
     industry:   row.industry   || undefined,
-    stage:      row.stage      || 'new',
+    // `stage` deliberately not set. The DB column IS called stage, but the
+    // frontend Lead type calls it `status` — mapped a few lines below — and
+    // nothing reads `lead.stage`. Setting both put an off-type property on every
+    // lead and was the only type error in this file. (Lead.state, which does
+    // exist, is the geographic state; unrelated despite the near-miss name.)
     score:      row.score      ?? 0,
     source:     row.source     || 'manual',
     owner_id:   row.owner_id   || '',

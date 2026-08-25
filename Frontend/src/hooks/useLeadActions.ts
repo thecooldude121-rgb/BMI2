@@ -7,7 +7,16 @@ import { useCurrentUser } from '../contexts/CurrentUserContext';
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 // updateLead signature matches the one provided by useLeads() context
-export type UpdateLeadFn = (id: string, updates: Partial<Lead>) => Promise<void> | void;
+/**
+ * LeadContext.updateLead returns Promise<boolean> — true when the API accepted
+ * the write. This was typed as Promise<void>, which does not accept that, so
+ * every consumer passing the real function was a type error.
+ *
+ * Widened to the truth rather than narrowing the provider. Callers here ignore
+ * the flag today; surfacing it (so a failed update stops reporting success) is
+ * worth doing, and is a behaviour change rather than a typing one.
+ */
+export type UpdateLeadFn = (id: string, updates: Partial<Lead>) => Promise<boolean | void> | boolean | void;
 
 export interface LeadActions {
   changeStatus:   (lead: Lead, toStatus: Lead['status'])                   => Promise<void>;

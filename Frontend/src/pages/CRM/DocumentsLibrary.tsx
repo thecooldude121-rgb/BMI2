@@ -341,8 +341,9 @@ const DocumentsLibrary: React.FC = () => {
       setDocuments(formattedDocs);
       setTotalCount(count);
 
+      // getUserFavorites returns an array of ids; starredDocs is a Set.
       const favorites = await documentsService.getUserFavorites();
-      setStarredDocs(favorites);
+      setStarredDocs(new Set(favorites));
     } catch (err: any) {
       // PHASE 2: this used to swallow the failure and show MOCK_DOCUMENTS, with
       // an explicit `setError(null); // Don't show error when using mock data`.
@@ -372,11 +373,13 @@ const DocumentsLibrary: React.FC = () => {
     const category = searchParams.get('category');
     const source = searchParams.get('source');
     const dealName = searchParams.get('deal_name');
-    const accountName = searchParams.get('account_name');
+    // `?? undefined`: searchParams.get returns null for a missing key, but the
+    // contextFilter fields are optional (string | undefined), not nullable.
+    const accountName = searchParams.get('account_name') ?? undefined;
     const contactName = searchParams.get('contact_name');
     const activityName = searchParams.get('activity_name');
-    const activityType = searchParams.get('activity_type');
-    const title = searchParams.get('title');
+    const activityType = searchParams.get('activity_type') ?? undefined;
+    const title = searchParams.get('title') ?? undefined;
     const hrmsConnected = searchParams.get('hrms_connected') === 'true';
 
     if (dealId) {
@@ -537,10 +540,11 @@ const DocumentsLibrary: React.FC = () => {
       const doc = documents.find(d => d.document_id === docId);
       if (!doc?.id) return;
 
-      const result = await documentsService.toggleFavorite(doc.id);
+      // toggleFavorite returns the NEW starred state as a boolean.
+      const isStarred = await documentsService.toggleFavorite(doc.id);
 
       const newStarred = new Set(starredDocs);
-      if (result.is_starred) {
+      if (isStarred) {
         newStarred.add(doc.id);
       } else {
         newStarred.delete(doc.id);
@@ -549,12 +553,12 @@ const DocumentsLibrary: React.FC = () => {
 
       setDocuments(prev => prev.map(d =>
         d.document_id === docId
-          ? { ...d, is_starred: result.is_starred, starred: result.is_starred }
+          ? { ...d, is_starred: isStarred, starred: isStarred }
           : d
       ));
 
       showToast(
-        result.is_starred ? 'Added to favorites' : 'Removed from favorites',
+        isStarred ? 'Added to favorites' : 'Removed from favorites',
         'success'
       );
     } catch (error: any) {
@@ -783,7 +787,10 @@ const DocumentsLibrary: React.FC = () => {
           const ownerB = getUserLabel(b.uploaded_by);
           compareValue = ownerA.localeCompare(ownerB);
         } else if (listSortColumn === 'uploaded') {
-          compareValue = new Date(a.uploaded_date).getTime() - new Date(b.uploaded_date).getTime();
+          // uploaded_date is optional; `?? 0` sorts an undated document last
+          // instead of producing NaN, which makes the comparator non-deterministic
+          // and can corrupt the whole sort order.
+          compareValue = new Date(a.uploaded_date ?? 0).getTime() - new Date(b.uploaded_date ?? 0).getTime();
         }
 
         return listSortDirection === 'asc' ? compareValue : -compareValue;
@@ -2198,7 +2205,7 @@ const DocumentsLibrary: React.FC = () => {
 
                           <div className="flex items-center gap-2 mb-3" style={{ fontSize: '13px', color: '#6b7280' }}>
                             <Calendar className="w-3 h-3" />
-                            <span>{formatDate(doc.last_modified_date)}</span>
+                            <span>{doc.last_modified_date ? formatDate(doc.last_modified_date) : '—'}</span>
                             <span>•</span>
                             <span>{formatFileSize(doc.file_size)}</span>
                           </div>
@@ -2536,7 +2543,7 @@ const DocumentsLibrary: React.FC = () => {
                             </td>
                             <td className="px-4 py-3">
                               <span className="text-sm" style={{ color: '#6b7280' }}>
-                                {formatDate(doc.uploaded_date)}
+                                {doc.uploaded_date ? formatDate(doc.uploaded_date) : '—'}
                               </span>
                             </td>
                           </tr>
