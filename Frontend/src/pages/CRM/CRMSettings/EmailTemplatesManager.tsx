@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Plus } from 'lucide-react';
 
 interface EmailTemplate {
@@ -138,13 +139,12 @@ As discussed, I've attached our proposal for {{deal_name}}...`,
           <h2 className="text-2xl font-bold text-gray-900">Email Templates</h2>
           <p className="text-sm text-gray-600 mt-1">Create and manage email templates for outreach and follow-ups</p>
         </div>
-        <button
+        <Button
           onClick={() => setShowCreateForm(!showCreateForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
         >
           <Plus className="h-4 w-4" />
           Create New
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-6">
@@ -275,12 +275,12 @@ As discussed, I've attached our proposal for {{deal_name}}...`,
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={handleSaveTemplate}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  size="lg"
                 >
                   Save Template
-                </button>
+                </Button>
               </div>
             </div>
           </div>

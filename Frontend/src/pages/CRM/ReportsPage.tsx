@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Sparkles, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -267,13 +268,12 @@ const ReportsPage: React.FC = () => {
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
-              <button
+              <Button
                 onClick={handleNavigateToCustomReportBuilder}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Custom Report</span>
-              </button>
+              </Button>
               <div className="relative hidden md:block">
                 <button
                   onClick={() => setShowMoreMenu(!showMoreMenu)}
@@ -1662,7 +1662,7 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Scheduling ${selectedReport}`);
                     setShowScheduleModal(false);
@@ -1676,10 +1676,10 @@ const ReportsPage: React.FC = () => {
                     setShowSuccessToast(true);
                     setTimeout(() => setShowSuccessToast(false), 5000);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Schedule
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1714,7 +1714,7 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Sharing ${selectedReport}`);
                     setShowShareModal(false);
@@ -1725,10 +1725,10 @@ const ReportsPage: React.FC = () => {
                     setShowSuccessToast(true);
                     setTimeout(() => setShowSuccessToast(false), 3000);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Share
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1782,15 +1782,15 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Renaming ${selectedReport}`);
                     setShowRenameModal(false);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Rename
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1826,15 +1826,15 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Emailing ${selectedReport}`);
                     setShowEmailModal(false);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Send
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1880,13 +1880,13 @@ const EmptyState: React.FC<EmptyStateProps> = ({
       <div className="text-6xl mb-4">{icon}</div>
       <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
       <p className="text-sm text-gray-600 mb-6 text-center max-w-md">{description}</p>
-      <button
+      <Button
         onClick={onAction}
-        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2 transition-all"
+        size="xl"
       >
         <Plus className="w-5 h-5" />
         {actionLabel}
-      </button>
+      </Button>
     </div>
   );
 };

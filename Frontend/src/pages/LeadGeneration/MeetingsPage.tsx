@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Calendar, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Video, Clock, Users, TrendingUp, MoreHorizontal, X, RefreshCw, CheckCircle, AlertCircle, Play, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Meeting } from '../../types/leadGeneration';
@@ -450,9 +451,9 @@ const MeetingsPage: React.FC = () => {
                 {selectedMeetings.length} meeting{selectedMeetings.length > 1 ? 's' : ''} selected
               </span>
               <div className="flex space-x-2">
-                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm">
                   Reschedule
-                </button>
+                </Button>
                 <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                   Mark Complete
                 </button>

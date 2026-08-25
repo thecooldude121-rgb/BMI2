@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, X, User, Briefcase, MapPin, Tag, FileText, Sparkles, CheckCircle, AlertTriangle, Linkedin, Building2, Link as LinkIcon, ExternalLink, Plus, Lightbulb, Zap } from 'lucide-react';
 
@@ -740,10 +741,10 @@ const AddEditContactPage: React.FC = () => {
             <button onClick={() => navigate('/crm/contacts')} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
               Cancel
             </button>
-            <button onClick={handleSave} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2">
+            <Button onClick={handleSave} size="xl">
               <Save className="h-5 w-5" />
               <span>Save Contact</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -983,10 +984,10 @@ const AddEditContactPage: React.FC = () => {
                       <>
                         <p className="text-sm text-blue-900 font-medium mb-2">💡 Existing account found: {existingAccount.name}</p>
                         <div className="flex items-center space-x-2">
-                          <button onClick={handleLinkToExistingAccount} className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 flex items-center space-x-1">
+                          <Button onClick={handleLinkToExistingAccount} size="sm" className="rounded">
                             <LinkIcon className="h-3 w-3" />
                             <span>Link to Existing</span>
-                          </button>
+                          </Button>
                           <button onClick={handleCreateNewAccount} className="px-3 py-1.5 bg-white border border-blue-600 text-blue-600 rounded text-xs font-medium hover:bg-blue-50 flex items-center space-x-1">
                             <Plus className="h-3 w-3" />
                             <span>Create New Account</span>
@@ -1334,13 +1335,13 @@ const AddEditContactPage: React.FC = () => {
                           <li>• Revenue: {enrichmentData.companyInfo.revenue}</li>
                           <li>• Location: {enrichmentData.companyInfo.location}</li>
                         </ul>
-                        <button
+                        <Button
                           onClick={handleApplyAllCompanyData}
-                          className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-2"
+                          size="sm" fullWidth className="rounded"
                         >
                           <Building2 className="h-4 w-4" />
                           <span>Apply All Company Data</span>
-                        </button>
+                        </Button>
                       </div>
                     )}
 
@@ -1573,7 +1574,7 @@ const AddEditContactPage: React.FC = () => {
                 )}
               </button>
             )}
-            <button onClick={handleSave} disabled={isSaving} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <Button onClick={handleSave} disabled={isSaving} size="xl">
               {isSaving ? (
                 <>
                   <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
@@ -1585,7 +1586,7 @@ const AddEditContactPage: React.FC = () => {
                   <span>Save Contact</span>
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1649,13 +1650,12 @@ const AddEditContactPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleLinkedinScrape}
                 disabled={!linkedinUrl}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Import Data
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1670,14 +1670,14 @@ const AddEditContactPage: React.FC = () => {
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center space-x-2 disabled:opacity-50"
+            size="lg" className="font-semibold"
           >
             <Save className="h-5 w-5" />
             <span>{isSaving ? 'Saving...' : 'Save Contact'}</span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

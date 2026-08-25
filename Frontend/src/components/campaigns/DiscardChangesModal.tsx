@@ -1,5 +1,6 @@
 
 import { AlertTriangle, Save, Trash2, X } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface DiscardChangesModalProps {
   isOpen: boolean;
@@ -89,21 +90,15 @@ export default function DiscardChangesModal({
         <div className="flex flex-col gap-3 p-6 bg-gray-50 rounded-b-xl">
           {/* Primary Actions */}
           <div className="flex gap-3">
-            <button
+            <Button
               onClick={onSaveDraft}
               disabled={isSaving}
-              className="
-                flex-1 px-4 py-3 bg-blue-600 border-2 border-blue-600
-                text-white font-medium text-sm rounded-lg
-                hover:bg-blue-700 transition-colors duration-200
-                disabled:opacity-50 disabled:cursor-wait
-                flex items-center justify-center gap-2
-              "
+              fullWidth className="border-2 border-blue-600 duration-200 disabled:cursor-wait"
               type="button"
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? 'Saving...' : 'Save Draft'}</span>
-            </button>
+            </Button>
 
             <button
               onClick={onDiscardChanges}

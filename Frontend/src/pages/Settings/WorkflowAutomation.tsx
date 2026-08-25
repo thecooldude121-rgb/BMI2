@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Workflow, Play, Pause, Edit, Copy, Upload, Plus, X, GitBranch, Clock, Zap, CheckCircle, Activity, BarChart, Filter, Search, Eye, Target, TrendingUp } from 'lucide-react';
 
 interface WorkflowDefinition {
@@ -263,13 +264,12 @@ const WorkflowAutomation: React.FC = () => {
               <p className="text-gray-600 mt-1">Enterprise process automation and business rules</p>
             </div>
           </div>
-          <button
+          <Button
             onClick={() => setShowWorkflowModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span>Create Workflow</span>
-          </button>
+          </Button>
         </div>
 
         {/* Statistics */}
@@ -757,9 +757,9 @@ const WorkflowAutomation: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Button >
                 Open Builder
-              </button>
+              </Button>
             </div>
           </div>
         </div>

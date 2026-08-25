@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, Phone, User, Calendar, Clock, BarChart3, DollarSign, Briefcase, Shield, Activity, TrendingUp, FileText, Lock, CheckCircle, ChevronRight, RefreshCw, MapPin, Globe, X, Trash2 } from 'lucide-react';
 import { mockTeamMembers, mockTeamCapacity, getRoleDisplayName, getStatusBadgeClass, getStatusIcon, type TeamMember } from '../../../utils/teamManagementMockData';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -385,10 +386,10 @@ const TeamManagement: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+          <Button >
             <UserPlus className="h-4 w-4" />
             Add New Team Member
-          </button>
+          </Button>
           <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
             <Upload className="h-4 w-4" />
             Import Users
@@ -491,13 +492,12 @@ const TeamManagement: React.FC = () => {
                 <div>• Auto-sync: {teamCapacity.autoSyncStatus} - Last sync: {teamCapacity.lastSync}</div>
               </div>
             </div>
-            <button
+            <Button
               onClick={() => setShowUpgradePlanModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
             >
               Upgrade Plan
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
           <div className="border-t border-gray-200 pt-3 mt-3">
             <div className="text-sm font-medium text-gray-900 mb-2">Upgrade Options:</div>
@@ -625,17 +625,16 @@ const TeamManagement: React.FC = () => {
               <p className="text-xs text-gray-500 text-center mb-6">
                 Try adjusting your search terms or filters
               </p>
-              <button
+              <Button
                 onClick={() => {
                   setSearchQuery('');
                   setRoleFilter('all');
                   setStatusFilter('all');
                   setDepartmentFilter('all');
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
               >
                 Clear All Filters
-              </button>
+              </Button>
             </div>
           ) : (
             filteredMembers.map((member) => (
@@ -812,13 +811,12 @@ const TeamManagement: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <button
+                <Button
                   onClick={() => handleViewProfile(member)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
                 >
                   <User className="h-4 w-4" />
                   View Profile
-                </button>
+                </Button>
                 {member.status === 'inactive' ? (
                   <>
                     <button

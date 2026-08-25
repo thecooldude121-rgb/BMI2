@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { robertChangEnrichmentData, robertChangEnrichmentHistory, alternativeEnrichmentOptions, getContactFields, getCompanyFields, getProfessionalFields, type RobertChangField } from '../../utils/robertChangEnrichmentData';
 import { useToast } from '../../contexts/ToastContext';
@@ -138,13 +139,12 @@ export default function RobertChangEnrichmentPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={handleTryAgain}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
             >
               <span>🔄</span>
               <span>Try Again</span>
-            </button>
+            </Button>
             <button
               onClick={handleAddManually}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
@@ -423,13 +423,13 @@ function FieldSection({
           {title} ({availableCount}/{totalCount} fields)
         </h4>
         {missingCount > 0 && onBulkAdd && (
-          <button
+          <Button
             onClick={onBulkAdd}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center gap-1"
+            size="sm" className="rounded"
           >
             <span>✏️</span>
             <span>Add All Fields</span>
-          </button>
+          </Button>
         )}
       </div>
       <div className="border-t border-gray-200 pt-3">
@@ -619,21 +619,21 @@ function AlternativeOptionCard({
           <div className="flex items-center gap-2">
             {option.actions ? (
               option.actions.map((action: string, idx: number) => (
-                <button
+                <Button
                   key={idx}
                   onClick={handleAction}
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+                  size="sm" className="rounded"
                 >
                   {action}
-                </button>
+                </Button>
               ))
             ) : (
-              <button
+              <Button
                 onClick={handleAction}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+                size="sm" className="rounded"
               >
                 {option.action}
-              </button>
+              </Button>
             )}
             {option.recommended && (
               <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
@@ -788,12 +788,11 @@ function LearnWhyModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-            <button
+            <Button
               onClick={onClose}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
               Got it
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -889,12 +888,11 @@ function ManualGuideModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-            <button
+            <Button
               onClick={onClose}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
               Start Manual Research
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1187,13 +1185,12 @@ function LinkedInImportModal({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={onImport}
               disabled={!linkedInUrl}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Import Profile
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1340,12 +1337,11 @@ function ConfigureSearchModal({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
             >
               Save & Retry Search
-            </button>
+            </Button>
           </div>
         </div>
       </div>

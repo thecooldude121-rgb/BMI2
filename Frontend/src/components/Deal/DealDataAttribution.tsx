@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { Database, CheckCircle2, RefreshCw, ChevronDown } from 'lucide-react';
 import { DataVerificationModal } from './DealActivityModals';
 import { useToast } from '../../contexts/ToastContext';
@@ -102,14 +103,14 @@ export const DealDataAttribution: React.FC<DealDataAttributionProps> = ({ dataSo
             </div>
 
             <div className="flex items-center gap-2">
-              <button
+              <Button
                 onClick={handleReEnrich}
                 disabled={isEnriching}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                size="sm"
               >
                 <RefreshCw className={`h-4 w-4 ${isEnriching ? 'animate-spin' : ''}`} />
                 {isEnriching ? 'Enriching...' : 'Re-enrich Now'}
-              </button>
+              </Button>
               <button
                 onClick={() => setShowVerifyModal(true)}
                 className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"

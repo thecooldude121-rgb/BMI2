@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { Users, Plus, Edit, Trash2, Search, Grid as GridIcon, List, ChevronRight, X, UserPlus, UserMinus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -172,14 +173,14 @@ export const UserGroupManagement: React.FC = () => {
             <p className="text-sm text-gray-600 mt-1">Manage user groups and memberships</p>
           </div>
 
-          <button
+          <Button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            
             aria-label="Create new group"
           >
             <Plus className="h-5 w-5" />
             <span>Create Group</span>
-          </button>
+          </Button>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -233,12 +234,11 @@ export const UserGroupManagement: React.FC = () => {
               {searchQuery ? 'Try adjusting your search criteria' : 'Create your first user group to get started'}
             </p>
             {!searchQuery && (
-              <button
+              <Button
                 onClick={() => setShowCreateModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Create First Group
-              </button>
+              </Button>
             )}
           </div>
         ) : viewMode === 'grid' ? (
@@ -458,13 +458,13 @@ export const UserGroupManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={createGroup}
                 disabled={!newGroup.name.trim() || loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="disabled:bg-gray-300"
               >
                 {loading ? 'Saving...' : selectedGroup ? 'Update' : 'Create'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -487,10 +487,10 @@ export const UserGroupManagement: React.FC = () => {
           </div>
 
           <div className="p-4 border-b border-gray-200">
-            <button className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <Button fullWidth>
               <UserPlus className="h-5 w-5" />
               <span>Add Members</span>
-            </button>
+            </Button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, DollarSign, Target, Edit, Activity, Mail, Phone, Video, CheckSquare, Clock, TrendingUp, ChevronDown, ChevronUp, Plus, Tag } from 'lucide-react';
 
@@ -129,19 +130,19 @@ const DealDetailPage: React.FC = () => {
                 Edit
               </button>
               
-              <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 transition-colors">
+              <Button className="rounded-xl">
                 <Target className="h-4 w-4 mr-2" />
                 Update Stage
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Quick Actions */}
           <div className="flex items-center space-x-3">
-            <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <Button >
               <Mail className="h-4 w-4 mr-2" />
               Send Email
-            </button>
+            </Button>
             <button className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
               <Phone className="h-4 w-4 mr-2" />
               Log Call
@@ -347,10 +348,10 @@ const DealDetailPage: React.FC = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900">Activity Timeline</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Log Activity
-                  </button>
+                  </Button>
                 </div>
                 
                 <div className="text-center py-16">
@@ -364,10 +365,10 @@ const DealDetailPage: React.FC = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900">Email Communications</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Mail className="h-4 w-4 mr-2" />
                     Compose Email
-                  </button>
+                  </Button>
                 </div>
                 
                 <div className="text-center py-16">

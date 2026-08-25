@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, Clock, CheckCircle2, Search } from 'lucide-react';
 
 interface MoreOptionsDropdownProps {
@@ -84,15 +85,15 @@ export const StageChangeModal: React.FC<StageChangeModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               onConfirm();
               onClose();
             }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            fullWidth
           >
             Move Stage
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -166,13 +167,13 @@ export const UpdateAmountModal: React.FC<UpdateAmountModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleUpdate}
             disabled={!reason.trim() || !newAmount}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             Update
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -324,15 +325,15 @@ export const FindCEOModal: React.FC<FindCEOModalProps> = ({ isOpen, onClose, onA
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   onAddContact(foundCEO);
                   onClose();
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                fullWidth
               >
                 Add to Deal
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -430,15 +431,15 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               onAddContact('new-contact', selectedRole);
               onClose();
             }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            fullWidth
           >
             Add
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -516,15 +517,15 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               alert('Email sent!');
               onClose();
             }}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            size="lg"
           >
             Send Email
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -592,15 +593,15 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               alert('Call logged!');
               onClose();
             }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            fullWidth
           >
             Save Call
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -678,16 +679,16 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               onSchedule({ title, date, time });
               onClose();
             }}
             disabled={!title || !date || !time}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+            fullWidth
           >
             Schedule
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -794,14 +795,14 @@ export const DuplicateDealModal: React.FC<DuplicateDealModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             type="button"
             disabled={!newName.trim() || isLoading}
             onClick={() => onConfirm(newName.trim())}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             {isLoading ? 'Creating…' : 'Create Duplicate'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

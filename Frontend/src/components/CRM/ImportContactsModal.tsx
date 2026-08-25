@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Upload, Download, CheckCircle } from 'lucide-react';
 
 interface ImportContactsModalProps {
@@ -144,13 +145,12 @@ const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClo
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleImport}
               disabled={!file}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Import Contacts
-            </button>
+            </Button>
           </div>
         </div>
       </div>

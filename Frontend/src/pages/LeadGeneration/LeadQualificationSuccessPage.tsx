@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CheckCircle, ArrowLeft, ExternalLink, Mail, Calendar, FileText, Target, Lightbulb } from 'lucide-react';
 import {
@@ -300,13 +301,12 @@ const LeadQualificationSuccessPage: React.FC = () => {
               <p className="font-semibold text-gray-900">{successData.crmOpportunity.owner}</p>
             </div>
           </div>
-          <button
+          <Button
             onClick={handleViewInCRM}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
           >
             <ExternalLink className="h-4 w-4" />
             View in CRM
-          </button>
+          </Button>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
@@ -415,13 +415,12 @@ const LeadQualificationSuccessPage: React.FC = () => {
             Back to Lead List
           </button>
           <div className="flex gap-3">
-            <button
+            <Button
               onClick={handleViewInCRM}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               <ExternalLink className="h-4 w-4" />
               View in CRM
-            </button>
+            </Button>
             <button
               onClick={handleContactLead}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"

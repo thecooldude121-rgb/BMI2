@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { X } from 'lucide-react';
 
 interface FormModalProps {
@@ -59,13 +60,13 @@ const FormModal: React.FC<FormModalProps> = ({
           >
             {cancelLabel}
           </button>
-          <button
+          <Button
             onClick={onSubmit}
             disabled={isSubmitting}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:bg-blue-400"
+            className="disabled:bg-blue-400"
           >
             {isSubmitting ? 'Saving...' : submitLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

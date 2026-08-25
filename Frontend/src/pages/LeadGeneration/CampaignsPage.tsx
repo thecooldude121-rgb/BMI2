@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import {
   Mail,
@@ -228,13 +229,13 @@ const CampaignsPage: React.FC = () => {
               </div>
               <p className="text-sm text-gray-600">Manage your multi-channel outreach campaigns</p>
             </div>
-            <button
+            <Button
               onClick={() => navigate('/lead-generation/campaigns/create')}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
+              className="bg-blue-500 hover:bg-blue-600"
             >
               <Rocket className="h-5 w-5" />
               Create Campaign
-            </button>
+            </Button>
           </div>
         </div>
 

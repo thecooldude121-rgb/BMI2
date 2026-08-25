@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Download, Plus, MoreVertical, Mail, Zap, CheckCircle, ChevronDown, ChevronUp, TrendingUp, Target, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
@@ -563,13 +564,12 @@ const LeadsListPage: React.FC = () => {
             <p className="text-gray-600 mt-1">Manage and qualify all your leads</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={() => navigate('/lead-generation/leads/add-import')}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Add / Import Leads
-            </button>
+            </Button>
             <button
               onClick={() => showToast('Exporting filtered leads to CSV...', 'success')}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -779,12 +779,12 @@ const LeadsListPage: React.FC = () => {
             </span>
 
             <div className="relative">
-              <button
+              <Button
                 onClick={() => setShowAssignMenu('bulk')}
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                size="sm" className="rounded"
               >
                 Assign to... ▼
-              </button>
+              </Button>
               {showAssignMenu === 'bulk' && (
                 <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                   {['Alex T.', 'Sarah C.', 'Mike J.', 'Round-robin', 'Territory rules'].map(owner => (
@@ -804,12 +804,12 @@ const LeadsListPage: React.FC = () => {
             </div>
 
             <div className="relative">
-              <button
+              <Button
                 onClick={() => setShowSequenceMenu('bulk')}
-                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                size="sm" className="rounded"
               >
                 Add to Sequence ▼
-              </button>
+              </Button>
               {showSequenceMenu === 'bulk' && (
                 <div className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                   {['New Customer Outreach', 'Product Launch Follow-up', 'Re-engagement Campaign'].map(seq => (

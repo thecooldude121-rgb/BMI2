@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { ArrowLeft, Edit, Mail, Phone, Video, Calendar, FileText, DollarSign, User, Building, Clock, Tag, Paperclip, Activity, MoreHorizontal, TrendingUp, Globe, Target, Plus, Download, Eye, CheckCircle, AlertCircle, X, Save, ChevronDown, ChevronUp, Briefcase } from 'lucide-react';
 import { Deal, Pipeline } from '../../types/deals';
 
@@ -221,13 +222,12 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
                 </span>
               </div>
               
-              <button
+              <Button
                 onClick={() => setShowStageModal(true)}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <Target className="h-4 w-4 mr-2" />
                 Change Stage
-              </button>
+              </Button>
               
               <button
                 onClick={() => setIsEditing(!isEditing)}
@@ -254,10 +254,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
 
           {/* Quick Actions */}
           <div className="flex items-center space-x-3 p-6 bg-gray-50 border-b border-gray-200">
-            <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <Button >
               <Mail className="h-4 w-4 mr-2" />
               Send Email
-            </button>
+            </Button>
             <button className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
               <Phone className="h-4 w-4 mr-2" />
               Log Call
@@ -719,10 +719,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold text-gray-900">Activities & Timeline</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Log Activity
-                  </button>
+                  </Button>
                 </div>
 
                 {deal.activities.length === 0 ? (
@@ -730,9 +730,9 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
                     <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No activities logged</h3>
                     <p className="text-gray-600 mb-6">Start tracking your deal activities and communications</p>
-                    <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors">
+                    <Button size="xl" className="rounded-xl">
                       Log First Activity
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -789,10 +789,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold text-gray-900">Email Communications</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Mail className="h-4 w-4 mr-2" />
                     Compose Email
-                  </button>
+                  </Button>
                 </div>
 
                 {deal.emails.length === 0 ? (
@@ -800,9 +800,9 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
                     <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No emails found</h3>
                     <p className="text-gray-600 mb-6">All deal-related emails will appear here</p>
-                    <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors">
+                    <Button size="xl" className="rounded-xl">
                       Send First Email
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -849,10 +849,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold text-gray-900">Attachments & Documents</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Upload File
-                  </button>
+                  </Button>
                 </div>
 
                 {deal.attachments.length === 0 ? (
@@ -860,9 +860,9 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
                     <Paperclip className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No attachments yet</h3>
                     <p className="text-gray-600 mb-6">Upload proposals, contracts, and supporting documents</p>
-                    <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors">
+                    <Button size="xl" className="rounded-xl">
                       Upload First File
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -966,10 +966,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold text-gray-900">Deal Notes</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Note
-                  </button>
+                  </Button>
                 </div>
 
                 {deal.notes ? (
@@ -987,9 +987,9 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({
                     <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No notes added</h3>
                     <p className="text-gray-600 mb-6">Add internal notes to track important information</p>
-                    <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors">
+                    <Button size="xl" className="rounded-xl">
                       Add First Note
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>

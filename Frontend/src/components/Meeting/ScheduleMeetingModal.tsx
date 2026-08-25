@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Video, Phone, MapPin, Link2, Calendar, Clock } from 'lucide-react';
 
 interface ScheduleMeetingModalProps {
@@ -286,12 +287,12 @@ export default function ScheduleMeetingModal({ isOpen, onClose, onSchedule }: Sc
             >
               Cancel
             </button>
-            <button
+            <Button
               type="submit"
-              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              size="xl" fullWidth
             >
               Schedule Meeting
-            </button>
+            </Button>
           </div>
         </form>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X } from 'lucide-react';
 
 interface ContactFormProps {
@@ -156,12 +157,11 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
             >
               Cancel
             </button>
-            <button
+            <Button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               {initialData ? 'Update Contact' : 'Create Contact'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

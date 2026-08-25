@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../ui/Button';
 import { Search, CheckCircle, X, Linkedin, Globe, Database } from 'lucide-react';
 
 interface AIEnrichmentSectionProps {
@@ -71,14 +72,13 @@ const AIEnrichmentSection: React.FC<AIEnrichmentSectionProps> = ({
               placeholder="Search Company..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <button
+            <Button
               onClick={handleSearch}
               disabled={isSearching || !searchQuery.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
             >
               <Search className="h-4 w-4" />
               <span>{isSearching ? 'Searching...' : 'Find & Enrich'}</span>
-            </button>
+            </Button>
           </div>
 
           <div className="pt-4 border-t border-blue-200">

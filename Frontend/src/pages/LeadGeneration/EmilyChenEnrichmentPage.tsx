@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { emilyChenEnrichmentData, emilyChenEnrichmentHistory, getEmilyChenLowConfidenceFields, getEmilyChenHighConfidenceFields, type EmilyChenEnrichedField } from '../../utils/emilyChenEnrichmentData';
 import { useToast } from '../../contexts/ToastContext';
@@ -202,13 +203,12 @@ export default function EmilyChenEnrichmentPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={handleEnrichNow}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
             >
               <span>🔄</span>
               <span>Enrich Now</span>
-            </button>
+            </Button>
             <button
               onClick={handleReviewApprove}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center gap-2"
@@ -622,13 +622,13 @@ function ReviewFieldCard({
           <span>❌</span>
           <span>Reject</span>
         </button>
-        <button
+        <Button
           onClick={onEdit}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center gap-1"
+          size="sm" className="rounded"
         >
           <span>✏️</span>
           <span>Edit Manually</span>
-        </button>
+        </Button>
       </div>
     </div>
   );

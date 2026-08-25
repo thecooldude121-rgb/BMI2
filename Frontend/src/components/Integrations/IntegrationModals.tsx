@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { ConnectedIntegration, AvailableIntegration, IntegrationProvider } from '../../types/integrations';
 
 interface ConfigureModalProps {
@@ -75,12 +76,12 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            fullWidth
           >
             Save Configuration
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -277,13 +278,13 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleConnect}
             disabled={!selectedProvider || !apiKey}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             Connect
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -357,12 +358,12 @@ export const LearnMoreModal: React.FC<LearnMoreModalProps> = ({
         </div>
 
         <div className="mt-6">
-          <button
+          <Button
             onClick={onClose}
-            className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            fullWidth
           >
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -804,13 +805,13 @@ export const AddCustomIntegrationModal: React.FC<AddCustomIntegrationModalProps>
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleNext}
             disabled={step === 1 ? !name || !description : false}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             {step === 1 ? 'Next: Configure' : 'Add Integration'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

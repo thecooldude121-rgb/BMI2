@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, XCircle, FileText } from 'lucide-react';
 import AIScoreBreakdown from '../../components/LeadQualification/AIScoreBreakdown';
@@ -431,13 +432,12 @@ const LeadQualificationPage: React.FC = () => {
                   <XCircle className="h-4 w-4" />
                   Disqualify Lead
                 </button>
-                <button
+                <Button
                   onClick={handleAddNotes}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   <FileText className="h-4 w-4" />
                   Add Notes
-                </button>
+                </Button>
               </div>
             </div>
           </div>

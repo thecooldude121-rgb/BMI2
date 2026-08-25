@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Info, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -484,10 +485,10 @@ const Login: React.FC = () => {
             </div>
 
             {/* Sign In Button */}
-            <button
+            <Button
               type="submit"
               disabled={loading || rateLimited}
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+              fullWidth className="border border-transparent shadow-sm font-semibold duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
             >
               {loading ? (
                 <>
@@ -503,7 +504,7 @@ const Login: React.FC = () => {
                   Sign In
                 </>
               )}
-            </button>
+            </Button>
           </form>
 
           {/* Divider */}

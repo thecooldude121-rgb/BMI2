@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Save } from 'lucide-react';
 
 const DisplayPreferences: React.FC = () => {
@@ -93,10 +94,10 @@ const DisplayPreferences: React.FC = () => {
         </div>
 
         <div className="pt-4 border-t border-gray-200">
-          <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+          <Button size="lg">
             <Save className="h-4 w-4" />
             Save Display Settings
-          </button>
+          </Button>
         </div>
       </div>
     </div>

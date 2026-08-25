@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Edit3, Trash2, Phone, Mail, Calendar, TrendingUp, Activity, MessageSquare, FileText, User, Building, Target, Zap, MoreHorizontal, Linkedin, Globe, Users, TrendingDown, Plus, Upload, AlertCircle, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, Bell, X } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -241,12 +242,11 @@ const LeadDetailPage: React.FC = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Lead Not Found</h2>
           <p className="text-gray-600 mb-4">The lead you're looking for doesn't exist or was deleted.</p>
-          <button
+          <Button
             onClick={() => navigate('/crm/leads')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
             Back to Leads
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -298,12 +298,12 @@ const LeadDetailPage: React.FC = () => {
                   : `Skipping lifecycle steps to "${pendingStatus.replace(/_/g, ' ')}" — confirm this is intentional.`}
             </p>
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={() => void applyStatusChange(pendingStatus)}
-                className="flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700"
+                fullWidth className="font-semibold"
               >
                 Proceed anyway
-              </button>
+              </Button>
               <button
                 onClick={() => setPendingStatus(null)}
                 className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
@@ -434,13 +434,12 @@ const LeadDetailPage: React.FC = () => {
         {/* Quick Actions Bar */}
         <div className="flex items-center flex-wrap gap-2 pt-4 border-t border-gray-200">
           {/* Primary */}
-          <button
+          <Button
             onClick={() => openOutreach('email')}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             <Mail className="h-4 w-4 mr-2" />
             Send email
-          </button>
+          </Button>
           {/* Secondary */}
           <button
             onClick={() => openOutreach('call')}
@@ -832,13 +831,12 @@ const LeadDetailPage: React.FC = () => {
                 <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600 mb-4">No notes or files yet.</p>
                 <div className="flex items-center justify-center space-x-3">
-                  <button
+                  <Button
                     onClick={() => openOutreach('note')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center space-x-2"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Add Note</span>
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setShowFileUpload(true)}
                     className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center space-x-2"
@@ -951,24 +949,24 @@ const LeadDetailPage: React.FC = () => {
                             )}
                             {index === 0 && (
                               <div className="mt-3">
-                                <button
+                                <Button
                                   onClick={() => openOutreach('email')}
-                                  className="w-full px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                                  size="sm" fullWidth className="rounded"
                                 >
                                   Compose Email
-                                </button>
+                                </Button>
                               </div>
                             )}
                             {index === 1 && lead.linkedin_url && (
-                              <button
+                              <Button
                                 onClick={() => window.open(
                                   lead.linkedin_url!.startsWith('http') ? lead.linkedin_url! : `https://${lead.linkedin_url}`,
                                   '_blank'
                                 )}
-                                className="mt-2 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 w-full"
+                                size="sm" fullWidth className="mt-2 rounded"
                               >
                                 Send via LinkedIn →
-                              </button>
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -986,12 +984,12 @@ const LeadDetailPage: React.FC = () => {
                           <p className="text-sm font-bold text-gray-900">Contact This Lead Today</p>
                           <p className="text-xs text-gray-600 mt-1">Reason: New lead — reach out within 24 hours for best response rate</p>
                           <div className="mt-3 flex space-x-2">
-                            <button
+                            <Button
                               onClick={() => openOutreach('email')}
-                              className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                              size="sm" fullWidth className="rounded"
                             >
                               Send Email
-                            </button>
+                            </Button>
                             <button
                               onClick={() => openOutreach('call')}
                               className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
@@ -1173,7 +1171,7 @@ const LeadDetailPage: React.FC = () => {
               </label>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={handleFileUpload} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Upload</button>
+              <Button onClick={handleFileUpload} fullWidth>Upload</Button>
               <button onClick={() => setShowFileUpload(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
             </div>
           </div>
@@ -1205,7 +1203,7 @@ const LeadDetailPage: React.FC = () => {
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={handleSetReminder} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Set Reminder</button>
+              <Button onClick={handleSetReminder} fullWidth>Set Reminder</Button>
               <button onClick={() => setShowReminderForm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
             </div>
           </div>

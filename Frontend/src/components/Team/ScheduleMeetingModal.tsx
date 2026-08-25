@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, Video, MapPin, Building, Calendar, Clock, Users, Link as LinkIcon, RefreshCw } from 'lucide-react';
 
 interface ScheduleMeetingModalProps {
@@ -439,12 +440,11 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
                 placeholder="Enter email address"
                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <button
+              <Button
                 onClick={handleAddAttendee}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Add
-              </button>
+              </Button>
             </div>
             {additionalAttendees.length > 0 && (
               <div className="flex flex-wrap gap-2">
@@ -551,10 +551,10 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleSchedule}
               disabled={scheduling || !date || !time || !subject.trim()}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              size="lg" className="disabled:bg-slate-300"
             >
               {scheduling ? (
                 <>
@@ -567,7 +567,7 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
                   Schedule Meeting
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

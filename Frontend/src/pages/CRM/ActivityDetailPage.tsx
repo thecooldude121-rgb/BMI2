@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Phone, Mail, Video, FileText, CheckCircle, Clock, Trash2,
@@ -147,9 +148,9 @@ const ActivityDetailPage: React.FC = () => {
           <AlertTriangle className="mx-auto h-8 w-8 text-red-500" aria-hidden="true" />
           <h1 className="mt-4 text-lg font-semibold text-gray-900">Could not load this activity</h1>
           <p className="mt-2 text-sm text-gray-600">{error}</p>
-          <button onClick={() => navigate('/crm/activities')} className="mt-6 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <Button onClick={() => navigate('/crm/activities')} className="mt-6">
             Back to Activities
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -161,9 +162,9 @@ const ActivityDetailPage: React.FC = () => {
         <div className="mx-auto max-w-lg text-center">
           <h1 className="text-lg font-semibold text-gray-900">Activity not found</h1>
           <p className="mt-2 text-sm text-gray-600">It may have been deleted.</p>
-          <button onClick={() => navigate('/crm/activities')} className="mt-6 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+          <Button onClick={() => navigate('/crm/activities')} className="mt-6">
             Back to Activities
-          </button>
+          </Button>
         </div>
       </div>
     );

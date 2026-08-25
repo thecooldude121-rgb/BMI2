@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { X, Brain, TrendingUp, Check, ExternalLink, RotateCcw } from 'lucide-react';
 
 interface AIDetectionModalProps {
@@ -96,13 +97,12 @@ export const AIDetectionModal: React.FC<AIDetectionModalProps> = ({
             </button>
           )}
           {onViewInCRM && (
-            <button
+            <Button
               onClick={onViewInCRM}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
             >
               <ExternalLink className="w-4 h-4" />
               View in CRM
-            </button>
+            </Button>
           )}
           <button
             onClick={onClose}
@@ -197,12 +197,11 @@ export const SentimentModal: React.FC<SentimentModalProps> = ({
         </div>
 
         <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-          <button
+          <Button
             onClick={onClose}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>

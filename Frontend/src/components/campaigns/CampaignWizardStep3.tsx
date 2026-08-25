@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Button } from '../ui/Button';
 import { ChevronLeft, ChevronRight, Loader2, Plus, Mail, Linkedin, ChevronDown, ChevronRight as ChevronRightIcon, MoreVertical } from 'lucide-react';
 import { CampaignTemplate, SequenceTouch } from '../../utils/campaignTemplates';
 import { useToast } from '../../contexts/ToastContext';
@@ -429,13 +430,13 @@ Best,
                       : 'Template touches will appear here'}
                   </p>
                 </div>
-                <button
+                <Button
                   onClick={handleAddTouch}
-                  className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                  className="mt-2"
                 >
                   <Plus className="w-4 h-4" />
                   Add First Touch
-                </button>
+                </Button>
               </div>
             </div>
           ) : (

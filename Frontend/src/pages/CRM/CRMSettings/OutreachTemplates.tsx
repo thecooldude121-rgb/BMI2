@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Plus, Mail, Copy, Pencil, Trash2 } from 'lucide-react';
 
 const OutreachTemplates: React.FC = () => {
@@ -15,10 +16,10 @@ const OutreachTemplates: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">Outreach Templates</h2>
           <p className="text-sm text-gray-600 mt-1">Create and manage email templates for outreach</p>
         </div>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+        <Button >
           <Plus className="h-4 w-4" />
           New Template
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-3">

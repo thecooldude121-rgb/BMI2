@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Mail, FileText, Share2, Calendar } from 'lucide-react';
 
 interface EmailDetailModalProps {
@@ -188,9 +189,9 @@ export const LogActivityModal: React.FC<LogActivityModalProps> = ({ isOpen, onCl
           <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium">
             Cancel
           </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+          <Button onClick={handleSave} >
             Save Activity
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -396,9 +397,9 @@ export const DataVerificationModal: React.FC<DataVerificationModalProps> = ({ is
           <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium">
             Cancel
           </button>
-          <button onClick={() => { onVerify(); onClose(); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+          <Button onClick={() => { onVerify(); onClose(); }} >
             Save Changes
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, ChevronDown, ChevronRight, Mail, MessageSquare } from 'lucide-react';
 import { CampaignTemplate } from '../../utils/campaignTemplates';
 
@@ -211,12 +212,12 @@ export const TemplateDetailsModal: React.FC<TemplateDetailsModalProps> = ({
             Close
           </button>
           {template.id !== 'custom_blank' && (
-            <button
+            <Button
               onClick={handleSelect}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+              size="lg"
             >
               Select This Template
-            </button>
+            </Button>
           )}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { CampaignWizardStep1, Step1Data } from '../../components/campaigns/CampaignWizardStep1';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -89,12 +90,12 @@ export const CampaignWizardStep1Demo: React.FC = () => {
                 >
                   Start Over
                 </button>
-                <button
+                <Button
                   onClick={() => console.log('Proceeding to Step 2...')}
-                  className="flex-1 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  size="lg" fullWidth
                 >
                   Continue to Step 2
-                </button>
+                </Button>
               </div>
             </div>
 

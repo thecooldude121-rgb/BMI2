@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Phone, Video, MapPin, Calendar, Clock, Link as LinkIcon } from 'lucide-react';
 
 interface ScheduleCallModalProps {
@@ -400,10 +401,10 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleSchedule}
               disabled={scheduling || !date || !time || !subject.trim()}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              size="lg" className="disabled:bg-slate-300"
             >
               {scheduling ? (
                 <>
@@ -416,7 +417,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
                   <span className="ml-2">Schedule Call</span>
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { Clock, Shield, Edit, Trash2, Plus, CheckCircle, XCircle, MessageSquare, AtSign, Download, RefreshCw, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -490,13 +491,13 @@ export const AuditFeed: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={addComment}
                 disabled={!newComment.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="disabled:bg-gray-300"
               >
                 Post Comment
-              </button>
+              </Button>
             </div>
           </div>
         </div>

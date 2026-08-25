@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, AlertTriangle, Clock, TrendingUp, Settings, Calendar, Zap } from 'lucide-react';
 
 interface RateLimitStatus {
@@ -306,13 +307,13 @@ const RateLimitExceededModal: React.FC<RateLimitExceededModalProps> = ({
                     <span className="font-bold text-green-600">$49/month</span>
                   </div>
                 </div>
-                <button
+                <Button
                   onClick={onUpgrade}
-                  className="mt-3 w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                  fullWidth className="mt-3"
                 >
                   <TrendingUp className="w-4 h-4" />
                   View Plans
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -349,13 +350,12 @@ const RateLimitExceededModal: React.FC<RateLimitExceededModalProps> = ({
             )}
 
             {selectedOption === 'zoominfo' && (
-              <button
+              <Button
                 onClick={handleContinue}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <Zap className="w-4 h-4" />
                 Continue with ZoomInfo
-              </button>
+              </Button>
             )}
 
             {selectedOption === 'upgrade' && (

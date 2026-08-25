@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Shield, Lock, Globe, Smartphone, Monitor, AlertTriangle, CheckCircle, Plus, X, Trash2, Download, Save, RefreshCw, Activity, Clock, MapPin, Key } from 'lucide-react';
 
 interface PasswordPolicy {
@@ -594,14 +595,14 @@ const SecurityPolicies: React.FC = () => {
             </div>
 
             <div className="mt-8 flex justify-end">
-              <button
+              <Button
                 onClick={handleSavePasswordPolicy}
                 disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                size="lg"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 <span>{loading ? 'Saving...' : 'Save Password Policy'}</span>
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -724,14 +725,14 @@ const SecurityPolicies: React.FC = () => {
             </div>
 
             <div className="mt-8 flex justify-end">
-              <button
+              <Button
                 onClick={handleSave2FASettings}
                 disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                size="lg"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 <span>{loading ? 'Saving...' : 'Save 2FA Settings'}</span>
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -744,13 +745,12 @@ const SecurityPolicies: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">IP Restrictions & Network Security</h2>
                 <p className="text-gray-600">Control access based on IP addresses and geographic locations</p>
               </div>
-              <button
+              <Button
                 onClick={() => setShowAddIPModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add IP Restriction</span>
-              </button>
+              </Button>
             </div>
 
             {/* IP Restrictions List */}
@@ -1124,12 +1124,11 @@ const SecurityPolicies: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddIPRestriction}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Add Restriction
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1171,16 +1170,16 @@ const SecurityPolicies: React.FC = () => {
                 ))}
               </div>
 
-              <button
+              <Button
                 onClick={() => {
                   const codesText = backupCodes.join('\n');
                   navigator.clipboard.writeText(codesText);
                   alert('Backup codes copied to clipboard!');
                 }}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                fullWidth
               >
                 Copy All Codes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Plus, Eye, Edit, Trash2, Star, Users, Lock, Globe, Filter, Settings } from 'lucide-react';
 import { CustomView } from '../../types/deals';
 
@@ -102,13 +103,12 @@ const CustomViewManager: React.FC<CustomViewManagerProps> = ({
             <p className="text-gray-600">Create and manage custom deal views</p>
           </div>
           <div className="flex items-center space-x-3">
-            <button
+            <Button
               onClick={() => setShowCreateForm(true)}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4 mr-2" />
               Create View
-            </button>
+            </Button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <X className="h-6 w-6" />
             </button>
@@ -167,13 +167,12 @@ const CustomViewManager: React.FC<CustomViewManagerProps> = ({
                   >
                     Cancel
                   </button>
-                  <button
+                  <Button
                     onClick={handleCreateView}
                     disabled={!newViewName.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
                   >
                     Create View
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -227,12 +226,12 @@ const CustomViewManager: React.FC<CustomViewManagerProps> = ({
                 <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No custom views</h3>
                 <p className="text-gray-600 mb-6">Create custom views to save your favorite filters and layouts</p>
-                <button
+                <Button
                   onClick={() => setShowCreateForm(true)}
-                  className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
+                  size="xl" className="rounded-xl"
                 >
                   Create Your First View
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

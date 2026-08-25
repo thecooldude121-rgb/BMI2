@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Send, Paperclip, Sparkles, Save } from 'lucide-react';
 
 interface TeamEmailComposerModalProps {
@@ -305,10 +306,10 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
                 </>
               )}
             </button>
-            <button
+            <Button
               onClick={handleSend}
               disabled={sending || !subject.trim() || !body.trim()}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              size="lg" className="disabled:bg-slate-300"
             >
               {sending ? (
                 <>
@@ -321,7 +322,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
                   Send Email
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Sparkles, Briefcase } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
@@ -1049,13 +1050,13 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             >
               Save as Draft
             </button>
-            <button
+            <Button
               onClick={() => handleSave(false)}
               disabled={isSaving || !validation.isValid}
-              className="flex-1 sm:flex-none px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 min-h-[44px] sm:min-h-0"
+              fullWidth className="sm:flex-none sm:py-1.5 sm:text-xs min-h-[44px] sm:min-h-0"
             >
               {isSaving ? 'Saving...' : 'Save Deal'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Mail, Phone, Calendar, DollarSign, Edit, MoreVertical, ExternalLink, Building2, Cake, Target, AlertTriangle, CheckCircle, Sparkles, Users, Play, Share2, Star } from 'lucide-react';
 import { fetchContactById } from '../../utils/contactsApi';
@@ -51,12 +52,11 @@ const ContactDetailView: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center space-y-4">
         <p className="text-lg text-gray-900">Could not load this contact</p>
         <p className="max-w-md text-center text-sm text-gray-600">{loadError}</p>
-        <button
+        <Button
           onClick={() => navigate('/crm/contacts')}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
         >
           Back to Contacts
-        </button>
+        </Button>
       </div>
     );
   }
@@ -65,12 +65,11 @@ const ContactDetailView: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center space-y-4">
         <p className="text-lg text-gray-700">Contact not found.</p>
-        <button
+        <Button
           onClick={() => navigate('/crm/contacts')}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
         >
           Back to Contacts
-        </button>
+        </Button>
       </div>
     );
   }
@@ -395,9 +394,9 @@ const ContactDetailView: React.FC = () => {
           </div>
         </div>
         <div className="mt-6 flex items-center space-x-3">
-          <button onClick={handleEmailComposer} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2 shadow-lg">
+          <Button onClick={handleEmailComposer} size="xl" className="shadow-lg">
             <Mail className="h-5 w-5" /><span>Email</span>
-          </button>
+          </Button>
           <button onClick={handleCallLogger} className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center space-x-2 shadow-lg">
             <Phone className="h-5 w-5" /><span>Call</span>
           </button>
@@ -560,9 +559,9 @@ const ContactDetailView: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-2 mt-4">
                       <button onClick={handleViewTranscript} className="px-3 py-2 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700">View Full Transcript</button>
-                      <button onClick={handlePlayRecording} className="px-3 py-2 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 flex items-center space-x-1">
+                      <Button onClick={handlePlayRecording} size="sm" className="rounded">
                         <Play className="h-3 w-3" /><span>Play Recording</span>
-                      </button>
+                      </Button>
                       <button onClick={handleShareSummary} className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 flex items-center space-x-1">
                         <Share2 className="h-3 w-3" /><span>Share Summary</span>
                       </button>
@@ -724,9 +723,9 @@ const ContactDetailView: React.FC = () => {
                 <p className="text-xs text-gray-500 mb-3">Last enriched: 2 hours ago</p>
                 <p className="text-xs text-gray-500 mb-4">Accuracy: 94%</p>
                 <div className="flex items-center space-x-2">
-                  <button onClick={handleReEnrich} className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium">
+                  <Button onClick={handleReEnrich} size="sm" fullWidth>
                     Re-enrich Now
-                  </button>
+                  </Button>
                   <button onClick={handleVerifyData} className="flex-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs font-medium">
                     Verify Data
                   </button>

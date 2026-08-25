@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { CheckSquare, Plus, Search, Download, Upload, Eye, Edit, Trash2, Clock, AlertTriangle, MoreHorizontal, X, RefreshCw, Phone, Mail, Video, FileText, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Task } from '../../types/leadGeneration';
@@ -445,9 +446,9 @@ const TasksPage: React.FC = () => {
                 <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                   Mark Complete
                 </button>
-                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm">
                   Assign
-                </button>
+                </Button>
                 <button className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors">
                   Change Priority
                 </button>

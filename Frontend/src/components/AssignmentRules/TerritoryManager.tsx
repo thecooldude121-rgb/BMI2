@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import type { TerritoryDefinition } from '../../utils/assignmentRules/types';
 import { getTerritories, upsertTerritory, deleteTerritory, resetTerritoriesToDefaults } from '../../utils/assignmentRules/territoryStore';
 
@@ -64,13 +65,12 @@ function EditModal({ territory, onSave, onClose }: {
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
             disabled={!name.trim()}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             Save
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -115,12 +115,11 @@ export default function TerritoryManager() {
           >
             Reset Defaults
           </button>
-          <button
+          <Button
             onClick={() => setEditing({ id: uid(), name: '', countries: [], cities: [] })}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             + New Territory
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Plus, ChevronUp, ChevronDown, Save } from 'lucide-react';
 
 interface DealStage {
@@ -105,13 +106,13 @@ const PipelineSettings: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">DEAL STAGES</h3>
-            <button
+            <Button
               onClick={handleAddStage}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Stage
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -185,13 +186,13 @@ const PipelineSettings: React.FC = () => {
             </div>
 
             <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
-              <button
+              <Button
                 onClick={handleSaveChanges}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+                size="lg"
               >
                 <Save className="h-4 w-4" />
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -199,13 +200,13 @@ const PipelineSettings: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">LOST REASONS</h3>
-            <button
+            <Button
               onClick={() => handleAddReason('lost')}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Reason
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -243,13 +244,13 @@ const PipelineSettings: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">WON REASONS (Optional)</h3>
-            <button
+            <Button
               onClick={() => handleAddReason('won')}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Reason
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -330,13 +331,13 @@ const PipelineSettings: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200 flex justify-end">
-              <button
+              <Button
                 onClick={handleSaveChanges}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium"
+                size="lg"
               >
                 <Save className="h-4 w-4" />
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

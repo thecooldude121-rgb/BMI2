@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Button } from '../ui/Button';
 import { Clock, Mail, Phone, Video, FileText, TrendingUp, Sparkles, CheckCircle2, Eye, MessageSquare, Share2, Plus } from 'lucide-react';
 import { computeWeeklyBuckets } from '../../utils/contactEngagement';
 import { EmailDetailModal, ShareSummaryModal, LogActivityModal } from './DealActivityModals';
@@ -223,13 +224,13 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
             <option value="meeting">Meetings</option>
             <option value="note">Notes</option>
           </select>
-          <button
+          <Button
             onClick={() => setShowLogActivity(true)}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            size="sm"
           >
             <Plus className="h-4 w-4 inline mr-1" />
             Log Activity
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -267,13 +268,13 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
             <p className="text-sm text-gray-500 max-w-xs">
               No activity recorded yet. Log your first activity to start tracking engagement.
             </p>
-            <button
+            <Button
               onClick={() => setShowLogActivity(true)}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm"
             >
               <Plus className="h-3.5 w-3.5" />
               Log Activity
-            </button>
+            </Button>
           </div>
         ) : (
           /* Coloured squares — oldest left, newest right */
@@ -344,12 +345,12 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
               >
                 Log Activity
               </button>
-              <button
+              <Button
                 onClick={handleScheduleFollowup}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                size="sm"
               >
                 Schedule Follow-up
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -532,13 +533,13 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
                           Play Recording
                         </button>
                       )}
-                      <button
+                      <Button
                         onClick={() => setShowShareSummary(true)}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        size="sm"
                       >
                         <Share2 className="h-4 w-4 inline mr-1" />
                         Share Summary
-                      </button>
+                      </Button>
                       <button
                         onClick={handleAddNote}
                         className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../ui/Button';
 import type { AssignmentResult } from '../../utils/assignmentRules/types';
 import { COMPANY_SIZE_OPTIONS, SOURCE_OPTIONS } from '../../utils/assignmentRules/types';
 import { evaluateAssignmentRules } from '../../utils/assignmentRules/evaluationEngine';
@@ -210,10 +211,10 @@ export default function SimulationPanel() {
         </div>
 
         <div className="flex gap-3 pt-1">
-          <button onClick={runSim}
-            className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+          <Button onClick={runSim}
+            size="lg" className="font-semibold">
             Run Simulation
-          </button>
+          </Button>
           <button onClick={reset}
             className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
             Reset

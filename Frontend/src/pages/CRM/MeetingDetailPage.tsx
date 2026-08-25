@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Video, Phone, Users, Calendar, CheckCircle, Sparkles, Play, Download, Share2, Edit, MoreVertical, FileText, DollarSign, Building2, Mail, ChevronRight, TrendingUp, Plus, Trash2, BarChart3, X } from 'lucide-react';
 import { sampleMeetings } from '../../utils/sampleMeetingsData';
@@ -761,13 +762,12 @@ export default function MeetingDetailPage() {
 
           {/* Quick Actions */}
           <div className="flex items-center space-x-3">
-            <button
+            <Button
               onClick={handlePlayRecording}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center space-x-2 transition-colors"
             >
               <Play className="w-4 h-4" />
               <span>Play Recording</span>
-            </button>
+            </Button>
             <button
               onClick={handleViewTranscript}
               className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium flex items-center space-x-2 transition-colors"
@@ -1207,12 +1207,12 @@ export default function MeetingDetailPage() {
                         </div>
                         {!attendee.isHost && (
                           <div className="mt-3 flex space-x-2">
-                            <button
+                            <Button
                               onClick={() => navigate(`/crm/contacts/${attendee.id}`)}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+                              size="sm" className="rounded"
                             >
                               View Contact
-                            </button>
+                            </Button>
                             <button
                               onClick={() => handleEmailAttendee(attendee)}
                               className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -1241,13 +1241,12 @@ export default function MeetingDetailPage() {
                   <FileText className="w-5 h-5 text-gray-600" />
                   <h2 className="text-xl font-bold text-gray-900">Meeting Notes</h2>
                 </div>
-                <button
+                <Button
                   onClick={() => setShowAddNoteModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center space-x-2 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Note</span>
-                </button>
+                </Button>
               </div>
 
               <div className="space-y-4">
@@ -1262,12 +1261,12 @@ export default function MeetingDetailPage() {
                           rows={3}
                         />
                         <div className="flex space-x-2">
-                          <button
+                          <Button
                             onClick={handleSaveEditNote}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+                            size="sm" className="rounded"
                           >
                             Save
-                          </button>
+                          </Button>
                           <button
                             onClick={handleCancelEditNote}
                             className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -1393,13 +1392,13 @@ export default function MeetingDetailPage() {
                         <div>Win Probability: 67%</div>
                       </div>
                     </div>
-                    <button
+                    <Button
                       onClick={() => navigate(`/crm/deals/${meeting.dealId}`)}
-                      className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-1"
+                      size="sm" fullWidth className="rounded"
                     >
                       <span>View Deal Details</span>
                       <ChevronRight className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -1416,13 +1415,13 @@ export default function MeetingDetailPage() {
                       <div>Size: 75 employees</div>
                       <div>Revenue: $12M annually</div>
                     </div>
-                    <button
+                    <Button
                       onClick={() => navigate(`/crm/accounts/${meeting.accountId}`)}
-                      className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-1"
+                      size="sm" fullWidth className="rounded"
                     >
                       <span>View Account Details</span>
                       <ChevronRight className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -1446,13 +1445,13 @@ export default function MeetingDetailPage() {
                           <div>Engagement: 92% response rate</div>
                         </div>
                       </div>
-                      <button
+                      <Button
                         onClick={() => navigate(`/crm/contacts/${meeting.attendees.filter(a => !a.isHost)[0].id}`)}
-                        className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-1"
+                        size="sm" fullWidth className="rounded"
                       >
                         <span>View Contact Details</span>
                         <ChevronRight className="w-4 h-4" />
-                      </button>
+                      </Button>
                     </>
                   )}
                 </div>
@@ -1796,12 +1795,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveEdit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1902,12 +1900,11 @@ export default function MeetingDetailPage() {
                     value={`https://bmi.com/meetings/${meeting.id}`}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
                   />
-                  <button
+                  <Button
                     onClick={handleCopyLink}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                   >
                     📋 Copy
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1918,12 +1915,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleShare}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Share
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2042,12 +2038,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveTask}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Create Task
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2115,12 +2110,11 @@ export default function MeetingDetailPage() {
               >
                 Review Individually
               </button>
-              <button
+              <Button
                 onClick={handleKeepAllChanges}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Keep All
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2175,12 +2169,11 @@ export default function MeetingDetailPage() {
               </div>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-end bg-gray-50">
-              <button
+              <Button
                 onClick={() => setShowSpeakingAnalysisModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2239,12 +2232,11 @@ export default function MeetingDetailPage() {
               </div>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-end bg-gray-50">
-              <button
+              <Button
                 onClick={() => setShowSentimentModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2325,12 +2317,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveRecordingSettings}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Settings
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2383,12 +2374,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSendEmail}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2456,12 +2446,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleScheduleMeeting}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Schedule Meeting
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2497,12 +2486,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddNote}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Note
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2581,12 +2569,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSendEmailToAttendees}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2655,12 +2642,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveFollowUp}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Schedule Meeting
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2718,12 +2704,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveToReport}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Add to Report
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2811,12 +2796,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleConfirmExport}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Export
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, Settings, Lightbulb, DollarSign, ChevronDown, ChevronRight, AlertTriangle, Info } from 'lucide-react';
 import { enrichmentFieldsConfig, calculateEnrichmentCost } from '../../utils/enrichmentFieldsConfig';
 
@@ -694,13 +695,12 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
           >
             Reset to Defaults
           </button>
-          <button
+          <Button
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
           >
             <Settings className="w-4 h-4" />
             Save Settings
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -718,12 +718,11 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={confirmReset}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
               >
                 Reset
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -773,12 +772,11 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={selectRecommendedFields}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
               >
                 Select Recommended Fields
-              </button>
+              </Button>
             </div>
           </div>
         </div>

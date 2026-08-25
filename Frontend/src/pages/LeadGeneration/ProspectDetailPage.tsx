@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mail, Phone, Edit, Plus, Linkedin, MapPin, Building, Globe, ExternalLink, Calendar, Clock, TrendingUp, MessageSquare, FileText, Activity, Target, CheckCircle, Eye } from 'lucide-react';
 
@@ -205,12 +206,12 @@ const ProspectDetailPage: React.FC = () => {
           <div className="text-6xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Prospect Not Found</h2>
           <p className="text-gray-600 mb-6">{error || 'The prospect you are looking for does not exist.'}</p>
-          <button
+          <Button
             onClick={() => navigate('/lead-generation/prospects')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            size="xl"
           >
             Back to Prospects
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -248,10 +249,10 @@ const ProspectDetailPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center space-x-3">
-                <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                <Button >
                   <Mail className="h-4 w-4 mr-2" />
                   Send Email
-                </button>
+                </Button>
                 <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                   <Phone className="h-4 w-4 mr-2" />
                   Call
@@ -460,10 +461,10 @@ const ProspectDetailPage: React.FC = () => {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900">Activity Timeline</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Log Activity
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="p-6">
@@ -505,9 +506,9 @@ const ProspectDetailPage: React.FC = () => {
                   rows={4}
                 ></textarea>
                 <div className="flex justify-end mt-3">
-                  <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button size="lg">
                     Save Note
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="p-6">

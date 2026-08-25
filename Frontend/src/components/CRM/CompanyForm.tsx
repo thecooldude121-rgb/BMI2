@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
@@ -283,12 +284,12 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
             >
               Cancel
             </button>
-            <button
+            <Button
               type="submit"
-              className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
+              className="border border-transparent rounded-md"
             >
               Add Company
-            </button>
+            </Button>
           </div>
         </form>
       </div>

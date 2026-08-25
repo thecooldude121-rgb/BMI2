@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Share2, Shield, Users, Lock, Eye, Edit, Plus, Trash2, Copy, CheckCircle, Search, Filter, Download, Save, RefreshCw, ChevronRight, Play, Pause, Info, Zap } from 'lucide-react';
 
 interface OrgWideDefault {
@@ -449,14 +450,14 @@ const SharingRules: React.FC = () => {
           </div>
 
           <div className="mt-6 flex justify-end">
-            <button
+            <Button
               onClick={handleSaveDefaults}
               disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              size="lg"
             >
               {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span>{loading ? 'Saving...' : 'Save Defaults'}</span>
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -488,16 +489,15 @@ const SharingRules: React.FC = () => {
                 ))}
               </select>
             </div>
-            <button
+            <Button
               onClick={() => {
                 setEditingRule(null);
                 setShowRuleBuilder(true);
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
             >
               <Plus className="h-4 w-4" />
               <span>Create Sharing Rule</span>
-            </button>
+            </Button>
           </div>
 
           {/* Rules List */}
@@ -809,7 +809,7 @@ const SharingRules: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   const rule: SharingRule = {
                     id: editingRule?.id || Date.now().toString(),
@@ -845,10 +845,9 @@ const SharingRules: React.FC = () => {
                     enabled: true
                   });
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 {editingRule ? 'Update Rule' : 'Create Rule'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

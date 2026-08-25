@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Users, Target, DollarSign, TrendingUp, Calendar, CheckSquare, AlertCircle } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
@@ -27,9 +28,9 @@ const Dashboard: React.FC = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <div className="flex space-x-3">
-          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+          <Button className="rounded-md">
             Add Lead
-          </button>
+          </Button>
           <button 
             onClick={() => navigate('/crm/deals/create')}
             className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"

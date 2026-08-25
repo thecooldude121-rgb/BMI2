@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeal, updateDeal, createDeal } from '../../utils/dealsApi';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
@@ -1258,10 +1259,10 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <button onClick={() => handleSendEmail(contact.email || '', '', '')}
-                      className="text-xs bg-blue-600 text-white rounded px-3 py-1.5 hover:bg-blue-700 font-medium transition-colors">
+                    <Button onClick={() => handleSendEmail(contact.email || '', '', '')}
+                      size="sm" className="rounded">
                       Email
-                    </button>
+                    </Button>
                     <button onClick={() => setShowCallLog(true)}
                       className="text-xs bg-green-600 text-white rounded px-3 py-1.5 hover:bg-green-700 font-medium transition-colors">
                       Call

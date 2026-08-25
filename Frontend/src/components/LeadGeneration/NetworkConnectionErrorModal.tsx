@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { networkConnectionErrorData } from '../../utils/networkConnectionErrorMockData';
 
 interface NetworkConnectionErrorModalProps {
@@ -234,10 +235,10 @@ export const NetworkConnectionErrorModal: React.FC<NetworkConnectionErrorModalPr
 
         {/* Footer Actions */}
         <div className="bg-gray-50 px-6 py-4 rounded-b-lg flex flex-wrap gap-2">
-          <button
+          <Button
             onClick={handleRetryNow}
             disabled={isRetrying}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+            className="disabled:bg-gray-400"
           >
             {isRetrying ? (
               <>
@@ -250,7 +251,7 @@ export const NetworkConnectionErrorModal: React.FC<NetworkConnectionErrorModalPr
                 Retry Now
               </>
             )}
-          </button>
+          </Button>
 
           <button
             onClick={handleCheckStatus}

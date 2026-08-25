@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Download } from 'lucide-react';
 
 const DataExport: React.FC = () => {
@@ -29,10 +30,10 @@ const DataExport: React.FC = () => {
           </select>
         </div>
 
-        <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+        <Button size="lg">
           <Download className="h-4 w-4" />
           Request Export
-        </button>
+        </Button>
 
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <h4 className="text-sm font-semibold text-gray-900 mb-2">Recent Exports:</h4>

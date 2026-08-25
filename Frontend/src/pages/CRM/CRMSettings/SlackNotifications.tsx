@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Save, ExternalLink } from 'lucide-react';
 
 const SlackNotifications: React.FC = () => {
@@ -61,19 +62,19 @@ const SlackNotifications: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-gray-200">
-            <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+            <Button size="lg">
               <Save className="h-4 w-4" />
               Save Settings
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
         <div className="text-center py-12">
           <p className="text-gray-600 mb-4">Connect your Slack workspace to receive notifications</p>
-          <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto">
+          <Button size="lg" className="mx-auto">
             Connect Slack
             <ExternalLink className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       )}
     </div>

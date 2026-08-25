@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../components/ui/Button';
 import { FileText, Calendar, ChevronRight, Briefcase, Mail, Building2, Zap, UserCheck, Play } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
@@ -221,12 +222,12 @@ const DocumentsContextDemo: React.FC = () => {
                     <div key={scenario.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                       <span className="text-sm font-medium text-gray-700 w-32 flex-shrink-0">Scenario {scenario.id}:</span>
                       <code className="text-xs text-blue-600 font-mono flex-1 truncate">{scenario.url}</code>
-                      <button
+                      <Button
                         onClick={() => navigate(scenario.url)}
-                        className="px-3 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                        size="sm" className="rounded"
                       >
                         Go
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>

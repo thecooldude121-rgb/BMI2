@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Button } from '../ui/Button';
 import { X, Plus, Trash2, GripVertical, ChevronDown, Copy, Pencil, Check } from 'lucide-react';
 import type { AdvancedFilter, FilterGroup, FilterCondition, FilterFieldId, FilterOperator, FilterValue } from '../../types/leadFilter';
 import {
@@ -571,12 +572,12 @@ export default function AdvancedFilterDrawer({
           >
             Clear all
           </button>
-          <button
+          <Button
             onClick={handleApply}
-            className="text-xs text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded font-medium transition-colors"
+            className="rounded"
           >
             Apply filters
-          </button>
+          </Button>
         </div>
       </div>
     </>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Search, Filter, Download, Eye, Plus, Target, Users, Building, Globe, MapPin, TrendingUp, Zap, ArrowLeft, Database, Bot, Sparkles, ChevronDown, ChevronUp, X, Save, CheckCircle, Mail, Phone, Cpu, Heart, Banknote, Factory, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -1173,13 +1174,13 @@ const ProspectDiscovery: React.FC = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-12 pr-4 py-4 text-lg border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
                 />
-                <button
+                <Button
                   onClick={handleSearch}
                   disabled={isSearching}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  size="lg" className="absolute right-3 top-1/2 transform -translate-y-1/2"
                 >
                   {isSearching ? 'Searching...' : 'Search'}
-                </button>
+                </Button>
               </div>
 
               {/* Search Presets */}
@@ -1413,10 +1414,10 @@ const ProspectDiscovery: React.FC = () => {
 
                     {/* Actions */}
                     <div className="flex space-x-2">
-                      <button className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                      <Button size="sm" fullWidth>
                         <Plus className="h-4 w-4 mr-1" />
                         Add to List
-                      </button>
+                      </Button>
                       <button className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors">
                         <Eye className="h-4 w-4" />
                       </button>
@@ -1453,9 +1454,9 @@ const ProspectDiscovery: React.FC = () => {
                         <Sparkles className="h-4 w-4 mr-1" />
                         Enrich
                       </button>
-                      <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                      <Button size="sm">
                         Add to Sequence
-                      </button>
+                      </Button>
                       <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                         Add to List
                       </button>
@@ -1520,13 +1521,12 @@ const ProspectDiscovery: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={saveSearch}
                 disabled={!searchName.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
               >
                 Save Search
-              </button>
+              </Button>
             </div>
           </div>
         </div>

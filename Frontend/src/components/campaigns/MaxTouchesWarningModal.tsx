@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface MaxTouchesWarningModalProps {
@@ -56,12 +57,12 @@ export const MaxTouchesWarningModal: React.FC<MaxTouchesWarningModalProps> = ({
         </div>
 
         <div className="flex justify-end">
-          <button
+          <Button
             onClick={onClose}
-            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            size="lg"
           >
             OK, Got It
-          </button>
+          </Button>
         </div>
       </div>
     </div>

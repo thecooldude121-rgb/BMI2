@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Zap, Webhook, Globe, RefreshCw, Plus, Trash2, Edit, Play, Pause, Settings, Search, TrendingUp, Mail, MessageSquare, BarChart, Cloud, DollarSign, Share2, HelpCircle, TestTube, Package, Star, ExternalLink } from 'lucide-react';
 
 interface Webhook {
@@ -640,16 +641,15 @@ const Integrations: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Webhook Management</h2>
                 <p className="text-gray-600">Configure outbound and inbound webhooks for real-time data exchange</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setEditingItem(null);
                   setShowWebhookModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Create Webhook</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -799,16 +799,15 @@ const Integrations: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">API Connection Manager</h2>
                 <p className="text-gray-600">Manage REST API connections and authentication</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setEditingItem(null);
                   setShowAPIModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add API Connection</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -960,9 +959,9 @@ const Integrations: React.FC = () => {
                     <p className="text-sm text-gray-600 mb-4">{integration.description}</p>
 
                     <div className="flex space-x-2">
-                      <button className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+                      <Button fullWidth>
                         Settings
-                      </button>
+                      </Button>
                       <button className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
                         <ExternalLink className="h-4 w-4" />
                       </button>
@@ -990,16 +989,15 @@ const Integrations: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Data Synchronization</h2>
                 <p className="text-gray-600">Manage data sync between BMI CRM and external systems</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setEditingItem(null);
                   setShowSyncModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Create Sync</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">

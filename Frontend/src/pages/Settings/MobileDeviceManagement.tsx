@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Smartphone, Tablet, Monitor, Shield, Lock, Battery, Signal, CheckCircle, XCircle, AlertTriangle, Clock, MapPin, Download, Upload, Settings, Eye, Edit, Trash2, RefreshCw, Search, Filter, Plus, X, Zap, Globe, Bell, Activity, BarChart, TrendingUp, Users, Database, QrCode } from 'lucide-react';
 
 interface MobileDevice {
@@ -285,13 +286,12 @@ const MobileDeviceManagement: React.FC = () => {
               <p className="text-gray-600 mt-1">Manage mobile devices, policies, and security settings</p>
             </div>
           </div>
-          <button
+          <Button
             onClick={() => setShowEnrollModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span>Enroll Device</span>
-          </button>
+          </Button>
         </div>
 
         {/* Statistics */}
@@ -551,10 +551,10 @@ const MobileDeviceManagement: React.FC = () => {
                   <h2 className="text-xl font-bold text-gray-900 mb-2">Mobile Security Policies</h2>
                   <p className="text-gray-600">Configure security requirements for mobile devices</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Plus className="h-4 w-4" />
                   <span>Create Policy</span>
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -657,10 +657,10 @@ const MobileDeviceManagement: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Upload className="h-4 w-4" />
                   <span>Deploy Update</span>
-                </button>
+                </Button>
               </div>
 
               <div className="grid grid-cols-4 gap-4">
@@ -972,9 +972,9 @@ const MobileDeviceManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Button >
                 Email Instructions
-              </button>
+              </Button>
             </div>
           </div>
         </div>

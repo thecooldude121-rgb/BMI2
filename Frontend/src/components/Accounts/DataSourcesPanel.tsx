@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { Database, CheckCircle2, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 
 interface DataSource {
@@ -121,13 +122,13 @@ const DataSourcesPanel: React.FC<DataSourcesPanelProps> = ({
       </div>
 
       <div className="flex flex-col gap-2">
-        <button
+        <Button
           onClick={onReEnrich}
-          className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+          fullWidth
         >
           <RefreshCw className="h-4 w-4 mr-2" />
           Re-enrich Now
-        </button>
+        </Button>
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={onVerifyData}

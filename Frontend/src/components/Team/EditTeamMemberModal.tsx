@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, AlertTriangle, Eye, Shield, Check } from 'lucide-react';
 
 interface TeamMember {
@@ -564,12 +565,12 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            size="lg"
           >
             Save Changes
-          </button>
+          </Button>
         </div>
       </div>
     </div>

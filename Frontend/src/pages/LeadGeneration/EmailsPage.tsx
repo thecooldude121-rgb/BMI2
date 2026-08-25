@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Mail, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Send, Archive, MoreHorizontal, X, Paperclip, Reply, Forward, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Email } from '../../types/leadGeneration';
@@ -411,9 +412,9 @@ const EmailsPage: React.FC = () => {
                 {selectedEmails.length} email{selectedEmails.length > 1 ? 's' : ''} selected
               </span>
               <div className="flex space-x-2">
-                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm">
                   Mark as Read
-                </button>
+                </Button>
                 <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                   Archive
                 </button>
@@ -446,13 +447,13 @@ const EmailsPage: React.FC = () => {
                 : 'Start by composing your first email'
               }
             </p>
-            <button
+            <Button
               onClick={() => setShowCompose(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
+              size="xl" className="rounded-xl"
             >
               <Plus className="h-4 w-4 mr-2 inline" />
               Compose Email
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -505,9 +506,9 @@ const EmailsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors">
+              <Button size="xl" className="rounded-xl">
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>

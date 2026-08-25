@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Smartphone, Code, Key, Zap, Shield, Book, Download, Copy, CheckCircle, AlertCircle, Activity, BarChart, Users, RefreshCw, Lock, Database, Webhook, Bell, Calendar, FileText } from 'lucide-react';
 
 const MobileAPI: React.FC = () => {
@@ -227,10 +228,10 @@ const MobileAPI: React.FC = () => {
                   <h3 className="font-semibold text-gray-900 mb-2">API Key Management</h3>
                   <p className="text-sm text-gray-600">Your primary API key for authentication</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Key className="h-4 w-4" />
                   <span>Generate New Key</span>
-                </button>
+                </Button>
               </div>
               <div className="flex items-center space-x-2">
                 <code className="flex-1 px-4 py-3 bg-white rounded-lg border border-gray-300 font-mono text-sm">

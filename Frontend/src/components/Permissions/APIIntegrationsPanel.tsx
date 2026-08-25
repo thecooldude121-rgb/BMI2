@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { Key, Webhook, Link as LinkIcon, Copy, Check, Plus, Trash2, Power, ExternalLink, Code, FileText, Settings, RefreshCw, Activity, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -218,9 +219,9 @@ export const APIIntegrationsPanel: React.FC = () => {
             <p className="text-sm text-gray-600 mt-1">Manage API keys, webhooks, and SSO configurations</p>
           </div>
 
-          <button
+          <Button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            
             aria-label={`Create new ${activeSection}`}
           >
             <Plus className="h-5 w-5" />
@@ -229,7 +230,7 @@ export const APIIntegrationsPanel: React.FC = () => {
               {activeSection === 'webhooks' && 'Add Webhook'}
               {activeSection === 'sso' && 'Configure SSO'}
             </span>
-          </button>
+          </Button>
         </div>
 
         <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
@@ -293,12 +294,11 @@ export const APIIntegrationsPanel: React.FC = () => {
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Key className="h-12 w-12 text-gray-400 mb-3" />
                 <p className="text-gray-600 mb-4">No API keys created yet</p>
-                <button
+                <Button
                   onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   Create First API Key
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -387,12 +387,11 @@ export const APIIntegrationsPanel: React.FC = () => {
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Webhook className="h-12 w-12 text-gray-400 mb-3" />
                 <p className="text-gray-600 mb-4">No webhooks configured</p>
-                <button
+                <Button
                   onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   Add First Webhook
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="space-y-3">
@@ -562,13 +561,13 @@ export const APIIntegrationsPanel: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={createAPIKey}
                 disabled={!newAPIKey.name.trim() || loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="disabled:bg-gray-300"
               >
                 {loading ? 'Creating...' : 'Create Key'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -648,13 +647,13 @@ export const APIIntegrationsPanel: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={createWebhook}
                 disabled={!newWebhook.name.trim() || !newWebhook.url.trim() || loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="disabled:bg-gray-300"
               >
                 {loading ? 'Creating...' : 'Create Webhook'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -680,13 +679,13 @@ export const APIIntegrationsPanel: React.FC = () => {
                 <code className="block text-sm text-gray-800 break-all font-mono">{generatedKey}</code>
               </div>
 
-              <button
+              <Button
                 onClick={() => copyToClipboard(generatedKey)}
-                className="w-full mt-4 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                fullWidth className="mt-4"
               >
                 {copiedKey ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
                 <span>{copiedKey ? 'Copied!' : 'Copy to Clipboard'}</span>
-              </button>
+              </Button>
             </div>
 
             <div className="p-6 border-t border-gray-200">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Plus, Search, Users, Building, Shield, X, Check, AlertTriangle, Edit, Power, Clock, Globe, Calendar, ArrowLeft } from 'lucide-react';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 
@@ -307,13 +308,13 @@ const ProfilesAccess: React.FC = () => {
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Users</h2>
-              <button
+              <Button
                 onClick={() => setShowAddUserModal(true)}
-                className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                size="sm"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add User
-              </button>
+              </Button>
             </div>
 
             <div className="relative mb-3">
@@ -773,12 +774,11 @@ const ProfilesAccess: React.FC = () => {
                   >
                     Cancel
                   </button>
-                  <button
+                  <Button
                     onClick={handleSaveUser}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     Save Changes
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -894,12 +894,11 @@ const ProfilesAccess: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Add User
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -982,7 +981,7 @@ const ProfilesAccess: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   if (bulkAction === 'changeRole') {
                     const select = document.getElementById('bulkRoleSelect') as HTMLSelectElement;
@@ -1003,10 +1002,10 @@ const ProfilesAccess: React.FC = () => {
                   }
                 }}
                 disabled={!bulkAction || (bulkAction === 'changeRole' && !(document.getElementById('bulkRoleSelect') as HTMLSelectElement)?.value)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="disabled:bg-gray-300"
               >
                 {bulkAction === 'changeRole' ? 'Preview Changes' : 'Apply'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1082,16 +1081,15 @@ const ProfilesAccess: React.FC = () => {
               >
                 Back
               </button>
-              <button
+              <Button
                 onClick={() => {
                   handleBulkAction();
                   setShowBulkPreview(false);
                   setPreviewAction(null);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Confirm Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

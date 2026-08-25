@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 
 /**
@@ -82,12 +83,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
           )}
 
           <div className="mt-6 flex items-center justify-center gap-3">
-            <button
+            <Button
               onClick={this.reset}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
               <RotateCcw className="h-4 w-4" /> Try again
-            </button>
+            </Button>
             <button
               onClick={() => window.history.back()}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

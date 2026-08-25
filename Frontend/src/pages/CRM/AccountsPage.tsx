@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertTriangle, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, Target, UserPlus, X, UserCog, FileText, GitMerge } from 'lucide-react';
@@ -242,13 +243,13 @@ const AccountsPage: React.FC = () => {
             <Upload className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Import</span>
           </button>
-          <button
+          <Button
             onClick={() => setShowAddAccountForm(true)}
-            className="flex items-center px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            size="sm" className="md:px-4"
           >
             <Plus className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Add Account</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -839,13 +840,12 @@ const AccountsPage: React.FC = () => {
                               <Eye className="h-4 w-4 inline mr-1" />
                               View
                             </button>
-                            <button
+                            <Button
                               onClick={() => handleCreateDeal(account)}
-                              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                             >
                               <Plus className="h-4 w-4 inline mr-1" />
                               Create Deal
-                            </button>
+                            </Button>
                             <button
                               onClick={() => handleAddContact(account)}
                               className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -1005,13 +1005,13 @@ const AccountsPage: React.FC = () => {
 
               {/* Quick Actions */}
               <div className="flex items-center space-x-2 pt-2">
-                <button
+                <Button
                   onClick={() => navigate(`/crm/accounts/${account.id}`)}
-                  className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg active:bg-blue-700"
+                  size="sm" fullWidth className="active:bg-blue-700"
                 >
                   <Eye className="h-4 w-4 inline mr-1" />
                   View
-                </button>
+                </Button>
                 <button
                   onClick={() => handleCreateDeal(account)}
                   className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg active:bg-gray-50"
@@ -1074,12 +1074,12 @@ const AccountsPage: React.FC = () => {
             Showing {Math.min(displayCount, filteredAccounts.length)} of {filteredAccounts.length} accounts
           </div>
           {displayCount < filteredAccounts.length && (
-            <button
+            <Button
               onClick={handleLoadMore}
-              className="w-full px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium"
+              fullWidth
             >
               Load More...
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -1156,15 +1156,14 @@ const AccountsPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   navigate(`/crm/accounts/${selectedHRMSAccount.id}`);
                   setShowHRMSModal(false);
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 View Full Account
-              </button>
+              </Button>
             </div>
           </div>
         </div>

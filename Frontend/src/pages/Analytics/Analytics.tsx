@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { BarChart3, TrendingUp, Users, DollarSign, Target, Filter, Download } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { aiEngine } from '../../utils/aiEngine';
@@ -93,10 +94,10 @@ const Analytics: React.FC = () => {
             <Filter className="h-4 w-4 mr-2" />
             Filter
           </button>
-          <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">
+          <Button className="rounded-md">
             <Download className="h-4 w-4 mr-2" />
             Export Report
-          </button>
+          </Button>
         </div>
       </div>
 

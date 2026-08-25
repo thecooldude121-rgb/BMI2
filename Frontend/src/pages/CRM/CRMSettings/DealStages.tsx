@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Plus, GripVertical, Pencil, Trash2, Save } from 'lucide-react';
 
 type DealStage = {
@@ -24,10 +25,10 @@ const DealStages: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">Deal Stages</h2>
           <p className="text-sm text-gray-600 mt-1">Configure your sales pipeline stages</p>
         </div>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+        <Button >
           <Plus className="h-4 w-4" />
           Add Stage
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-3">
@@ -70,10 +71,10 @@ const DealStages: React.FC = () => {
       </div>
 
       <div className="mt-6 pt-4 border-t border-gray-200">
-        <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+        <Button size="lg">
           <Save className="h-4 w-4" />
           Save Changes
-        </button>
+        </Button>
       </div>
     </div>
   );

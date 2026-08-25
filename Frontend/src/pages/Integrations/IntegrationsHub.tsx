@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { useIntegrations } from '../../contexts/IntegrationsContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -38,12 +39,11 @@ export const IntegrationsHub: React.FC = () => {
           <p className="text-gray-600 mb-4">
             {error instanceof Error ? error.message : 'An unknown error occurred'}
           </p>
-          <button
+          <Button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Reload Page
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -205,12 +205,11 @@ export const IntegrationsHub: React.FC = () => {
           <p className="text-gray-600 mb-4">
             Unable to load integrations data. Please try again.
           </p>
-          <button
+          <Button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Reload Page
-          </button>
+          </Button>
         </div>
       </div>
     );

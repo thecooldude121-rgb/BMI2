@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Users, Search, Filter, Plus, Download, Upload, Eye, ArrowLeft, MoreHorizontal, Star, Mail, Phone, Target, Zap, Globe, TrendingUp, X, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Prospect } from '../../types/leadGeneration';
@@ -485,13 +486,13 @@ const ProspectsPage: React.FC = () => {
 
           {/* Actions */}
           <div className="flex space-x-2">
-            <button
+            <Button
               onClick={() => navigate(`/lead-generation/prospects/${prospect.id}`)}
-              className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+              size="sm" fullWidth
             >
               <Eye className="h-4 w-4 mr-1" />
               View
-            </button>
+            </Button>
             <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
               <Mail className="h-4 w-4" />
             </button>
@@ -713,9 +714,9 @@ const ProspectsPage: React.FC = () => {
                 {selectedProspects.length} prospect{selectedProspects.length > 1 ? 's' : ''} selected
               </span>
               <div className="flex space-x-2">
-                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm">
                   Add to Sequence
-                </button>
+                </Button>
                 <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                   Add to List
                 </button>
@@ -747,13 +748,13 @@ const ProspectsPage: React.FC = () => {
                 : 'Start by discovering new prospects'
               }
             </p>
-            <button
+            <Button
               onClick={() => navigate('/lead-generation/discovery')}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
+              size="xl" className="rounded-xl"
             >
               <Search className="h-4 w-4 mr-2 inline" />
               Find Prospects
-            </button>
+            </Button>
           </div>
         )}
       </div>

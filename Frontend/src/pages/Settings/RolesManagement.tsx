@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Users, ChevronDown, ChevronRight, Plus, Copy, Trash2, Edit2, Save, X, Search, AlertCircle, Shield, Clock, User, Calendar, FileText, Eye, EyeOff, List, GitBranch, ArrowLeft } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import { SystemRole } from '../../types/settings';
@@ -506,16 +507,16 @@ const RolesManagement: React.FC = () => {
               <Users className="h-6 w-6 text-blue-600" />
               <h2 className="text-lg font-semibold text-gray-900">Roles</h2>
             </div>
-            <button
+            <Button
               onClick={() => {
                 setParentRoleForNew(null);
                 setShowCreateModal(true);
               }}
-              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="p-2"
               title="Create new role"
             >
               <Plus className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
 
           <div className="space-y-3">
@@ -598,16 +599,15 @@ const RolesManagement: React.FC = () => {
                 <p className="text-sm text-gray-600">Organizational structure and reporting relationships</p>
               </div>
             </div>
-            <button
+            <Button
               onClick={() => {
                 setParentRoleForNew(null);
                 setShowCreateModal(true);
               }}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               <Plus className="h-4 w-4 mr-2" />
               Create Role
-            </button>
+            </Button>
             </div>
           </div>
           <div className="flex-1">
@@ -715,14 +715,14 @@ const RolesManagement: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <button
+                      <Button
                         onClick={() => setIsEditing(true)}
-                        className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        size="sm"
                         disabled={selectedRole.is_system}
                       >
                         <Edit2 className="h-4 w-4 mr-2" />
                         Edit
-                      </button>
+                      </Button>
                       <button
                         onClick={() => setShowCloneModal(true)}
                         className="flex items-center px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -1183,13 +1183,13 @@ const RolesManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCreateRole}
                 disabled={!newRoleData.name.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="disabled:bg-gray-300"
               >
                 Create Role
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1225,13 +1225,12 @@ const RolesManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCloneRole}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 <Copy className="h-4 w-4 mr-2" />
                 Clone Role
-              </button>
+              </Button>
             </div>
           </div>
         </div>

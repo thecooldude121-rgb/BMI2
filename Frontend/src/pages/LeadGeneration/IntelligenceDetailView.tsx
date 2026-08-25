@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, DollarSign, Users, Rocket, Globe, Plus, BellOff, Star, MoreHorizontal, ExternalLink, Bell, Share2, Download, Building2, Mail, Phone, Linkedin, Globe as WebIcon, Twitter, FileText, Target, CheckCircle, Copy, Check, X, AlertCircle } from 'lucide-react';
 import { getIntelligenceSignalById, type DecisionMaker } from '../../utils/intelligenceSignalMockData';
@@ -44,12 +45,11 @@ const IntelligenceDetailView: React.FC = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Signal Not Found</h2>
           <p className="text-gray-600 mb-4">The intelligence signal you're looking for doesn't exist.</p>
-          <button
+          <Button
             onClick={() => navigate('/lead-generation/intelligence')}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Back to Intelligence Feed
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -833,16 +833,16 @@ const IntelligenceDetailView: React.FC = () => {
                       )}
                     </div>
 
-                    <button
+                    <Button
                       onClick={() => {
                         setSelectedDecisionMaker(dm);
                         setCreateMultiple(false);
                         setShowAddLeadModal(true);
                       }}
-                      className="w-full mt-3 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                      size="sm" fullWidth className="mt-3"
                     >
                       Add as Lead
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -990,16 +990,16 @@ const IntelligenceDetailView: React.FC = () => {
               <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
 
               <div className="space-y-2">
-                <button
+                <Button
                   onClick={() => {
                     setCreateMultiple(false);
                     setShowAddLeadModal(true);
                   }}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  fullWidth
                 >
                   <Plus className="h-4 w-4" />
                   <span>Create Lead</span>
-                </button>
+                </Button>
                 <button
                   onClick={() => {
                     setCreateMultiple(true);
@@ -1118,12 +1118,11 @@ const IntelligenceDetailView: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCreateLead}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 {createMultiple ? `Create ${selectedDMs.length} Leads` : 'Create Lead'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1237,12 +1236,11 @@ const IntelligenceDetailView: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSetReminder}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Set Reminder
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1304,12 +1302,11 @@ const IntelligenceDetailView: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleShare}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Share
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1374,12 +1371,11 @@ const IntelligenceDetailView: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddToSequence}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Add to Sequence
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1589,16 +1585,16 @@ const IntelligenceDetailView: React.FC = () => {
                 )}
               </div>
 
-              <button
+              <Button
                 onClick={() => {
                   setShowContactModal(false);
                   setCreateMultiple(false);
                   setShowAddLeadModal(true);
                 }}
-                className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                fullWidth className="mt-4"
               >
                 Create Lead
-              </button>
+              </Button>
             </div>
           </div>
         </div>

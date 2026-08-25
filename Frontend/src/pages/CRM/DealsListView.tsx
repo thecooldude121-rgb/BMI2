@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Button } from '../../components/ui/Button';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Building2, User, Sparkles, Mail, Phone, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Copy, Trash2, Archive, StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX, Pencil, ArrowLeftRight, UserCog, Zap, FileText, CheckSquare, ClipboardList, Workflow, Link2, ListFilter, Swords, AlertCircle, Search, TrendingUp, TrendingDown } from 'lucide-react';
@@ -4439,12 +4440,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => setShowEmailModal(null)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>

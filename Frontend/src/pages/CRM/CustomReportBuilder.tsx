@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, X, BarChart3, Table2, PieChart, LineChart, TrendingUp, Copy, GripVertical, Plus, Sparkles, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
@@ -1057,13 +1058,13 @@ export default function CustomReportBuilder() {
             >
               {isSaving && !isRunning ? '⏳ Saving...' : '💾 Save as Draft'}
             </button>
-            <button
+            <Button
               onClick={handleSaveAndRun}
               disabled={isSaving || isRunning}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              className="whitespace-nowrap"
             >
               {isRunning ? '⏳ Running...' : isEditMode ? '▶️ Update & Run' : '▶️ Save & Run'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1986,14 +1987,14 @@ export default function CustomReportBuilder() {
           >
             {isSaving && !isRunning ? '⏳' : '💾 Draft'}
           </button>
-          <button
+          <Button
             onClick={handleSaveAndRun}
             disabled={isSaving || isRunning}
             title={isEditMode ? 'Update & Run Report (Ctrl/Cmd + Enter)' : 'Save & Run Report (Ctrl/Cmd + Enter)'}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="whitespace-nowrap"
           >
             {isRunning ? '⏳' : isEditMode ? '▶️ Update' : '▶️ Run'}
-          </button>
+          </Button>
         </div>
       </div>
 

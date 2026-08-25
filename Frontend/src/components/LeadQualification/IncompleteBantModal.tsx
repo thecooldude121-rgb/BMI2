@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { X, AlertCircle, Edit, Save } from 'lucide-react';
 
 interface IncompleteBantModalProps {
@@ -129,13 +130,13 @@ const IncompleteBantModal: React.FC<IncompleteBantModalProps> = ({
         </div>
 
         <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <button
+          <Button
             onClick={() => onCompleteBant(firstMissingField)}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            fullWidth
           >
             <Edit className="h-5 w-5" />
             Complete BANT Assessment
-          </button>
+          </Button>
           <button
             onClick={onSaveDraft}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"

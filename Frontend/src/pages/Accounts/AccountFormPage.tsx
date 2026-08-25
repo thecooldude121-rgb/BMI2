@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, X, Globe, Linkedin, Twitter, Building2 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
@@ -696,14 +697,13 @@ const AccountFormPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => handleSave('view')}
                 disabled={isSaving}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
                 <span>{isSaving ? 'Saving...' : 'Save'}</span>
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1022,13 +1022,13 @@ const AccountFormPage: React.FC = () => {
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               <h3 className="text-sm font-semibold text-gray-900 mb-4">Save Options</h3>
               <div className="space-y-2">
-                <button
+                <Button
                   onClick={() => handleSave('view')}
                   disabled={isSaving}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50"
+                  fullWidth
                 >
                   Save & View Account
-                </button>
+                </Button>
                 <button
                   onClick={() => handleSave('contact')}
                   disabled={isSaving}

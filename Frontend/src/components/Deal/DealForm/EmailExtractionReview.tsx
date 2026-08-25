@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../ui/Button';
 import { CheckCircle2, X, AlertTriangle, ChevronDown, ChevronUp, Swords } from 'lucide-react';
 import { ParsedEmailExtraction, ExtractionField, Suggestion } from '../../../utils/emailParser';
 import { Competitor } from '../../../config/competitors';
@@ -118,12 +119,12 @@ export const EmailExtractionReview: React.FC<Props> = ({
           </span>
         </div>
         {highMediumCount > 0 && actionableCount > 0 && (
-          <button
+          <Button
             onClick={acceptAll}
-            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            size="sm" className="font-semibold"
           >
             Accept high/medium ({highMediumCount})
-          </button>
+          </Button>
         )}
       </div>
 
@@ -180,12 +181,12 @@ export const EmailExtractionReview: React.FC<Props> = ({
                   </div>
                   {!isAccepted && !isSkipped && (
                     <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button
+                      <Button
                         onClick={() => applyField(field, suggestion)}
-                        className="px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-2.5 font-semibold"
                       >
                         Accept
-                      </button>
+                      </Button>
                       <button
                         onClick={() => skipField(field)}
                         className="px-2.5 py-1 border border-gray-200 text-gray-500 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors"
@@ -269,12 +270,12 @@ export const EmailExtractionReview: React.FC<Props> = ({
                 {/* Action buttons */}
                 {!displayOnly && !isAccepted && !isSkipped && (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
+                    <Button
                       onClick={() => applyField(field, suggestion)}
-                      className="px-2.5 py-1 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="px-2.5 font-semibold"
                     >
                       Accept
-                    </button>
+                    </Button>
                     <button
                       onClick={() => skipField(field)}
                       className="px-2.5 py-1 border border-gray-200 text-gray-500 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"

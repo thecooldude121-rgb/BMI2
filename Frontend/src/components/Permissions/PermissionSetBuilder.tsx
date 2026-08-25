@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 
 interface PermissionSetBuilderProps {
@@ -432,13 +433,13 @@ export const PermissionSetBuilder: React.FC<PermissionSetBuilderProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
             disabled={!name.trim()}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            size="lg" className="disabled:bg-gray-300"
           >
             {existingSet ? 'Save Changes' : 'Create Permission Set'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

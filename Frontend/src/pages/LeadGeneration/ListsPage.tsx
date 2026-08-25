@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { List, Plus, Search, Filter, Download, Upload, Eye, Edit, Trash2, Copy, Users, Target, Zap, MoreHorizontal, X, Globe, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { LeadList } from '../../types/leadGeneration';
@@ -365,10 +366,10 @@ const ListsPage: React.FC = () => {
 
               {/* Actions */}
               <div className="flex space-x-2">
-                <button className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm" fullWidth>
                   <Eye className="h-4 w-4 mr-1" />
                   View
-                </button>
+                </Button>
                 <button className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors">
                   <Edit className="h-4 w-4" />
                 </button>
@@ -397,9 +398,9 @@ const ListsPage: React.FC = () => {
                 {selectedLists.length} list{selectedLists.length > 1 ? 's' : ''} selected
               </span>
               <div className="flex space-x-2">
-                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm">
                   Add to Sequence
-                </button>
+                </Button>
                 <button className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                   Merge Lists
                 </button>

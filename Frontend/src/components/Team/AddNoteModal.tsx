@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, FileText, Calendar, Tag, Lock, Users } from 'lucide-react';
 
 interface AddNoteModalProps {
@@ -322,10 +323,10 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleSave}
               disabled={saving || !subject.trim() || !content.trim()}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              size="lg" className="disabled:bg-slate-300"
             >
               {saving ? (
                 <>
@@ -338,7 +339,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
                   Save Note
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

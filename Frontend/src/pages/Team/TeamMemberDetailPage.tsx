@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Building2, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
@@ -789,12 +790,12 @@ export default function TeamMemberDetailPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-8">
         <div className="bg-white rounded-xl shadow-lg p-12 max-w-md text-center">
           <h2 className="text-2xl font-bold text-slate-800 mb-4">Member Not Found</h2>
-          <button
+          <Button
             onClick={() => navigate('/team')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            size="lg"
           >
             Back to Team
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1457,12 +1458,12 @@ export default function TeamMemberDetailPage() {
           <p className="text-slate-600 mb-6">
             Team member profiles are not available for Support role. Contact your administrator for access.
           </p>
-          <button
+          <Button
             onClick={() => navigate('/team')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            size="lg"
           >
             Back to Team
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1594,13 +1595,12 @@ export default function TeamMemberDetailPage() {
 
           <div className="flex gap-3">
             {canScheduleMeetings && (
-              <button
+              <Button
                 onClick={handleSchedule1on1}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <Calendar className="w-4 h-4" />
                 Schedule 1-on-1
-              </button>
+              </Button>
             )}
             <button
               onClick={handleViewCalendar}
@@ -2471,13 +2471,12 @@ export default function TeamMemberDetailPage() {
                 Coaching Notes (3 Total, Showing All)
               </h2>
               {canAddNotes && (
-                <button
+                <Button
                   onClick={() => setAddNoteOpen(!addNoteOpen)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                 >
                   <Plus className="w-4 h-4" />
                   Add Note
-                </button>
+                </Button>
               )}
             </div>
 
@@ -2559,12 +2558,11 @@ export default function TeamMemberDetailPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4">
-                  <button
+                  <Button
                     onClick={saveNote}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                   >
                     Save Note
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setAddNoteOpen(false)}
                     className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
@@ -2750,9 +2748,9 @@ export default function TeamMemberDetailPage() {
                 <input type="text" placeholder="Office or Zoom link" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={saveSchedule} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <Button onClick={saveSchedule} fullWidth>
                   Schedule Meeting
-                </button>
+                </Button>
                 <button onClick={() => setScheduleModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
                   Cancel
                 </button>
@@ -2784,10 +2782,10 @@ export default function TeamMemberDetailPage() {
               </button>
             </div>
             <div className="space-y-3">
-              <button onClick={() => { setContactModalOpen(false); handleSendEmail(selectedContact); }} className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-3">
+              <Button onClick={() => { setContactModalOpen(false); handleSendEmail(selectedContact); }} fullWidth>
                 <Mail className="w-5 h-5" />
                 Send Email
-              </button>
+              </Button>
               <button onClick={() => { setContactModalOpen(false); handleSchedule1on1(); }} className="w-full px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium flex items-center gap-3">
                 <Calendar className="w-5 h-5" />
                 Schedule Call
@@ -2846,9 +2844,9 @@ export default function TeamMemberDetailPage() {
                 <p className="text-sm text-slate-700 leading-relaxed">{selectedHrmsLead.context}</p>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setHrmsModalOpen(false); handleViewDeal(selectedHrmsLead.id, selectedHrmsLead.company); }} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <Button onClick={() => { setHrmsModalOpen(false); handleViewDeal(selectedHrmsLead.id, selectedHrmsLead.company); }} fullWidth>
                   View Full Deal
-                </button>
+                </Button>
                 <button onClick={() => setHrmsModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
                   Close
                 </button>
@@ -2891,9 +2889,9 @@ export default function TeamMemberDetailPage() {
                 </select>
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={updateNote} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <Button onClick={updateNote} fullWidth>
                   Update Note
-                </button>
+                </Button>
                 <button onClick={() => setEditNoteModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
                   Cancel
                 </button>
@@ -3038,15 +3036,15 @@ export default function TeamMemberDetailPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={() => {
                   showToast('1-on-1 scheduled successfully', 'success');
                   setOneOnOneModalOpen(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Schedule 1-on-1
-              </button>
+              </Button>
               <button
                 onClick={() => setOneOnOneModalOpen(false)}
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
@@ -3111,15 +3109,15 @@ export default function TeamMemberDetailPage() {
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-slate-200">
-              <button
+              <Button
                 onClick={() => {
                   showToast('Document shared successfully', 'success');
                   setShareDocModalOpen(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Share Document
-              </button>
+              </Button>
               <button
                 onClick={() => setShareDocModalOpen(false)}
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
@@ -3198,15 +3196,15 @@ export default function TeamMemberDetailPage() {
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-slate-200">
-              <button
+              <Button
                 onClick={() => {
                   showToast('Task created successfully', 'success');
                   setAddTaskModalOpen(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Create Task
-              </button>
+              </Button>
               <button
                 onClick={() => setAddTaskModalOpen(false)}
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"

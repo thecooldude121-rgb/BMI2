@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Button } from '../ui/Button';
 import { LayoutGrid, List, Plus, Filter, Search, Download, RefreshCw, Eye, Edit, Trash2, MoreHorizontal, ChevronDown, ChevronUp, X, AlertCircle, DollarSign, TrendingUp, Target, Star, Columns } from 'lucide-react';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { Deal, Pipeline, DealFilters, DealColumn, CustomView, DEFAULT_DEAL_COLUMNS, SAMPLE_PIPELINES } from '../../types/deals';
@@ -934,13 +935,13 @@ const DealsModule: React.FC = () => {
                 : 'Get started by creating your first deal'
               }
             </p>
-            <button
+            <Button
               onClick={() => setShowCreateForm(true)}
-              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
+              size="xl" className="rounded-xl"
             >
               <Plus className="h-4 w-4 mr-2 inline" />
               Create Your First Deal
-            </button>
+            </Button>
           </div>
         )}
       </div>

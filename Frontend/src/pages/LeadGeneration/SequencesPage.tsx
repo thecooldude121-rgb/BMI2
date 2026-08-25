@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Zap, Plus, Play, Pause, Edit, Trash2, Copy, BarChart3, Users, Mail, Clock, TrendingUp, Eye, Filter, Search, Download, Upload, Target, ArrowRight, CheckCircle, MessageSquare, Phone, CheckSquare, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { EmailSequence } from '../../types/leadGeneration';
@@ -352,10 +353,10 @@ const SequencesPage: React.FC = () => {
 
           {/* Actions */}
           <div className="flex space-x-2">
-            <button className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+            <Button size="sm" fullWidth>
               <Eye className="h-4 w-4 mr-1" />
               View
-            </button>
+            </Button>
             <button className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors">
               <Edit className="h-4 w-4" />
             </button>
@@ -703,10 +704,10 @@ const SequencesPage: React.FC = () => {
                   <Pause className="h-4 w-4 mr-1" />
                   Pause
                 </button>
-                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                <Button size="sm">
                   <Copy className="h-4 w-4 mr-1" />
                   Duplicate
-                </button>
+                </Button>
                 <button className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors">
                   <Trash2 className="h-4 w-4 mr-1" />
                   Delete

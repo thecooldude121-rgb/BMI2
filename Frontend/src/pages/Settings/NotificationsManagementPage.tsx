@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Bell, Plus, Trash2, Edit, ArrowLeft, Check, X, Activity, TrendingUp, Clock, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { NotificationConfiguration, NotificationChannel } from '../../types/workflowAutomation';
@@ -373,10 +374,10 @@ const NotificationsManagementPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+              <Button fullWidth className="font-semibold">
                 <Zap className="h-4 w-4 inline mr-2" />
                 Create Notification
-              </button>
+              </Button>
             </div>
           </div>
         </div>

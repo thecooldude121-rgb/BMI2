@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../ui/Button';
 import type {
   AssignmentRule, RuleCondition, ConditionField, ConditionOp,
   BusinessHoursValue, FollowUpTaskConfig,
@@ -521,10 +522,10 @@ export default function RuleEditor({ rule: initial, onSave, onCancel }: Props) {
           className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
           Cancel
         </button>
-        <button onClick={handleSave}
-          className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+        <Button onClick={handleSave}
+          size="lg" className="font-semibold">
           Save Rule
-        </button>
+        </Button>
       </div>
     </div>
   );

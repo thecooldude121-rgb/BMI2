@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { ExternalLink, CheckCircle, XCircle, FileText, Upload, Activity } from 'lucide-react';
 
@@ -190,13 +191,13 @@ const IntegrationsOverview: React.FC = () => {
           </div>
 
           <div className="p-6 space-y-3">
-            <button
+            <Button
               onClick={handleConnectNew}
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2"
+              fullWidth
             >
               <ExternalLink className="h-4 w-4" />
               + Connect New Integration
-            </button>
+            </Button>
             <p className="text-xs text-gray-500 text-center -mt-1">Navigate to Screen 10.1</p>
 
             <button

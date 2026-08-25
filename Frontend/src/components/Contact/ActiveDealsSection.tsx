@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { DollarSign, Calendar, User, ExternalLink, AlertCircle } from 'lucide-react';
 
 interface ActiveDealsSectionProps {
@@ -108,13 +109,13 @@ const ActiveDealsSection: React.FC<ActiveDealsSectionProps> = ({ deal, onViewDea
         </div>
 
         <div className="flex items-center space-x-3">
-          <button
+          <Button
             onClick={onViewDeal}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center space-x-2"
+            fullWidth
           >
             <ExternalLink className="h-4 w-4" />
             <span>View Full Deal</span>
-          </button>
+          </Button>
           <button
             onClick={onUpdateStage}
             className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"

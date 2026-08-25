@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { CheckSquare, Clock, AlertTriangle, Plus } from 'lucide-react';
 import {
   fetchTasks,
@@ -155,13 +156,13 @@ const TasksPage: React.FC = () => {
       <div className="bg-white rounded-lg border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">All Tasks</h3>
-          <button
+          <Button
             onClick={() => { void handleAddTask(); }}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+            className="rounded-md"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Task
-          </button>
+          </Button>
         </div>
 
         {error && (

@@ -2,6 +2,7 @@
 // Replaces the thin ConversionWorkflowModal routing shim.
 // TODO: replace stub ID generation with real entity-creation API calls when available.
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Button } from '../ui/Button';
 import {
   X, UserPlus, Building2, TrendingUp, Link2,
   CheckCircle, XCircle, AlertCircle, ArrowRight, Loader2, Check,
@@ -938,16 +939,16 @@ export default function LeadConversionWizard({
 
               {/* Next / Convert */}
               {step < 3 ? (
-                <button
+                <Button
                   onClick={() => setStep(prev => (prev + 1) as WizardStep)}
                   disabled={
                     (step === 1 && step1Disabled) ||
                     (step === 2 && leadDuplicateRisk === 'high' && !dupDismissed)
                   }
-                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  size="lg" className="font-semibold rounded-xl disabled:opacity-40"
                 >
                   Next <ArrowRight size={14} />
-                </button>
+                </Button>
               ) : (
                 <button
                   onClick={handleConvert}

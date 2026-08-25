@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Button } from '../ui/Button';
 import { X, Upload, FileText, File, Image, FileSpreadsheet, Presentation, CheckCircle } from 'lucide-react';
 
 interface ShareDocumentModalProps {
@@ -268,12 +269,11 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
                     <p className="text-sm text-slate-600 mb-2">
                       Drag and drop your file here, or
                     </p>
-                    <button
+                    <Button
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       Choose File
-                    </button>
+                    </Button>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -386,10 +386,10 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleShare}
               disabled={sharing || !isValid}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              size="lg" className="disabled:bg-slate-300"
             >
               {sharing ? (
                 <>
@@ -402,7 +402,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
                   Share Document
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

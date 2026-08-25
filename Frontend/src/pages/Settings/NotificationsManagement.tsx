@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Bell, Mail, MessageSquare, Smartphone, Globe, Settings, Plus, Edit, Trash2, Eye, Clock, TrendingUp, Send, Code, Copy, Save, TestTube, BarChart, Zap, Pause, Play } from 'lucide-react';
 
 interface NotificationTemplate {
@@ -386,16 +387,15 @@ const NotificationsManagement: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Notification Rules</h2>
                 <p className="text-gray-600">Configure event-driven notification triggers and delivery rules</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setSelectedItem(null);
                   setShowRuleModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Create Rule</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -541,16 +541,15 @@ const NotificationsManagement: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Notification Templates</h2>
                 <p className="text-gray-600">Manage email, SMS, and in-app notification templates</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setSelectedItem(null);
                   setShowTemplateModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Create Template</span>
-              </button>
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -772,10 +771,10 @@ const NotificationsManagement: React.FC = () => {
             </div>
 
             <div className="mt-6 flex justify-end">
-              <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors">
+              <Button size="lg">
                 <Save className="h-4 w-4" />
                 <span>Save Preferences</span>
-              </button>
+              </Button>
             </div>
           </div>
         )}

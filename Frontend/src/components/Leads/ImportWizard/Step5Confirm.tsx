@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../ui/Button';
 import { CheckCircle, XCircle, GitMerge, AlertTriangle, Zap, UserCheck, Tag } from 'lucide-react';
 import { TEAM_MEMBERS } from '../../../utils/leadOwnerRouting';
 import type { ParsedRow, ImportRules } from './types';
@@ -138,14 +139,14 @@ export default function Step5Confirm({ validatedRows, skipErrors, rules, onConfi
         </div>
       )}
 
-      <button
+      <Button
         onClick={onConfirm}
         disabled={toImport === 0}
-        className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+        fullWidth className="rounded-xl font-semibold shadow-sm"
       >
         <CheckCircle className="h-5 w-5" />
         Start importing {toImport.toLocaleString()} lead{toImport !== 1 ? 's' : ''}
-      </button>
+      </Button>
     </div>
   );
 }

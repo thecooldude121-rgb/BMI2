@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { BarChart, LineChart, PieChart, TrendingUp, Target, Download, Upload, Plus, Eye, Edit, Copy, Share2, Play, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Dashboard {
@@ -199,10 +200,10 @@ const AnalyticsReporting: React.FC = () => {
               <Upload className="h-4 w-4" />
               <span>Import</span>
             </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+            <Button >
               <Plus className="h-4 w-4" />
               <span>Create Dashboard</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -379,10 +380,10 @@ const AnalyticsReporting: React.FC = () => {
                   <h2 className="text-xl font-bold text-gray-900 mb-2">Automated Reports</h2>
                   <p className="text-gray-600">Schedule and distribute custom reports</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Plus className="h-4 w-4" />
                   <span>Create Report</span>
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -554,10 +555,10 @@ const AnalyticsReporting: React.FC = () => {
                   <h2 className="text-xl font-bold text-gray-900 mb-2">Key Performance Indicators</h2>
                   <p className="text-gray-600">Track and monitor critical business metrics</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Plus className="h-4 w-4" />
                   <span>Create KPI</span>
-                </button>
+                </Button>
               </div>
             </div>
 

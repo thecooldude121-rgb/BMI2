@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../ui/Button';
 import { Settings, Tag, X } from 'lucide-react';
 
 interface CRMSettingsSectionProps {
@@ -170,12 +171,11 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 placeholder="Add tag"
               />
-              <button
+              <Button
                 onClick={handleAddTag}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
                 <Tag className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             <div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Settings, Shield, Users, Lock, Activity, Key, Globe, Database, Bell, FileText, Workflow, UserCheck, Zap, Search, ChevronRight, AlertTriangle, CheckCircle, Info, ArrowLeft, X, Webhook, MessageSquare, TrendingUp, Smartphone } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import RolesManagement from './RolesManagement';
@@ -343,7 +344,7 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{section.title}</h3>
                 <p className="text-gray-600 mb-6">{section.description}</p>
-                <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Configure {section.title}</button>
+                <Button size="xl">Configure {section.title}</Button>
               </div>
             </div>
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -429,13 +430,13 @@ const SettingsPage: React.FC = () => {
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleCreateRole}
               disabled={!newRole.name.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="disabled:bg-gray-300"
             >
               Create Role
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Filter, Tag, RefreshCw } from 'lucide-react';
 import { DealFilters, Pipeline } from '../../types/deals';
 
@@ -270,12 +271,12 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
               className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Filter by tag..."
             />
-            <button
+            <Button
               onClick={addTag}
-              className="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 transition-colors"
+              className="rounded-r-lg"
             >
               Add
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -297,12 +298,11 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={applyFilters}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
           >
             Apply Filters
-          </button>
+          </Button>
         </div>
       </div>
     </div>

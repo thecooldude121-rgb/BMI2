@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
 import { Download, Settings, BarChart3, Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, FileText } from 'lucide-react';
@@ -348,7 +349,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No deals found</h3>
             <p className="text-sm text-gray-600 mb-6">Try adjusting your filters or search criteria</p>
-            <button
+            <Button
               onClick={() => {
                 setSelectedStage('all');
                 setSelectedOwner('all');
@@ -356,10 +357,9 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 setSelectedValue('all');
                 setSelectedSource('all');
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Clear Filters
-            </button>
+            </Button>
           </div>
         ) : (
           <>
@@ -607,13 +607,13 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
                 {/* Action Buttons */}
                 <div className="space-y-2">
-                  <button
+                  <Button
                     onClick={(e) => { e.stopPropagation(); setShowEmailModal(deal); }}
-                    className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                    size="sm" fullWidth
                   >
                     <Mail className="h-4 w-4" />
                     <span>Email</span>
-                  </button>
+                  </Button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCallModal(deal); }}
                     className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
@@ -718,12 +718,12 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
             {/* Load More / Status */}
             <div className="mt-8 text-center">
               {displayedDeals.length < filteredDeals.length ? (
-                <button
+                <Button
                   onClick={loadMore}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  size="xl"
                 >
                   Load More ({filteredDeals.length - displayedDeals.length} remaining)
-                </button>
+                </Button>
               ) : (
                 <p className="text-sm text-gray-600">
                   Showing all {displayedDeals.length} deals
@@ -850,12 +850,11 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => setShowEmailModal(null)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1039,12 +1038,11 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => setShowProposalModal(null)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Proposal
-              </button>
+              </Button>
             </div>
           </div>
         </div>

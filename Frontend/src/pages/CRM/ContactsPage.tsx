@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Upload, Search, ChevronDown, Mail, Phone, Eye, Target, Building2, Globe, Edit, Download, Trash2, Tag, Grid, List, Columns } from 'lucide-react';
 import { Contact, ContactFilters } from '../../types/contact';
@@ -329,13 +330,12 @@ const ContactsPage: React.FC = () => {
               <Upload className="h-4 w-4" />
               <span>Import</span>
             </button>
-            <button
+            <Button
               onClick={handleAddContact}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center space-x-2"
             >
               <Plus className="h-4 w-4" />
               <span>Add Contact</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -675,12 +675,11 @@ const ContactsPage: React.FC = () => {
                             <div className="flex items-center space-x-2 mt-3">
                               {contact.status === 'inactive' ? (
                                 <>
-                                  <button
+                                  <Button
                                     onClick={() => handleReengage(contact)}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                                   >
                                     Re-engage
-                                  </button>
+                                  </Button>
                                   <button
                                     onClick={() => handleArchiveContact(contact.id)}
                                     className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
@@ -690,13 +689,12 @@ const ContactsPage: React.FC = () => {
                                 </>
                               ) : (
                                 <>
-                                  <button
+                                  <Button
                                     onClick={() => handleEmailContact(contact)}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center space-x-1"
                                   >
                                     <Mail className="h-4 w-4" />
                                     <span>Email</span>
-                                  </button>
+                                  </Button>
                                   <button
                                     onClick={() => handleCallContact(contact)}
                                     className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center space-x-1"
@@ -768,13 +766,12 @@ const ContactsPage: React.FC = () => {
                 <span>Add Tag</span>
                 <ChevronDown className="h-4 w-4" />
               </button>
-              <button
+              <Button
                 onClick={handleBulkExport}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center space-x-2"
               >
                 <Download className="h-4 w-4" />
                 <span>Export</span>
-              </button>
+              </Button>
               <button
                 onClick={handleBulkDelete}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm flex items-center space-x-2"

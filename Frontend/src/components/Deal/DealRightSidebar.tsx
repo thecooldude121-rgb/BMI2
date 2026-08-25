@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { TrendingUp, Calendar, Eye, BarChart3, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PredictedCloseDateModal, SimilarityBreakdownModal } from './DealActivityModals';
@@ -248,13 +249,13 @@ export const DealRightSidebar: React.FC<DealRightSidebarProps> = ({
                   Same challenge: <span className="font-semibold">{deal.challenge}</span>
                 </div>
               )}
-              <button
+              <Button
                 onClick={() => window.open(`/crm/deals/${deal.id}`, '_blank')}
-                className="mt-2 px-2 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                size="sm" className="mt-2 rounded"
               >
                 <Eye className="h-3 w-3 inline mr-1" />
                 View Deal
-              </button>
+              </Button>
             </div>
           ))}
         </div>

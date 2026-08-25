@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
@@ -2339,17 +2340,16 @@ const DealsKanbanPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   const title = taskTitle.trim() || undefined;
                   console.log('Creating tasks for deals:', aiInsights.needAttention.map(d => d.id), { title });
                   setShowTaskModal(false);
                   setTaskTitle('');
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Create Tasks
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2398,16 +2398,15 @@ const DealsKanbanPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   navigate('/hrms');
                   setShowHRMSModal(false);
                   setSelectedHRMSDeal(null);
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 View HRMS Module
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2462,16 +2461,15 @@ const DealsKanbanPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   setShowActivityModal(false);
                   setSelectedActivityDeal(null);
                   navigate(`/crm/deals/${selectedActivityDeal.id}`);
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Log Activity
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Grid, Search, Download, Upload, Save, X, AlertTriangle, Info, Eye, Edit, Trash2, Copy, Layers, ChevronDown, ChevronRight, RotateCcw, Zap, Shield, CheckSquare, Square, MinusSquare, HelpCircle } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 
@@ -1144,13 +1145,13 @@ const PermissionMatrix: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-4">
             {sidebarView === 'sets' && (
               <div className="space-y-4">
-                <button
+                <Button
                   onClick={createPermissionSet}
-                  className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Create Permission Set
-                </button>
+                </Button>
 
                 {permissionSets.length === 0 ? (
                   <div className="text-center py-12">
@@ -1173,12 +1174,12 @@ const PermissionMatrix: React.FC = () => {
                         )}
                       </div>
                       <div className="flex items-center space-x-2 mt-3">
-                        <button
+                        <Button
                           onClick={() => applyPermissionSet(set)}
-                          className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                          size="sm" fullWidth className="rounded"
                         >
                           Apply
-                        </button>
+                        </Button>
                         <button className="p-1.5 text-gray-600 hover:bg-gray-100 rounded">
                           <Edit className="h-4 w-4" />
                         </button>
@@ -1374,7 +1375,7 @@ const PermissionMatrix: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   if (copyFromRole && selectedRoles.size > 0) {
                     selectedRoles.forEach(targetRoleId => {
@@ -1384,10 +1385,10 @@ const PermissionMatrix: React.FC = () => {
                   }
                 }}
                 disabled={!copyFromRole || selectedRoles.size === 0}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="disabled:bg-gray-300"
               >
                 Copy Permissions
-              </button>
+              </Button>
             </div>
           </div>
         </div>

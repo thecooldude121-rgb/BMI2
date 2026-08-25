@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Settings, User, Mail, Calendar, Zap, Database, Shield, Bell, Globe, Download, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -77,9 +78,9 @@ const SettingsPage: React.FC = () => {
                   className="h-20 w-20 rounded-full object-cover"
                 />
                 <div>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 mr-3">
+                  <Button className="mr-3">
                     Change Photo
-                  </button>
+                  </Button>
                   <button className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
                     Remove
                   </button>
@@ -122,9 +123,9 @@ const SettingsPage: React.FC = () => {
               </div>
 
               <div className="flex justify-end">
-                <button className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                <Button size="xl" className="rounded-xl">
                   Save Changes
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -164,9 +165,9 @@ const SettingsPage: React.FC = () => {
               </div>
 
               <div className="flex justify-end">
-                <button className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                <Button size="xl" className="rounded-xl">
                   Save Settings
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -214,9 +215,9 @@ const SettingsPage: React.FC = () => {
               </div>
 
               <div className="flex justify-end">
-                <button className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                <Button size="xl" className="rounded-xl">
                   Save Preferences
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -291,9 +292,9 @@ const SettingsPage: React.FC = () => {
                       />
                     </div>
                   </div>
-                  <button className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                  <Button size="xl" className="mt-4 rounded-xl">
                     Update Password
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="border-t border-gray-200 pt-6">

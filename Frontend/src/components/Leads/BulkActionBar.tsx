@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import {
   X, ChevronDown, Download, ArrowRightCircle, Archive,
   XCircle, Trash2, UserCheck, Tag, Sparkles, GitMerge,
@@ -297,13 +298,13 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   ))}
                 </div>
 
-                <button
+                <Button
                   onClick={handleApplyFollowUp}
                   disabled={!followUpDate}
-                  className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  size="sm" fullWidth
                 >
                   Set Follow-up
-                </button>
+                </Button>
               </div>
             )}
           </div>

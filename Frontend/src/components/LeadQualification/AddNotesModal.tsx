@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, FileText, Save, AlertCircle } from 'lucide-react';
 
 interface AddNotesModalProps {
@@ -148,13 +149,13 @@ const AddNotesModal: React.FC<AddNotesModalProps> = ({
         </div>
 
         <div className="flex gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <button
+          <Button
             onClick={handleSave}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            fullWidth
           >
             <Save className="h-5 w-5" />
             Save Note
-          </button>
+          </Button>
           <button
             onClick={handleCancel}
             className="flex-1 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"

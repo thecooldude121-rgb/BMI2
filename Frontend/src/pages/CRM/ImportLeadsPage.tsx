@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import ImportWizard from '../../components/Leads/ImportWizard';
 import { Upload, Check, Settings, Calendar, TrendingUp, Zap, Download, AlertCircle, X, ArrowLeft, Loader2 } from 'lucide-react';
@@ -367,13 +368,13 @@ const ImportLeadsPage: React.FC = () => {
                 <div className="flex gap-2">
                   {integration.status === 'connected' ? (
                     <>
-                      <button
+                      <Button
                         onClick={() => handleImportNow(integration)}
-                        className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                        fullWidth
                       >
                         <Upload className="h-4 w-4 mr-2" />
                         Import Now
-                      </button>
+                      </Button>
                       <button
                         onClick={() => handleConfigure(integration)}
                         className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
@@ -388,12 +389,12 @@ const ImportLeadsPage: React.FC = () => {
                       </button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnect(integration)}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                      fullWidth
                     >
                       Connect {integration.name}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -463,12 +464,11 @@ const ImportLeadsPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center space-x-2 ml-4">
-                    <button
+                    <Button
                       onClick={() => handleViewTheseLeads(item)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       View These Leads
-                    </button>
+                    </Button>
                     <button
                       onClick={() => handleViewDetails(item)}
                       className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
@@ -505,13 +505,13 @@ const ImportLeadsPage: React.FC = () => {
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload CSV File</h3>
                 <p className="text-sm text-gray-600 mb-4">Click to open the guided import wizard</p>
-                <button
+                <Button
                   onClick={e => { e.stopPropagation(); setWizardOpen(true); }}
-                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  size="xl"
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Start CSV Import
-                </button>
+                </Button>
               </div>
 
               <div className="mt-6 flex items-center justify-center">
@@ -644,12 +644,12 @@ const ImportLeadsPage: React.FC = () => {
                     >
                       Cancel
                     </button>
-                    <button
+                    <Button
                       onClick={handleStartImport}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                      fullWidth
                     >
                       Start Import
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>
@@ -679,12 +679,12 @@ const ImportLeadsPage: React.FC = () => {
                   >
                     Close
                   </button>
-                  <button
+                  <Button
                     onClick={handleImportComplete}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    fullWidth
                   >
                     View Imported Leads
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -796,12 +796,12 @@ const ImportLeadsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveConfig}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Save Settings
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -883,12 +883,12 @@ const ImportLeadsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCompleteConnection}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Connect
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -956,15 +956,15 @@ const ImportLeadsPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   setShowImportDetailsModal(false);
                   handleViewTheseLeads(selectedImport);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 View These Leads
-              </button>
+              </Button>
             </div>
           </div>
         </div>

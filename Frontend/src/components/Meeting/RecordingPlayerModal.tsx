@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Play, Pause, SkipBack, SkipForward, Volume2, Settings, Maximize2, Download, Share2 } from 'lucide-react';
 
 interface RecordingPlayerModalProps {
@@ -87,16 +88,16 @@ export default function RecordingPlayerModal({ isOpen, onClose, meeting }: Recor
                 <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                   <SkipBack className="h-5 w-5 text-gray-700" />
                 </button>
-                <button
+                <Button
                   onClick={() => setIsPlaying(!isPlaying)}
-                  className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+                  className="p-3 rounded-full"
                 >
                   {isPlaying ? (
                     <Pause className="h-6 w-6" />
                   ) : (
                     <Play className="h-6 w-6 ml-0.5" />
                   )}
-                </button>
+                </Button>
                 <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                   <SkipForward className="h-5 w-5 text-gray-700" />
                 </button>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, Mail, Phone, Globe, MapPin, Users, DollarSign, Calendar, Edit, MoreVertical, Plus, Star, Target, FileText, Sparkles, Clock, Activity, Video } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -170,13 +171,12 @@ const TechStartDetailView: React.FC = () => {
 
           {/* Quick Actions */}
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={handleCreateDeal}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
               <DollarSign className="h-4 w-4" />
               Create Deal
-            </button>
+            </Button>
             <button
               onClick={handleAddContact}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
@@ -467,13 +467,12 @@ const TechStartDetailView: React.FC = () => {
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-lg font-semibold text-gray-900">Contacts ({contacts.length})</h3>
-                  <button
+                  <Button
                     onClick={handleAddContact}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                   >
                     <Plus className="h-4 w-4" />
                     Add Contact
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="space-y-4">
@@ -567,13 +566,12 @@ const TechStartDetailView: React.FC = () => {
                       {deals.length} deals worth ${metrics.total_pipeline.toLocaleString()}
                     </p>
                   </div>
-                  <button
+                  <Button
                     onClick={handleCreateDeal}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                   >
                     <Plus className="h-4 w-4" />
                     Create Deal
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-6">
@@ -849,13 +847,12 @@ const TechStartDetailView: React.FC = () => {
                     <h3 className="text-lg font-semibold text-gray-900">Documents</h3>
                     <p className="text-sm text-gray-600 mt-1">Files and attachments</p>
                   </div>
-                  <button
+                  <Button
                     onClick={handleUploadDocument}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                   >
                     <Upload className="h-4 w-4" />
                     Upload
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="text-center py-12">
@@ -1041,9 +1038,9 @@ const TechStartDetailView: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <Button >
                   Send Email
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1090,9 +1087,9 @@ const TechStartDetailView: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <Button >
                   Schedule Meeting
-                </button>
+                </Button>
               </div>
             </div>
           </div>

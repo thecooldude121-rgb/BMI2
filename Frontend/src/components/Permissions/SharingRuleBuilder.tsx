@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import {
   ChevronRight, ChevronLeft, Check, X, Plus, Trash2,
   Users, Database, Filter, Calendar, AlertCircle, Info
@@ -559,13 +560,12 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
           </div>
 
           {currentStep < steps.length ? (
-            <button
+            <Button
               onClick={nextStep}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <span>Next</span>
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </Button>
           ) : (
             <button
               onClick={handleSave}

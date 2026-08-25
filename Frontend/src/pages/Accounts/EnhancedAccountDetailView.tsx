@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, Mail, Phone, Globe, MapPin, TrendingUp, Users, DollarSign, Calendar, Edit, MoreVertical, Plus, Star, Target, FileText, MessageSquare, Eye, Download, Upload, ChevronDown, ChevronRight, GitMerge, Trash2, Copy, Archive } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
@@ -584,13 +585,12 @@ const EnhancedAccountDetailView: React.FC = () => {
 
             {/* Quick Actions */}
             <div className="flex flex-wrap gap-3">
-              <button
+              <Button
                 onClick={handleCreateDeal}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 <DollarSign className="h-4 w-4 mr-2" />
                 Create Deal
-              </button>
+              </Button>
               <button
                 onClick={handleAddContact}
                 className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -760,12 +760,12 @@ const EnhancedAccountDetailView: React.FC = () => {
                                 </div>
                               </div>
                               <div className="flex flex-wrap gap-2 mt-3">
-                                <button
+                                <Button
                                   onClick={() => alert('There is no HRMS integration — nothing was opened.')}
-                                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                                  size="sm" className="rounded"
                                 >
                                   View Employee Profile in HRMS
-                                </button>
+                                </Button>
                                 <button
                                   onClick={handleSendEmail}
                                   className="px-3 py-1 bg-orange-600 text-white text-sm rounded hover:bg-orange-700"
@@ -980,12 +980,12 @@ const EnhancedAccountDetailView: React.FC = () => {
                             )}
 
                             <div className="flex gap-2 mt-3">
-                              <button
+                              <Button
                                 onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                                className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                                size="sm" fullWidth
                               >
                                 View Full Deal
-                              </button>
+                              </Button>
                               <button className="px-3 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50">
                                 Update Stage
                               </button>
@@ -1079,12 +1079,12 @@ const EnhancedAccountDetailView: React.FC = () => {
                               </div>
 
                               <div className="flex gap-2 mt-3">
-                                <button
+                                <Button
                                   onClick={() => navigate(`/crm/contacts/${contact.id}`)}
-                                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                                  size="sm" className="rounded"
                                 >
                                   View Contact
-                                </button>
+                                </Button>
                                 <button className="px-3 py-1 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50">
                                   Email
                                 </button>
@@ -1450,12 +1450,12 @@ const EnhancedAccountDetailView: React.FC = () => {
                           </div>
 
                           <div className="flex gap-2">
-                            <button
+                            <Button
                               onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              fullWidth
                             >
                               View Full Deal
-                            </button>
+                            </Button>
                             <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
                               Update Stage
                             </button>
@@ -1489,10 +1489,10 @@ const EnhancedAccountDetailView: React.FC = () => {
                       <MessageSquare className="h-7 w-7 mr-3 text-green-600" />
                       Activity Timeline
                     </h2>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                    <Button >
                       <Plus className="h-4 w-4 mr-2" />
                       Log Activity
-                    </button>
+                    </Button>
                   </div>
 
                   {/* Activity Stats */}
@@ -1763,13 +1763,12 @@ const EnhancedAccountDetailView: React.FC = () => {
                       <FileText className="h-7 w-7 mr-3 text-blue-600" />
                       Documents & Files
                     </h2>
-                    <button
+                    <Button
                       onClick={handleUploadDocument}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
                     >
                       <Upload className="h-4 w-4 mr-2" />
                       Upload
-                    </button>
+                    </Button>
                   </div>
 
                   {/* Storage Stats */}
@@ -2046,9 +2045,9 @@ const EnhancedAccountDetailView: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <Button >
                   Send Email
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -2103,9 +2102,9 @@ const EnhancedAccountDetailView: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <Button >
                   Schedule Meeting
-                </button>
+                </Button>
               </div>
             </div>
           </div>

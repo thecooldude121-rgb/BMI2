@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Button } from '../../components/ui/Button';
 import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
@@ -458,7 +459,7 @@ const ActivitiesPage: React.FC = () => {
               <div className="flex gap-2">
                 {activity.type === 'meeting' && activity.status === 'upcoming' && (
                   <>
-                    <button
+                    <Button
                       onClick={() => {
                         if (activity.location?.includes('Zoom')) {
                           window.open('https://zoom.us/start', '_blank');
@@ -468,10 +469,10 @@ const ActivitiesPage: React.FC = () => {
                           alert(`Opening meeting: ${activity.location || 'Virtual'}`);
                         }
                       }}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      size="sm"
                     >
                       Join Meeting
-                    </button>
+                    </Button>
                     <button
                       onClick={() => navigate(`/crm/activities/${activity.id}`)}
                       className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
@@ -670,10 +671,10 @@ const ActivitiesPage: React.FC = () => {
             <p className="text-gray-600 mt-1">Track all customer interactions across your CRM</p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium">
+            <Button >
               <Plus className="w-5 h-5" />
               Log Activity
-            </button>
+            </Button>
             <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
               <MoreVertical className="w-5 h-5" />
             </button>
@@ -956,10 +957,10 @@ const ActivitiesPage: React.FC = () => {
               Get started by logging your first customer interaction or import from connected tools
             </p>
 
-            <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium mb-8 inline-flex items-center gap-2">
+            <Button size="xl" className="mb-8">
               <Plus className="w-5 h-5" />
               Log Activity
-            </button>
+            </Button>
 
             <div className="mb-8">
               <div className="text-sm text-gray-500 mb-4 flex items-center gap-3 justify-center">
@@ -1016,12 +1017,12 @@ const ActivitiesPage: React.FC = () => {
               Try adjusting your filters or search query
             </p>
 
-            <button
+            <Button
               onClick={clearAllFilters}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium mb-8"
+              size="xl" className="mb-8"
             >
               Clear All Filters
-            </button>
+            </Button>
 
             <div className="bg-gray-50 rounded-lg p-6 max-w-lg mx-auto">
               <div className="text-sm font-semibold text-gray-700 mb-3">Active Filters:</div>

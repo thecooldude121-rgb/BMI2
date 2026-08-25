@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Eye, Download, Share2, Edit, Trash2, ChevronRight, FileText, Calendar, User, Clock, Briefcase, Building2, Mail, Phone, Upload, RotateCcw, Send, X, CheckCircle2, Archive, Paperclip, Plus, Sparkles } from 'lucide-react';
 
@@ -971,12 +972,12 @@ const DocumentDetailPage: React.FC = () => {
           <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">Document Not Found</h2>
           <p className="text-gray-600 mb-6">{error || 'The document you are looking for does not exist.'}</p>
-          <button
+          <Button
             onClick={() => navigate('/crm/documents')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            size="lg"
           >
             Back to Documents
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1104,13 +1105,13 @@ const DocumentDetailPage: React.FC = () => {
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{document.name}</h3>
                 <p className="text-gray-600 mb-6">{formatFileSize(document.file_size)} • {document.file_type.toUpperCase()} Document</p>
                 <div className="flex items-center justify-center space-x-4">
-                  <button
+                  <Button
                     onClick={handleView}
-                    className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    size="lg"
                   >
                     <Eye className="w-4 h-4 mr-2" />
                     Open PDF Viewer
-                  </button>
+                  </Button>
                   <button
                     onClick={handleDownload}
                     className="inline-flex items-center px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
@@ -1220,12 +1221,11 @@ const DocumentDetailPage: React.FC = () => {
                     >
                       Cancel
                     </button>
-                    <button
+                    <Button
                       onClick={handleSaveDescription}
-                      className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                       Save
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -1236,13 +1236,13 @@ const DocumentDetailPage: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Version History</h2>
-                <button
+                <Button
                   onClick={handleUploadNewVersion}
-                  className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  size="sm"
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Upload New Version
-                </button>
+                </Button>
               </div>
               <div className="space-y-4">
                 {versions.map((version) => (
@@ -1344,12 +1344,12 @@ const DocumentDetailPage: React.FC = () => {
                               >
                                 Cancel
                               </button>
-                              <button
+                              <Button
                                 onClick={() => handleReply(comment.id)}
-                                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                size="sm"
                               >
                                 Reply
-                              </button>
+                              </Button>
                             </div>
                           </div>
                         )}
@@ -1400,14 +1400,13 @@ const DocumentDetailPage: React.FC = () => {
                       >
                         Cancel
                       </button>
-                      <button
+                      <Button
                         onClick={handleAddComment}
                         disabled={!newComment.trim()}
-                        className="inline-flex items-center px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Send className="w-4 h-4 mr-2" />
                         Post Comment
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1554,12 +1553,11 @@ const DocumentDetailPage: React.FC = () => {
                   placeholder="Add tag..."
                   className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-                <button
+                <Button
                   onClick={handleAddTag}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
                   Add
-                </button>
+                </Button>
               </div>
             </div>
 

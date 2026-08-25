@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Search, Download, Upload, Save, Star, TrendingUp, MapPin, Linkedin, Mail, Users, Eye, Edit, Plus, X, CheckCircle, Zap, Target, Sparkles, ChevronDown, ChevronUp, Copy, SlidersHorizontal } from 'lucide-react';
 
 interface Prospect {
@@ -261,10 +262,10 @@ const ProspectsDiscovery: React.FC = () => {
               <Save className="h-4 w-4" />
               <span>Save View</span>
             </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+            <Button >
               <Plus className="h-4 w-4" />
               <span>Add Prospect</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -679,7 +680,7 @@ const ProspectsDiscovery: React.FC = () => {
             </div>
             <div className="flex items-center space-x-2">
               <button className="px-3 py-1 border border-gray-300 rounded hover:bg-white">Previous</button>
-              <button className="px-3 py-1 bg-blue-600 text-white rounded">1</button>
+              <Button size="sm" className="rounded">1</Button>
               <button className="px-3 py-1 border border-gray-300 rounded hover:bg-white">2</button>
               <button className="px-3 py-1 border border-gray-300 rounded hover:bg-white">Next</button>
             </div>

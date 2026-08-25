@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { sarahLeeEnrichmentData, type EnrichedField, type DataSource, type EnrichmentHistoryEntry } from '../../utils/sarahLeeEnrichmentData';
 import { useToast } from '../../contexts/ToastContext';
@@ -532,9 +533,9 @@ function DataSourceDetailsModal({ source, onClose }: { source: DataSource; onClo
             <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
               Test Connection
             </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+            <Button >
               Reconnect API
-            </button>
+            </Button>
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium"

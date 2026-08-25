@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { Building2, TrendingUp, MapPin, Globe, Sparkles, AlertTriangle, Users, Mail, Phone, Eye, Award, Briefcase, Trophy, DollarSign, Settings, Star, Plus, X, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dotColor, computeEngagementDirection, isSilenceAlert } from '../../utils/contactEngagement';
@@ -173,12 +174,11 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
           <Building2 className="h-6 w-6 text-blue-600" />
           <h2 className="text-xl font-bold text-gray-900">Account & Contacts</h2>
         </div>
-        <button
+        <Button
           onClick={onViewAccount}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
           View Account
-        </button>
+        </Button>
       </div>
 
       {/* Account Information */}
@@ -453,13 +453,13 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
 
                     {/* Action buttons */}
                     <div className="flex items-center space-x-2 mt-2">
-                      <button
+                      <Button
                         onClick={() => onEmail?.(contact.email || '', 'Following up', '')}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        size="sm"
                       >
                         <Mail className="h-4 w-4 inline mr-1" />
                         Email
-                      </button>
+                      </Button>
                       <button
                         onClick={() => onCall?.()}
                         className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
@@ -489,12 +489,12 @@ export const DealAccountContacts: React.FC<DealAccountContactsProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button
+                      <Button
                         onClick={onFindCEO}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        size="sm"
                       >
                         Find {contact.role === 'Decision Maker' ? 'CEO' : 'Contact'}
-                      </button>
+                      </Button>
                       <button
                         onClick={onRequestIntro}
                         className="px-3 py-1.5 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"

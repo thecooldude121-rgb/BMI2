@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Calendar as CalendarIcon, Clock, Users, Video, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 
@@ -121,10 +122,10 @@ const Calendar: React.FC = () => {
               </button>
             ))}
           </div>
-          <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">
+          <Button className="rounded-md">
             <Plus className="h-4 w-4 mr-2" />
             New Meeting
-          </button>
+          </Button>
         </div>
       </div>
 

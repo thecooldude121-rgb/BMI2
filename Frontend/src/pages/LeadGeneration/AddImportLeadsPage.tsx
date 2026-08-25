@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { NotAvailable } from '../../components/common/NotAvailable';
 import {
@@ -711,12 +712,12 @@ const AddImportLeadsPage: React.FC = () => {
                         >
                           Add Anyway
                         </button>
-                        <button
+                        <Button
                           onClick={handleMergeUpdate}
-                          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                          size="sm" className="rounded"
                         >
                           Merge & Update
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -806,13 +807,13 @@ const AddImportLeadsPage: React.FC = () => {
               >
                 Save as Draft
               </button>
-              <button
+              <Button
                 onClick={handleManualSubmit}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-2"
+                size="lg"
               >
                 <Plus className="h-4 w-4" />
                 Create Lead
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -962,12 +963,12 @@ const AddImportLeadsPage: React.FC = () => {
                   >
                     Back
                   </button>
-                  <button
+                  <Button
                     onClick={() => setCSVStep(3)}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                    size="lg"
                   >
                     Next
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1080,15 +1081,15 @@ const AddImportLeadsPage: React.FC = () => {
                   >
                     Back
                   </button>
-                  <button
+                  <Button
                     onClick={handleCSVImport}
                     disabled
                     aria-disabled
                     title="Importing leads from a file is not available yet"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium opacity-50 cursor-not-allowed"
+                    size="lg" className="opacity-50 cursor-not-allowed"
                   >
                     Start Import
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1196,13 +1197,12 @@ const AddImportLeadsPage: React.FC = () => {
                 >
                   Clear
                 </button>
-                <button
+                <Button
                   onClick={handleApolloSearch}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2 transition-colors"
                 >
                   <Search className="h-4 w-4" />
                   <span>Search</span>
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -1333,13 +1333,13 @@ const AddImportLeadsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleApolloImport}
                 disabled={selectedApolloLeads.length === 0}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                size="lg"
               >
                 Import Selected ({selectedApolloLeads.length})
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1411,12 +1411,11 @@ const AddImportLeadsPage: React.FC = () => {
                       placeholder="https://linkedin.com/in/sarah-lee-cfo"
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    <button
+                    <Button
                       onClick={() => handleFetchLinkedInProfile(linkedInUrl)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                     >
                       Fetch Profile
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>

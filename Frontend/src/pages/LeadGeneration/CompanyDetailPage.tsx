@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building, Globe, MapPin, Users, DollarSign, TrendingUp, Star, Target, Zap, Plus, ChevronDown, ChevronUp, Clock, Activity, Mail, Calendar, Tag, Edit, Share, Settings, Sparkles, Bot } from 'lucide-react';
 import { Company } from '../../types/leadGeneration';
@@ -184,10 +185,10 @@ const CompanyDetailPage: React.FC = () => {
                 Share
               </button>
               
-              <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-xl text-sm hover:bg-blue-700 transition-colors">
+              <Button className="rounded-xl">
                 <Target className="h-4 w-4 mr-2" />
                 Find Prospects
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -488,10 +489,10 @@ const CompanyDetailPage: React.FC = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900">Company Prospects</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Find More Prospects
-                  </button>
+                  </Button>
                 </div>
                 
                 <div className="text-center py-16">
@@ -505,10 +506,10 @@ const CompanyDetailPage: React.FC = () => {
               <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900">Activity Timeline</h3>
-                  <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                  <Button >
                     <Plus className="h-4 w-4 mr-2" />
                     Log Activity
-                  </button>
+                  </Button>
                 </div>
                 
                 <div className="text-center py-16">

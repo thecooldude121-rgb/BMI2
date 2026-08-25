@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Target, Sparkles, FileText, Settings, Upload, PlusCircle, Bell, ArrowRight, Clock, User, Search, X, MoreVertical, Mail, UserPlus, Trash2, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
@@ -475,12 +476,11 @@ const LeadGenerationDashboard: React.FC = () => {
                           Auto-added
                         </button>
                       ) : (
-                        <button
+                        <Button
                           onClick={() => handleAddSignalToLeads(signal)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
                         >
                           Add to Leads
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -563,12 +563,12 @@ const LeadGenerationDashboard: React.FC = () => {
                       </td>
                       <td className="py-4 px-4">
                         <div className="flex items-center space-x-2">
-                          <button
+                          <Button
                             onClick={() => navigate(`/lead-generation/leads/${lead.id}`)}
-                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                            size="sm" className="rounded"
                           >
                             View
-                          </button>
+                          </Button>
                           {lead.status === 'qualified' ? (
                             <button
                               onClick={() => handleSyncToCRM(lead.id)}
@@ -786,15 +786,15 @@ const LeadGenerationDashboard: React.FC = () => {
               </div>
 
               <div className="flex space-x-3">
-                <button
+                <Button
                   onClick={() => {
                     navigate(`/lead-generation/companies/${showCompanyPreview}`);
                     setShowCompanyPreview(null);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  fullWidth
                 >
                   View Full Profile
-                </button>
+                </Button>
                 <button
                   onClick={() => setShowCompanyPreview(null)}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"

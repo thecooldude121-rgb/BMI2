@@ -1,5 +1,6 @@
 
 import { AlertTriangle, Save, LogOut, X } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface UnsavedChangesModalProps {
   isOpen: boolean;
@@ -99,22 +100,17 @@ export default function UnsavedChangesModal({
             Cancel
           </button>
 
-          <button
+          <Button
             onClick={onSaveAndExit}
             disabled={isSaving}
-            className="
-              flex-1 px-4 py-2.5 bg-blue-600 border-2 border-blue-600
-              text-white font-medium text-sm rounded-lg
-              hover:bg-blue-700 transition-colors duration-200
-              disabled:opacity-50 disabled:cursor-wait
-            "
+            fullWidth className="border-2 border-blue-600 duration-200 disabled:cursor-wait"
             type="button"
           >
             <span className="flex items-center justify-center gap-2">
               <Save className="w-4 h-4" />
               {isSaving ? 'Saving...' : 'Save & Exit'}
             </span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

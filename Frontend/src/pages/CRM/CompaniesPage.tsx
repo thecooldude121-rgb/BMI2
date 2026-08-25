@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { Plus, Search, Building, Globe, Users, DollarSign, Download } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import CompanyForm from '../../components/CRM/CompanyForm';
@@ -59,13 +60,13 @@ const CompaniesPage: React.FC = () => {
             <Download className="h-4 w-4 mr-2" />
             Export
           </button>
-          <button
+          <Button
             onClick={() => setShowForm(true)}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+            className="rounded-md"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Company
-          </button>
+          </Button>
         </div>
       </div>
 

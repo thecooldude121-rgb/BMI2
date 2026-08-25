@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, Save, DollarSign, Calendar, Target, ArrowRight, ArrowLeft, Check, AlertCircle, FileText, Tag, Briefcase, Lightbulb, Bot, Sparkles } from 'lucide-react';
 import { Deal, Pipeline } from '../../types/deals';
 
@@ -533,17 +534,17 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
                 }
               }}
             />
-            <button
+            <Button
               type="button"
               onClick={(e) => {
                 const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement;
                 addTag(input.value);
                 input.value = '';
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-r-xl hover:bg-blue-700 transition-colors"
+              className="rounded-r-xl"
             >
               Add
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -587,9 +588,9 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
             <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h4 className="text-lg font-medium text-gray-900 mb-2">Drop files here</h4>
             <p className="text-gray-600 mb-4">or click to browse</p>
-            <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors">
+            <Button size="xl" className="rounded-xl">
               Choose Files
-            </button>
+            </Button>
           </div>
         </div>
       </div>

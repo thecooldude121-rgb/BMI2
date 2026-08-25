@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import {
   michaelTorresEnrichmentData,
@@ -147,13 +148,12 @@ export default function MichaelTorresEnrichmentPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={handleEnrichNow}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
             >
               <span>🔄</span>
               <span>Enrich Now</span>
-            </button>
+            </Button>
             <button
               onClick={handleRetryZoomInfo}
               disabled={isRetrying}

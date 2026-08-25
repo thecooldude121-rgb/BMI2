@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { Check, MinusSquare, ChevronDown, ChevronRight, Save, X, AlertCircle, CheckCircle, Eye, Lock } from 'lucide-react';
 
 interface PermissionState {
@@ -252,10 +253,9 @@ export const RolePermissionEditor: React.FC<RolePermissionEditorProps> = ({
               <X className="h-4 w-4 inline mr-1" />
               Discard
             </button>
-            <button
+            <Button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {saving ? (
                 <>
@@ -268,7 +268,7 @@ export const RolePermissionEditor: React.FC<RolePermissionEditorProps> = ({
                   Save Permissions
                 </>
               )}
-            </button>
+            </Button>
           </div>
         )}
 
@@ -385,13 +385,13 @@ export const RolePermissionEditor: React.FC<RolePermissionEditorProps> = ({
           >
             Discard Changes
           </button>
-          <button
+          <Button
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            size="lg"
           >
             {saving ? 'Saving...' : 'Save Permissions'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

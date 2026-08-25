@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Users, Trash2, Mail, Tag, Archive, Target, AlertTriangle, Check } from 'lucide-react';
 import { Pipeline } from '../../types/deals';
 
@@ -172,13 +173,12 @@ const BulkActionsBar: React.FC<BulkActionsBarProps> = ({
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => handleAction('transfer', { newOwnerId: selectedUser })}
                 disabled={!selectedUser || isLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
               >
                 Transfer {selectedCount} Deal{selectedCount > 1 ? 's' : ''}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -305,12 +305,12 @@ const BulkActionsBar: React.FC<BulkActionsBarProps> = ({
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter tag name..."
                 />
-                <button
+                <Button
                   onClick={addTag}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 transition-colors"
+                  className="rounded-r-lg"
                 >
                   Add
-                </button>
+                </Button>
               </div>
             </div>
             

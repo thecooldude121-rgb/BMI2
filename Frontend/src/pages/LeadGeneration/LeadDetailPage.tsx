@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Mail, Phone, Plus, Settings, ChevronDown, Linkedin, ExternalLink, RefreshCw, CheckCircle, TrendingUp, Building, Users, Target, Zap, FileText, Upload, Star, Edit3, Trash2, Download, X, BarChart3, Activity } from 'lucide-react';
 import { sarahLeeMockData } from '../../utils/sarahLeeMockData';
@@ -219,13 +220,12 @@ const LeadDetailPage: React.FC = () => {
 
         {/* Quick Actions Bar */}
         <div className="flex items-center space-x-3">
-          <button
+          <Button
             onClick={handleEmailClick}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             <Mail className="h-4 w-4 mr-2" />
             Email
-          </button>
+          </Button>
           <button
             onClick={handleCallClick}
             className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
@@ -432,12 +432,12 @@ const LeadDetailPage: React.FC = () => {
                             View
                           </a>
                           {dm.canCreateLead && (
-                            <button
+                            <Button
                               onClick={() => handleCreateLead(dm)}
-                              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                              size="sm" className="rounded"
                             >
                               Add Lead
-                            </button>
+                            </Button>
                           )}
                         </>
                       )}
@@ -604,13 +604,13 @@ const LeadDetailPage: React.FC = () => {
               )}
 
               <div className="flex space-x-2">
-                <button
+                <Button
                   onClick={() => setShowNoteEditor(true)}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center space-x-2"
+                  fullWidth
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add Note</span>
-                </button>
+                </Button>
                 <button
                   onClick={() => setShowFileUpload(true)}
                   className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center justify-center space-x-2"
@@ -808,15 +808,15 @@ const LeadDetailPage: React.FC = () => {
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button
+              <Button
                 onClick={() => {
                   alert('Email sent successfully!');
                   setShowEmailComposer(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                fullWidth
               >
                 Send Email
-              </button>
+              </Button>
               <button
                 onClick={() => setShowEmailComposer(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
@@ -909,15 +909,15 @@ const LeadDetailPage: React.FC = () => {
               />
             </div>
             <div className="flex space-x-3 mt-6">
-              <button
+              <Button
                 onClick={() => {
                   alert('Note added successfully!');
                   setShowNoteEditor(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                fullWidth
               >
                 Save Note
-              </button>
+              </Button>
               <button
                 onClick={() => setShowNoteEditor(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
@@ -951,15 +951,15 @@ const LeadDetailPage: React.FC = () => {
               </label>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button
+              <Button
                 onClick={() => {
                   alert('File uploaded successfully!');
                   setShowFileUpload(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                fullWidth
               >
                 Upload
-              </button>
+              </Button>
               <button
                 onClick={() => setShowFileUpload(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
@@ -1204,12 +1204,12 @@ const LeadDetailPage: React.FC = () => {
               </div>
             </div>
             <div className="flex space-x-3">
-              <button
+              <Button
                 onClick={handleConfirmCreateLead}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                fullWidth
               >
                 Create Lead
-              </button>
+              </Button>
               <button
                 onClick={() => setShowCreateLeadModal(null)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"

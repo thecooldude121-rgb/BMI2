@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Search, Star, Play, Copy, Trash2, ArrowLeft, Grid3X3, List, Download, Move, Calendar, Plus, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -230,13 +231,13 @@ const SavedSearchesPage: React.FC = () => {
               </div>
             </div>
 
-            <button
+            <Button
               onClick={() => navigate('/lead-generation/discovery')}
-              className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              size="xl" className="font-semibold"
             >
               <Plus className="h-5 w-5 mr-2" />
               New Search
-            </button>
+            </Button>
           </div>
 
           {/* Search and Filters */}
@@ -358,12 +359,12 @@ const SavedSearchesPage: React.FC = () => {
                 ? 'Try adjusting your search terms'
                 : 'Save your first search to quickly access your favorite prospect filters'}
             </p>
-            <button
+            <Button
               onClick={() => navigate('/lead-generation/discovery')}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              size="xl" className="font-semibold"
             >
               Create Your First Search
-            </button>
+            </Button>
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-3 gap-6">
@@ -449,13 +450,13 @@ const SavedSearchesPage: React.FC = () => {
 
                 {/* Actions */}
                 <div className="flex items-center space-x-2">
-                  <button
+                  <Button
                     onClick={() => handleRunSearch(search)}
-                    className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    fullWidth
                   >
                     <Play className="h-4 w-4 mr-2" />
                     Run Search
-                  </button>
+                  </Button>
                   <button
                     onClick={() => handleDuplicate(search)}
                     className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -513,13 +514,12 @@ const SavedSearchesPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button
+                  <Button
                     onClick={() => handleRunSearch(search)}
-                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <Play className="h-4 w-4 mr-2" />
                     Run
-                  </button>
+                  </Button>
                   <button
                     onClick={() => handleDuplicate(search)}
                     className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"

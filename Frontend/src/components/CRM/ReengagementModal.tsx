@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Mail, Phone, MessageSquare } from 'lucide-react';
 
 interface ReengagementModalProps {
@@ -153,12 +154,11 @@ const ReengagementModal: React.FC<ReengagementModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleLaunch}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               Launch Campaign
-            </button>
+            </Button>
           </div>
         </div>
       </div>

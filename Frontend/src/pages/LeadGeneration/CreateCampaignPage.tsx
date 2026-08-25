@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, X, Mail, Share2, Linkedin, RefreshCw, Calendar, Target, Users, Settings, CheckCircle, Sparkles, TrendingUp, Zap, AlertTriangle, Lightbulb, Plus, Search, UserCircle, MoreVertical, ChevronDown, ChevronUp, Trash2, Copy, Link, Paperclip, Type, Clock, Check, Edit2, BarChart3, Rocket, FileText, Send } from 'lucide-react';
 
@@ -663,12 +664,12 @@ const CreateCampaignPage: React.FC = () => {
               placeholder="Add a tag..."
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
             />
-            <button
+            <Button
               onClick={handleAddTag}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="bg-blue-500 hover:bg-blue-600"
             >
               <Plus className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
           {formData.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -886,7 +887,7 @@ const CreateCampaignPage: React.FC = () => {
       <div className="bg-white rounded-lg border border-gray-200 p-8">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xl font-bold text-gray-900">STEP 3: BUILD SEQUENCE</h2>
-          <button
+          <Button
             onClick={() => {
               const newTouch: SequenceTouch = {
                 touch: formData.sequence.length + 1,
@@ -902,11 +903,11 @@ const CreateCampaignPage: React.FC = () => {
               setFormData({ ...formData, sequence: [...formData.sequence, newTouch] });
               setExpandedTouches([...expandedTouches, newTouch.touch]);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+            className="bg-blue-500 hover:bg-blue-600"
           >
             <Plus className="h-4 w-4" />
             Add Touch
-          </button>
+          </Button>
         </div>
         <p className="text-sm text-gray-600 mb-8">Create your multi-touch outreach sequence</p>
 
@@ -2687,13 +2688,13 @@ const CreateCampaignPage: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-                <button
+                <Button
                   onClick={handleSendTestEmail}
-                  className="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                  size="lg" className="mt-6"
                 >
                   <Mail className="h-4 w-4" />
                   Send Test
-                </button>
+                </Button>
               </div>
             </div>
           </div>

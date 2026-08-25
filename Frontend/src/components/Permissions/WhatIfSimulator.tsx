@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { AlertTriangle, CheckCircle, XCircle, Download, Users, Shield, X, Play } from 'lucide-react';
 
 interface ChangeImpact {
@@ -212,14 +213,14 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={onApply}
                   disabled={conflictCount > 0}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  size="lg" className="disabled:bg-gray-300"
                   aria-label="Apply changes"
                 >
                   Apply Changes
-                </button>
+                </Button>
               </div>
             </div>
           </>

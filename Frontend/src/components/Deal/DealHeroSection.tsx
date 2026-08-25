@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../ui/Button';
 import {
   Edit, Building2, Sparkles,
   Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown,
@@ -555,13 +556,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   className="w-full text-2xl font-bold text-blue-900 bg-white border border-blue-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
                 />
                 <div className="flex gap-1.5">
-                  <button
+                  <Button
                     type="button"
                     onClick={commitValue}
-                    className="flex-1 text-xs font-semibold bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 transition-colors"
+                    fullWidth className="font-semibold rounded-md"
                   >
                     ✓ Save
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => setActiveInlineEdit(null)}
@@ -650,13 +651,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   className="w-full text-base font-bold bg-white border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
                 />
                 <div className="flex gap-1.5">
-                  <button
+                  <Button
                     type="button"
                     onClick={commitCloseDate}
-                    className="flex-1 text-xs font-semibold bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 transition-colors"
+                    fullWidth className="font-semibold rounded-md"
                   >
                     ✓ Save
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => setActiveInlineEdit(null)}
@@ -1146,11 +1147,11 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           <div className="hidden md:flex items-center gap-1 px-6 py-2 border-t border-gray-200 overflow-hidden">
 
             {/* ── Communication group ── */}
-            <button title="Email (E)" onClick={onEmail} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
+            <Button title="Email (E)" onClick={onEmail} className="rounded-md px-2.5 whitespace-nowrap flex-shrink-0">
               <Mail className="h-3.5 w-3.5" />
               Email
               <KbdBadge char="E" />
-            </button>
+            </Button>
             <button title="Call (C)" onClick={onCall} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
               <Phone className="h-3.5 w-3.5" />
               Call
@@ -1211,13 +1212,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
         {/* ── Mobile action row ── */}
         <div className="flex md:hidden items-center gap-2 mt-4">
-          <button
+          <Button
             onClick={onEmail}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm"
+            fullWidth
           >
             <Mail className="h-4 w-4" />
             Follow Up
-          </button>
+          </Button>
           <button
             onClick={() => setShowMobileSheet(true)}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-gray-700 text-white rounded-lg font-medium text-sm"

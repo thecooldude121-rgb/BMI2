@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Check, Link as LinkIcon, X, ArrowLeft, AlertCircle } from 'lucide-react';
 
@@ -270,21 +271,21 @@ const IntegrationsPage: React.FC = () => {
                       >
                         Configure
                       </button>
-                      <button
+                      <Button
                         onClick={() => navigate(`/crm/leads?source=${integration.id}`)}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                        fullWidth
                       >
                         View Leads
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnect(integration)}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                      fullWidth
                     >
                       <LinkIcon className="h-4 w-4 mr-2" />
                       Connect {integration.name}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -359,13 +360,13 @@ const IntegrationsPage: React.FC = () => {
                       </button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnect(integration)}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                      fullWidth
                     >
                       <LinkIcon className="h-4 w-4 mr-2" />
                       Connect {integration.name}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -479,12 +480,12 @@ const IntegrationsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveConfig}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Save Settings
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -566,12 +567,12 @@ const IntegrationsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCompleteConnection}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Connect
-              </button>
+              </Button>
             </div>
           </div>
         </div>

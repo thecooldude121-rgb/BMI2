@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, CheckSquare, Calendar, AlertCircle, Link2 } from 'lucide-react';
 
 interface CreateTaskModalProps {
@@ -304,10 +305,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleCreate}
               disabled={creating || !title.trim() || !dueDate}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              size="lg" className="disabled:bg-slate-300"
             >
               {creating ? (
                 <>
@@ -320,7 +321,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   Create Task
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

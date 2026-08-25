@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, Download, Share2, Star, Clock, Filter, RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Activity, Home, ChevronRight, ChevronDown, Mail, FileSpreadsheet, FileText, BarChart3, PieChart, LineChart, Table, Eye, Info, CheckCircle } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -267,13 +268,12 @@ const ReportDetailView: React.FC = () => {
                 Share
               </button>
 
-              <button
+              <Button
                 onClick={handleSchedule}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
                 <Calendar className="w-4 h-4" />
                 Schedule
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -777,12 +777,12 @@ const ReportDetailView: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={handleScheduleConfirm}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                  size="lg"
                 >
                   Schedule
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -897,12 +897,12 @@ const ReportDetailView: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={handleShareConfirm}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                  size="lg"
                 >
                   Share
-                </button>
+                </Button>
               </div>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Settings, Search, DollarSign, Users, Rocket, Globe, Plus, Eye, BellOff, MoreHorizontal, ExternalLink, Undo, TrendingUp, X, Star, Share2, AlertTriangle, Clock, BarChart3, ChevronDown } from 'lucide-react';
 import { getAllIntelligenceSignals, type IntelligenceSignal } from '../../utils/intelligenceSignalMockData';
@@ -705,13 +706,12 @@ const SalesIntelligenceFeed: React.FC = () => {
                 <div className="flex items-center space-x-3 pt-4 border-t border-gray-200">
                   {signal.status === 'new' || signal.status === 'in_review' ? (
                     <>
-                      <button
+                      <Button
                         onClick={() => handleAddToLeads(signal)}
-                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                       >
                         <Plus className="h-4 w-4" />
                         <span>Add to Leads</span>
-                      </button>
+                      </Button>
                       <button
                         onClick={() => handleViewDetails(signal.id)}
                         className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
@@ -761,13 +761,12 @@ const SalesIntelligenceFeed: React.FC = () => {
                     </>
                   ) : signal.status === 'converted' ? (
                     <>
-                      <button
+                      <Button
                         onClick={() => handleViewLead(signal.id)}
-                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                       >
                         <ExternalLink className="h-4 w-4" />
                         <span>View Lead</span>
-                      </button>
+                      </Button>
                       <button
                         onClick={() => handleViewDetails(signal.id)}
                         className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
@@ -809,9 +808,9 @@ const SalesIntelligenceFeed: React.FC = () => {
             <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               ← Previous
             </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+            <Button >
               1
-            </button>
+            </Button>
             <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium">
               2
             </button>
@@ -892,12 +891,11 @@ const SalesIntelligenceFeed: React.FC = () => {
               >
                 Create Single Lead
               </button>
-              <button
+              <Button
                 onClick={() => handleCreateLead(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
               >
                 Create Multiple Leads
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1033,15 +1031,14 @@ const SalesIntelligenceFeed: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   setShowCompanyPreviewModal(false);
                   handleViewDetails(selectedSignal.id);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
               >
                 View Full Details
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1119,12 +1116,11 @@ const SalesIntelligenceFeed: React.FC = () => {
             </div>
 
             <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
-              <button
+              <Button
                 onClick={() => setShowConversionFunnelModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>

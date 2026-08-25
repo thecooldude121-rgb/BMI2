@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { ArrowLeft, Edit, Mail, Plus, MoreHorizontal, ChevronDown, ChevronUp, User, Building, DollarSign, Target, Phone, Video, FileText, Paperclip, Clock, Activity, MessageSquare, Globe, Briefcase, Save, X, Check, Download, Eye, Trash2, Flag } from 'lucide-react';
@@ -42,12 +43,12 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Deal Not Found</h2>
-          <button
+          <Button
             onClick={() => navigate('/crm/deals')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
+            size="xl" className="rounded-xl"
           >
             Back to Deals
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -223,10 +224,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
             </div>
             
             <div className="flex items-center space-x-3">
-              <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Button >
                 <Mail className="h-4 w-4 mr-2" />
                 Send Email
-              </button>
+              </Button>
               <button className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Activity
@@ -516,10 +517,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
                     <div className="mb-8">
                       <div className="flex items-center justify-between mb-4">
                         <h4 className="text-lg font-semibold text-gray-900">Products & Line Items</h4>
-                        <button className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                        <Button size="sm">
                           <Plus className="h-4 w-4 mr-2" />
                           Add Product
-                        </button>
+                        </Button>
                       </div>
                       <div className="overflow-x-auto rounded-lg border border-gray-200">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -659,10 +660,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
                       </div>
                     </div>
                   </div>,
-                  <button className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                  <Button size="sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Activity
-                  </button>
+                  </Button>
                 )}
 
                 {/* Communication */}
@@ -744,9 +745,9 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
                       <Paperclip className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                       <h4 className="text-lg font-medium text-gray-900 mb-2">Drop files here</h4>
                       <p className="text-gray-600 mb-4">or click to browse</p>
-                      <button className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors">
+                      <Button size="xl" className="rounded-xl">
                         Choose Files
-                      </button>
+                      </Button>
                     </div>
                     
                     {/* Existing Attachments */}
@@ -779,10 +780,10 @@ const DealDetailPage: React.FC<DealDetailPageProps> = ({ dealId: propDealId }) =
                       ))}
                     </div>
                   </div>,
-                  <button className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
+                  <Button size="sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Upload File
-                  </button>
+                  </Button>
                 )}
               </>
             )}

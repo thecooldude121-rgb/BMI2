@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Plus, MoreVertical, Video, Phone, Users, Clock, CheckCircle, Zap, BarChart3, Target, Search, Download, List, Play, FileText, MapPin, Building2, DollarSign, Sparkles, ChevronRight, Edit, Trash2, Share2, X } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -574,7 +575,7 @@ END:VCALENDAR`;
             </>
           ) : isUpcoming ? (
             <>
-              <button
+              <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   if (meeting.type === 'in-person') {
@@ -583,10 +584,10 @@ END:VCALENDAR`;
                     handleJoinMeeting(meeting);
                   }
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 {meeting.type === 'in-person' ? 'View Details' : 'Join Early'}
-              </button>
+              </Button>
               {meeting.prepNotes && meeting.prepNotes.length > 0 && (
                 <button
                   onClick={(e) => {
@@ -642,15 +643,15 @@ END:VCALENDAR`;
             </>
           ) : (
             <>
-              <button
+              <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/crm/meetings/${meeting.id}`);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 View Details
-              </button>
+              </Button>
               {meeting.hasRecording && (
                 <button
                   onClick={(e) => {
@@ -698,13 +699,13 @@ END:VCALENDAR`;
             <p className="text-gray-600">Manage your meetings and AI-powered insights</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={() => setModals({ ...modals, scheduleMeeting: true })}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+              size="lg"
             >
               <Plus className="h-5 w-5" />
               Schedule Meeting
-            </button>
+            </Button>
             <div className="relative">
               <button
                 onClick={() => setModals({ ...modals, moreOptions: !modals.moreOptions })}
@@ -956,12 +957,12 @@ END:VCALENDAR`;
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Try adjusting your filters or search terms
                   </p>
-                  <button
+                  <Button
                     onClick={clearAllFilters}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    size="xl"
                   >
                     Clear All Filters
-                  </button>
+                  </Button>
                 </>
               ) : sampleMeetings.length === 0 ? (
                 <>
@@ -969,13 +970,13 @@ END:VCALENDAR`;
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Schedule your first meeting to get started with AI-powered meeting intelligence
                   </p>
-                  <button
+                  <Button
                     onClick={() => setModals({ ...modals, scheduleMeeting: true })}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium inline-flex items-center gap-2"
+                    size="xl"
                   >
                     <Plus className="h-5 w-5" />
                     Schedule Meeting
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>

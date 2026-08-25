@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { User, Upload, Save, Edit2, CheckCircle, AlertCircle, X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
@@ -240,13 +241,12 @@ const ProfileSettings: React.FC = () => {
               PROFILE INFORMATION
             </h3>
             {!isEditingProfile && (
-              <button
+              <Button
                 onClick={() => setIsEditingProfile(true)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
                 <Edit2 className="h-4 w-4" />
                 Edit Profile
-              </button>
+              </Button>
             )}
           </div>
 
@@ -309,10 +309,10 @@ const ProfileSettings: React.FC = () => {
                 </div>
 
                 <div className="pt-4 border-t border-gray-200 flex gap-3">
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                  <Button >
                     <Edit2 className="h-4 w-4" />
                     Edit Profile
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setShowChangeAvatarModal(true)}
                     className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
@@ -329,10 +329,10 @@ const ProfileSettings: React.FC = () => {
                     AR
                   </div>
                   <div>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                    <Button >
                       <Upload className="h-4 w-4" />
                       Upload Photo
-                    </button>
+                    </Button>
                     <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF (max. 2MB)</p>
                   </div>
                 </div>
@@ -445,13 +445,13 @@ const ProfileSettings: React.FC = () => {
                 </div>
 
                 <div className="pt-4 border-t border-gray-200 flex gap-3">
-                  <button
+                  <Button
                     onClick={handleSaveProfile}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    size="lg"
                   >
                     <Save className="h-4 w-4" />
                     Save Changes
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setIsEditingProfile(false)}
                     className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -567,13 +567,13 @@ const ProfileSettings: React.FC = () => {
             )}
 
             <div className="pt-4 border-t border-gray-200 flex gap-3">
-              <button
+              <Button
                 onClick={handleUpdatePassword}
                 disabled={!passwordData.currentPassword || !passwordData.newPassword || passwordData.newPassword !== passwordData.confirmPassword || isUpdatingPassword}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                size="lg"
               >
                 {isUpdatingPassword ? 'Updating...' : 'Update Password'}
-              </button>
+              </Button>
               <button
                 onClick={() => setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -645,13 +645,13 @@ const ProfileSettings: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200">
-              <button
+              <Button
                 onClick={handleSaveEmailVisibility}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                size="lg"
               >
                 <Save className="h-4 w-4" />
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

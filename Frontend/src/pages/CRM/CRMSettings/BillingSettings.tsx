@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Check, CreditCard, Target } from 'lucide-react';
 
 interface Invoice {
@@ -124,12 +125,12 @@ const BillingSettings: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200 flex gap-3">
-              <button
+              <Button
                 onClick={handleUpgradePlan}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                size="lg"
               >
                 Upgrade Plan
-              </button>
+              </Button>
               <button
                 onClick={handleManageAddons}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, AlertCircle, Lock, ExternalLink, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { invalidAPIKeyData } from '../../utils/invalidAPIKeyMockData';
 
@@ -189,10 +190,10 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
 
               {/* Test Connection Button */}
               {apiKey.length > 0 && (
-                <button
+                <Button
                   onClick={handleTestConnection}
                   disabled={!isValidFormat || isTestingConnection}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  fullWidth className="disabled:bg-gray-300"
                 >
                   {isTestingConnection ? (
                     <>
@@ -212,7 +213,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
                   ) : (
                     'Test Connection'
                   )}
-                </button>
+                </Button>
               )}
 
               {testResult === 'success' && (
@@ -280,17 +281,17 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
             <span>🔧</span>
             Go to Settings
           </button>
-          <button
+          <Button
             onClick={handleSaveAndTest}
             disabled={
               selectedOption === 'update_key' &&
               (apiKey.length === 0 || !isValidFormat || testResult !== 'success')
             }
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+            className="disabled:bg-gray-300"
           >
             <span>💾</span>
             Save & Test
-          </button>
+          </Button>
         </div>
       </div>
     </div>

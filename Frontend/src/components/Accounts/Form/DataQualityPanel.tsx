@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../ui/Button';
 import { CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 
 interface DataQualityPanelProps {
@@ -129,9 +130,9 @@ const DataQualityPanel: React.FC<DataQualityPanelProps> = ({ formData }) => {
             ))}
           </div>
 
-          <button className="mt-3 w-full px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+          <Button size="sm" fullWidth className="mt-3">
             Find Missing Data
-          </button>
+          </Button>
         </div>
       )}
     </div>
