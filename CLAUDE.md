@@ -30,6 +30,25 @@ India, Middle East, and Africa.
   `workspace_id` filter is a data-leak bug between tenants, not a style issue. Flag it
   explicitly if you are about to skip one; that is a hard stop, not a nit.
 - RBAC checks happen at the API layer, not just the UI.
+- **Auth is the SSO contract.** This CRM is the identity provider for Lead Generation and
+  HRMS later, so all workspace-resolution logic lives server-side in `authController`: a
+  client sends credentials and receives either a token or the set of workspaces to choose
+  between. It never decides, and can never assert, which workspace a session belongs to.
+  - The JWT's canonical claim is **`workspace_id`**. The DB column is still `tenant_id`;
+    `middleware/auth.ts` maps claim -> request scope in exactly ONE place, so the rename can
+    land later without breaking an external consumer.
+  - Scope comes from the token and nowhere else — never a query param, body field or header.
+    Otherwise `UNIQUE(tenant_id, email)` is enforced in Postgres and bypassable at the API.
+    (Verified: a workspace-2 token passing `?workspace_id=<workspace-1>` still reads 0 rows.)
+  - Login verifies the **password before disclosing any workspace**. Listing the workspaces
+    an email belongs to and then asking for a password turns the endpoint into a
+    membership-enumeration oracle. Failed auth returns one identical message whether or not
+    the email exists.
+  - Workspace provisioning is explicit. No "first workspace wins" fallback: one workspace is
+    used because it is the only one, and a second makes `workspace_slug` required.
+- **No advertised demo credentials.** A "Demo Access" panel on the login page named an
+  account that never existed. Real credentials come from `cd Backend && npm run db:seed:users`,
+  which rotates the seeded users' passwords and prints them once to the console.
 - All timestamps are `TIMESTAMPTZ`. All primary keys are UUID (`gen_random_uuid()`).
 - Soft delete only where noted; no hard deletes without explicit ask.
 
@@ -215,6 +234,16 @@ navigation on the Kanban board and all forms.
 its buttons is a bug. If a view isn't built, disable the button and label it — don't leave a
 dead third option.
 
+## Known gaps in the auth shell
+- **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in
+  dependency order: transactional email delivery (provider, sender domain, SPF/DKIM) — this
+  is the decision that blocks everything else; a `password_resets` table of single-use
+  expiring tokens stored **hashed**, so a leaked table is not a set of live keys; rate
+  limiting per email and per IP; request and confirm endpoints; and two screens.
+- **Workspace creation, user invites and the workspace switcher are deferred** to the
+  Settings module. Registration joins the single existing workspace, and the server asks for
+  a `workspace_slug` once more than one exists rather than guessing.
+
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions
 - All PII encrypted at rest; TLS in transit
@@ -251,7 +280,16 @@ something directly, do that instead of reasoning about what should be true.**
    **If you have to manufacture a credential, seed a value, or poke internal state to make
    something work, that is a finding — not a setup step.** Stop and report it. The workaround
    is the bug telling you where it lives.
-3. **Corollaries seen in practice:** a broken reachability grep once reported every file as
+3. **Type errors in this project have twice concealed live, user-facing bugs — treat the
+   count as a signal, not noise.** `AccountFormPage` read `account.address` (the field is
+   `billingAddress`) and wrote a key the payload mapper never read, so the account edit form
+   loaded a blank address and saved nothing under a success toast — the compiler had been
+   reporting it all along as 24 lines of "noise". Separately, changing `login()` from
+   `Promise<boolean>` to `Promise<LoginResult>` produced **zero** errors, because its caller
+   did `if (success)` and `if (object)` is always truthy — every failed sign-in would have
+   looked successful. Triage the backlog by REACHABILITY (is the file routed? does it touch
+   a real API?), never by error code.
+4. **Corollaries seen in practice:** a broken reachability grep once reported every file as
    unimported and nearly caused a live, routed component to be deleted — resolve each import
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a

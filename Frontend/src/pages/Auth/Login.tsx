@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Info, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface FormErrors {
@@ -310,19 +310,14 @@ const Login: React.FC = () => {
             <p className="text-gray-600">Sign in to access your dashboard</p>
           </div>
 
-          {/* Demo Credentials Notice */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-start space-x-2">
-              <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-semibold text-blue-900 mb-1">Demo Access</h3>
-                <p className="text-xs text-blue-800 leading-relaxed">
-                  <strong>Email:</strong> demo@company.com<br />
-                  <strong>Password:</strong> password123
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* A "Demo Access" panel used to sit here advertising
+              demo@company.com / password123. No such user has ever existed. It
+              appeared to work only because login accepted any input; once login
+              became real it became a credential that is guaranteed to fail.
+              Removed rather than replaced — an advertised demo account is a
+              fabricated credential presented as real, which is the same rule
+              that governs fabricated data. Real credentials come from
+              `npm run db:seed:users`, which prints them to the console. */}
 
           {/* General Error Message */}
           {errors.general && (
@@ -514,6 +509,15 @@ const Login: React.FC = () => {
               )}
             </Button>
           </form>
+
+          {/* Registration had no UI at all — POST /auth/register existed but the
+              only way to reach it was curl. */}
+          <p className="text-sm text-gray-600 text-center mt-6">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-brand-600 font-medium hover:underline">
+              Create one
+            </Link>
+          </p>
 
           {/* Divider */}
           <div className="mt-6">

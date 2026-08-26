@@ -12,6 +12,7 @@ import { IntegrationsProvider } from './contexts/IntegrationsContext';
 import Sidebar from './components/Layout/Sidebar';
 import TopBar from './components/Layout/TopBar';
 import Login from './pages/Auth/Login';
+import Register from './pages/Auth/Register';
 
 
 /**
@@ -139,6 +140,8 @@ const App = () => {
                 <IntegrationsProvider>
                   <Routes>
                   <Route path="/login" element={<RouteShell><Login /></RouteShell>} />
+                  {/* Open, like /login: you cannot be signed in to create an account. */}
+                  <Route path="/register" element={<RouteShell><Register /></RouteShell>} />
                   <Route path="/login/wireframe" element={<RouteShell><LoginWireframe /></RouteShell>} />
                   <Route path="/" element={<RequireAuth><Layout><Navigate to="/dashboard" replace /></Layout></RequireAuth>} />
                   <Route path="/dashboard" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />

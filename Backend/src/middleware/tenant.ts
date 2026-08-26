@@ -6,7 +6,10 @@ import { AuthRequest } from './auth';
 // everywhere, and fails loudly (500, not a silent cross-tenant leak) if a
 // route is ever wired up without `protect`.
 export const requireTenantId = (req: AuthRequest): string => {
-  const tenantId = req.user?.tenant_id;
+  // Reads the value `protect` derived from the token's `workspace_id` claim.
+  // Deliberately takes no argument other than the request: there is no code path
+  // by which a caller can supply a workspace.
+  const tenantId = req.user?.workspace_id ?? req.user?.tenant_id;
   if (!tenantId) throw new Error('Missing tenant context — route is not authenticated');
   return tenantId;
 };
