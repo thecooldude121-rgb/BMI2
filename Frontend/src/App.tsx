@@ -1,7 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/common/ErrorBoundary';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CurrentUserProvider } from './contexts/CurrentUserContext';
 import RoleSwitcher from './components/Dev/RoleSwitcher';
 import { DataProvider } from './contexts/DataContext';
@@ -99,6 +99,35 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 };
 
 
+
+/**
+ * Gate every authenticated route behind a real session.
+ *
+ * There was no guard at all before, because AuthProvider initialised `user` to a
+ * hardcoded object — the app was always "signed in" and /login was unreachable
+ * in normal use. With `user` correctly starting null, a guard is mandatory
+ * rather than nice to have: 27 call sites read `user.id` without optional
+ * chaining and would throw on a signed-out render.
+ *
+ * `loading` is respected so an existing token gets validated before we decide.
+ * Without that, a refresh would bounce a signed-in user to /login for a frame.
+ */
+const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500">Checking your session…</p>
+      </div>
+    );
+  }
+  // `state` carries the attempted URL so login can return the user to it.
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  return <>{children}</>;
+};
+
 const App = () => {
   return (
     <CurrentUserProvider>
@@ -111,33 +140,33 @@ const App = () => {
                   <Routes>
                   <Route path="/login" element={<RouteShell><Login /></RouteShell>} />
                   <Route path="/login/wireframe" element={<RouteShell><LoginWireframe /></RouteShell>} />
-                  <Route path="/" element={<Layout><Navigate to="/dashboard" replace /></Layout>} />
-                  <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-                  <Route path="/crm/*" element={<Layout><CRMModule /></Layout>} />
-                  <Route path="/accounts/*" element={<Layout><AccountsModule /></Layout>} />
-                  <Route path="/hrms/*" element={<Layout><HRMSModule /></Layout>} />
-                  <Route path="/analytics" element={<Layout><Analytics /></Layout>} />
-                  <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
-                  <Route path="/lead-generation/*" element={<Layout><LeadGenerationModule /></Layout>} />
-                  <Route path="/demo/disqualification" element={<Layout><DisqualificationDemo /></Layout>} />
-                  <Route path="/demo/rate-limit" element={<Layout><RateLimitDemo /></Layout>} />
-                  <Route path="/demo/invalid-api-key" element={<Layout><InvalidAPIKeyDemo /></Layout>} />
-                  <Route path="/demo/network-error" element={<Layout><NetworkConnectionErrorDemo /></Layout>} />
-                  <Route path="/demo/partial-enrichment" element={<Layout><PartialEnrichmentDemo /></Layout>} />
-                  <Route path="/demo/data-conflict" element={<Layout><DataConflictDemo /></Layout>} />
-                  <Route path="/demo/real-time-progress" element={<Layout><RealTimeProgressDemo /></Layout>} />
-                  <Route path="/demo/field-level-actions" element={<Layout><FieldLevelActionsDemo /></Layout>} />
-                  <Route path="/demo/campaign-wizard-step1" element={<Layout><CampaignWizardStep1Demo /></Layout>} />
-                  <Route path="/demo/campaign-wizard-step2" element={<Layout><CampaignWizardStep2Demo /></Layout>} />
-                  <Route path="/demo/campaign-wizard-step3" element={<Layout><CampaignWizardStep3Demo /></Layout>} />
-                  <Route path="/sequences" element={<Layout><SequencesAutomationPage /></Layout>} />
-                  <Route path="/integrations" element={<Layout><IntegrationsHub /></Layout>} />
-                  <Route path="/team" element={<Layout><TeamPerformancePage /></Layout>} />
-                  <Route path="/team/:id" element={<Layout><TeamMemberDetailPage /></Layout>} />
-                  <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-                  <Route path="/settings/integrations" element={<Layout><IntegrationsPage /></Layout>} />
-                  <Route path="/settings/workflows" element={<Layout><WorkflowAutomationPage /></Layout>} />
-                  <Route path="/settings/notifications" element={<Layout><NotificationsManagementPage /></Layout>} />
+                  <Route path="/" element={<RequireAuth><Layout><Navigate to="/dashboard" replace /></Layout></RequireAuth>} />
+                  <Route path="/dashboard" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />
+                  <Route path="/crm/*" element={<RequireAuth><Layout><CRMModule /></Layout></RequireAuth>} />
+                  <Route path="/accounts/*" element={<RequireAuth><Layout><AccountsModule /></Layout></RequireAuth>} />
+                  <Route path="/hrms/*" element={<RequireAuth><Layout><HRMSModule /></Layout></RequireAuth>} />
+                  <Route path="/analytics" element={<RequireAuth><Layout><Analytics /></Layout></RequireAuth>} />
+                  <Route path="/calendar" element={<RequireAuth><Layout><Calendar /></Layout></RequireAuth>} />
+                  <Route path="/lead-generation/*" element={<RequireAuth><Layout><LeadGenerationModule /></Layout></RequireAuth>} />
+                  <Route path="/demo/disqualification" element={<RequireAuth><Layout><DisqualificationDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/rate-limit" element={<RequireAuth><Layout><RateLimitDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/invalid-api-key" element={<RequireAuth><Layout><InvalidAPIKeyDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/network-error" element={<RequireAuth><Layout><NetworkConnectionErrorDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/partial-enrichment" element={<RequireAuth><Layout><PartialEnrichmentDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/data-conflict" element={<RequireAuth><Layout><DataConflictDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/real-time-progress" element={<RequireAuth><Layout><RealTimeProgressDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/field-level-actions" element={<RequireAuth><Layout><FieldLevelActionsDemo /></Layout></RequireAuth>} />
+                  <Route path="/demo/campaign-wizard-step1" element={<RequireAuth><Layout><CampaignWizardStep1Demo /></Layout></RequireAuth>} />
+                  <Route path="/demo/campaign-wizard-step2" element={<RequireAuth><Layout><CampaignWizardStep2Demo /></Layout></RequireAuth>} />
+                  <Route path="/demo/campaign-wizard-step3" element={<RequireAuth><Layout><CampaignWizardStep3Demo /></Layout></RequireAuth>} />
+                  <Route path="/sequences" element={<RequireAuth><Layout><SequencesAutomationPage /></Layout></RequireAuth>} />
+                  <Route path="/integrations" element={<RequireAuth><Layout><IntegrationsHub /></Layout></RequireAuth>} />
+                  <Route path="/team" element={<RequireAuth><Layout><TeamPerformancePage /></Layout></RequireAuth>} />
+                  <Route path="/team/:id" element={<RequireAuth><Layout><TeamMemberDetailPage /></Layout></RequireAuth>} />
+                  <Route path="/settings" element={<RequireAuth><Layout><SettingsPage /></Layout></RequireAuth>} />
+                  <Route path="/settings/integrations" element={<RequireAuth><Layout><IntegrationsPage /></Layout></RequireAuth>} />
+                  <Route path="/settings/workflows" element={<RequireAuth><Layout><WorkflowAutomationPage /></Layout></RequireAuth>} />
+                  <Route path="/settings/notifications" element={<RequireAuth><Layout><NotificationsManagementPage /></Layout></RequireAuth>} />
                 </Routes>
                 </IntegrationsProvider>
               </SettingsProvider>

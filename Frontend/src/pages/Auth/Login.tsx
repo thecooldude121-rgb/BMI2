@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Info, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -12,6 +12,7 @@ interface FormErrors {
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -29,13 +30,15 @@ const Login: React.FC = () => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [rateLimited, setRateLimited] = useState(false);
 
-  // Redirect if already logged in
+  // Redirect once a session exists. Prefers the page the user was trying to
+  // reach (RequireAuth passes it in `location.state.from`) over a role-based
+  // guess — sending an Admin to /settings when they clicked a deal link is a
+  // small thing that feels broken.
   useEffect(() => {
-    if (user) {
-      const redirectPath = user.role === 'Admin' ? '/settings' : '/';
-      navigate(redirectPath);
-    }
-  }, [user, navigate]);
+    if (!user) return;
+    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    navigate(from ?? '/', { replace: true });
+  }, [user, navigate, location.state]);
 
   // Email validation
   const validateEmail = (email: string): string | undefined => {
@@ -139,9 +142,13 @@ const Login: React.FC = () => {
     setErrors({});
 
     try {
-      const success = await login(formData.email, formData.password);
+      // login() returns { ok, message }. Destructured deliberately: it used to
+      // return a boolean, and `if (result)` on an object is always truthy — the
+      // compiler cannot catch that, so a failed sign-in would have looked
+      // successful and left the user on a blank app with no session.
+      const { ok, message } = await login(formData.email, formData.password);
 
-      if (success) {
+      if (ok) {
         if (formData.rememberMe) {
           localStorage.setItem('rememberMe', 'true');
           localStorage.setItem('userEmail', formData.email);
@@ -149,11 +156,12 @@ const Login: React.FC = () => {
           localStorage.removeItem('rememberMe');
           localStorage.removeItem('userEmail');
         }
+        // The redirect is handled by the effect watching `user`.
       } else {
         setLoginAttempts(prev => prev + 1);
-        setErrors({
-          general: 'Invalid email or password. Please try again.'
-        });
+        // Show the server's own reason rather than assuming a bad password —
+        // an unreachable server is not the same failure.
+        setErrors({ general: message ?? 'Invalid email or password. Please try again.' });
       }
     } catch (error) {
       setLoginAttempts(prev => prev + 1);
