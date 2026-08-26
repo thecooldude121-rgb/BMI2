@@ -159,13 +159,48 @@ Footprint to remove:
   header comment saying it used to be one. **All 6 remaining importers are inside the two
   dead Settings trees or `components/Permissions/`** — so this sweep is now entirely
   subsumed by the Settings rebuild in §2. There is no Supabase import left outside it.
-- 12 files mention Supabase in total (was 14; `SavedSearchesPage.tsx` and
-  `services/disqualificationService.ts` both went with the Lead Gen deletion)
-- Of those, `pages/Auth/LoginWireframe.tsx` is worth its own look: it is a **routed** page
-  that documents "Supabase Auth", `auth.signInWithPassword()` and "CSRF Protection: Handled
-  by Supabase" as this product's auth design. It is not code that runs, but it is a
-  wireframe actively describing an architecture that was never real, and it contradicts the
-  actual `authController` SSO contract. Delete or rewrite it with the sweep.
+- **Do not plan this as separate work.** It was scoped as a standalone repo-wide sweep when
+  the footprint was believed to be 8 importers spread across the app. It is not: every
+  remaining importer dies when §2's Settings rebuild deletes `pages/Settings/`,
+  `pages/CRM/CRMSettings/` and `components/Permissions/`. What is left over afterwards is
+  three lines of cleanup, not a sweep: delete `lib/supabase.ts`, drop
+  `@supabase/supabase-js` from `Frontend/package.json`, and remove the
+  `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` references. Budget it as a tail on the
+  Settings work, not as its own item, or it gets planned twice.
+- 11 files mention Supabase in total (was 14). `SavedSearchesPage.tsx` and
+  `services/disqualificationService.ts` went with the Lead Gen deletion;
+  `pages/Auth/LoginWireframe.tsx` was deleted outright — see below.
+- The four non-importer mentions are comments and are harmless:
+  `pages/CRM/DocumentsLibrary.tsx`, `services/documentsService.ts`, `utils/leadsApi.ts`
+  (all three say "this used to be Supabase") and `utils/meetingTranscriptMockData.ts`.
+
+### `LoginWireframe.tsx` — deleted, and why it did not wait for the sweep
+
+`pages/Auth/LoginWireframe.tsx` (400 lines, routed at `/login/wireframe`) was **not** dead
+code: it was a **publicly reachable page** — `RouteShell`, not `RequireAuth`, the same
+bracket as `/login` — asserting a security posture this product does not have. It claimed:
+
+| Wireframe claim | Reality |
+|---|---|
+| "CSRF Protection: Handled by Supabase" | no CSRF middleware exists; no Supabase either |
+| "Secure Storage: HTTP-only cookies for tokens" | token lives in `localStorage`; the server never calls `res.cookie` |
+| "JWT tokens with automatic refresh" | one 7-day JWT, `JWT_EXPIRES_IN` default, no refresh or rotation |
+| "Rate Limiting: max 5 attempts, 5-minute lockout" | real windows are 15 and 60 minutes, different budgets |
+| tech-stack list: "Supabase Auth · HTTPS Only · CSRF Protection" | none of the three describe this system |
+
+Deleted rather than corrected. Its reference value was nil: `pages/Auth/Login.tsx` is the
+real, working login and therefore the real design, while the wireframe documented a Supabase
+flow that never existed — so as a "design reference" it pointed the wrong way. Rewriting 400
+lines to re-describe what `Login.tsx` already implements produces a stale duplicate, not a
+reference.
+
+**Read the deeper hazard, because it survives the file:** the doc did not merely overstate a
+control, it described the *opposite storage model*. Under the current design — Bearer token
+in an `Authorization` header — CSRF is largely not applicable, because nothing is attached
+to a cross-site request automatically. Under the cookie model the wireframe described, CSRF
+protection becomes **mandatory**, and there is none. Anyone who had implemented that page as
+spec'd would have built the exact configuration where its own headline claim was both
+required and absent.
 - `@supabase/supabase-js ^2.57.4` in `Frontend/package.json`
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` references
 
@@ -176,6 +211,32 @@ sequence the two together rather than fixing files that are about to go.
 ---
 
 ## 4. Known gaps — real, and deliberately not fixed
+
+### Fabricated data still in the tree — three finds, one pattern
+
+Tracked here rather than mentioned in passing, because this is now a **recurring class of
+defect in this codebase, not three coincidences**. Each was a finished-looking surface with
+nothing behind it, and each was initially read as unfinished work rather than as fabrication.
+
+| # | Where | What | Status |
+|---|---|---|---|
+| 1 | CRM dashboard | six widgets built from hardcoded literals, no queries; stale "147 contacts" / "$2.4M pipeline" surviving across pages | fixed earlier; the surviving gamification panel is now correctly labelled `PREVIEW · SAMPLE CONTENT` with a "not your data" note |
+| 2 | `components/Deals/` | a second, complete Deals implementation — kanban, drag-and-drop, bulk actions, filters — **zero `fetch` calls across 8 files**, fed by `generateSampleDeals()`, routed at `/lead-generation/deals` | **deleted** with the Lead Gen tool (§1) |
+| 3 | `utils/aiEngine.ts:128` | a hardcoded "AI recommendation" — `type: 'persona_match'`, an invented `confidence: 0.85`, and made-up advice ("focus on Healthcare and Technology sectors", "Target companies with 500+ employees") presented as derived from closed-won deals | **OPEN** — reachable from `pages/Analytics/Analytics.tsx` |
+
+On #3: agreed it is not for now. AI features are Phase 2 per `CLAUDE.md` and this is one of
+them, so the fix is not to make the recommendation real — it is to either remove the block
+or label it `PREVIEW · SAMPLE CONTENT` like the gamification panel, so a user cannot mistake
+an invented confidence score for a computed one. It is reachable today, which is what makes
+it worth tracking. Check the rest of `aiEngine.ts` at the same time; line 128 was found
+incidentally while sweeping for `lead-generation` strings, so it is unlikely to be the only
+fabricated block in that file.
+
+**The detection rule now lives in `CLAUDE.md`:** a component tree with zero data-fetching
+calls is suspected fabricated code, to be reported rather than assumed to be a work in
+progress. Grep the tree for `fetch(`, the API clients and the data contexts; a count of zero
+across every file means the feature is backed by nothing regardless of how finished the UI
+looks. That check is cheap and has now paid for itself three times.
 
 **Password reset is not built.** Blocked on nothing now except a sender domain. Needs, in
 order: a `password_resets` table of single-use expiring tokens stored **hashed**; rate

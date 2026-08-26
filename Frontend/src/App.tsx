@@ -33,7 +33,6 @@ const HRMSModule = lazy(() => import('./pages/HRMS/HRMSModule'));
 const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
 const Calendar = lazy(() => import('./pages/Calendar/Calendar'));
 const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'));
-const LoginWireframe = lazy(() => import('./pages/Auth/LoginWireframe'));
 const SequencesAutomationPage = lazy(() => import('./pages/Sequences'));
 const IntegrationsPage = lazy(() => import('./pages/Settings/IntegrationsPage'));
 const WorkflowAutomationPage = lazy(() => import('./pages/Settings/WorkflowAutomationPage'));
@@ -130,7 +129,6 @@ const App = () => {
                   <Route path="/login" element={<RouteShell><Login /></RouteShell>} />
                   {/* Open, like /login: you cannot be signed in to create an account. */}
                   <Route path="/register" element={<RouteShell><Register /></RouteShell>} />
-                  <Route path="/login/wireframe" element={<RouteShell><LoginWireframe /></RouteShell>} />
                   <Route path="/" element={<RequireAuth><Layout><Navigate to="/dashboard" replace /></Layout></RequireAuth>} />
                   <Route path="/dashboard" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />
                   <Route path="/crm/*" element={<RequireAuth><Layout><CRMModule /></Layout></RequireAuth>} />
