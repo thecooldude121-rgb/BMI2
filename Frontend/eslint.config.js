@@ -19,6 +19,21 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+
+      /**
+       * Pinned explicitly, though `recommended` already sets it, because this
+       * one must never be relaxed to quiet a build. A conditionally-called hook
+       * is not a style preference — it changes the hook count between renders,
+       * and React responds by throwing "Rendered more hooks than during the
+       * previous render", killing the whole subtree.
+       *
+       * There were 22 of these. Two were modals whose default-date effect sat
+       * below `if (!isOpen) return null`, so they crashed the moment the user
+       * opened them. Run `npm run lint:hooks` to check this rule alone — the
+       * full lint still has ~1,000 pre-existing errors and cannot gate yet.
+       */
+      'react-hooks/rules-of-hooks': 'error',
+
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },

@@ -59,6 +59,15 @@ interface ValueInputProps {
 function ValueInput({ fieldId, operator, value, leads, onChange }: ValueInputProps) {
   const meta = FILTER_FIELDS.find(f => f.id === fieldId);
 
+  // Hoisted above every early return and branch below. This was originally
+  // declared inside the `fieldId === 'country'` branch, where it is called on
+  // some renders and not others — which breaks React's hook ordering for the
+  // whole subtree, not just this input.
+  const countries = useMemo(
+    () => Array.from(new Set(leads.map(l => l.country).filter(Boolean))).sort(),
+    [leads],
+  );
+
   if (NO_VALUE_OPERATORS.has(operator)) return null;
 
   if (operator === 'between') {
@@ -137,11 +146,6 @@ function ValueInput({ fieldId, operator, value, leads, onChange }: ValueInputPro
 
   // country with is/is_not/is_any_of: distinct dropdown
   if (fieldId === 'country' && (operator === 'is' || operator === 'is_not')) {
-    const countries = useMemo(
-      () => Array.from(new Set(leads.map(l => l.country).filter(Boolean))).sort(),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [leads],
-    );
     return (
       <select
         value={typeof value === 'string' ? value : ''}

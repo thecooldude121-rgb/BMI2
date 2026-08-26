@@ -147,6 +147,20 @@ const EnhancedAccountDetailView: React.FC = () => {
     alert('Logging an activity from here is not available yet. Activities can be logged from the Activities page.');
   };
 
+  // Declared above the `!account` early return below. Every hook in a component
+  // has to run on every render: when this sat further down, it was skipped while
+  // the account was still loading and then ran once it arrived, changing the hook
+  // count mid-life and crashing the view.
+  const meetingsThisQuarter = useMemo(() => {
+    const now = new Date();
+    const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    return accountActivities.filter(a => {
+      if (a.type !== 'meeting') return false;
+      const when = a.completed_at ?? a.scheduled_at ?? a.created_at;
+      return new Date(when) >= quarterStart;
+    }).length;
+  }, [accountActivities]);
+
   if (!account) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -204,16 +218,6 @@ const EnhancedAccountDetailView: React.FC = () => {
    * comparison needs a second query, and an invented percentage is what Phase 0
    * spent its time deleting.
    */
-  const meetingsThisQuarter = useMemo(() => {
-    const now = new Date();
-    const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-    return accountActivities.filter(a => {
-      if (a.type !== 'meeting') return false;
-      const when = a.completed_at ?? a.scheduled_at ?? a.created_at;
-      return new Date(when) >= quarterStart;
-    }).length;
-  }, [accountActivities]);
-
   const metrics = {
     totalPipeline: deals?.reduce((sum, deal) => sum + (deal.amount || 0), 0) || 0,
     activeDeals: deals?.length || 0,

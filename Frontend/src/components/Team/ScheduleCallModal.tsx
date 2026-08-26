@@ -45,18 +45,20 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
   const [scheduling, setScheduling] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
 
-  if (!isOpen) return null;
-
-  const firstName = memberName.split(' ')[0];
-
-  // Set default date to tomorrow
+  // Set default date to tomorrow. Must stay above the `isOpen` early return —
+  // a hook below it changes the hook count when the modal opens, which makes
+  // React throw "Rendered more hooks than during the previous render".
   React.useEffect(() => {
     if (isOpen && !date) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setDate(tomorrow.toISOString().split('T')[0]);
     }
-  }, [isOpen]);
+  }, [isOpen, date]);
+
+  if (!isOpen) return null;
+
+  const firstName = memberName.split(' ')[0];
 
   const handleGenerateZoomLink = async () => {
     setGeneratingLink(true);

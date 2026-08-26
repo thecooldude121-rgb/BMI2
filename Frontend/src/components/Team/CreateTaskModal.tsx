@@ -35,15 +35,18 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [sendReminder, setSendReminder] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  if (!isOpen) return null;
-
+  // Must stay above the `isOpen` early return: a hook below it is skipped while
+  // closed and runs once open, so the hook count changes between renders and
+  // React throws "Rendered more hooks than during the previous render".
   React.useEffect(() => {
     if (isOpen && !dueDate) {
       const twoDaysFromNow = new Date();
       twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
       setDueDate(twoDaysFromNow.toISOString().split('T')[0]);
     }
-  }, [isOpen]);
+  }, [isOpen, dueDate]);
+
+  if (!isOpen) return null;
 
   const handleCreate = async () => {
     if (!title.trim() || !dueDate) return;

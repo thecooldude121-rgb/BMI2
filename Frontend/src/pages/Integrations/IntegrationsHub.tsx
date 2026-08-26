@@ -20,35 +20,10 @@ import { ConnectedIntegration, AvailableIntegration, IntegrationType } from '../
 type FilterStatus = 'all' | 'connected' | 'available';
 
 export const IntegrationsHub: React.FC = () => {
-  console.log('IntegrationsHub: Component rendering');
-
-  let contextData;
-  try {
-    contextData = useIntegrations();
-    console.log('IntegrationsHub: Context data loaded', {
-      hasConnected: !!contextData.connectedIntegrations,
-      hasAvailable: !!contextData.availableIntegrations,
-      isLoading: contextData.isLoading
-    });
-  } catch (error) {
-    console.error('IntegrationsHub: Context error', error);
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Integrations</h1>
-          <p className="text-gray-600 mb-4">
-            {error instanceof Error ? error.message : 'An unknown error occurred'}
-          </p>
-          <Button
-            onClick={() => window.location.reload()}
-          >
-            Reload Page
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
+  // No try/catch around useIntegrations(): catching a hook throw and returning
+  // early leaves React's hook list truncated, which corrupts every later render
+  // rather than recovering from anything. The route-level ErrorBoundary renders
+  // the failure UI instead.
   const {
     connectedIntegrations,
     availableIntegrations,
@@ -61,7 +36,7 @@ export const IntegrationsHub: React.FC = () => {
     configureIntegration,
     switchProvider,
     refreshApiKey,
-  } = contextData;
+  } = useIntegrations();
 
   const navigate = useNavigate();
   const { showToast } = useToast();
