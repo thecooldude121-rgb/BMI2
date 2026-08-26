@@ -91,7 +91,12 @@ the real API — they are a design reference, not a starting point.
 ## 3. Outstanding: repo-wide Supabase sweep
 
 Supabase is **not** part of the architecture (`CLAUDE.md` was wrong about this and has been
-corrected). Residual code remains, and **it is in the live path** — `lib/supabase.ts` calls
+corrected). The database is plain PostgreSQL, reached only through the Node backend;
+`pgAdmin 4` is a GUI client the owner administers it with and is not part of the running
+system. **A Supabase reference here is a defect to delete, never a dependency to wire up** —
+there are no credentials to obtain and no project to provision.
+
+Residual code remains, and **it is in the live path** — `lib/supabase.ts` calls
 `createClient` at module scope, so it initialises at app boot and emits a console warning.
 
 Footprint to remove:

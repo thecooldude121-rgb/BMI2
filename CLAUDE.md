@@ -25,8 +25,13 @@ India, Middle East, and Africa.
   architecture.) An earlier version of this file said "PostgreSQL via Supabase
   (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)". That was wrong, inferred from a console
   warning, and it sent work down a dead end: `Frontend/src/lib/supabase.ts` and its callers
-  are written against a backend that has never existed and never will. Treat every Supabase
-  reference in this repo as dead code, not as an unconfigured integration.
+  are written against a backend that has never existed and never will.
+  **A Supabase reference in this codebase is a defect to delete, never a dependency to wire
+  up.** It is not an unconfigured integration and there is nothing to provision: no
+  credentials, no project, no plan to create one. Encountering one — an import, a client
+  init, an env var, a type, the package dependency — the correct action is removal, and
+  never "make it work". Removal is sequenced with the Settings rebuild (see HANDOFF.md), so
+  raise it rather than deleting it mid-task.
 - Cache: Redis (sessions, tenant config, dashboard aggregates)
 - File storage: S3-compatible (S3 or Cloudflare R2)
 
