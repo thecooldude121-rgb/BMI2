@@ -20,7 +20,13 @@ India, Middle East, and Africa.
 - Styling: Tailwind CSS + shadcn/ui components
 - Icons: Lucide React
 - Backend: Node.js (separate `backend` service)
-- Database: PostgreSQL via **Supabase** (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
+- Database: **PostgreSQL**, accessed only through the Node backend API. **No Supabase.**
+  (`pgAdmin 4` is a GUI client for administering the database — it is not part of the
+  architecture.) An earlier version of this file said "PostgreSQL via Supabase
+  (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)". That was wrong, inferred from a console
+  warning, and it sent work down a dead end: `Frontend/src/lib/supabase.ts` and its callers
+  are written against a backend that has never existed and never will. Treat every Supabase
+  reference in this repo as dead code, not as an unconfigured integration.
 - Cache: Redis (sessions, tenant config, dashboard aggregates)
 - File storage: S3-compatible (S3 or Cloudflare R2)
 
@@ -30,6 +36,12 @@ India, Middle East, and Africa.
   `workspace_id` filter is a data-leak bug between tenants, not a style issue. Flag it
   explicitly if you are about to skip one; that is a hard stop, not a nit.
 - RBAC checks happen at the API layer, not just the UI.
+- **The frontend must never query the database directly.** All data access goes through the
+  backend API, where tenant scoping, FK ownership checks, and rate limiting are enforced in
+  one place. A second data path is a second place for those to be forgotten — and the
+  workspace-scoping work proved the point: the leak was not a missing `WHERE` clause but an
+  unscoped `JOIN` and an unvalidated foreign id, both of which live in exactly the code a
+  direct-from-browser query would bypass.
 - **Auth is the SSO contract.** This CRM is the identity provider for Lead Generation and
   HRMS later, so all workspace-resolution logic lives server-side in `authController`: a
   client sends credentials and receives either a token or the set of workspaces to choose
@@ -325,6 +337,14 @@ dead third option.
 - **Workspace creation, user invites and the workspace switcher are deferred** to the
   Settings module. Registration joins the single existing workspace, and the server asks for
   a `workspace_slug` once more than one exists rather than guessing.
+- **Settings will be built fresh against the backend API.** There are two existing Settings
+  trees and NEITHER is a starting point — both are dead code kept only as UI reference:
+  - `pages/Settings/` (20 files) drives `contexts/SettingsContext.tsx`, whose 46 queries go
+    to Supabase — a backend that does not exist. Not "unconfigured": wrong.
+  - `pages/CRM/CRMSettings/` (36 files) has zero `fetch` and zero `localStorage`; it
+    persists nothing at all.
+  Do not extend, repair or migrate either one. When the Settings module is built, it talks
+  to the Node API like every other page, and these two trees are deleted then.
 
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions
