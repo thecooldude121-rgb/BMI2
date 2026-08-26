@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../config/database';
+import { hashToken } from './invitesController';
 
 /**
  * Authentication and workspace resolution.
@@ -69,45 +70,62 @@ function safeUser(user: UserRow) {
 }
 
 /**
- * Which workspace does a new registration join?
+ * REGISTRATION IS INVITE-ONLY.
  *
- * Replaces `SELECT id FROM tenants ORDER BY created_at LIMIT 1` — "first
- * workspace wins", an implicit default that silently misroutes every signup the
- * moment a second workspace exists.
+ * It used to be open: unauthenticated, any email domain, and it resolved
+ * "exactly one workspace exists -> join it". One curl from a gmail.com address
+ * created a `sales` account inside the tenant that could immediately read all 20
+ * contacts, 15 companies, 24 deals and 15 tasks. That defeated the query-layer
+ * isolation at the front door — token-only scoping is worth nothing if workspace
+ * membership is available from a public form.
  *
- * Explicit rules, and it fails loudly rather than guessing:
- *   - a slug was supplied      -> that workspace, or 404
- *   - exactly one exists       -> that one (unambiguous, not "first")
- *   - several exist, no slug   -> 400 asking for one
- *   - none exist               -> 500; the deployment is not provisioned
+ * The invite now supplies the workspace AND the role, so "which workspace does a
+ * signup join" is no longer a defaulting question at all: it is answered by
+ * whoever issued the invite. There is deliberately no fallback path.
  */
-async function resolveWorkspaceForRegistration(
-  slug: string | undefined,
-): Promise<{ id: string } | { error: { status: number; message: string } }> {
-  if (slug) {
-    const found = await pool.query('SELECT id FROM tenants WHERE slug = $1', [slug]);
-    if (!found.rows[0]) {
-      return { error: { status: 404, message: `No workspace with slug "${slug}"` } };
-    }
-    return { id: found.rows[0].id };
+interface RedeemableInvite {
+  id: string;
+  workspace_id: string;
+  email: string;
+  role: string;
+}
+
+async function redeemableInvite(
+  token: unknown,
+  submittedEmail: string,
+): Promise<{ invite: RedeemableInvite } | { error: { status: number; message: string } }> {
+  if (typeof token !== 'string' || token.length < 20) {
+    return { error: { status: 400, message: 'A valid invite is required to create an account' } };
   }
 
-  const all = await pool.query('SELECT id, slug FROM tenants');
-  if (all.rows.length === 1) return { id: all.rows[0].id };
-  if (all.rows.length === 0) {
-    return { error: { status: 500, message: 'No workspace is configured on this deployment' } };
+  // Looked up by hash — the token itself never appears in a query or a log.
+  const found = await pool.query(
+    `SELECT id, workspace_id, email, role, expires_at, accepted_at, revoked_at
+       FROM workspace_invites WHERE token_hash = $1`,
+    [hashToken(token)],
+  );
+  const invite = found.rows[0];
+
+  // One message for every rejection. Distinguishing "no such invite" from
+  // "expired" from "already used" tells a probe which tokens once existed.
+  const reject = { error: { status: 400, message: 'That invite is invalid, expired, or already used' } };
+  if (!invite) return reject;
+  if (invite.accepted_at || invite.revoked_at) return reject;
+  if (new Date(invite.expires_at).getTime() < Date.now()) return reject;
+
+  // The invite is bound to one address, so a leaked link cannot be redeemed by
+  // someone else — which is the difference between an invite and a signup code.
+  if (invite.email.trim().toLowerCase() !== submittedEmail.trim().toLowerCase()) {
+    return { error: { status: 400, message: 'This invite was issued for a different email address' } };
   }
-  return {
-    error: {
-      status: 400,
-      message: `workspace_slug is required: this deployment has ${all.rows.length} workspaces`,
-    },
-  };
+
+  return { invite };
 }
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
   try {
-    const { email, password, first_name, last_name, department, workspace_slug } = req.body;
+    const { email, password, first_name, last_name, department, invite_token } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ success: false, message: 'Email and password are required' });
@@ -118,40 +136,60 @@ export const register = async (req: Request, res: Response, next: NextFunction):
       return;
     }
 
-    const resolved = await resolveWorkspaceForRegistration(workspace_slug);
-    if ('error' in resolved) {
-      res.status(resolved.error.status).json({ success: false, message: resolved.error.message });
+    const redeemed = await redeemableInvite(invite_token, String(email));
+    if ('error' in redeemed) {
+      res.status(redeemed.error.status).json({ success: false, message: redeemed.error.message });
       return;
     }
-    const workspaceId = resolved.id;
+    const { invite } = redeemed;
 
-    // Scoped to the workspace, matching UNIQUE(tenant_id, lower(email)) from
-    // migration 022. The old check was global, so one person could never join a
-    // second workspace — the spec explicitly allows that.
-    const existing = await pool.query(
+    await client.query('BEGIN');
+
+    // Claim the invite FIRST, and only if it is still open. Two requests racing
+    // the same link both pass the read above; this UPDATE is what makes it
+    // single-use, because the second one matches no row.
+    const claimed = await client.query(
+      `UPDATE workspace_invites SET accepted_at = NOW()
+        WHERE id = $1 AND accepted_at IS NULL AND revoked_at IS NULL
+        RETURNING id`,
+      [invite.id],
+    );
+    if (!claimed.rows[0]) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ success: false, message: 'That invite is invalid, expired, or already used' });
+      return;
+    }
+
+    // Scoped to the workspace, matching UNIQUE(tenant_id, lower(email)).
+    const existing = await client.query(
       'SELECT id FROM users WHERE tenant_id = $1 AND lower(email) = lower($2)',
-      [workspaceId, email],
+      [invite.workspace_id, email],
     );
     if (existing.rows.length > 0) {
+      await client.query('ROLLBACK');
       res.status(409).json({ success: false, message: 'That email is already registered in this workspace' });
       return;
     }
 
     const password_hash = await bcrypt.hash(password, 12);
-    // Self-registration always gets the baseline 'sales' role — elevated roles
-    // (admin/manager/hr) can only be granted by an existing admin, never by the
-    // signup payload itself.
-    const result = await pool.query(
+    // The ROLE COMES FROM THE INVITE, never from the request body. Previously
+    // self-registration hardcoded 'sales'; now the inviter decides, and an
+    // invitee still cannot choose their own privileges.
+    const result = await client.query(
       `INSERT INTO users (email, password_hash, first_name, last_name, role, department, tenant_id)
-       VALUES ($1, $2, $3, $4, 'sales', $5, $6)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, email, password_hash, first_name, last_name, role, department, avatar_url, tenant_id`,
-      [email, password_hash, first_name, last_name, department, workspaceId],
+      [email, password_hash, first_name, last_name, invite.role, department, invite.workspace_id],
     );
 
+    await client.query('COMMIT');
     const user = result.rows[0] as UserRow;
     res.status(201).json({ success: true, token: signToken(user), user: safeUser(user) });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     next(error);
+  } finally {
+    client.release();
   }
 };
 

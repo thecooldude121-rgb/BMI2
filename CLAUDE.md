@@ -46,6 +46,32 @@ India, Middle East, and Africa.
     the email exists.
   - Workspace provisioning is explicit. No "first workspace wins" fallback: one workspace is
     used because it is the only one, and a second makes `workspace_slug` required.
+- **Registration is INVITE-ONLY, and this is a security boundary, not a workflow
+  preference.** Open self-registration was a live exposure: `POST /auth/register` was
+  unauthenticated, accepted any email domain, and resolved "one workspace exists -> join
+  it", so a single curl from a gmail.com address produced a `sales` account that could read
+  every contact, company and deal in the tenant. Query-layer isolation is worthless if
+  workspace membership is obtainable from a public form — the front door matters as much as
+  the queries.
+  - An invite names the workspace AND the role, so neither is ever defaulted, and an
+    invitee cannot choose their own privileges.
+  - Invite tokens are stored as SHA-256 hashes, bound to one email address, single-use
+    (claimed inside the registration transaction, so two requests racing one link cannot
+    both win), and expiring. Same rules will apply to password-reset tokens.
+  - Every rejection returns one identical message. Distinguishing "no such invite" from
+    "expired" from "already used" tells a probe which tokens once existed.
+- **Credential endpoints are rate limited, per IP and per email.** Per-IP alone is beaten by
+  spraying one password across accounts from a botnet; per-email alone by rotating accounts
+  from one host. Both run and either can reject. Emit standard `RateLimit-*` headers
+  (draft-8) and 429 — a DAST scan looks for these. Store is in-process memory today: counters
+  reset on restart and are NOT shared across instances, so `store` is the seam for
+  `rate-limit-redis` once Redis is wired. Behind a proxy, `TRUST_PROXY` must be set or every
+  request looks like it came from the load balancer and the per-IP budget becomes one global
+  budget.
+  - Tune with the shared-NAT case in mind. A 10-per-15-minutes per-IP login budget locked
+    out its own verification run; an office behind one address would have read that as an
+    outage. Successful logins do not consume the anti-brute-force budget — only failures are
+    evidence of an attack.
 - **No advertised demo credentials.** A "Demo Access" panel on the login page named an
   account that never existed. Real credentials come from `cd Backend && npm run db:seed:users`,
   which rotates the seeded users' passwords and prints them once to the console.
@@ -289,7 +315,12 @@ something directly, do that instead of reasoning about what should be true.**
    did `if (success)` and `if (object)` is always truthy — every failed sign-in would have
    looked successful. Triage the backlog by REACHABILITY (is the file routed? does it touch
    a real API?), never by error code.
-4. **Corollaries seen in practice:** a broken reachability grep once reported every file as
+4. **Never put a backtick inside SQL written in a JS template literal.** It closes the
+   string and the file stops compiling. This has now happened twice in this project within
+   hours — once in `activitiesController` and once in `dealsController`, both while writing
+   a comment that quoted a SQL fragment. Quote SQL in comments with plain text, not
+   backticks.
+5. **Corollaries seen in practice:** a broken reachability grep once reported every file as
    unimported and nearly caused a live, routed component to be deleted — resolve each import
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a

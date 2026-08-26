@@ -9,6 +9,7 @@ import activitiesRoutes from './activities';
 import tasksRoutes from './tasks';
 import documentsRoutes from './documents';
 import usersRoutes from './users';
+import invitesRoutes from './invites';
 import quotasRoutes from './quotas';
 import forecastRoutes from './forecast';
 
@@ -24,6 +25,7 @@ router.use('/activities', activitiesRoutes);
 router.use('/tasks', tasksRoutes);
 router.use('/documents', documentsRoutes);
 router.use('/users', usersRoutes);
+router.use('/invites', invitesRoutes);
 router.use('/quotas', quotasRoutes);
 router.use('/forecast', forecastRoutes);
 

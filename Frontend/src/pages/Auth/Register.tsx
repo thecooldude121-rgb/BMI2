@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, Building2, CheckCircle, Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
@@ -12,11 +12,15 @@ import { useAuth } from '../../contexts/AuthContext';
  * "Auth + Workspace shell" item — the app shipped a login form with no way to
  * obtain something to log in with.
  *
+ * INVITE-ONLY. Open self-registration was a live exposure: the form joined the
+ * existing workspace with no authentication, so anyone reaching this URL got a
+ * `sales` account that could read every contact, company and deal in the tenant.
+ * An invite token is now required, and it — not this page — determines which
+ * workspace is joined and which role is granted.
+ *
  * DELIBERATELY NOT HERE (both belong to the Settings module):
- *  - creating a NEW workspace. The server resolves which workspace a signup
- *    joins (see resolveWorkspaceForRegistration) and will ask for a slug once
- *    more than one exists; it does not guess.
- *  - inviting users. This is self-signup only.
+ *  - creating a NEW workspace
+ *  - the admin UI for issuing invites (POST /invites exists; Settings will use it)
  *
  * The server owns every rule that matters — password length, email uniqueness
  * within the workspace, and the role granted. The checks below are there to save
@@ -38,6 +42,10 @@ interface FormState {
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const { user, login } = useAuth();
+  const [searchParams] = useSearchParams();
+  // The invite comes from the link the admin sent. It is never typed in and never
+  // defaulted: no token means no account.
+  const inviteToken = searchParams.get('invite') ?? '';
 
   const [form, setForm] = useState<FormState>({
     firstName: '', lastName: '', email: '', password: '', confirmPassword: '',
@@ -84,6 +92,7 @@ const Register: React.FC = () => {
           password: form.password,
           first_name: form.firstName.trim(),
           last_name: form.lastName.trim(),
+          invite_token: inviteToken,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -112,6 +121,34 @@ const Register: React.FC = () => {
     }
   };
 
+  // No invite in the URL: there is nothing this page can do. Shown before the
+  // form rather than letting someone fill it in and be rejected on submit.
+  if (!inviteToken) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="flex items-center justify-center gap-2 mb-8">
+            <Building2 className="h-8 w-8 text-brand-600" aria-hidden="true" />
+            <span className="text-2xl font-bold text-gray-900">BMI Platform</span>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 text-center">
+            <h1 className="text-xl font-bold text-gray-900 mb-2">You need an invite</h1>
+            <p className="text-sm text-gray-600">
+              Accounts are created by invitation only. Ask an admin in your workspace to
+              send you an invite link — it will bring you back to this page.
+            </p>
+            <Link
+              to="/login"
+              className="inline-block mt-6 text-sm text-brand-600 font-medium hover:underline"
+            >
+              Back to sign in
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const field = (hasError: boolean) =>
     `w-full pl-10 pr-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-600 focus:border-transparent`;
 
@@ -126,7 +163,7 @@ const Register: React.FC = () => {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Create your account</h1>
           <p className="text-gray-600 mb-6 text-sm">
-            You'll join your organisation's existing workspace.
+            You've been invited to a workspace. Use the email address the invite was sent to.
           </p>
 
           {errors.general && (
