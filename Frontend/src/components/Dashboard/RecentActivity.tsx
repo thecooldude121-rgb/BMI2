@@ -65,7 +65,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({ activities, failed = fa
 
   /** Only navigates to a parent the row actually has. */
   const openParent = (a: ActivityRecord) => {
-    if (a.lead_id) navigate(`/lead-generation/leads/${a.lead_id}`);
+    if (a.lead_id) navigate(`/crm/leads/${a.lead_id}`);
     else if (a.deal_id) navigate(`/crm/deals/${a.deal_id}`);
     else if (a.contact_id) navigate(`/crm/contacts/${a.contact_id}`);
     else if (a.company_id) navigate(`/accounts/${a.company_id}`);

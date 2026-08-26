@@ -165,8 +165,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return false;
     const rolePermissions: Record<User['role'], string[]> = {
       Admin: ['all'],
-      Manager: ['crm', 'hrms', 'analytics', 'lead-generation', 'integrations', 'calendar', 'settings', 'gamification', 'dashboard', 'team'],
-      Sales: ['crm', 'lead-generation', 'calendar', 'integrations', 'dashboard', 'team'],
+      Manager: ['crm', 'hrms', 'analytics', 'integrations', 'calendar', 'settings', 'gamification', 'dashboard', 'team'],
+      Sales: ['crm', 'calendar', 'integrations', 'dashboard', 'team'],
       HR: ['hrms', 'analytics', 'dashboard'],
     };
     const userPermissions = rolePermissions[user.role] || [];

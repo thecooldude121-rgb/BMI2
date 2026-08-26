@@ -10,7 +10,7 @@ import { getStageStyle } from '../../config/stageColors';
 import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 
-import type { FilterCondition, Conjunction } from '../../components/Deals/AdvancedFilterBuilder';
+import type { FilterCondition, Conjunction } from '../../components/Deal/AdvancedFilterBuilder';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
 import { getNextBestAction } from '../../utils/dealNextBestAction';
 import { getRelationshipRisk } from '../../utils/relationshipRisk';

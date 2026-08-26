@@ -35,44 +35,87 @@ not assume a file you did not write is yours to rewrite.
 
 ---
 
-## 1. Item 4 — Lead Generation deletion. UNSTARTED. Do not delete before review.
+## 1. Item 4 — Lead Generation deletion. DONE. 118 files, 56,073 lines removed.
 
-The decision is made: Lead Gen and HRMS are **separate platforms consuming this CRM over
-SSO**, not modules in this repo. So the Lead Generation *tool* is out of product, not just
-out of phase, and deleting it is correct.
+Lead Gen and HRMS are **separate platforms consuming this CRM over SSO**, not modules in
+this repo. The Lead Generation *tool* was out of product, not just out of phase. It is gone.
+Approved by the repo owner against a full file-level mapping before a single file was
+deleted; the mapping is preserved as an artifact (see the commit message for the link).
 
-**The trap is the name.** Two unrelated things both say "lead":
+**What went, in two tiers:**
 
-| | Lines | Verdict |
+| | Files | Lines |
 |---|---|---|
-| `Frontend/src/pages/LeadGeneration/` (42 files) | 28,206 | **DELETE** — the prospecting/enrichment tool |
-| `Frontend/src/components/LeadGeneration/` (11 files) | 3,536 | **DELETE** — same tool |
-| `Frontend/src/components/Leads/` (36 files) | — | **KEEP** — CRM leads UI |
-| `Frontend/src/utils/lead*.ts` (32 files) | — | **KEEP** — SLA, NBA, scoring, dedupe engines |
-| `Backend/src/routes/leads.ts` (29 routes) | — | **KEEP** — CRM |
-| `Backend/src/controllers/leadSubController.ts` | — | **KEEP** — CRM |
-| 7 `lead_*` tables (`leads`, `lead_notes`, `lead_tasks`, `lead_emails`, `lead_calls`, `lead_meetings`, `lead_views`) | — | **KEEP** — CRM, all workspace-scoped |
+| **Tier A** — the tool itself: `pages/LeadGeneration/`, `components/LeadGeneration/` | 53 | 31,742 |
+| **Tier B** — orphaned by the cascade, nothing else reached it | 65 | 24,307 |
 
-**Required before deleting anything:** produce the full file list and the
-tool-vs-module mapping for the repo owner's review. That is an explicit instruction, not a
-formality.
+Tier B was the part the earlier estimate missed: `components/campaigns/` (17),
+`components/Deals/` (7 of 8), `components/LeadQualification/` (11), 22 per-persona mock/
+enrichment fixtures in `utils/`, 4 `types/`, 2 `services/`, `pages/CRM/DealsPage.tsx`,
+`pages/Discovery/SavedSearchesPage.tsx`. Verified by simulation before deleting: reachable
+file count dropped 511 -> 393 and the newly-unreachable set was **exactly** those 65 files.
 
-### Hand-verify `Frontend/src/components/Deals/` — do NOT trust a reachability grep
+**KEEP side, verified intact and untouched** — 75 files, 21,910 lines: `components/Leads/`
+(36), `pages/CRM/{LeadsPage,LeadDetailPage,AddLeadPage,ImportLeadsPage}.tsx`, `utils/lead*`
+incl. `leadNBA/ leadScoring/ leadSla/` (26), `types/{lead,leadDomain,leadFilter,leadScoring}`,
+`contexts/LeadContext.tsx` + `hooks/useLead*`, and `components/Lead/LeadScoreBreakdownPanel.tsx`
+(singular `Lead`, one file, live via `pages/CRM/LeadDetailPage.tsx:7`).
+**Backend: zero changes.** All 29 routes in `routes/leads.ts` and all 7 `lead_*` tables
+intact; `POST /leads/:id/enrich` is still consumed by `utils/leadsApi.ts`. Not one KEEP file
+imported a deleted module. Two `utils/lead*` files were NOT keeps despite the name:
+`utils/leadDiscoveryMockData.ts` and `types/leadGeneration.ts` were tool-only.
 
-A live, routed component in that directory has been **nearly deleted twice** on faulty
-reachability analysis. Both near-misses came from a grep that reported everything as
-unimported.
+### The `components/Deals/` trap — resolved, and it was worse than recorded
 
-Known facts, verified by resolving imports to real paths:
+The previous note said `components/Deals/DealsModule.tsx` is imported by
+`pages/CRM/DealsPage.tsx`, therefore live. **Correct one hop, wrong two hops.**
+`DealsPage.tsx` is a 14-line shell routed ONLY at `/lead-generation/deals`
+(`LeadGenerationModule.tsx:15,66`); it appears nowhere in `CRMModule.tsx`. So 7 of the 8
+files in that directory died with the tool. The live CRM deals page is a different tree
+entirely: `Sidebar.tsx:30` -> `/crm/deals` -> `CRMModule.tsx:72` -> `DealsKanbanPage.tsx`
+-> `DealsListView`/`DealsGridView`/`components/Deal/` (singular).
 
-- `components/Deals/DealsModule.tsx` **is imported** by `pages/CRM/DealsPage.tsx` — live.
-- `components/Deals/DealDetailPage.tsx` **is imported** by `DealsModule.tsx` — live.
-- `components/Deal/DealDetailPage.tsx` (singular `Deal`) had zero importers and was
-  correctly deleted. **Three sibling files shared that basename.** Two are live.
-- `pages/CRM/DealsListView.tsx` was wrongly reported dead in an audit; it **is imported** by
-  `DealsKanbanPage.tsx`.
+**One file in there was load-bearing:** `components/Deals/AdvancedFilterBuilder.tsx` (591
+lines), imported type-only by `pages/CRM/DealsListView.tsx:13`. `rm -rf components/Deals/`
+would have broken `/crm/deals`. It was extracted first with `git mv` (recorded as `R100`,
+history preserved) to **`components/Deal/AdvancedFilterBuilder.tsx`** — beside its
+consumer's other dependencies — and its import repointed. `components/Deals/` no longer
+exists; `components/Deal/` is the single home for CRM deals components.
 
-Resolve every candidate import to an actual file path before calling anything dead.
+**Lesson, generalised:** an import edge proves the edge, not reachability. Resolve the chain
+all the way to a route in `App.tsx`, and check the sidebar href a real user clicks. A
+`pages/CRM/` path is not evidence of being CRM code.
+
+**What the deletion also removed:** `components/Deals/` was a second, complete, fabricated
+Deals implementation — kanban, drag-and-drop, bulk actions, filters — with **zero** `fetch`
+calls across all 8 files, fed by `generateSampleDeals()`, live at `/lead-generation/deals`
+next to the real `DataContext`-backed one. That is the second whole feature in this repo
+backed by nothing. `CLAUDE.md` now carries the rule that a zero-fetch component tree is
+suspected fabricated code, to be reported rather than assumed to be work in progress.
+
+### Repairs made alongside the deletion (these were regressions, not cleanup)
+
+- `components/Dashboard/RecentActivity.tsx:68` navigated to `/lead-generation/leads/:id`.
+  Live via `pages/Dashboard.tsx` — a dashboard activity row would have landed on a dead
+  route. Repointed to `/crm/leads/:id` (`CRMModule.tsx:61`).
+- `components/Layout/Sidebar.tsx` — `Lead Generation` nav entry removed, plus the `Target`
+  icon import it left unused.
+- `components/Layout/TopBar.tsx` — `/lead-generation` breadcrumb label removed.
+- `contexts/AuthContext.tsx:168-169` — `lead-generation` removed from the Manager and Sales
+  RBAC module lists (vestigial; nothing called `hasPermission('lead-generation')`).
+- `App.tsx` — 12 lazy imports and 13 routes removed (`/lead-generation/*` plus 12 `/demo/*`).
+
+**Two dangling string references were deliberately left**, both out of scope:
+`components/navigation/BreadcrumbNav.tsx:35` has a `lead-generation` label but is imported
+only by the dead `pages/Settings/` tree (§2 says do not touch it); `utils/aiEngine.ts:128`
+tags a recommendation `relatedTo: 'lead-generation'` — that file is a separate finding, a
+hardcoded AI recommendation with an invented `confidence: 0.85`, reachable from
+`pages/Analytics/Analytics.tsx`. Phase-2 AI plus fabricated data; not this task.
+
+**Verification:** typecheck raw errors 535 -> 388 (147 eliminated), **zero `TS2307`
+"cannot find module" and zero `TS2304`** — no import was left dangling. `npm run build`
+clean. 318/318 vitest tests pass. Then verified live through a real login and real sidebar
+navigation — see §6 for the standard that was applied.
 
 ---
 
@@ -103,11 +146,24 @@ Footprint to remove:
 
 - `Frontend/src/lib/supabase.ts` — the client, with a `https://placeholder.supabase.co`
   fallback so it "works" without config
-- 8 files importing it: `contexts/SettingsContext.tsx`,
+- **6 files importing it** (recounted, not inherited — the earlier figure of 8 was wrong
+  twice over): `contexts/SettingsContext.tsx`,
   `components/Permissions/{APIIntegrationsPanel,UserGroupManagement,AuditFeed}.tsx`,
-  `pages/Settings/AuditTrail.tsx`, `pages/CRM/CRMSettings/ProfileSettings.tsx`,
-  `pages/Discovery/SavedSearchesPage.tsx`, `services/documentsService.ts`
-- 14 files mention Supabase in total
+  `pages/Settings/AuditTrail.tsx`, `pages/CRM/CRMSettings/ProfileSettings.tsx`.
+  `pages/Discovery/SavedSearchesPage.tsx` was deleted with the Lead Generation tool (§1) —
+  it was unreachable dead code carrying a live Supabase import, exactly the "defect that
+  looks like an unconfigured integration" trap, so it went now rather than later.
+  `services/documentsService.ts` was never an importer: it mentions Supabase only in a
+  header comment saying it used to be one. **All 6 remaining importers are inside the two
+  dead Settings trees or `components/Permissions/`** — so this sweep is now entirely
+  subsumed by the Settings rebuild in §2. There is no Supabase import left outside it.
+- 12 files mention Supabase in total (was 14; `SavedSearchesPage.tsx` and
+  `services/disqualificationService.ts` both went with the Lead Gen deletion)
+- Of those, `pages/Auth/LoginWireframe.tsx` is worth its own look: it is a **routed** page
+  that documents "Supabase Auth", `auth.signInWithPassword()` and "CSRF Protection: Handled
+  by Supabase" as this product's auth design. It is not code that runs, but it is a
+  wireframe actively describing an architecture that was never real, and it contradicts the
+  actual `authController` SSO contract. Delete or rewrite it with the sweep.
 - `@supabase/supabase-js ^2.57.4` in `Frontend/package.json`
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` references
 

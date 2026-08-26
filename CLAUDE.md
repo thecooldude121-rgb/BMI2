@@ -133,6 +133,15 @@ counts like "147 contacts" and "$2.4M pipeline" surviving across pages).
 - Never leave test/seed records (`*-test`, `probe@`, "Isolation Test Co", etc.) in live
   data. Clean up any record you create for verification **in the same session you create
   it** — do not let it become the next session's mystery.
+- **A component tree with zero data-fetching calls is suspected fabricated code — report it,
+  do not assume it is a work in progress.** Grep the whole tree for `fetch(`, the API client
+  and the data contexts; if the count is zero across every file, the feature is backed by
+  nothing no matter how finished the UI looks. This has now happened twice at whole-feature
+  scale: the six-widget dashboard built from hardcoded literals, and a second complete Deals
+  implementation (`components/Deals/`, 8 files, ~4,400 lines, routed and drag-and-droppable)
+  whose data came from `generateSampleDeals()` — zero `fetch` calls in the entire directory,
+  sitting next to the real `DataContext`-backed one. Both read as unfinished work; both were
+  finished, and fake. The tell is cheap to check and the assumption is expensive.
 
 ## Core data model (spec — reconcile against actual DB before relying on it)
 ```sql

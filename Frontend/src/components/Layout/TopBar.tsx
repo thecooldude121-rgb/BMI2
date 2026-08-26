@@ -22,7 +22,6 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   if (pathname.startsWith('/hrms'))              return { label: 'HRMS' };
   if (pathname.startsWith('/analytics'))         return { label: 'Analytics' };
   if (pathname.startsWith('/calendar'))          return { label: 'Calendar' };
-  if (pathname.startsWith('/lead-generation'))   return { label: 'Lead Generation' };
   if (pathname.startsWith('/sequences'))         return { label: 'Sequences' };
   if (pathname.startsWith('/integrations'))      return { label: 'Integrations' };
   if (pathname.startsWith('/settings'))          return { label: 'Settings' };

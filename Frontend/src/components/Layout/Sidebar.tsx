@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, Users, Building, DollarSign,
-  Activity, FileText, BarChart3, Target, Calendar, UserCheck,
+  Activity, FileText, BarChart3, Calendar, UserCheck,
   Plug, Settings, Trophy, ChevronDown, ChevronRight,
   Building2, Phone, Video, CheckSquare, PanelLeftClose,
   PanelLeftOpen, Bookmark, Clock, PauseCircle
@@ -53,7 +53,6 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     label: 'Modules',
     items: [
       { name: 'HRMS',            href: '/hrms',                         icon: UserCheck },
-      { name: 'Lead Generation', href: '/lead-generation/dashboard',    icon: Target },
       { name: 'Analytics',       href: '/analytics',                    icon: BarChart3 },
       { name: 'Calendar',        href: '/calendar',                     icon: Calendar },
       { name: 'Team',            href: '/team',                         icon: Users },

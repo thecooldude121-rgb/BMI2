@@ -32,30 +32,18 @@ const AccountsModule = lazy(() => import('./pages/Accounts'));
 const HRMSModule = lazy(() => import('./pages/HRMS/HRMSModule'));
 const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
 const Calendar = lazy(() => import('./pages/Calendar/Calendar'));
-const LeadGenerationModule = lazy(() => import('./pages/LeadGeneration/LeadGenerationModule'));
-const DisqualificationDemo = lazy(() => import('./pages/LeadGeneration/DisqualificationDemo'));
-const RateLimitDemo = lazy(() => import('./pages/LeadGeneration/RateLimitDemo'));
-const InvalidAPIKeyDemo = lazy(() => import('./pages/LeadGeneration/InvalidAPIKeyDemo'));
-const NetworkConnectionErrorDemo = lazy(() => import('./pages/LeadGeneration/NetworkConnectionErrorDemo'));
-const PartialEnrichmentDemo = lazy(() => import('./pages/LeadGeneration/PartialEnrichmentDemo'));
-const DataConflictDemo = lazy(() => import('./pages/LeadGeneration/DataConflictDemo'));
-const FieldLevelActionsDemo = lazy(() => import('./pages/LeadGeneration/FieldLevelActionsDemo'));
 const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'));
 const LoginWireframe = lazy(() => import('./pages/Auth/LoginWireframe'));
 const SequencesAutomationPage = lazy(() => import('./pages/Sequences'));
 const IntegrationsPage = lazy(() => import('./pages/Settings/IntegrationsPage'));
 const WorkflowAutomationPage = lazy(() => import('./pages/Settings/WorkflowAutomationPage'));
 const NotificationsManagementPage = lazy(() => import('./pages/Settings/NotificationsManagementPage'));
-const CampaignWizardStep2Demo = lazy(() => import('./pages/LeadGeneration/CampaignWizardStep2Demo'));
-const CampaignWizardStep3Demo = lazy(() => import('./pages/LeadGeneration/CampaignWizardStep3Demo'));
 
 // These modules export their page as a NAMED export, so it has to be remapped
 // to `default` — React.lazy only accepts a module whose default is a component.
-const RealTimeProgressDemo = lazy(() => import('./pages/LeadGeneration/RealTimeProgressDemo').then(m => ({ default: m.RealTimeProgressDemo })));
 const IntegrationsHub = lazy(() => import('./pages/Integrations').then(m => ({ default: m.IntegrationsHub })));
 const TeamPerformancePage = lazy(() => import('./pages/Team').then(m => ({ default: m.TeamPerformancePage })));
 const TeamMemberDetailPage = lazy(() => import('./pages/Team').then(m => ({ default: m.TeamMemberDetailPage })));
-const CampaignWizardStep1Demo = lazy(() => import('./pages/LeadGeneration/CampaignWizardStep1Demo').then(m => ({ default: m.CampaignWizardStep1Demo })));
 
 
 /** Shown while a route's chunk downloads. Deliberately quiet — a full-page
@@ -150,18 +138,6 @@ const App = () => {
                   <Route path="/hrms/*" element={<RequireAuth><Layout><HRMSModule /></Layout></RequireAuth>} />
                   <Route path="/analytics" element={<RequireAuth><Layout><Analytics /></Layout></RequireAuth>} />
                   <Route path="/calendar" element={<RequireAuth><Layout><Calendar /></Layout></RequireAuth>} />
-                  <Route path="/lead-generation/*" element={<RequireAuth><Layout><LeadGenerationModule /></Layout></RequireAuth>} />
-                  <Route path="/demo/disqualification" element={<RequireAuth><Layout><DisqualificationDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/rate-limit" element={<RequireAuth><Layout><RateLimitDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/invalid-api-key" element={<RequireAuth><Layout><InvalidAPIKeyDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/network-error" element={<RequireAuth><Layout><NetworkConnectionErrorDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/partial-enrichment" element={<RequireAuth><Layout><PartialEnrichmentDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/data-conflict" element={<RequireAuth><Layout><DataConflictDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/real-time-progress" element={<RequireAuth><Layout><RealTimeProgressDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/field-level-actions" element={<RequireAuth><Layout><FieldLevelActionsDemo /></Layout></RequireAuth>} />
-                  <Route path="/demo/campaign-wizard-step1" element={<RequireAuth><Layout><CampaignWizardStep1Demo /></Layout></RequireAuth>} />
-                  <Route path="/demo/campaign-wizard-step2" element={<RequireAuth><Layout><CampaignWizardStep2Demo /></Layout></RequireAuth>} />
-                  <Route path="/demo/campaign-wizard-step3" element={<RequireAuth><Layout><CampaignWizardStep3Demo /></Layout></RequireAuth>} />
                   <Route path="/sequences" element={<RequireAuth><Layout><SequencesAutomationPage /></Layout></RequireAuth>} />
                   <Route path="/integrations" element={<RequireAuth><Layout><IntegrationsHub /></Layout></RequireAuth>} />
                   <Route path="/team" element={<RequireAuth><Layout><TeamPerformancePage /></Layout></RequireAuth>} />
