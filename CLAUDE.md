@@ -449,6 +449,21 @@ something directly, do that instead of reasoning about what should be true.**
    **If you have to manufacture a credential, seed a value, or poke internal state to make
    something work, that is a finding — not a setup step.** Stop and report it. The workaround
    is the bug telling you where it lives.
+
+   **When a verification step cannot be performed as specified, say so explicitly and explain
+   why it does or does not matter for that specific change. Never silently substitute a
+   weaker check.** A substituted check reported as a clean pass is how a fix stays broken for
+   three commits. Name what you could not do, what you did instead, and what that leaves
+   unproven — then let the reader judge the gap. Worked examples from this project:
+   - `/integrations` was verified by direct URL rather than a sidebar click, because a dev
+     widget was intercepting the click. Stated, with the reason it was tolerable there: the
+     object of verification was what the page *rendered*, not the nav path. Had the change
+     been about navigation — as the Lead Generation deletion was, where sidebar absence was
+     the whole point — the same substitution would have invalidated the result.
+   - The `RecentActivity` route repair could not be exercised by click at all, because
+     `activities` is 0 rows and the feed renders its empty state. Reported as not proven
+     rather than counted as passing; fabricating an activity to force the path would have
+     broken the no-fabricated-data rule to satisfy a verification rule.
 3. **Type errors in this project have twice concealed live, user-facing bugs — treat the
    count as a signal, not noise.** `AccountFormPage` read `account.address` (the field is
    `billingAddress`) and wrote a key the payload mapper never read, so the account edit form
