@@ -32,34 +32,21 @@ const VALID_STATUSES = ['planned', 'completed', 'cancelled', 'no_show', 'resched
 const VALID_DIRECTIONS = ['inbound', 'outbound'] as const;
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 
-/**
- * SQL fragment that stores a client-supplied timestamp as the WALL CLOCK the
- * column expects.
+/*
+ * Timestamps need no special handling here any more.
  *
- * activities.scheduled_at / completed_at / created_at / updated_at are all
- * `timestamp WITHOUT time zone`, and the server's own writes use NOW(), which
- * for that type is local wall-clock time. A client sending an ISO instant
- * ("2026-12-01T09:00:00.000Z") therefore had its offset SILENTLY DROPPED by the
- * driver: the UTC hour was stored as though it were local.
+ * Phase 3 (14/n) wrapped these columns in
+ * `$n::timestamptz AT TIME ZONE current_setting('TimeZone')` because
+ * scheduled_at / completed_at / created_at were `timestamp WITHOUT time zone`:
+ * the driver dropped the offset from any ISO instant a client sent, storing the
+ * UTC hour as though it were local. An activity logged at 14:32 came out with
+ * created_at 14:32 and completed_at 09:02.
  *
- * The damage was visible inside a single row. An activity logged at 14:32 local
- * was stored with created_at 14:32 (from NOW()) and completed_at 09:02 (from an
- * ISO string), i.e. completed five and a half hours BEFORE it was created. A
- * meeting a user scheduled for 14:30 was stored, and shown back, as 09:00.
- *
- * `$n::timestamptz AT TIME ZONE current_setting('TimeZone')` fixes both
- * directions:
- *   - an offset-bearing string is parsed as an absolute instant, then converted
- *     to the server's local wall clock, so it agrees with NOW()
- *   - an offset-free string ("2026-12-01 14:30") is parsed in the server zone
- *     and comes back unchanged, so a naive client is not shifted either
- *   - NULL stays NULL
- *
- * The real fix is `timestamptz` columns, which can represent an instant. That
- * is a schema-wide change — every timestamp on leads, deals, tasks and
- * activities, plus every read — and belongs in its own migration, not here.
+ * Migration 021 converted every timestamp column in the schema to timestamptz,
+ * which removes the cause, so the wrapper is gone and the parameters are passed
+ * straight through. A timestamptz column stores the instant a client sent,
+ * whatever offset it carried, and NOW() agrees with it.
  */
-const AS_LOCAL = (n: number) => `$${n}::timestamptz AT TIME ZONE current_setting('TimeZone')`;
 
 /** Exactly one parent must be supplied. */
 const PARENTS = ['lead_id', 'deal_id', 'contact_id', 'company_id'] as const;
@@ -203,16 +190,15 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
          (subject, type, direction, status, priority, description, outcome,
           duration, scheduled_at, completed_at, created_by, assigned_to,
           lead_id, deal_id, contact_id, company_id, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${AS_LOCAL(9)},
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
                -- completed_at defaults to now when the caller logs something
                -- already done, so a logged call is never left without a time.
-               -- NOW() rather than a JS ISO string: see AS_LOCAL above.
-               -- The fallback is decided in JS rather than with a
-               -- CASE WHEN on the status parameter: reusing that placeholder
-               -- makes it both an insert value for a varchar column and a text
-               -- comparison, and Postgres resolves ONE type per parameter --
-               -- "inconsistent types deduced for parameter $4".
-               COALESCE(${AS_LOCAL(10)}, ${resolvedStatus === 'completed' ? 'NOW()' : 'NULL'}),
+               -- The fallback is decided in JS rather than with a CASE WHEN on
+               -- the status parameter: reusing that placeholder makes it both an
+               -- insert value for a varchar column and a text comparison, and
+               -- Postgres resolves ONE type per parameter -- "inconsistent
+               -- types deduced for parameter $4".
+               COALESCE($10::timestamptz, ${resolvedStatus === 'completed' ? 'NOW()' : 'NULL'}),
                $11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       [
@@ -258,14 +244,8 @@ export const updateActivity = async (req: AuthRequest, res: Response, next: Next
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
-    // The two timestamp columns go through AS_LOCAL for the same reason as the
-    // insert; everything else is stored verbatim.
-    const TIMESTAMP_FIELDS = new Set(['scheduled_at', 'completed_at']);
     UPDATABLE.forEach(f => {
-      if (req.body[f] === undefined) return;
-      updates.push(TIMESTAMP_FIELDS.has(f) ? `${f} = ${AS_LOCAL(i)}` : `${f} = $${i}`);
-      params.push(req.body[f]);
-      i++;
+      if (req.body[f] !== undefined) { updates.push(`${f} = $${i++}`); params.push(req.body[f]); }
     });
 
     // Completing an activity stamps completed_at unless the caller set it, so

@@ -252,7 +252,50 @@ export const runMigrations = async (): Promise<void> => {
       ? `✅ migrations: ${ran} applied, ${files.length - ran} already up to date`
       : `✅ migrations: up to date (${files.length} known)`
   );
+
+  await warnOnNaiveTimestamps();
 };
+
+/**
+ * Warn if any `timestamp WITHOUT time zone` column exists.
+ *
+ * Migration 021 converted all 50 of them because a naive column cannot hold an
+ * instant: the driver drops the offset from any ISO timestamp a client sends and
+ * stores the UTC hour as local. That produced rows whose completed_at preceded
+ * their own created_at, and a meeting saved at 14:30 that read back as 09:00.
+ *
+ * The failure is silent — nothing errors, the data is just wrong by one offset —
+ * so a `CREATE TABLE ... created_at TIMESTAMP` in some future migration would
+ * reintroduce it with no symptom until someone in another timezone noticed. This
+ * makes it visible on every boot.
+ *
+ * A warning, not a failure: refusing to start would turn a schema-hygiene note
+ * into an outage, and the same reasoning already governs migration leniency in
+ * dev above.
+ */
+async function warnOnNaiveTimestamps(): Promise<void> {
+  try {
+    const { rows } = await pool.query<{ table_name: string; column_name: string }>(
+      `SELECT c.table_name, c.column_name
+         FROM information_schema.columns c
+         JOIN information_schema.tables t
+           ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+        WHERE c.table_schema = 'public'
+          AND c.data_type = 'timestamp without time zone'
+          AND t.table_type = 'BASE TABLE'
+        ORDER BY c.table_name, c.column_name`,
+    );
+    if (rows.length === 0) return;
+    console.warn(
+      `⚠️  ${rows.length} timestamp column(s) are "without time zone" and will silently ` +
+      `drop the offset from any ISO timestamp a client sends. Convert them to timestamptz ` +
+      `in a migration — see 021_timestamps_to_timestamptz.sql:\n` +
+      rows.map(r => `     ${r.table_name}.${r.column_name}`).join('\n'),
+    );
+  } catch {
+    // A diagnostic must never be the reason the server fails to start.
+  }
+}
 
 // Allow `npm run db:migrate` to run this standalone.
 //
