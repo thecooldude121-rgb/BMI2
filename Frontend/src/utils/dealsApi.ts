@@ -238,6 +238,41 @@ export async function fetchDeals(limit = 50): Promise<any[]> {
   return json.success ? json.data : [];
 }
 
+/** The subset of a deal row the contact and account pages render. */
+export interface RelatedDeal {
+  id: string;
+  name: string;
+  value: number | string | null;
+  stage: string | null;
+  probability: number | null;
+  expected_close_date: string | null;
+  assigned_to: string | null;
+  contact_email: string | null;
+  company_name: string | null;
+}
+
+/**
+ * Deals belonging to a contact, matched on `deals.contact_email`.
+ *
+ * That text column is the ONLY link deals carry to a contact — the table has no
+ * contact_id (see the note in getDeals). So this is a genuine read of a weak
+ * link, not a guess, and the caller must SAY it is matched by email rather than
+ * implying a hard relationship.
+ *
+ * Throws on failure. Returning [] would render "no deals" for a contact who has
+ * them, which is the same class of untruth as inventing one.
+ */
+export async function fetchDealsForContact(email: string): Promise<RelatedDeal[]> {
+  if (!email) return [];
+  const res = await fetch(
+    `${API_BASE}/deals?contact_email=${encodeURIComponent(email)}&limit=50`,
+    { headers: getAuthHeaders() },
+  );
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load deals (HTTP ${res.status})`);
+  return (json.data ?? []) as RelatedDeal[];
+}
+
 export async function getDeal(id: string): Promise<{ success: boolean; data: any }> {
   const res = await fetch(`${API_BASE}/deals/${id}`, {
     headers: getAuthHeaders(),

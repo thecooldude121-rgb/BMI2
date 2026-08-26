@@ -130,6 +130,81 @@ export async function createActivity(
   return json.data;
 }
 
+/**
+ * The timestamp an activity should be ordered and displayed by.
+ *
+ * An activity has EITHER completed_at (it happened) or scheduled_at (it is
+ * planned) — never both, because setting both makes it ambiguous whether it has
+ * occurred. Ordering on completed_at alone puts every planned activity at the
+ * Unix epoch, which is how a "next week" meeting sorts to the bottom of a
+ * newest-first timeline. created_at is the last resort: a row always has one.
+ */
+export function activityTimestamp(a: Pick<ActivityRecord, 'completed_at' | 'scheduled_at' | 'created_at'>): string {
+  return a.completed_at ?? a.scheduled_at ?? a.created_at;
+}
+
+/** Newest first, on whichever timestamp each activity actually carries. */
+export function sortActivitiesNewestFirst<T extends Pick<ActivityRecord, 'completed_at' | 'scheduled_at' | 'created_at'>>(
+  activities: readonly T[],
+): T[] {
+  return [...activities].sort(
+    (a, b) => new Date(activityTimestamp(b)).getTime() - new Date(activityTimestamp(a)).getTime(),
+  );
+}
+
+/** What a form collects before it becomes an activity. */
+export interface ActivityDraft {
+  subject: string;
+  type: ActivityType;
+  /** 'now' = it already happened, 'later' = planned. */
+  when: 'now' | 'later';
+  /** Required when when === 'later'. A local datetime-input value. */
+  scheduledAt?: string;
+  direction?: 'inbound' | 'outbound';
+  /** Raw text from a number input, so '' means "not entered", not zero. */
+  duration?: string;
+  description?: string;
+  outcome?: string;
+}
+
+/**
+ * Turn a draft into the body POST /activities expects.
+ *
+ * Three rules that are easy to get wrong and impossible to see once stored:
+ *
+ *  1. completed_at and scheduled_at are mutually exclusive. Setting both makes
+ *     it undecidable whether the activity happened, and the timeline orders on
+ *     whichever is present (see activityTimestamp).
+ *  2. duration comes from a text input, and Number('') is 0 — so a call the
+ *     user did not time would be recorded as a zero-minute call rather than a
+ *     call of unknown length. Blank must be omitted.
+ *  3. Whitespace-only text is not text. '   ' in a notes field must not become
+ *     a description, or the UI renders an empty paragraph that looks like data.
+ *
+ * `now` is injected rather than read from the clock so this is testable.
+ */
+export function buildActivityPayload(draft: ActivityDraft, now: Date): Record<string, unknown> {
+  const trimmed = (v: string | undefined) => (v ?? '').trim();
+  const payload: Record<string, unknown> = {
+    subject: trimmed(draft.subject),
+    type: draft.type,
+    status: draft.when === 'now' ? 'completed' : 'planned',
+  };
+
+  if (draft.when === 'now') payload.completed_at = now.toISOString();
+  else if (draft.scheduledAt) payload.scheduled_at = new Date(draft.scheduledAt).toISOString();
+
+  if (draft.direction) payload.direction = draft.direction;
+
+  const duration = trimmed(draft.duration);
+  if (duration !== '' && Number.isFinite(Number(duration))) payload.duration = Number(duration);
+
+  if (trimmed(draft.description)) payload.description = trimmed(draft.description);
+  if (trimmed(draft.outcome)) payload.outcome = trimmed(draft.outcome);
+
+  return payload;
+}
+
 export async function updateActivity(id: string, updates: Partial<ActivityRecord>): Promise<ActivityRecord> {
   const json = await request<{ data: ActivityRecord }>(`/activities/${encodeURIComponent(id)}`, {
     method: 'PUT',

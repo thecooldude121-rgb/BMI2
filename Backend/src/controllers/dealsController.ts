@@ -6,7 +6,7 @@ import { requireTenantId } from '../middleware/tenant';
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { stage, assigned_to, search, limit = 50, offset = 0, include_test } = req.query;
+    const { stage, assigned_to, search, contact_email, company_name, limit = 50, offset = 0, include_test } = req.query;
     // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
     // produce duplicate rows for the same deal.  Duplicate cards on the board
     // are caused by genuine duplicate rows in the deals table (different ids,
@@ -43,6 +43,22 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     if (stage)       { query += ` AND d.stage = $${i++}`;             params.push(stage); }
     if (assigned_to) { query += ` AND d.assigned_to = $${i++}`;       params.push(assigned_to); }
     if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${search}%`); i++; }
+
+    // contact_email / company_name: the ONLY link deals carry to a contact or an
+    // account. `deals` has no contact_id and no account_id — just the free-text
+    // columns company_name, contact_name, contact_email, contact_title. So the
+    // contact detail page finds a contact's deals by matching the email it
+    // stored, case-insensitively because nothing normalises either side.
+    //
+    // This is a weak link and should become a real FK. Deliberately NOT done as
+    // part of this: of 25 deals exactly one carries a contact_email and it
+    // matches no contact, so a backfill would set zero rows, and the deal form
+    // still writes free text — the column would be dead schema. Add
+    // deals.contact_id together with a contact picker in the deal form, and
+    // backfill then.
+    if (contact_email) { query += ` AND lower(d.contact_email) = lower($${i++})`; params.push(contact_email); }
+    if (company_name)  { query += ` AND lower(d.company_name)  = lower($${i++})`; params.push(company_name); }
+
     query += ` ORDER BY d.created_at DESC LIMIT $${i++} OFFSET $${i}`;
     params.push(limit, offset);
     const result = await pool.query(query, params);

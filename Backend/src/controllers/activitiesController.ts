@@ -32,6 +32,35 @@ const VALID_STATUSES = ['planned', 'completed', 'cancelled', 'no_show', 'resched
 const VALID_DIRECTIONS = ['inbound', 'outbound'] as const;
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 
+/**
+ * SQL fragment that stores a client-supplied timestamp as the WALL CLOCK the
+ * column expects.
+ *
+ * activities.scheduled_at / completed_at / created_at / updated_at are all
+ * `timestamp WITHOUT time zone`, and the server's own writes use NOW(), which
+ * for that type is local wall-clock time. A client sending an ISO instant
+ * ("2026-12-01T09:00:00.000Z") therefore had its offset SILENTLY DROPPED by the
+ * driver: the UTC hour was stored as though it were local.
+ *
+ * The damage was visible inside a single row. An activity logged at 14:32 local
+ * was stored with created_at 14:32 (from NOW()) and completed_at 09:02 (from an
+ * ISO string), i.e. completed five and a half hours BEFORE it was created. A
+ * meeting a user scheduled for 14:30 was stored, and shown back, as 09:00.
+ *
+ * `$n::timestamptz AT TIME ZONE current_setting('TimeZone')` fixes both
+ * directions:
+ *   - an offset-bearing string is parsed as an absolute instant, then converted
+ *     to the server's local wall clock, so it agrees with NOW()
+ *   - an offset-free string ("2026-12-01 14:30") is parsed in the server zone
+ *     and comes back unchanged, so a naive client is not shifted either
+ *   - NULL stays NULL
+ *
+ * The real fix is `timestamptz` columns, which can represent an instant. That
+ * is a schema-wide change — every timestamp on leads, deals, tasks and
+ * activities, plus every read — and belongs in its own migration, not here.
+ */
+const AS_LOCAL = (n: number) => `$${n}::timestamptz AT TIME ZONE current_setting('TimeZone')`;
+
 /** Exactly one parent must be supplied. */
 const PARENTS = ['lead_id', 'deal_id', 'contact_id', 'company_id'] as const;
 
@@ -167,23 +196,29 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
     }
 
     const actor = await resolveActorName(req);
-    // completed_at defaults to now when the caller logs something already done,
-    // so a logged call is not left with an empty timestamp.
     const resolvedStatus = status || 'planned';
-    const resolvedCompletedAt =
-      completed_at ?? (resolvedStatus === 'completed' ? new Date().toISOString() : null);
 
     const result = await pool.query(
       `INSERT INTO activities
          (subject, type, direction, status, priority, description, outcome,
           duration, scheduled_at, completed_at, created_by, assigned_to,
           lead_id, deal_id, contact_id, company_id, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,${AS_LOCAL(9)},
+               -- completed_at defaults to now when the caller logs something
+               -- already done, so a logged call is never left without a time.
+               -- NOW() rather than a JS ISO string: see AS_LOCAL above.
+               -- The fallback is decided in JS rather than with a
+               -- CASE WHEN on the status parameter: reusing that placeholder
+               -- makes it both an insert value for a varchar column and a text
+               -- comparison, and Postgres resolves ONE type per parameter --
+               -- "inconsistent types deduced for parameter $4".
+               COALESCE(${AS_LOCAL(10)}, ${resolvedStatus === 'completed' ? 'NOW()' : 'NULL'}),
+               $11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       [
         String(subject).trim(), type || 'note', direction || null, resolvedStatus,
         priority || 'medium', description || null, outcome || null,
-        duration ?? null, scheduled_at || null, resolvedCompletedAt,
+        duration ?? null, scheduled_at || null, completed_at || null,
         actor, assigned_to || actor,
         lead_id ?? null, deal_id ?? null, contact_id ?? null, company_id ?? null,
         tenantId,
@@ -223,8 +258,14 @@ export const updateActivity = async (req: AuthRequest, res: Response, next: Next
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
+    // The two timestamp columns go through AS_LOCAL for the same reason as the
+    // insert; everything else is stored verbatim.
+    const TIMESTAMP_FIELDS = new Set(['scheduled_at', 'completed_at']);
     UPDATABLE.forEach(f => {
-      if (req.body[f] !== undefined) { updates.push(`${f} = $${i++}`); params.push(req.body[f]); }
+      if (req.body[f] === undefined) return;
+      updates.push(TIMESTAMP_FIELDS.has(f) ? `${f} = ${AS_LOCAL(i)}` : `${f} = $${i}`);
+      params.push(req.body[f]);
+      i++;
     });
 
     // Completing an activity stamps completed_at unless the caller set it, so
