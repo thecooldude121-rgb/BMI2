@@ -1428,7 +1428,9 @@ const LeadsPage: React.FC = () => {
           isOpen={isModalOpen('convertLead')}
           onClose={closeModal}
           onUpdateLead={async (id, updates) => {
-            await updateLead(id, updates);
+            // Returned so the wizard can tell success from a rejected write.
+            const accepted = await updateLead(id, updates);
+            if (!accepted) return false;
             if (updates.status === 'converted') {
               const targetType =
                 updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
@@ -1436,6 +1438,7 @@ const LeadsPage: React.FC = () => {
                 : 'contact';
               actions.convert(activeLead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
             }
+            return true;
           }}
         />
       )}

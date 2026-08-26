@@ -212,6 +212,74 @@ sequence the two together rather than fixing files that are about to go.
 
 ## 4. Known gaps — real, and deliberately not fixed
 
+### Lead conversion has NEVER worked — scoped Phase 1 item, not a regression
+
+**Read this first: nothing was rolled back.** The Convert Lead wizard could not have saved a
+conversion on any day of this project's life. It was narrowed to fail honestly instead of
+falsely reporting success, and the feature below is what would make it actually work. If you
+see the wizard now showing "Conversion failed — nothing was saved", that is the fix, not the
+break.
+
+What was wrong, verified against the running API rather than inferred:
+
+- `handleConvert` never created anything. It minted ids from a timestamp —
+  `cnt_${Date.now()}`, `acc_${...}`, `deal_${...}` — and sent them as if records existed.
+  There is no POST to contacts, accounts or deals anywhere in the flow.
+- `leadsApi` maps `status` -> `stage`, so the request carried `stage: 'converted'`.
+  `VALID_STAGES` is `new, contacted, qualified, proposal, won, lost`. Sending exactly that
+  payload returns **HTTP 400**, `"stage must be one of: ..."`.
+- The conversion fields alone return **HTTP 400**, `"No valid fields to update"` — they are
+  not in `UPDATABLE_FIELDS`.
+- **The columns do not exist.** On `leads`, of `converted_at`, `converted_to_contact_id`,
+  `converted_to_deal_id`, `account_id`, none are present. Only `status` is.
+- `updateLeadViaAPI` caught the 400, logged it and returned `null`; the wizard ignored the
+  falsy result and advanced to step 4. Fixed — it throws now, and the wizard renders the
+  server's message.
+- `LeadContext.convertLead` (line ~378) is itself a stub returning `{ contactId: undefined,
+  dealId: undefined }`. `detectDuplicates` returns `[]` and `mergeLeads` returns `true`
+  without doing anything. That stub is the natural home for the real implementation.
+
+**To build it, in dependency order:**
+
+1. **Migration** — add to `leads`: `converted_at TIMESTAMPTZ`,
+   `converted_to_contact_id UUID REFERENCES contacts(id)`,
+   `converted_to_deal_id UUID REFERENCES deals(id)`,
+   `account_id UUID REFERENCES companies(id)`. All nullable. Note the FK caveat in
+   `CLAUDE.md`: these reference GLOBAL primary keys, so Postgres will happily accept a row
+   in workspace A pointing at workspace B — the write must be validated (step 4).
+2. **Settle the stage/status vocabulary.** `VALID_STAGES` and `VALID_STATUSES` are two
+   different vocabularies and `leadsApi` silently maps one onto the other. Decide whether
+   "converted" is a stage, a status, or neither (it may belong only in `converted_at` being
+   non-null). Do not add `'converted'` to `VALID_STAGES` without deciding — the frontend
+   `Lead.status` / DB `leads.status` mismatch is already recorded as known schema drift.
+3. **Extend `UPDATABLE_FIELDS`** in `leadsController` with the new columns, once they exist.
+4. **Real record creation with FK ownership validation.** Conversion creates a contact, and
+   optionally a company and a deal, then links them. Every FK must be proven to belong to
+   the caller's workspace before insert — use `utils/tenantScope.ts`, reject with 400 naming
+   the field, per the settled contract in `src/__tests__/tenantIsolation.test.ts`. Do it in
+   ONE transaction: a half-converted lead pointing at a contact that failed to insert is
+   worse than a failed conversion.
+5. **Contact and account search endpoints**, to replace the two pickers. The wizard's
+   "Link to Existing" path is currently **disabled and labelled** because its contact list
+   came from `DataContext` (sample-seeded) and its account list from a `MOCK_ACCOUNTS` array
+   in the wizard file. Both are deleted. Re-enable the path only when real search exists.
+6. **Match suggestions** — deleted along with `buildSuggestions`, whose matching was far
+   weaker than the real engine (contacts on email-DOMAIN equality alone, which flags every
+   colleague at a shared domain; accounts on bidirectional substring containment). If
+   suggestions come back, route them through `utils/leadDuplicates.ts`, not a new heuristic.
+
+**Left alone deliberately:** `findDuplicates` from `utils/leadDuplicates.ts` — a tested
+4-signal engine (email, phone, company domain, name similarity via levenshtein) running
+against `LeadContext`'s API-backed leads. It is real, it works, and it still gates step 2.
+Verified live: it correctly flagged "Liam Johnson · Similar name (medium)" against a real lead.
+
+**Also note the same swallow pattern remains in ~10 other `leadsApi` functions**
+(`createLeadViaAPI`, `createNoteViaAPI`, `createTaskViaAPI`, `logEmailViaAPI`,
+`logCallViaAPI`, `scheduleMeetingViaAPI`, and others all `catch` -> `console.error` ->
+`return null`). Only `updateLeadViaAPI` was fixed, to keep the narrowing pass narrow. Each
+is a place where a rejected write can read as a successful one.
+
+
 ### Fabricated data still in the tree — three finds, one pattern
 
 Tracked here rather than mentioned in passing, because this is now a **recurring class of

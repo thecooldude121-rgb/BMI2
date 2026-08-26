@@ -132,26 +132,34 @@ export async function createLeadViaAPI(lead: Partial<Lead>): Promise<Lead | null
   }
 }
 
-export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Promise<Lead | null> {
-  try {
-    // Translate frontend field names → DB column names (status → stage)
-    const payload: Record<string, any> = { ...updates };
-    if ('status' in payload) {
-      payload.stage = payload.status;
-      delete payload.status;
-    }
-    const res = await fetch(`${API_BASE}/leads/${id}`, {
-      method:  'PUT',
-      headers: getAuthHeaders(),
-      body:    JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.message || 'Failed to update lead');
-    return mapRowToLead(json.data);
-  } catch (err: any) {
-    console.error('[leadsApi] updateLead:', err.message);
-    return null;
+/**
+ * Throws on a rejected write. It used to catch, console.error and return null,
+ * which is how the lead-conversion wizard came to show a success screen for a
+ * write that never happened: the server returned 400, the message went to the
+ * console, the caller saw a falsy value it was not checking, and the UI advanced.
+ * A silent null is indistinguishable from "nothing to update" at the call site.
+ *
+ * Callers that only need success/failure keep using LeadContext.updateLead, which
+ * still returns a boolean; it catches this and also records the message on
+ * `lastWriteError` so a caller can show what actually went wrong.
+ */
+export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Promise<Lead> {
+  // Translate frontend field names → DB column names (status → stage)
+  const payload: Record<string, any> = { ...updates };
+  if ('status' in payload) {
+    payload.stage = payload.status;
+    delete payload.status;
   }
+  const res = await fetch(`${API_BASE}/leads/${id}`, {
+    method:  'PUT',
+    headers: getAuthHeaders(),
+    body:    JSON.stringify(payload),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json.message || `Failed to update lead (HTTP ${res.status})`);
+  }
+  return mapRowToLead(json.data);
 }
 
 export async function deleteLeadViaAPI(id: string): Promise<boolean> {

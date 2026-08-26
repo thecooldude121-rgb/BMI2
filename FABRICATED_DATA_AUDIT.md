@@ -543,3 +543,56 @@ at providers and on detail pages.** Providers (`DataContext`, `AccountsContext`,
 (`/crm/deals/:id`, `/accounts/:accountId`, `/crm/documents/:id`, `/crm/meetings/:id`) because a
 detail view needs many fields, most tables only have a few, and the gap got filled with
 literals. List pages are comparatively clean. If a 28th finding exists, that is where to look.
+
+---
+
+# Finding 28 — `MOCK_ACCOUNTS`, and the structural prediction holding up
+
+Found while narrowing the lead-conversion wizard, not by either audit pass.
+
+### F28 · `components/Leads/LeadConversionWizard.tsx:73` — REMOVED
+**Fabricated:** five invented companies — `acc_mock_1` "Acme Corp" (Technology),
+`acc_mock_2` "Global Industries" (Manufacturing), `acc_mock_3` "Horizon Partners" (Finance),
+`acc_mock_4` "Nexus Solutions" (Consulting), `acc_mock_5` "Apex Ventures" (Healthcare) —
+declared as a `MOCK_ACCOUNTS` const **inside the component file itself**, independent of
+`DataContext`.
+
+**Reachable:** yes, and on a write path. It fed three things: the account branch of
+`buildSuggestions()`, the `filteredAccounts` picker in the wizard's "Link to Existing" step,
+and a name lookup inside `handleConvert`. Selecting one of these accounts was intended to
+write `account_id: 'acc_mock_1'` onto a real `leads` row.
+
+**Disposition: deleted** (done). `buildSuggestions` went with it — its contact branch was
+equally fabricated, reading `DataContext`, and its matching was weaker than the real engine
+besides: contacts on email-**domain** equality alone, which flags every colleague at a shared
+domain, arbitrarily capped at two; accounts on bidirectional substring containment of the
+company name. The "Link to Existing" path is now **disabled and labelled** rather than
+populated by fiction, because removing both fabricated sources left it nothing real to offer.
+`findDuplicates` from `utils/leadDuplicates.ts` — the tested 4-signal engine — was untouched
+and still gates the duplicates step.
+
+### The structural claim is holding
+
+The main report closed by predicting that fabrication in this codebase clusters at
+**providers** and **detail pages**, that list pages are comparatively clean, and that a 28th
+finding would be found in one of those places rather than on a list page.
+
+F28 landed on a **detail-page modal** — the conversion wizard, reachable from
+`/crm/leads/:id`. Not a list page. That is now three for three:
+
+| Finding | Where | Shape |
+|---|---|---|
+| F1 `DataContext` | provider | ten collections seeded from a fixture |
+| F22 `IntegrationsContext` | provider | whole subsystem + a fake `sk_live_` credential |
+| F28 `MOCK_ACCOUNTS` | detail-page modal | a const array inside the component file |
+
+The mechanism is also consistent: a detail view needs many fields, most tables have few, and
+the gap gets filled with literals — which is why `/crm/deals/:id` (F24),
+`/accounts/:accountId` (F25), `/crm/documents/:id` (F27) and now the lead conversion wizard
+all carry it, while `LeadsPage`, `ContactsPage` and `DealsKanbanPage` are clean.
+
+**Revised total: 28 findings.** F22 and F28 are fixed; F24, F25, F27 and the rest remain open.
+The blind spots named in the original confidence statement still stand, and F28 is direct
+evidence for the strongest of them: it was in a file both passes had touched, and neither
+pass flagged it, because a const array in a modal is not a zero-fetch page and carries no
+currency or percent symbol.

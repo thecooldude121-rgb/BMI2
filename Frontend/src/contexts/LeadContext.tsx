@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 // All data comes from the Express backend → PostgreSQL (bmi_crm in pgAdmin 4).
 import {
   fetchLeadsFromAPI,
@@ -48,6 +48,16 @@ interface LeadContextType {
   getLead: (id: string) => Promise<Lead | null>;
   createLead: (lead: Partial<Lead>) => Promise<Lead | null>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
+  /** Server message from the last rejected write, so a caller can show the real
+   *  reason instead of reporting success. Cleared on the next successful write.
+   *  Use for RENDERING. */
+  lastWriteError: string | null;
+  /** The same message, readable synchronously. A caller that awaits updateLead()
+   *  and then reads state still holds the pre-call closure value, so it would see
+   *  null and fall back to a generic string — which is how the conversion wizard
+   *  reported "the server rejected it" without saying why. Read this instead when
+   *  you need the reason immediately after the await. */
+  lastWriteErrorRef: React.MutableRefObject<string | null>;
   deleteLead: (id: string) => Promise<boolean>;
   bulkDeleteLeads: (ids: string[]) => Promise<boolean>;
 
@@ -124,6 +134,8 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastWriteError, setLastWriteError] = useState<string | null>(null);
+  const lastWriteErrorRef = useRef<string | null>(null);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [currentFilters, setCurrentFilters] = useState<LeadFilters>({});
   const [currentView, setCurrentView] = useState<LeadView | null>(null);
@@ -157,13 +169,24 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     return created;
   };
 
+  // Keeps its Promise<boolean> contract — every existing consumer already treats
+  // false as failure — but no longer loses WHY. updateLeadViaAPI now throws with
+  // the server's message; that message is recorded on `lastWriteError` so a caller
+  // can show the real reason instead of guessing or, worse, reporting success.
   const updateLead = async (id: string, updates: Partial<Lead>): Promise<boolean> => {
-    const updated = await updateLeadViaAPI(id, updates);
-    if (updated) {
+    try {
+      await updateLeadViaAPI(id, updates);
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+      lastWriteErrorRef.current = null;
+      setLastWriteError(null);
       return true;
+    } catch (err: any) {
+      const message = err?.message || 'The server rejected the update.';
+      console.error('[LeadContext] updateLead:', message);
+      lastWriteErrorRef.current = message;
+      setLastWriteError(message);
+      return false;
     }
-    return false;
   };
 
   const deleteLead = async (id: string): Promise<boolean> => {
@@ -391,6 +414,8 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     leads,
     loading,
     error,
+    lastWriteError,
+    lastWriteErrorRef,
     selectedLeadIds,
     currentFilters,
     currentView,

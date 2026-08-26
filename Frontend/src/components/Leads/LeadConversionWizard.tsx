@@ -10,7 +10,6 @@ import {
 import type { Lead } from '../../types/lead';
 import type { ConversionReadinessResult, ConversionReadinessState } from '../../utils/conversionReadiness';
 import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
-import { useData } from '../../contexts/DataContext';
 import { useLeads } from '../../contexts/LeadContext';
 import { findDuplicates, computeRisk } from '../../utils/leadDuplicates';
 import { getPlaybook } from '../../utils/leadSourcePlaybook';
@@ -24,14 +23,6 @@ export type WizardPath =
   | 'link_existing';
 
 type WizardStep = 1 | 2 | 3 | 4;
-
-interface DuplicateSuggestion {
-  type:        'contact' | 'account';
-  id:          string;
-  name:        string;
-  subtitle:    string;
-  matchReason: string;
-}
 
 interface ConversionResult {
   contactId:    string;
@@ -50,7 +41,9 @@ export interface LeadConversionWizardProps {
   readiness:    ConversionReadinessResult;
   isOpen:       boolean;
   onClose:      () => void;
-  onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
+  /** Must report whether the write was accepted. Returning void is how this
+   *  wizard used to show "Conversion complete" for a rejected 400. */
+  onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -70,14 +63,6 @@ const DEAL_STAGES = ['Prospecting', 'Discovery', 'Proposal', 'Negotiation', 'Clo
 
 // Static mock accounts — used for "link to existing" dropdown.
 // TODO: replace with live account search when search API exists.
-const MOCK_ACCOUNTS = [
-  { id: 'acc_mock_1', name: 'Acme Corp',         industry: 'Technology'   },
-  { id: 'acc_mock_2', name: 'Global Industries',  industry: 'Manufacturing'},
-  { id: 'acc_mock_3', name: 'Horizon Partners',   industry: 'Finance'      },
-  { id: 'acc_mock_4', name: 'Nexus Solutions',    industry: 'Consulting'   },
-  { id: 'acc_mock_5', name: 'Apex Ventures',      industry: 'Healthcare'   },
-];
-
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
 function defaultPath(state: ConversionReadinessState, source?: string): WizardPath {
@@ -98,47 +83,20 @@ function leadDisplayName(lead: Lead): string {
   return lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
 }
 
-// TODO: replace with contacts/accounts search API when available.
-function buildSuggestions(
-  lead:     Lead,
-  contacts: Array<{ id: string; firstName: string; lastName: string; email: string }>,
-): DuplicateSuggestion[] {
-  const sugs: DuplicateSuggestion[] = [];
-  const domain = lead.email?.split('@')[1];
-
-  if (domain) {
-    contacts
-      .filter(c => c.email?.split('@')[1] === domain)
-      .slice(0, 2)
-      .forEach(c =>
-        sugs.push({
-          type:        'contact',
-          id:          c.id,
-          name:        `${c.firstName} ${c.lastName}`,
-          subtitle:    c.email,
-          matchReason: `same email domain (@${domain})`,
-        })
-      );
-  }
-
-  if (lead.company) {
-    const lc = lead.company.toLowerCase();
-    MOCK_ACCOUNTS
-      .filter(a => a.name.toLowerCase().includes(lc) || lc.includes(a.name.toLowerCase()))
-      .slice(0, 2)
-      .forEach(a =>
-        sugs.push({
-          type:        'account',
-          id:          a.id,
-          name:        a.name,
-          subtitle:    a.industry,
-          matchReason: 'company name match',
-        })
-      );
-  }
-
-  return sugs;
-}
+// buildSuggestions() lived here. Both of its branches were fabricated: contacts
+// came from DataContext (which seeds React state from generateSampleData() and
+// never touches the network) and accounts came from a MOCK_ACCOUNTS array defined
+// in this file — five invented companies, ids 'acc_mock_1'..'acc_mock_5'. Its
+// matching was also far weaker than the real engine: contacts matched on email
+// DOMAIN EQUALITY alone, which flags every colleague at a shared domain, capped
+// arbitrarily at two; accounts matched on bidirectional substring containment of
+// the company name.
+//
+// Removed rather than repointed. Real match suggestions need contact and account
+// SEARCH ENDPOINTS that do not exist yet — see HANDOFF.md for the scoped item.
+// The real lead-vs-lead duplicate detection (findDuplicates from
+// utils/leadDuplicates, a tested 4-signal engine running against LeadContext's
+// API-backed leads) is untouched and still gates step 2.
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
@@ -187,14 +145,23 @@ interface PathCardProps {
   selected:    boolean;
   recommended: boolean;
   onClick:     () => void;
+  /** Renders the card inert with a reason, for a path that is not built yet.
+   *  A selectable option that cannot work is worse than a visibly disabled one. */
+  disabled?:   boolean;
+  disabledNote?: string;
 }
 
-function PathCard({ icon, title, description, selected, recommended, onClick }: PathCardProps) {
+function PathCard({ icon, title, description, selected, recommended, onClick, disabled, disabledNote }: PathCardProps) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+      title={disabled ? disabledNote : undefined}
       className={`w-full flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all ${
-        selected
+        disabled
+          ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+          : selected
           ? 'border-blue-500 bg-blue-50'
           : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
       }`}
@@ -224,48 +191,6 @@ function PathCard({ icon, title, description, selected, recommended, onClick }: 
   );
 }
 
-// ── Suggestion row ────────────────────────────────────────────────────────────
-
-function SuggestionRow({
-  sug, linked, onLink, onUnlink,
-}: {
-  sug:      DuplicateSuggestion;
-  linked:   boolean;
-  onLink:   () => void;
-  onUnlink: () => void;
-}) {
-  const Icon = sug.type === 'contact' ? UserPlus : Building2;
-  return (
-    <div className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${
-      linked ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
-    }`}>
-      <span className={`p-1.5 rounded-lg shrink-0 ${linked ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-        <Icon size={12} />
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-gray-800 truncate">{sug.name}</p>
-        <p className="text-[11px] text-gray-400 truncate">{sug.subtitle}</p>
-        <p className="text-[10px] text-amber-600 mt-0.5">Match: {sug.matchReason}</p>
-      </div>
-      {linked ? (
-        <button
-          onClick={onUnlink}
-          className="text-[11px] font-medium text-red-500 hover:text-red-700 shrink-0"
-        >
-          Unlink
-        </button>
-      ) : (
-        <button
-          onClick={onLink}
-          className="text-[11px] font-medium text-blue-600 hover:text-blue-800 shrink-0 whitespace-nowrap"
-        >
-          Use this →
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ── Checklist row ─────────────────────────────────────────────────────────────
 
 function CheckRow({ label, met }: { label: string; met: boolean }) {
@@ -284,8 +209,7 @@ function CheckRow({ label, met }: { label: string; met: boolean }) {
 export default function LeadConversionWizard({
   lead, readiness, isOpen, onClose, onUpdateLead,
 }: LeadConversionWizardProps) {
-  const { contacts } = useData();
-  const { leads: allLeads } = useLeads();
+  const { leads: allLeads, lastWriteErrorRef } = useLeads();
 
   // ── Duplicate detection (for Step 2 high-risk gating) ─────────────────────
   const leadDuplicateCandidates = useMemo(
@@ -302,10 +226,9 @@ export default function LeadConversionWizard({
 
   // Step 2
   const [dupDismissed,    setDupDismissed]    = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
   const [linkedContactId, setLinkedContactId] = useState('');
   const [linkedAccountId, setLinkedAccountId] = useState('');
-  const [linkContactSearch, setLinkContactSearch] = useState('');
-  const [linkAccountSearch, setLinkAccountSearch] = useState('');
 
   // Step 3
   const [ownerId,    setOwnerId]    = useState(lead.owner_id ?? TEAM_MEMBERS[0]?.id ?? '');
@@ -329,8 +252,7 @@ export default function LeadConversionWizard({
       setDupDismissed(false);
       setLinkedContactId('');
       setLinkedAccountId('');
-      setLinkContactSearch('');
-      setLinkAccountSearch('');
+      setConvertError(null);
       setOwnerId(lead.owner_id ?? TEAM_MEMBERS[0]?.id ?? '');
       setCarryTags(true);
       setCarryNotes(true);
@@ -345,8 +267,6 @@ export default function LeadConversionWizard({
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  const suggestions = useMemo(() => buildSuggestions(lead, contacts), [lead, contacts]);
-
   const sourcePlaybook = getPlaybook(lead.source);
   const isNoDealPath   = !!sourcePlaybook.noDealPath;
 
@@ -358,20 +278,11 @@ export default function LeadConversionWizard({
   const includesDeal    = path === 'contact_account_deal';
   const isLinkExisting  = path === 'link_existing';
 
-  const filteredContacts = contacts.filter(c => {
-    const q = linkContactSearch.toLowerCase();
-    return q === '' || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || c.email.toLowerCase().includes(q);
-  }).slice(0, 8);
-
-  const filteredAccounts = MOCK_ACCOUNTS.filter(a => {
-    const q = linkAccountSearch.toLowerCase();
-    return q === '' || a.name.toLowerCase().includes(q) || a.industry.toLowerCase().includes(q);
-  });
-
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleConvert = useCallback(async () => {
     setConverting(true);
+    setConvertError(null);
     try {
       const ts = Date.now();
       const contactId = (isLinkExisting && linkedContactId) ? linkedContactId : `cnt_${ts}`;
@@ -392,11 +303,7 @@ export default function LeadConversionWizard({
         contactId,
         contactName:  leadDisplayName(lead),
         accountId,
-        accountName:  accountId
-          ? (isLinkExisting && linkedAccountId
-              ? MOCK_ACCOUNTS.find(a => a.id === linkedAccountId)?.name ?? lead.company ?? 'Account'
-              : lead.company ?? 'Account')
-          : undefined,
+        accountName:  accountId ? (lead.company ?? 'Account') : undefined,
         dealId,
         dealName:     dealId ? dealName : undefined,
         ownerLabel:   ownerMember?.label ?? ownerId,
@@ -404,13 +311,29 @@ export default function LeadConversionWizard({
         isLinked:     isLinkExisting,
       };
 
-      await onUpdateLead(lead.id, {
+      // The write decides what the user is told. This previously ignored the
+      // result and advanced to step 4 unconditionally, so a rejected 400 produced
+      // a "Conversion complete" screen naming a contact and account that were
+      // never created. Lead conversion is not implemented server-side at all (no
+      // converted_* columns, and 'converted' is not a valid stage), so today this
+      // branch is ALWAYS the one that runs.
+      const accepted = await onUpdateLead(lead.id, {
         status:                  'converted',
         converted_at:            new Date().toISOString(),
         converted_to_contact_id: contactId,
         ...(dealId    ? { converted_to_deal_id: dealId }  : {}),
         ...(accountId ? { account_id: accountId }         : {}),
       } as Partial<Lead>);
+
+      if (!accepted) {
+        // Read through the ref: state set during the await is not visible to this
+        // closure, so `lastWriteError` would still be null here.
+        setConvertError(
+          lastWriteErrorRef.current ??
+          'The server rejected the conversion and nothing was saved.'
+        );
+        return;
+      }
 
       setResult(res);
       setStep(4);
@@ -420,7 +343,7 @@ export default function LeadConversionWizard({
   }, [
     lead, isLinkExisting, linkedContactId, linkedAccountId,
     includesAccount, includesDeal, ownerId, carryTags, carryNotes, carryActs,
-    dealName, onUpdateLead,
+    dealName, onUpdateLead, lastWriteErrorRef,
   ]);
 
   if (!isOpen) return null;
@@ -560,6 +483,8 @@ export default function LeadConversionWizard({
                     selected={path === 'link_existing'}
                     recommended={false}
                     onClick={() => setPath('link_existing')}
+                    disabled
+                    disabledNote="Needs contact and account search against the database — not built yet."
                   />
                 </div>
               </div>
@@ -570,82 +495,33 @@ export default function LeadConversionWizard({
           {step === 2 && (
             <>
               {isLinkExisting ? (
-                /* Link to existing — search dropdowns */
+                /* Link to existing — UNAVAILABLE. The contact picker read
+                   DataContext (sample-seeded, never networked) and the account
+                   picker read a MOCK_ACCOUNTS array in this file. Removing the
+                   fiction leaves nothing real to offer, so the path is disabled
+                   and labelled rather than populated — the same treatment as a
+                   dead view toggle. Needs contact/account search endpoints. */
                 <div className="space-y-4">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Find Existing Records
                   </p>
-
-                  {/* Contact search */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-600">Link to Contact</label>
-                    <input aria-label="Link to Contact"
-                      type="text"
-                      placeholder="Search by name or email…"
-                      value={linkContactSearch}
-                      onChange={e => setLinkContactSearch(e.target.value)}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400"
-                    />
-                    <div className="space-y-1 max-h-36 overflow-y-auto">
-                      {filteredContacts.length > 0 ? filteredContacts.map(c => (
-                        <button
-                          key={c.id}
-                          onClick={() => setLinkedContactId(linkedContactId === c.id ? '' : c.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-colors ${
-                            linkedContactId === c.id
-                              ? 'border-blue-400 bg-blue-50'
-                              : 'border-gray-100 hover:bg-gray-50'
-                          }`}
-                        >
-                          <UserPlus size={12} className="text-gray-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 truncate">
-                              {c.firstName} {c.lastName}
-                            </p>
-                            <p className="text-[11px] text-gray-400 truncate">{c.email}</p>
-                          </div>
-                          {linkedContactId === c.id && <Check size={12} className="text-blue-500 shrink-0" />}
-                        </button>
-                      )) : (
-                        <p className="text-xs text-gray-400 py-2 text-center">No contacts found</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Account search */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-600">Link to Account</label>
-                    <input aria-label="Link to Account"
-                      type="text"
-                      placeholder="Search by company name…"
-                      value={linkAccountSearch}
-                      onChange={e => setLinkAccountSearch(e.target.value)}
-                      className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400"
-                    />
-                    <div className="space-y-1">
-                      {filteredAccounts.map(a => (
-                        <button
-                          key={a.id}
-                          onClick={() => setLinkedAccountId(linkedAccountId === a.id ? '' : a.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-colors ${
-                            linkedAccountId === a.id
-                              ? 'border-blue-400 bg-blue-50'
-                              : 'border-gray-100 hover:bg-gray-50'
-                          }`}
-                        >
-                          <Building2 size={12} className="text-gray-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-800 truncate">{a.name}</p>
-                            <p className="text-[11px] text-gray-400">{a.industry}</p>
-                          </div>
-                          {linkedAccountId === a.id && <Check size={12} className="text-blue-500 shrink-0" />}
-                        </button>
-                      ))}
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2">
+                    <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">
+                        Linking to existing records is not available yet
+                      </p>
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        This needs contact and account search against the database. The
+                        pickers here previously listed sample data, so anything selected
+                        would not have referred to a real record. Choose one of the other
+                        paths on the previous step.
+                      </p>
                     </div>
                   </div>
                 </div>
               ) : (
-                /* Heuristic duplicate suggestions */
+                /* Real lead-vs-lead duplicate detection */
                 <div className="space-y-4">
                   {/* High-risk lead duplicate gating */}
                   {leadDuplicateRisk === 'high' && !dupDismissed && (
@@ -674,64 +550,20 @@ export default function LeadConversionWizard({
                     </div>
                   )}
 
-                  <div className="flex items-start justify-between">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                      Match Suggestions
-                    </p>
-                    <span className="text-[10px] text-gray-400">
-                      {suggestions.length} found
-                    </span>
-                  </div>
-
-                  {suggestions.length > 0 ? (
-                    <>
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
-                        <AlertCircle size={12} className="text-amber-500 mt-0.5 shrink-0" />
-                        <p className="text-[11px] text-amber-700">
-                          These are pattern-based suggestions. Verify before linking.
-                        </p>
-                      </div>
-
-                      <div className="space-y-2">
-                        {suggestions.map(sug => {
-                          const isLinked =
-                            (sug.type === 'contact' && linkedContactId === sug.id) ||
-                            (sug.type === 'account' && linkedAccountId === sug.id);
-                          return (
-                            <SuggestionRow
-                              key={`${sug.type}_${sug.id}`}
-                              sug={sug}
-                              linked={isLinked}
-                              onLink={() => {
-                                if (sug.type === 'contact') setLinkedContactId(sug.id);
-                                else                        setLinkedAccountId(sug.id);
-                              }}
-                              onUnlink={() => {
-                                if (sug.type === 'contact') setLinkedContactId('');
-                                else                        setLinkedAccountId('');
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      {(linkedContactId || linkedAccountId) && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                          <p className="text-xs text-blue-700 font-medium">
-                            {[
-                              linkedContactId && 'Contact will be linked instead of created.',
-                              linkedAccountId && 'Account will be linked instead of created.',
-                            ].filter(Boolean).join(' ')}
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
+                  {/* The fabricated "Match Suggestions" panel was here — see the note
+                      at the top of this file. What remains is the real thing:
+                      lead-vs-lead duplicate detection from utils/leadDuplicates,
+                      whose high-risk result gates this step just above. */}
+                  {leadDuplicateRisk !== 'high' && (
                     <div className="py-6 text-center">
                       <CheckCircle className="h-8 w-8 text-green-300 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500 font-medium">No duplicates found</p>
+                      <p className="text-sm text-gray-500 font-medium">
+                        No high-confidence duplicate leads
+                      </p>
                       <p className="text-xs text-gray-400 mt-1">
-                        No existing contacts or accounts match this lead's email domain or company.
+                        Checked against your existing leads on email, phone, company domain
+                        and name. Matching against existing contacts and accounts needs
+                        search endpoints that are not built yet.
                       </p>
                     </div>
                   )}
@@ -917,6 +749,26 @@ export default function LeadConversionWizard({
           )}
 
         </div>
+
+        {/* A rejected write is reported, not hidden. This wizard used to advance to
+            the success screen regardless of what the server said. */}
+        {convertError && (
+          <div
+            role="alert"
+            className="shrink-0 mx-6 mb-1 rounded-lg border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2"
+          >
+            <AlertCircle size={14} className="text-red-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-red-800">
+                Conversion failed — nothing was saved
+              </p>
+              <p className="text-[11px] text-red-700 mt-1">{convertError}</p>
+              <p className="text-[11px] text-red-600 mt-1">
+                Lead conversion is not implemented on the server yet. The lead is unchanged.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Footer navigation */}
         <div className="shrink-0 px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
