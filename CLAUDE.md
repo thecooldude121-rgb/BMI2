@@ -133,6 +133,26 @@ counts like "147 contacts" and "$2.4M pipeline" surviving across pages).
 - Never leave test/seed records (`*-test`, `probe@`, "Isolation Test Co", etc.) in live
   data. Clean up any record you create for verification **in the same session you create
   it** — do not let it become the next session's mystery.
+- **Never render a fabricated credential — no API keys, tokens, secrets, webhook URLs or
+  connection strings. Not as a placeholder, not as an example, not behind a "regenerate"
+  control.** A fake secret a user can copy is worse than a fake number they can only read:
+  the number misleads inside the app, the secret leaves it. `IntegrationsContext` rendered
+  `sk_live_abc123456789...` into an input with a copy-to-clipboard button, and a "regenerate"
+  button that minted more with `Math.random()` — a string a user could carry into a config
+  file, a ticket, or a message to a colleague, where it is indistinguishable from a real
+  leaked key. This is the one fabrication class whose blast radius extends beyond the app, so
+  it does not get labelled `PREVIEW · SAMPLE CONTENT` like a fake metric; it gets deleted. If
+  a credential field has nothing real behind it, render an empty state, not a specimen.
+- **Never mock at the provider level. A React context or provider that supplies fabricated
+  data is the highest-severity form of this defect**, because every consumer inherits it
+  invisibly and no individual component looks wrong. A page reading `useData()` is correct,
+  idiomatic, reviewable code — and renders invented data anyway, so the defect is unfindable
+  from the component you are looking at. `hooks/useDashboardData.ts:26` states the lesson
+  exactly: *"Deliberately NOT a context. The dashboard is the only consumer, and a context is
+  what let sample data spread to eighteen files unnoticed in the first place."* Copy that
+  pattern — fetch, then pass down as props — rather than seeding provider state from a
+  fixture. Three providers in this repo did the latter (`DataContext`, `AccountsContext`,
+  `IntegrationsContext`); see `FABRICATED_DATA_AUDIT.md`.
 - **A component tree with zero data-fetching calls is suspected fabricated code — report it,
   do not assume it is a work in progress.** Grep the whole tree for `fetch(`, the API client
   and the data contexts; if the count is zero across every file, the feature is backed by
@@ -401,9 +421,19 @@ session's memory is a rule that will be relearned the expensive way.
 These were learned the hard way in this project. The shared principle: **when you can verify
 something directly, do that instead of reasoning about what should be true.**
 
-1. **Verify the network response before reporting a failure.** A page was twice reported as
-   broken ("0 accounts / could not load deals") when all three requests were returning 200 —
-   the screenshots were simply taken before the fetch resolved. Check the network log first.
+1. **Verify the network response before reporting a failure — but a 200 is not evidence the
+   screen is right.** A page was twice reported as broken ("0 accounts / could not load
+   deals") when all three requests were returning 200; the screenshots were simply taken
+   before the fetch resolved. So check the network log first, and note precisely what it
+   proves: **that the request succeeded, not that the rendered value came from it.**
+   `pages/Accounts/EnhancedAccountDetailView.tsx` is the documented counter-example — it
+   fetches real contacts and activities on 200s, then renders `mockActivities` (an invented
+   "Sarah Chen" timeline) and discards the real result, so "I checked the network log and saw
+   200s" clears a page that is showing fabricated data. **For data correctness, cross-check
+   the rendered value against the database row**: Nancy Wilson / FinSolve Ltd / 98 on screen,
+   then `SELECT name, company, score FROM leads WHERE id = 36`, and FinSolve $120K on a deal
+   card against `value = 120000.00`. Network log for "did it load"; a SQL query for "is it
+   true". The two questions are separate and need separate evidence.
 2. **Verify through the same entry point a real user uses.** Not the file you edited, not a
    direct URL, not hand-supplied state — a real login, the real nav, a real session. This
    rule has now been earned three times in three different disguises:
