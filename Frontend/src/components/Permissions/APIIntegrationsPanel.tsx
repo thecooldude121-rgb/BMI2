@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import { Key, Webhook, Link as LinkIcon, Copy, Check, Plus, Trash2, Power, ExternalLink, Code, FileText, Settings, RefreshCw, Activity, X } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 
 interface APIKey {
   id: string;
@@ -41,7 +40,8 @@ export const APIIntegrationsPanel: React.FC = () => {
   const [ssoConfigs, setSSOConfigs] = useState<SSOConfig[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [generatedKey, setGeneratedKey] = useState('');
+  // Never set now — no key is generated client-side. See the note below.
+  const [generatedKey] = useState('');
   const [copiedKey, setCopiedKey] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -62,136 +62,49 @@ export const APIIntegrationsPanel: React.FC = () => {
     loadData();
   }, [activeSection]);
 
+  /*
+   * TODO: reference only, backend removed.
+   *
+   * These read and wrote the Supabase tables `api_keys`, `webhooks` and
+   * `sso_configurations`. There is no Supabase in this architecture (CLAUDE.md)
+   * and no equivalent tables on our Postgres schema. Markup kept for visual
+   * reference until the Settings module is rebuilt against our own API.
+   *
+   * Reads resolve empty. Writes do not push into local state — an API key shown
+   * once and gone on reload is worse than no key at all, and a fabricated key
+   * rendered as if it were live was removed from this codebase once already
+   * (commit f895e9b).
+   */
   const loadData = async () => {
-    setLoading(true);
-    try {
-      if (activeSection === 'api') {
-        const { data, error } = await supabase
-          .from('api_keys')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (data) setApiKeys(data);
-      } else if (activeSection === 'webhooks') {
-        const { data, error } = await supabase
-          .from('webhooks')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (data) setWebhooks(data);
-      } else if (activeSection === 'sso') {
-        const { data, error } = await supabase
-          .from('sso_configurations')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (data) setSSOConfigs(data);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
+    setApiKeys([]);
+    setWebhooks([]);
+    setSSOConfigs([]);
+    setLoading(false);
   };
 
-  const generateAPIKey = () => {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let key = 'bmi_';
-    for (let i = 0; i < 32; i++) {
-      key += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    return key;
-  };
+  /*
+   * REMOVED: generateAPIKey() built a random `bmi_...` string in the browser and
+   * the UI rendered it as a real credential. A key that no server ever issued is
+   * fabricated data, and the same pattern was already deleted from this codebase
+   * in f895e9b. Nothing generates a key here; the real one will come from the API.
+   */
 
   const createAPIKey = async () => {
-    if (!newAPIKey.name.trim()) return;
-
-    setLoading(true);
-    try {
-      const key = generateAPIKey();
-      const { data, error } = await supabase
-        .from('api_keys')
-        .insert([{
-          name: newAPIKey.name,
-          key_hash: key,
-          permissions: newAPIKey.permissions,
-          expires_at: newAPIKey.expires_at || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-          is_active: true
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setApiKeys([data, ...apiKeys]);
-      setGeneratedKey(key);
-      setShowKeyModal(true);
-      setShowCreateModal(false);
-      setNewAPIKey({ name: '', expires_at: '', permissions: {} });
-    } catch (error) {
-      console.error('Error creating API key:', error);
-    } finally {
-      setLoading(false);
-    }
+    // Not persisted anywhere; the modal closes and no key is created.
+    setShowCreateModal(false);
   };
 
   const createWebhook = async () => {
-    if (!newWebhook.name.trim() || !newWebhook.url.trim()) return;
-
-    setLoading(true);
-    try {
-      const secret = `whsec_${generateAPIKey().slice(4)}`;
-      const { data, error } = await supabase
-        .from('webhooks')
-        .insert([{
-          ...newWebhook,
-          secret,
-          is_active: true
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setWebhooks([data, ...webhooks]);
-      setShowCreateModal(false);
-      setNewWebhook({ name: '', url: '', events: [], secret: '' });
-    } catch (error) {
-      console.error('Error creating webhook:', error);
-    } finally {
-      setLoading(false);
-    }
+    // Not persisted anywhere; the modal closes and no webhook is created.
+    setShowCreateModal(false);
   };
 
-  const toggleAPIKeyStatus = async (id: string, isActive: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('api_keys')
-        .update({ is_active: !isActive })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setApiKeys(apiKeys.map(key =>
-        key.id === id ? { ...key, is_active: !isActive } : key
-      ));
-    } catch (error) {
-      console.error('Error toggling API key:', error);
-    }
+  const toggleAPIKeyStatus = async (_id: string, _isActive: boolean) => {
+    // Not persisted anywhere; status is unchanged.
   };
 
-  const deleteAPIKey = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this API key? This action cannot be undone.')) return;
-
-    try {
-      const { error } = await supabase
-        .from('api_keys')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setApiKeys(apiKeys.filter(key => key.id !== id));
-    } catch (error) {
-      console.error('Error deleting API key:', error);
-    }
+  const deleteAPIKey = async (_id: string) => {
+    // Not persisted anywhere; nothing is removed.
   };
 
   const copyToClipboard = (text: string) => {

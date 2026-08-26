@@ -3,7 +3,7 @@ import { Button } from '../../../components/ui/Button';
 import { User, Upload, Save, Edit2, CheckCircle, AlertCircle, X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
-import { supabase } from '../../../lib/supabase';
+import { NotAvailable, stubControl } from '../../../components/common/NotAvailable';
 import FormModal from '../../../components/common/FormModal';
 
 const ProfileSettings: React.FC = () => {
@@ -13,13 +13,15 @@ const ProfileSettings: React.FC = () => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  // Always false now: the update path is disabled, so there is no in-flight state.
+  const isUpdatingPassword = false;
   const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
   const [showChangeAvatarModal, setShowChangeAvatarModal] = useState(false);
   const [selectedAvatarColor, setSelectedAvatarColor] = useState('#667eea');
 
-  const [profileData, setProfileData] = useState({
+  // Setter dropped with the write path. These values are placeholders — see the
+  // NotAvailable banner below; they are NOT this user's data.
+  const [profileData] = useState({
     fullName: 'Alex Rodriguez',
     firstName: 'Alex',
     lastName: 'Rodriguez',
@@ -95,109 +97,36 @@ const ProfileSettings: React.FC = () => {
     { label: 'Contains special character (!@#$%)', met: /[^A-Za-z0-9]/.test(passwordData.newPassword), recommended: false }
   ];
 
+  /*
+   * PROFILE / PASSWORD / EMAIL WRITES ARE NOT WIRED.
+   *
+   * These four handlers called `supabase.auth.updateUser()`. There is no
+   * Supabase in this architecture and never was (see CLAUDE.md) — the CRM's own
+   * auth lives in `Backend/src/controllers/authController.ts`, which today
+   * exposes only register / login / me. There is no update-profile and no
+   * change-password endpoint to call instead, so this cannot be rewired without
+   * new backend work.
+   *
+   * The controls are therefore disabled via `stubControl` and the page carries a
+   * <NotAvailable> banner. These handlers remain only as a guard: if any
+   * keyboard or form-submit path still reaches one, it must refuse, never report
+   * success. The old code failed honestly into an error toast, which was better
+   * than a lie but still offered the user a control that could not work.
+   */
+  const refuseUnwiredWrite = (what: string) => {
+    showToast(`${what} is not available yet`, 'error');
+  };
+
   const handleSaveProfile = async () => {
-    if (!user) return;
-
-    setIsSavingProfile(true);
-    try {
-      // Update user metadata in Supabase
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          first_name: editFormData.firstName,
-          last_name: editFormData.lastName,
-          phone: editFormData.phone,
-          job_title: editFormData.jobTitle,
-          department: editFormData.department,
-          location: editFormData.location,
-          timezone: editFormData.timezone,
-          language: editFormData.language
-        }
-      });
-
-      if (error) throw error;
-
-      // Update local state
-      setProfileData({
-        ...profileData,
-        firstName: editFormData.firstName,
-        lastName: editFormData.lastName,
-        fullName: `${editFormData.firstName} ${editFormData.lastName}`,
-        phone: editFormData.phone,
-        jobTitle: editFormData.jobTitle,
-        department: editFormData.department,
-        location: editFormData.location
-      });
-
-      setIsEditingProfile(false);
-      showToast('Profile updated successfully', 'success');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      showToast('Failed to update profile', 'error');
-    } finally {
-      setIsSavingProfile(false);
-    }
+    refuseUnwiredWrite('Editing your profile');
   };
 
   const handleUpdatePassword = async () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword) {
-      showToast('Please fill in all password fields', 'error');
-      return;
-    }
-
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showToast('Passwords do not match', 'error');
-      return;
-    }
-
-    if (passwordData.newPassword.length < 8) {
-      showToast('Password must be at least 8 characters', 'error');
-      return;
-    }
-
-    setIsUpdatingPassword(true);
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      });
-
-      if (error) throw error;
-
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      showToast('Password updated successfully. All other sessions have been logged out.', 'success');
-    } catch (error) {
-      console.error('Error updating password:', error);
-      showToast('Failed to update password. Please check your current password.', 'error');
-    } finally {
-      setIsUpdatingPassword(false);
-    }
+    refuseUnwiredWrite('Changing your password');
   };
 
   const handleChangeEmail = async () => {
-    if (!changeEmailData.newEmail || !changeEmailData.password) {
-      showToast('Please fill in all fields', 'error');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(changeEmailData.newEmail)) {
-      showToast('Please enter a valid email address', 'error');
-      return;
-    }
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        email: changeEmailData.newEmail
-      });
-
-      if (error) throw error;
-
-      showToast(`Verification email sent to ${changeEmailData.newEmail}`, 'success');
-      setShowChangeEmailModal(false);
-      setChangeEmailData({ newEmail: '', password: '' });
-    } catch (error) {
-      console.error('Error changing email:', error);
-      showToast('Failed to change email', 'error');
-    }
+    refuseUnwiredWrite('Changing your email address');
   };
 
   const handleSaveAvatarColor = () => {
@@ -206,22 +135,7 @@ const ProfileSettings: React.FC = () => {
   };
 
   const handleSaveEmailVisibility = async () => {
-    try {
-      if (user) {
-        const { error } = await supabase.auth.updateUser({
-          data: {
-            email_visibility: emailVisibility
-          }
-        });
-
-        if (error) throw error;
-
-        showToast(`Email visibility set to ${emailVisibility}`, 'success');
-      }
-    } catch (error) {
-      console.error('Error updating email visibility:', error);
-      showToast('Failed to update email visibility', 'error');
-    }
+    refuseUnwiredWrite('Email visibility');
   };
 
   return (
@@ -232,6 +146,28 @@ const ProfileSettings: React.FC = () => {
           <p className="text-sm text-gray-600 mt-1">Manage your personal information and security</p>
         </div>
       </div>
+
+      {/*
+        * Two separate problems, both stated plainly rather than papered over:
+        *   1. The writes were never wired. These forms called
+        *      `supabase.auth.updateUser()` — a service this product does not use.
+        *      Every save failed. There is no update-profile or change-password
+        *      endpoint on our own API yet, so the controls are disabled.
+        *   2. The values rendered below are PLACEHOLDERS, not this user's data
+        *      ("Alex Rodriguez", a San Francisco address, a December 2024 last
+        *      login). Only the email address comes from the real session. Saying
+        *      "your details are shown below" would have replaced a broken write
+        *      with a false read, so the banner says what is actually true.
+        */}
+      <NotAvailable
+        feature="Your profile, password and email settings"
+        detail="Nothing on this page is connected yet. The details shown below are
+                placeholder text, not your account — only your email address is real. The
+                save controls are disabled because the endpoints for updating a profile and
+                changing a password have not been built; the form previously wrote to a
+                service this product does not use, so every save failed."
+        className="mb-6"
+      />
 
       <div className="space-y-6">
         <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -448,6 +384,7 @@ const ProfileSettings: React.FC = () => {
                   <Button
                     onClick={handleSaveProfile}
                     size="lg"
+                    {...stubControl('Editing your profile')}
                   >
                     <Save className="h-4 w-4" />
                     Save Changes
@@ -569,8 +506,8 @@ const ProfileSettings: React.FC = () => {
             <div className="pt-4 border-t border-gray-200 flex gap-3">
               <Button
                 onClick={handleUpdatePassword}
-                disabled={!passwordData.currentPassword || !passwordData.newPassword || passwordData.newPassword !== passwordData.confirmPassword || isUpdatingPassword}
                 size="lg"
+                {...stubControl('Changing your password')}
               >
                 {isUpdatingPassword ? 'Updating...' : 'Update Password'}
               </Button>
@@ -604,9 +541,12 @@ const ProfileSettings: React.FC = () => {
                   Verified
                 </span>
               </div>
+              {/* Disabled at the trigger, so the modal is unreachable rather than
+                  openable-but-broken. FormModal is shared, so it is not modified. */}
               <button
                 onClick={() => setShowChangeEmailModal(true)}
-                className="mt-2 text-sm text-blue-600 hover:text-blue-700"
+                {...stubControl('Changing your email address')}
+                className="mt-2 text-sm text-blue-600 cursor-not-allowed opacity-50"
               >
                 Change Email
               </button>
@@ -648,6 +588,7 @@ const ProfileSettings: React.FC = () => {
               <Button
                 onClick={handleSaveEmailVisibility}
                 size="lg"
+                {...stubControl('Email visibility')}
               >
                 <Save className="h-4 w-4" />
                 Save Changes

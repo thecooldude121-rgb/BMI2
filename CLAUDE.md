@@ -379,6 +379,16 @@ dead third option.
     persists nothing at all.
   Do not extend, repair or migrate either one. When the Settings module is built, it talks
   to the Node API like every other page, and these two trees are deleted then.
+- **CHECKLIST — when the new Settings module ships, do all four of these together.** This
+  is the last of the Supabase removal, deliberately sequenced behind the rebuild because
+  the importing files are the trees due for deletion. Do not let it become permanent debt:
+  1. Delete `Frontend/src/lib/supabase.ts` (down to 12 lines — client construction only).
+  2. `npm uninstall @supabase/supabase-js` in `Frontend/`.
+  3. Delete `pages/Settings/` and `pages/CRM/CRMSettings/`, and
+     `contexts/SettingsContext.tsx` with its 46 stripped-but-still-present queries.
+  4. Rebuild `ProfileSettings` against real endpoints — and note that **the
+     update-profile and change-password endpoints do not exist yet**; `authController`
+     exposes only register / login / me. The form is disabled and labelled until they do.
 
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions

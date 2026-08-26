@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import { Users, Plus, Edit, Trash2, Search, Grid as GridIcon, List, ChevronRight, X, UserPlus, UserMinus } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 
 interface UserGroup {
   id: string;
@@ -44,103 +43,37 @@ export const UserGroupManagement: React.FC = () => {
     loadGroups();
   }, []);
 
+  /*
+   * TODO: reference only, backend removed.
+   *
+   * Every function below read or wrote Supabase tables (`user_groups`,
+   * `user_group_members`). There is no Supabase in this architecture — see
+   * CLAUDE.md — and no equivalent tables on our Postgres schema, so there is
+   * nothing to repoint these at. The markup is kept for visual reference until
+   * the Settings module is rebuilt against our own API.
+   *
+   * Reads resolve empty. Writes do NOT mutate local state and do NOT report
+   * success: a create that only pushed a row into React state would look like it
+   * had saved and vanish on reload, which is the exact failure mode this project
+   * has spent months removing.
+   */
   const loadGroups = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('user_groups')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setGroups(data || []);
-    } catch (error) {
-      console.error('Error loading groups:', error);
-    } finally {
-      setLoading(false);
-    }
+    setGroups([]);
+    setLoading(false);
   };
 
-  const loadGroupMembers = async (groupId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_group_members')
-        .select('*')
-        .eq('group_id', groupId);
-
-      if (error) throw error;
-
-      const membersData: GroupMember[] = (data || []).map((m: any) => ({
-        id: m.id,
-        user_id: m.user_id,
-        user_name: `User ${m.user_id.slice(0, 8)}`,
-        user_email: `user@example.com`,
-        added_at: m.added_at
-      }));
-
-      setMembers(membersData);
-    } catch (error) {
-      console.error('Error loading members:', error);
-    }
+  const loadGroupMembers = async (_groupId: string) => {
+    setMembers([]);
   };
 
   const createGroup = async () => {
-    if (!newGroup.name.trim()) return;
-
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('user_groups')
-        .insert([{
-          name: newGroup.name,
-          description: newGroup.description,
-          parent_group_id: newGroup.parent_group_id,
-          is_dynamic: newGroup.is_dynamic,
-          dynamic_criteria: newGroup.dynamic_criteria
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setGroups([data, ...groups]);
-      setShowCreateModal(false);
-      setNewGroup({
-        name: '',
-        description: '',
-        parent_group_id: null,
-        is_dynamic: false,
-        dynamic_criteria: {}
-      });
-    } catch (error) {
-      console.error('Error creating group:', error);
-    } finally {
-      setLoading(false);
-    }
+    // Not persisted anywhere. Closing the modal without adding a row is the
+    // honest outcome; see the note above.
+    setShowCreateModal(false);
   };
 
-  const deleteGroup = async (groupId: string) => {
-    if (!confirm('Are you sure you want to delete this group?')) return;
-
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from('user_groups')
-        .delete()
-        .eq('id', groupId);
-
-      if (error) throw error;
-
-      setGroups(groups.filter(g => g.id !== groupId));
-      if (selectedGroup?.id === groupId) {
-        setSelectedGroup(null);
-        setShowMembersPanel(false);
-      }
-    } catch (error) {
-      console.error('Error deleting group:', error);
-    } finally {
-      setLoading(false);
-    }
+  const deleteGroup = async (_groupId: string) => {
+    // Not persisted anywhere; nothing is removed. See the note above.
   };
 
   const openMembersPanel = (group: UserGroup) => {

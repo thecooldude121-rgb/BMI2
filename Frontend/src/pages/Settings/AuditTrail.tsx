@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, User, Shield, Filter, Search, Download, RefreshCw, X, Activity, FileText, Eye, CheckCircle, Trash2, Copy, Plus, Edit } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 
 interface AuditLog {
@@ -43,21 +42,15 @@ const AuditTrail: React.FC = () => {
   }, [auditLogs, searchQuery, selectedActionType, selectedEntityType, selectedUser, dateFrom, dateTo]);
 
   const loadAuditLogs = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
-      setAuditLogs(data || []);
-    } catch (error) {
-      console.error('Error loading audit logs:', error);
-    } finally {
-      setLoading(false);
-    }
+    // TODO: reference only, backend removed.
+    // This read Supabase's `audit_logs` table. There is no Supabase in this
+    // architecture (see CLAUDE.md) and no audit_logs table on our Postgres
+    // schema either, so there is nothing to repoint this at. The markup below is
+    // kept for visual reference until the Settings module is rebuilt against our
+    // API; it renders its own empty state, so leaving the list empty is correct
+    // rather than a regression.
+    setAuditLogs([]);
+    setLoading(false);
   };
 
   const applyFilters = () => {
