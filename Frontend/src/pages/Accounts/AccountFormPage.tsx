@@ -105,15 +105,23 @@ const AccountFormPage: React.FC = () => {
     targetMarket: '',
     website: existingAccount?.website || '',
     companyPhone: existingAccount?.phone || '',
-    linkedin: existingAccount?.socialProfiles?.linkedin || '',
+    // `existingAccount.address` DOES NOT EXIST on EnhancedAccount — the field is
+    // `billingAddress`, and its postcode key is `postalCode`, not `zip`. Every
+    // one of these read undefined, so opening an account for editing showed a
+    // blank address even when the database held a full one. TypeScript reported
+    // all six as errors; they sat in the 228 "noise" pile.
+    //
+    // socialProfiles does not exist either. There is no column for it, so it is
+    // not read back — see the note on the save payload below.
+    linkedin: '',
     twitter: '',
     companyEmail: existingAccount?.email || '',
-    addressLine1: existingAccount?.address?.street || '',
+    addressLine1: existingAccount?.billingAddress?.street || '',
     addressLine2: '',
-    city: existingAccount?.address?.city || '',
-    state: existingAccount?.address?.state || '',
-    postalCode: existingAccount?.address?.zip || '',
-    country: existingAccount?.address?.country || 'United States',
+    city: existingAccount?.billingAddress?.city || '',
+    state: existingAccount?.billingAddress?.state || '',
+    postalCode: existingAccount?.billingAddress?.postalCode || '',
+    country: existingAccount?.billingAddress?.country || 'United States',
     offices: [],
     foundedMonth: '',
     foundedYear: 2018,
@@ -133,7 +141,7 @@ const AccountFormPage: React.FC = () => {
     infrastructure: '',
     crmTools: '',
     devTools: '',
-    accountOwner: existingAccount?.owner || 'Alex Rodriguez',
+    accountOwner: existingAccount?.ownerId || '',
     accountStatus: existingAccount?.status || 'Active',
     priority: 'Medium',
     tags: existingAccount?.tags || [],
@@ -168,15 +176,17 @@ const AccountFormPage: React.FC = () => {
         targetMarket: existingAccount.customFields?.targetMarket || '',
         website: existingAccount.website || '',
         companyPhone: existingAccount.phone || '',
-        linkedin: existingAccount.socialProfiles?.linkedin || '',
-        twitter: existingAccount.socialProfiles?.twitter || '',
+        // Same six mismatches as the initial state above — this block is the
+        // reset effect and had drifted identically. billingAddress / postalCode.
+        linkedin: '',
+        twitter: '',
         companyEmail: existingAccount.email || '',
-        addressLine1: existingAccount.address?.street || '',
+        addressLine1: existingAccount.billingAddress?.street || '',
         addressLine2: '',
-        city: existingAccount.address?.city || '',
-        state: existingAccount.address?.state || '',
-        postalCode: existingAccount.address?.zip || '',
-        country: existingAccount.address?.country || 'United States',
+        city: existingAccount.billingAddress?.city || '',
+        state: existingAccount.billingAddress?.state || '',
+        postalCode: existingAccount.billingAddress?.postalCode || '',
+        country: existingAccount.billingAddress?.country || 'United States',
         offices: existingAccount.customFields?.offices || [],
         foundedMonth: '',
         foundedYear: 2018,
@@ -196,7 +206,7 @@ const AccountFormPage: React.FC = () => {
         infrastructure: existingAccount.customFields?.techStack?.infrastructure || '',
         crmTools: existingAccount.customFields?.techStack?.crmTools || '',
         devTools: existingAccount.customFields?.techStack?.devTools || '',
-        accountOwner: existingAccount.owner || 'Alex Rodriguez',
+        accountOwner: existingAccount.ownerId || '',
         accountStatus: existingAccount.status || 'Active',
         priority: existingAccount.customFields?.priority || 'Medium',
         tags: existingAccount.tags || [],
@@ -425,12 +435,18 @@ const AccountFormPage: React.FC = () => {
     if (!formData.country) {
       newErrors.country = 'This field is required';
     }
-    if (!formData.accountOwner) {
-      newErrors.accountOwner = 'This field is required';
-    }
-    if (!formData.accountStatus) {
-      newErrors.accountStatus = 'This field is required';
-    }
+    // accountOwner and accountStatus are NOT required, and must not be:
+    // `companies` has no owner and no status column, and mapAccountToPayload
+    // sends neither, so both collect input that goes nowhere. Gating the save on
+    // them meant the form could refuse to submit over a value it would then
+    // discard.
+    //
+    // This also fixes a regression I introduced in the same pass: sourcing
+    // accountOwner from `existingAccount.ownerId` (the type's real field) made it
+    // '' — mapRowToAccount defaults ownerId to '' because there is no column —
+    // so validation failed on every save and the form became unusable. The
+    // previous code read a non-existent `.owner` and fell back to the literal
+    // 'Alex Rodriguez', which passed the check by accident.
 
     setErrors(newErrors);
 
@@ -463,22 +479,31 @@ const AccountFormPage: React.FC = () => {
         website: formData.website,
         phone: formData.companyPhone,
         email: formData.companyEmail,
-        address: {
+        // Was `address: { ..., zip }`. mapAccountToPayload reads ONLY
+        // `billingAddress` and its `postalCode` key, so nothing here reached the
+        // API: you could type a full address, press Save, be told "Account
+        // updated successfully", and no part of the address was sent. Two
+        // mismatches in one object — the wrapper name and the postcode key.
+        billingAddress: {
           street: formData.addressLine1,
           city: formData.city,
           state: formData.state,
-          zip: formData.postalCode,
+          postalCode: formData.postalCode,
           country: formData.country,
         },
         employeeCount: formData.employeeCount,
         annualRevenue: formData.annualRevenue,
-        owner: formData.accountOwner,
-        status: formData.accountStatus,
+        // `owner` is not a field on EnhancedAccount (it is `ownerId`) and
+        // `status` is a constrained union, not the form's free-text
+        // "Active"/"Inactive". Neither reached the API either way —
+        // mapAccountToPayload sends name, domain, industry, size, revenue,
+        // website, phone, description and the billing address, and nothing else.
+        // Sending them was collecting input into nothing.
         tags: formData.tags,
-        socialProfiles: {
-          linkedin: formData.linkedin,
-          twitter: formData.twitter,
-        },
+        // socialProfiles removed from the payload: there is no such field on
+        // EnhancedAccount and no column on `companies`, so mapAccountToPayload
+        // dropped it silently. The inputs are marked in the form instead of
+        // being collected into nothing.
         customFields: {
           legalName: formData.legalName,
           tradeName: formData.tradeName,

@@ -559,8 +559,40 @@ const CRMDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Gamification Widgets */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+        {/* ── Gamification: PREVIEW, not a working feature ───────────────────
+            Every figure in these three cards is a literal in `gamificationData`
+            above: 38,450 points, rank #2, level 4 "Platinum", 87% to Diamond,
+            5 badges, a 23-day streak, 10 coins, a "Make 15 calls" challenge at
+            8/15 with "6h 32m remaining", and team celebrations for Sarah, Mike
+            and Emily.
+
+            `gamification_points` and `gamification_achievements` exist as tables.
+            NOTHING reads or writes either one — no controller, no API client, no
+            query. So there is no scoring, no ranking, no streak tracking and no
+            leaderboard behind any of it.
+
+            Kept visible because the shape of the feature is a real product
+            decision worth showing, and marked so it cannot be read as a record of
+            anyone's actual performance. Same treatment as the AI Insights panel. */}
+        <div
+          className="mb-8 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/60 p-5"
+          data-preview="Gamification"
+          aria-describedby="gamification-preview-note"
+        >
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h2 className="font-bold text-gray-900 flex items-center" style={{ fontSize: '18px' }}>
+              <span className="mr-2" aria-hidden="true">🎮</span> Performance &amp; Rewards
+            </h2>
+            <span className="rounded-full bg-gray-700 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+              Preview · sample content
+            </span>
+          </div>
+          <p id="gamification-preview-note" className="text-sm text-gray-700 mb-4">
+            Illustrative only. <strong>Points, rank, level, streak and team activity below are not
+            your data</strong> — nothing tracks or awards them yet, so the numbers are fixed
+            examples.
+          </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Your Performance Card */}
           <div
             className="relative bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg cursor-pointer transition-all duration-300"
@@ -816,6 +848,7 @@ const CRMDashboard: React.FC = () => {
               View All
             </button>
           </div>
+        </div>
         </div>
 
         {/* Two Column Layout */}

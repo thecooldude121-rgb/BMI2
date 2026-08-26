@@ -6,6 +6,7 @@ import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertT
 import { useAccounts } from '../../contexts/AccountsContext';
 import { EnhancedAccount } from '../../types/accounts';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import { NotAvailableBadge } from '../../components/common/NotAvailable';
 
 const AccountsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -495,24 +496,38 @@ const AccountsPage: React.FC = () => {
               <option value="health">Health</option>
               <option value="recent">Recent</option>
             </select>
-            <div className="hidden lg:flex items-center border border-gray-300 rounded-lg">
+            {/* These three used to set `viewMode` and nothing else: the value was
+                read ONLY to style the buttons, never to choose a view, so the
+                table rendered whatever you clicked. List and Grid now gate the
+                render below.
+
+                Kanban is disabled rather than left as a third dead button —
+                there is no kanban view for accounts, and grouping them would need
+                a decision about what the columns are (status? industry? owner?)
+                that has not been made. */}
+            <div className="hidden lg:flex items-center border border-gray-300 rounded-lg" role="group" aria-label="View mode">
               <button
                 onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
                 className={`px-3 py-2 text-sm ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
               >
                 📋 List
               </button>
               <button
                 onClick={() => setViewMode('grid')}
+                aria-pressed={viewMode === 'grid'}
                 className={`px-3 py-2 text-sm border-l border-gray-300 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
               >
                 ⊞ Grid
               </button>
               <button
-                onClick={() => setViewMode('kanban')}
-                className={`px-3 py-2 text-sm border-l border-gray-300 ${viewMode === 'kanban' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
+                type="button"
+                disabled
+                title="There is no kanban view for accounts yet"
+                className="px-3 py-2 text-sm border-l border-gray-300 text-gray-400 cursor-not-allowed flex items-center gap-1.5"
               >
                 ≡ Kanban
+                <NotAvailableBadge label="Soon" />
               </button>
             </div>
           </div>
@@ -567,8 +582,10 @@ const AccountsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Accounts Table - Desktop & Tablet */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hidden md:block">
+      {/* Accounts Table - Desktop & Tablet. Hidden entirely in grid mode. */}
+      <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden ${
+        viewMode === 'list' ? 'hidden md:block' : 'hidden'
+      }`}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -941,8 +958,15 @@ const AccountsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Card View */}
-      <div className="md:hidden space-y-4">
+      {/* Card view. In list mode this is the mobile fallback (the table takes
+          over at md and up). In grid mode it is THE view at every width, laid out
+          in responsive columns — the markup was already a card, it just had no
+          way to be chosen. */}
+      <div className={
+        viewMode === 'grid'
+          ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4'
+          : 'md:hidden space-y-4'
+      }>
         {displayedAccounts.map((account) => (
           <div
             key={account.id}
