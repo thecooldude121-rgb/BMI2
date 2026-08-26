@@ -1,19 +1,30 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { X, Mail, Phone, MessageSquare } from 'lucide-react';
+import { NotAvailable } from '../common/NotAvailable';
 
 interface ReengagementModalProps {
   isOpen: boolean;
   onClose: () => void;
   contactName: string;
-  onLaunch: (campaign: any) => void;
 }
 
+/**
+ * Re-engagement campaigns have no backend. There is no sequences, campaigns or
+ * scheduled-touch table, and nothing sends email.
+ *
+ * This modal used to end with "This campaign will be launched immediately and
+ * tracked in your Sequences dashboard. You'll receive notifications for any
+ * responses" over a Launch Campaign button that called
+ * onLaunch(...) -> alert("Launching email campaign for Sarah Lee!"). Three
+ * specific promises, none of which anything could keep. The picker is kept
+ * because the shape of the feature is a real product decision worth showing;
+ * the claim that it does something is gone.
+ */
 const ReengagementModal: React.FC<ReengagementModalProps> = ({
   isOpen,
   onClose,
   contactName,
-  onLaunch
 }) => {
   const [selectedCampaign, setSelectedCampaign] = useState('email');
   const [message, setMessage] = useState('');
@@ -40,15 +51,6 @@ const ReengagementModal: React.FC<ReengagementModalProps> = ({
       description: 'Combine email, calls, and LinkedIn touches'
     }
   ];
-
-  const handleLaunch = () => {
-    onLaunch({
-      type: selectedCampaign,
-      message,
-      contactName
-    });
-    onClose();
-  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -139,13 +141,10 @@ const ReengagementModal: React.FC<ReengagementModalProps> = ({
             />
           </div>
 
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h3 className="font-semibold text-yellow-900 mb-2">Campaign Preview</h3>
-            <p className="text-sm text-yellow-800">
-              This campaign will be launched immediately and tracked in your Sequences dashboard.
-              You'll receive notifications for any responses.
-            </p>
-          </div>
+          <NotAvailable
+            feature="Launching a re-engagement campaign"
+            detail="Nothing sends email or schedules a touch yet, so this cannot be launched. Your selection is not saved. Use the contact's email or phone in the meantime."
+          />
 
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
             <button
@@ -154,9 +153,7 @@ const ReengagementModal: React.FC<ReengagementModalProps> = ({
             >
               Cancel
             </button>
-            <Button
-              onClick={handleLaunch}
-            >
+            <Button disabled title="Launching a campaign is not available yet">
               Launch Campaign
             </Button>
           </div>

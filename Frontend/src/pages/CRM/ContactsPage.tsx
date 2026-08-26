@@ -1,18 +1,33 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, Upload, Search, ChevronDown, Mail, Phone, Eye, Target, Building2, Globe, Edit, Download, Trash2, Tag, Grid, List, Columns } from 'lucide-react';
-import { Contact, ContactFilters } from '../../types/contact';
-import { fetchContacts } from '../../utils/contactsApi';
+import { Users, Plus, Upload, Search, ChevronDown, Mail, Phone, Eye, Target, Building2, Globe, Edit, Download, Trash2, Tag, Grid, List, Columns, UserPlus, Archive, Calendar } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Contact, ContactFilters, ContactStatus, ContactSource } from '../../types/contact';
+import {
+  fetchContacts,
+  createContactViaAPI,
+  updateContactViaAPI,
+  deleteContactViaAPI,
+  bulkUpdateContactsViaAPI,
+} from '../../utils/contactsApi';
+import { useToast } from '../../contexts/ToastContext';
+import { toCsv } from '../../utils/csv';
+import { describeBulk } from '../../utils/describeBulk';
 import ContactForm from '../../components/CRM/ContactForm';
 import ImportContactsModal from '../../components/CRM/ImportContactsModal';
 import ContactActionMenu from '../../components/CRM/ContactActionMenu';
 import ReengagementModal from '../../components/CRM/ReengagementModal';
+import AssignOwnerModal from '../../components/CRM/AssignOwnerModal';
 
 type ViewMode = 'list' | 'grid' | 'kanban';
 
+
 const ContactsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { addToast } = useToast();
+  /** Set while a write is in flight, so the UI can't fire the same one twice. */
+  const [busy, setBusy] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -37,6 +52,8 @@ const ContactsPage: React.FC = () => {
   const [showReengagementModal, setShowReengagementModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [reengageContact, setReengageContact] = useState<Contact | null>(null);
+  /** Ids the owner picker will apply to — empty means the picker is closed. */
+  const [assigningIds, setAssigningIds] = useState<string[]>([]);
 
   const [filters, setFilters] = useState<ContactFilters>({
     status: 'all',
@@ -136,39 +153,35 @@ const ContactsPage: React.FC = () => {
     }
   };
 
-  const getSourceBadge = (source: string) => {
-    switch (source) {
-      case 'lead-gen':
-        return (
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-            <Target className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-medium text-blue-700">🎯 Lead Gen</span>
-          </div>
-        );
-      case 'hrms':
-        return (
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg">
-            <Building2 className="h-4 w-4 text-orange-600" />
-            <span className="text-sm font-medium text-orange-700">🏢 HRMS</span>
-          </div>
-        );
-      case 'website':
-        return (
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-            <Globe className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium text-green-700">🌐 Website</span>
-          </div>
-        );
-      case 'manual':
-        return (
-          <div className="flex items-center space-x-2 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded-lg">
-            <Edit className="h-4 w-4 text-gray-600" />
-            <span className="text-sm font-medium text-gray-700">✍️ Manual</span>
-          </div>
-        );
-      default:
-        return null;
-    }
+  /**
+   * Every value in contacts_source_check has a badge. The previous version was
+   * a switch over four of the seven and returned null for the rest, so a
+   * contact whose source was 'referral', 'converted' or 'event' showed a blank
+   * cell that read as "no source recorded".
+   *
+   * Absence gets its own rendering, because most existing rows genuinely have
+   * no source: the mapper used to default those to 'manual', which reported
+   * every one of them as hand-entered.
+   */
+  const SOURCE_BADGES: Record<ContactSource, { label: string; className: string; Icon: LucideIcon }> = {
+    'lead-gen':  { label: '🎯 Lead Gen',  className: 'bg-blue-50 border-blue-200 text-blue-700',       Icon: Target },
+    'hrms':      { label: '🏢 HRMS',      className: 'bg-orange-50 border-orange-200 text-orange-700', Icon: Building2 },
+    'website':   { label: '🌐 Website',   className: 'bg-green-50 border-green-200 text-green-700',    Icon: Globe },
+    'referral':  { label: '🤝 Referral',  className: 'bg-purple-50 border-purple-200 text-purple-700', Icon: UserPlus },
+    'event':     { label: '📅 Event',     className: 'bg-pink-50 border-pink-200 text-pink-700',       Icon: Calendar },
+    'converted': { label: '↗️ Converted', className: 'bg-indigo-50 border-indigo-200 text-indigo-700', Icon: Target },
+    'manual':    { label: '✍️ Manual',    className: 'bg-gray-100 border-gray-300 text-gray-700',      Icon: Edit },
+  };
+
+  const getSourceBadge = (source?: ContactSource) => {
+    if (!source) return <span className="text-sm text-gray-400">Not recorded</span>;
+    const { label, className, Icon } = SOURCE_BADGES[source];
+    return (
+      <div className={`inline-flex items-center space-x-2 px-3 py-1.5 border rounded-lg ${className}`}>
+        <Icon className="h-4 w-4" aria-hidden="true" />
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+    );
   };
 
   const getTagColor = (tag: string) => {
@@ -196,30 +209,54 @@ const ContactsPage: React.FC = () => {
     navigate(`/crm/contacts/${contact.id}/edit`);
   };
 
-  const handleSaveContact = (contactData: any) => {
-    if (editingContact) {
-      setContacts(prev => prev.map(c => c.id === editingContact.id ? { ...c, ...contactData } : c));
-      alert('✅ Contact updated successfully!');
-    } else {
-      const newContact: Contact = {
-        ...contactData,
-        id: String(contacts.length + 1),
-        createdAt: new Date().toISOString().split('T')[0],
-        updatedAt: new Date().toISOString().split('T')[0]
-      };
-      setContacts(prev => [...prev, newContact]);
-      alert('✅ Contact created successfully!');
+  /**
+   * Every write below goes to /api/v1/contacts and only updates local state
+   * after the server confirms. Previously each one was a setState plus a
+   * "✅ ... successfully!" alert: the list read real contacts, so the fake
+   * confirmation was completely credible, and the change was gone on refresh.
+   *
+   * The server owns ids. The old code minted `String(contacts.length + 1)`,
+   * which collides the moment the loaded list is stale and does not match the
+   * CT001 scheme the table actually uses.
+   */
+  const handleSaveContact = async (contactData: Partial<Contact>) => {
+    setBusy(true);
+    try {
+      if (editingContact) {
+        const saved = await updateContactViaAPI(editingContact.id, contactData);
+        setContacts(prev => prev.map(c => (c.id === saved.id ? saved : c)));
+        addToast(`${saved.name} updated`, 'success');
+      } else {
+        const saved = await createContactViaAPI(contactData);
+        setContacts(prev => [saved, ...prev]);
+        addToast(`${saved.name} created`, 'success');
+      }
+      setShowContactForm(false);
+      setEditingContact(null);
+    } catch (e) {
+      // The form stays open with the user's input intact — closing it on
+      // failure would lose what they typed.
+      addToast(e instanceof Error ? e.message : 'Could not save this contact', 'error');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleImportContacts = (file: File) => {
-    alert(`Importing contacts from ${file.name}...`);
-  };
-
-  const handleDeleteContact = (contactId: string) => {
-    if (window.confirm('Are you sure you want to delete this contact?')) {
+  const handleDeleteContact = async (contactId: string) => {
+    const contact = contacts.find(c => c.id === contactId);
+    if (!window.confirm(`Delete ${contact?.name ?? 'this contact'}? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await deleteContactViaAPI(contactId);
       setContacts(prev => prev.filter(c => c.id !== contactId));
-      alert('✅ Contact deleted successfully!');
+      setSelectedContacts(prev => prev.filter(id => id !== contactId));
+      addToast(`${contact?.name ?? 'Contact'} deleted`, 'success');
+    } catch (e) {
+      // A contact named by a quote comes back as a 409 with a message that says
+      // so, which is worth showing verbatim rather than replacing.
+      addToast(e instanceof Error ? e.message : 'Could not delete this contact', 'error');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -246,66 +283,152 @@ const ContactsPage: React.FC = () => {
     setShowReengagementModal(true);
   };
 
-  const handleArchiveContact = (contactId: string) => {
-    if (window.confirm('Are you sure you want to archive this contact?')) {
-      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, status: 'inactive' as const } : c));
-      alert('✅ Contact archived successfully!');
+  /**
+   * `setStatusFor` backs archive, mark-inactive and the bulk status action.
+   * All three used to be a local setState; 'inactive' is a real column value
+   * now (migration 020), so they persist.
+   *
+   * Note archive maps to 'inactive', not to 'do-not-contact'. Those mean
+   * different things — see the ContactStatus doc comment — and conflating them
+   * would silently suppress contacts a user only meant to shelve.
+   */
+  const setStatusFor = async (ids: string[], status: ContactStatus, pastTense: string) => {
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      const result = await bulkUpdateContactsViaAPI('status', ids, { status });
+      setContacts(prev => prev.map(c => (ids.includes(c.id) ? { ...c, status } : c)));
+      addToast(describeBulk(result, pastTense), result.affected > 0 ? 'success' : 'warning');
+      setSelectedContacts([]);
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Could not update these contacts', 'error');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleAssignContact = () => {
-    alert('Assign contact functionality - opens team member selector');
+  const handleArchiveContact = async (contactId: string) => {
+    const contact = contacts.find(c => c.id === contactId);
+    if (!window.confirm(`Archive ${contact?.name ?? 'this contact'}? They will be marked inactive.`)) return;
+    await setStatusFor([contactId], 'inactive', 'Archived');
   };
 
-  const handleAddToDeal = () => {
-    alert('Add to deal functionality - opens deal selector');
+  const handleMarkInactive = (contactId: string) => setStatusFor([contactId], 'inactive', 'Marked inactive');
+
+  const handleBulkMarkInactive = () => setStatusFor(selectedContacts, 'inactive', 'Marked inactive');
+
+  const handleBulkAddTag = async () => {
+    const tag = window.prompt(`Tag to add to ${selectedContacts.length} contact(s):`)?.trim();
+    if (!tag) return;
+    setBusy(true);
+    try {
+      const result = await bulkUpdateContactsViaAPI('tag', selectedContacts, { tag });
+      // Mirror the server's append-without-duplicating rule locally.
+      setContacts(prev => prev.map(c =>
+        selectedContacts.includes(c.id) && !c.tags.includes(tag)
+          ? { ...c, tags: [...c.tags, tag] }
+          : c));
+      addToast(describeBulk(result, `Added the tag "${tag}" to`), result.affected > 0 ? 'success' : 'warning');
+      setSelectedContacts([]);
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Could not add that tag', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleAddTag = () => {
-    alert('Add tag functionality - opens tag selector');
+  /**
+   * Owner assignment, for one contact or a selection. Real as of migration 020
+   * — contacts.owner_id is an FK to users(id). The menu item used to alert
+   * "Assign contact functionality - opens team member selector".
+   */
+  const handleAssignOwner = async (ownerId: number | null) => {
+    const ids = assigningIds;
+    if (ids.length === 0) return;
+    setBusy(true);
+    try {
+      const result = await bulkUpdateContactsViaAPI('owner', ids, { owner_id: ownerId });
+      // ownerName is a join result, so it cannot be derived locally for a real
+      // id. Clearing it on assign keeps the row from displaying the PREVIOUS
+      // owner's name against the new id; the next load fills it in.
+      setContacts(prev => prev.map(c =>
+        ids.includes(c.id)
+          ? { ...c, ownerId: ownerId ?? undefined, ownerName: undefined }
+          : c));
+      addToast(describeBulk(result, ownerId === null ? 'Unassigned' : 'Assigned'),
+               result.affected > 0 ? 'success' : 'warning');
+      setAssigningIds([]);
+      setSelectedContacts([]);
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Could not assign these contacts', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleMarkInactive = (contactId: string) => {
-    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, status: 'inactive' as const } : c));
-    alert('Contact marked as inactive!');
+  const handleAddTagTo = async (contactId: string) => {
+    const tag = window.prompt('Tag to add:')?.trim();
+    if (!tag) return;
+    setBusy(true);
+    try {
+      await bulkUpdateContactsViaAPI('tag', [contactId], { tag });
+      setContacts(prev => prev.map(c =>
+        c.id === contactId && !c.tags.includes(tag) ? { ...c, tags: [...c.tags, tag] } : c));
+      addToast(`Tagged "${tag}"`, 'success');
+    } catch (e) {
+      addToast(e instanceof Error ? e.message : 'Could not add that tag', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleBulkAssign = () => {
-    alert(`Assigning ${selectedContacts.length} contacts to team member...`);
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selectedContacts.length} contact(s)? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      const result = await bulkUpdateContactsViaAPI('delete', selectedContacts);
+      setContacts(prev => prev.filter(c => !selectedContacts.includes(c.id)));
+      addToast(describeBulk(result, 'Deleted'), result.affected > 0 ? 'success' : 'warning');
+      setSelectedContacts([]);
+    } catch (e) {
+      // One 23503 rolls the whole batch back, and the message says so. Do not
+      // remove anything from the list in that case.
+      addToast(e instanceof Error ? e.message : 'Could not delete these contacts', 'error');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleBulkAddTag = () => {
-    alert(`Adding tag to ${selectedContacts.length} contacts...`);
-  };
-
+  /**
+   * Export is genuinely client-side — the rows are already loaded, so no
+   * endpoint is needed and this is real, not a placeholder.
+   *
+   * Fields are RFC-4180 quoted. The previous version interpolated raw values
+   * into a comma-joined string, so a company name like "Acme, Inc." shifted
+   * every later column on that row, and a note containing a newline split it
+   * into two broken rows. A silently corrupted export is worse than none.
+   */
   const handleBulkExport = () => {
-    const selectedContactsData = contacts.filter(c => selectedContacts.includes(c.id));
-    const csv = [
-      'Name,Company,Position,Email,Phone,Source,Status',
-      ...selectedContactsData.map(c =>
-        `${c.name},${c.company},${c.position},${c.email},${c.phone || ''},${c.source},${c.status}`
-      )
-    ].join('\n');
+    const rows = contacts.filter(c => selectedContacts.includes(c.id));
+    if (rows.length === 0) { addToast('Select at least one contact to export', 'warning'); return; }
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
+    const csv = toCsv(
+      ['Name','Company','Position','Email','Phone','Mobile','Department','City','Country','Source','Status','Owner','Tags'],
+      rows.map(c => [
+        c.name, c.company, c.position, c.email, c.phone, c.mobile, c.department,
+        c.city, c.country, c.source, c.status, c.ownerName, c.tags.join('; '),
+      ]),
+    );
+
+    const url = window.URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'contacts_export.csv';
+    a.download = `contacts_export_${rows.length}.csv`;
     a.click();
-    alert('✅ Contacts exported successfully!');
-  };
-
-  const handleBulkDelete = () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedContacts.length} contacts?`)) {
-      setContacts(prev => prev.filter(c => !selectedContacts.includes(c.id)));
-      setSelectedContacts([]);
-      alert('✅ Contacts deleted successfully!');
-    }
-  };
-
-  const handleLaunchReengagement = (campaign: any) => {
-    alert(`Launching ${campaign.type} campaign for ${campaign.contactName}!`);
+    // Revoking is what actually frees the blob; without it the data stays in
+    // memory for the life of the document.
+    window.URL.revokeObjectURL(url);
+    addToast(`Exported ${rows.length} contact${rows.length === 1 ? '' : 's'} to CSV`, 'success');
   };
 
   return (
@@ -712,12 +835,10 @@ const ContactsPage: React.FC = () => {
                                 <span>View</span>
                               </button>
                               <ContactActionMenu
-                                contactId={contact.id}
                                 onEdit={() => handleEditContact(contact)}
                                 onDelete={() => handleDeleteContact(contact.id)}
-                                onAssign={handleAssignContact}
-                                onAddToDeal={handleAddToDeal}
-                                onAddTag={handleAddTag}
+                                onAssign={() => setAssigningIds([contact.id])}
+                                onAddTag={() => handleAddTagTo(contact.id)}
                                 onMarkInactive={() => handleMarkInactive(contact.id)}
                               />
                             </div>
@@ -748,37 +869,33 @@ const ContactsPage: React.FC = () => {
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-blue-500 shadow-lg px-8 py-4">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
             <div className="text-sm font-medium text-gray-900">
-              {selectedContacts.length} contacts selected
+              {selectedContacts.length} contact{selectedContacts.length === 1 ? '' : 's'} selected
             </div>
+            {/* Every one of these now writes to the server, so all of them are
+                disabled while a request is in flight — the old versions were
+                local setState and could not fail, so double-clicking was
+                harmless. It is not any more. */}
             <div className="flex items-center space-x-3">
-              <button
-                onClick={handleBulkAssign}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm flex items-center space-x-2"
-              >
-                <span>Assign to...</span>
-                <ChevronDown className="h-4 w-4" />
-              </button>
-              <button
-                onClick={handleBulkAddTag}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm flex items-center space-x-2"
-              >
-                <Tag className="h-4 w-4" />
+              <Button variant="secondary" onClick={() => setAssigningIds(selectedContacts)} disabled={busy}>
+                <UserPlus className="h-4 w-4" aria-hidden="true" />
+                <span>Assign to…</span>
+              </Button>
+              <Button variant="secondary" onClick={handleBulkAddTag} disabled={busy}>
+                <Tag className="h-4 w-4" aria-hidden="true" />
                 <span>Add Tag</span>
-                <ChevronDown className="h-4 w-4" />
-              </button>
-              <Button
-                onClick={handleBulkExport}
-              >
-                <Download className="h-4 w-4" />
+              </Button>
+              <Button variant="secondary" onClick={handleBulkMarkInactive} disabled={busy}>
+                <Archive className="h-4 w-4" aria-hidden="true" />
+                <span>Mark Inactive</span>
+              </Button>
+              <Button onClick={handleBulkExport} disabled={busy}>
+                <Download className="h-4 w-4" aria-hidden="true" />
                 <span>Export</span>
               </Button>
-              <button
-                onClick={handleBulkDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm flex items-center space-x-2"
-              >
-                <Trash2 className="h-4 w-4" />
+              <Button variant="danger" onClick={handleBulkDelete} disabled={busy}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
                 <span>Delete</span>
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -795,14 +912,20 @@ const ContactsPage: React.FC = () => {
       <ImportContactsModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImport={handleImportContacts}
       />
 
       <ReengagementModal
         isOpen={showReengagementModal}
         onClose={() => setShowReengagementModal(false)}
         contactName={reengageContact?.name || ''}
-        onLaunch={handleLaunchReengagement}
+      />
+
+      <AssignOwnerModal
+        isOpen={assigningIds.length > 0}
+        onClose={() => setAssigningIds([])}
+        count={assigningIds.length}
+        onAssign={handleAssignOwner}
+        busy={busy}
       />
     </div>
   );

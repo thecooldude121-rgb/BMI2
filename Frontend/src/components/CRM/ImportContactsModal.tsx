@@ -1,51 +1,31 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '../ui/Button';
-import { X, Upload, Download, CheckCircle } from 'lucide-react';
+import { X, Download } from 'lucide-react';
+import { NotAvailable } from '../common/NotAvailable';
 
 interface ImportContactsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (file: File) => void;
 }
 
-const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClose, onImport }) => {
-  const [dragActive, setDragActive] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-
+/**
+ * CSV import is NOT implemented, and this modal now says so.
+ *
+ * It previously accepted a file, showed a green tick and its size, and called
+ * onImport(file) — which alerted "Importing contacts from x.csv..." and did
+ * nothing with the bytes. Nothing ever parsed the file. Accepting an upload you
+ * will never read is the most convincing kind of false confirmation: the user
+ * has evidence the app received their data.
+ *
+ * What it needs: a bulk-create endpoint. Importing 400 rows as 400 POSTs can
+ * half-succeed with no way to report which half — the same reason
+ * POST /contacts/bulk exists for the other bulk actions. Column mapping and
+ * per-row validation errors also need somewhere to be shown.
+ *
+ * The template download stays: it builds the CSV locally and genuinely works.
+ */
+const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
-
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-    }
-  };
-
-  const handleImport = () => {
-    if (file) {
-      onImport(file);
-      onClose();
-    }
-  };
 
   const downloadTemplate = () => {
     const csv = 'Name,Company,Position,Email,Phone,Source,Tags,Status\nJohn Smith,Acme Corp,VP Sales,john@acme.com,+1 555-0123,lead-gen,"VIP,Decision Maker",active';
@@ -72,13 +52,12 @@ const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClo
 
         <div className="p-6 space-y-6">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-900 mb-2">Import Instructions</h3>
-            <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-              <li>Download the CSV template below</li>
-              <li>Fill in your contact information</li>
-              <li>Upload the completed CSV file</li>
-              <li>Review and confirm the import</li>
-            </ul>
+            <h3 className="font-semibold text-blue-900 mb-2">Adding contacts today</h3>
+            <p className="text-sm text-blue-800">
+              Contacts can be added one at a time from <strong>+ Add Contact</strong>, which
+              saves to your account immediately. The template below shows the columns a
+              future import will expect.
+            </p>
           </div>
 
           <div className="flex items-center justify-center">
@@ -91,52 +70,10 @@ const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClo
             </button>
           </div>
 
-          <div
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              dragActive
-                ? 'border-blue-500 bg-blue-50'
-                : file
-                ? 'border-green-500 bg-green-50'
-                : 'border-gray-300 bg-gray-50'
-            }`}
-          >
-            {file ? (
-              <div className="space-y-2">
-                <CheckCircle className="h-12 w-12 text-green-600 mx-auto" />
-                <p className="text-lg font-medium text-gray-900">{file.name}</p>
-                <p className="text-sm text-gray-600">
-                  {(file.size / 1024).toFixed(2)} KB
-                </p>
-                <button
-                  onClick={() => setFile(null)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Choose different file
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Upload className="h-12 w-12 text-gray-400 mx-auto" />
-                <p className="text-lg font-medium text-gray-900">
-                  Drag and drop your CSV file here
-                </p>
-                <p className="text-sm text-gray-600">or</p>
-                <label className="inline-block px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium cursor-pointer">
-                  Browse Files
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            )}
-          </div>
+          <NotAvailable
+            feature="Importing contacts from a file"
+            detail="Uploading a CSV does not create contacts yet, so this modal no longer accepts a file — it would look like the import had been received. Add contacts individually in the meantime."
+          />
 
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
             <button
@@ -145,12 +82,7 @@ const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClo
             >
               Cancel
             </button>
-            <Button
-              onClick={handleImport}
-              disabled={!file}
-            >
-              Import Contacts
-            </Button>
+            <Button onClick={onClose}>Close</Button>
           </div>
         </div>
       </div>
