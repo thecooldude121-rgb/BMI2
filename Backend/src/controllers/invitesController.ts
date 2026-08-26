@@ -3,6 +3,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { getEmailService } from '../services/email';
 
 /**
  * Workspace invites.
@@ -12,10 +13,16 @@ import { requireTenantId } from '../middleware/tenant';
  * the UI, and leaving the endpoint unbuilt would have meant either keeping open
  * registration or having no way to onboard anyone.
  *
- * EMAIL DELIVERY IS NOT WIRED YET. `createInvite` returns the accept URL in its
- * response so an admin can pass it on out of band, and says so in the payload
- * rather than implying a mail was sent. When EmailService lands, the send goes
- * here and the URL stops being returned.
+ * DELIVERY. The invite is emailed through EmailService. Until a sender domain is
+ * provisioned the configured transport is the log transport, which renders the
+ * message to the log and does NOT deliver it — so the response still reports
+ * `email_sent: false` and still returns the accept URL for the admin to pass on
+ * by hand. That is the honest state of the feature, not a placeholder: the send
+ * is attempted, and what actually happened is what gets reported.
+ *
+ * The invite is NOT rolled back when delivery fails. The record is valid and the
+ * link works; losing it because a mail provider was briefly down would be worse
+ * than an admin having to re-send. `email_sent` tells the caller which happened.
  */
 
 /** Roles an invite may grant. Mirrors what the app understands. */
@@ -80,14 +87,54 @@ export const createInvite = async (req: AuthRequest, res: Response, next: NextFu
     );
 
     const appUrl = process.env.APP_URL || 'http://localhost:5173';
+    const acceptUrl = `${appUrl}/register?invite=${token}`;
+
+    // Who is inviting, for the email body. Scoped to the workspace like every
+    // other read; falls back to a neutral phrase rather than inventing a name.
+    const inviterRow = req.user?.id
+      ? await pool.query(
+          `SELECT TRIM(CONCAT(first_name, ' ', last_name)) AS name
+             FROM users WHERE id = $1 AND tenant_id = $2`,
+          [req.user.id, workspaceId],
+        )
+      : null;
+    const workspaceRow = await pool.query('SELECT name FROM tenants WHERE id = $1', [workspaceId]);
+
+    const mail = getEmailService();
+    const sent = await mail.sendTransactional({
+      to: email,
+      subject: `You've been invited to ${workspaceRow.rows[0]?.name ?? 'a workspace'} on BMI Platform`,
+      template: 'workspace-invite',
+      vars: {
+        workspaceName: workspaceRow.rows[0]?.name ?? 'your workspace',
+        inviterName: inviterRow?.rows[0]?.name || 'An administrator',
+        acceptUrl,
+        expiresInDays: ttl,
+      },
+    });
+
+    // `delivers` is what separates "the provider accepted it" from "nothing was
+    // actually emailed". The log transport returns ok:true because it did its job;
+    // reporting that as email_sent would be a fabricated success.
+    const emailDelivered = sent.ok && mail.delivers;
+    if (!sent.ok) {
+      console.error(`invite ${inserted.rows[0].id}: email send failed — ${sent.error}`);
+    }
+
     res.status(201).json({
       success: true,
       invite: inserted.rows[0],
-      // Returned because nothing emails it yet. Stated plainly so no one assumes
-      // the invitee has been contacted.
-      accept_url: `${appUrl}/register?invite=${token}`,
-      email_sent: false,
-      note: 'Email delivery is not configured yet — send this link to the invitee yourself.',
+      email_sent: emailDelivered,
+      // Still returned while nothing is delivered, so an admin has a way to get
+      // the link to the invitee at all. Once a real transport is configured this
+      // should be dropped from the response — a working invite link in an API
+      // payload is a secret sitting somewhere it does not need to be.
+      ...(emailDelivered ? {} : { accept_url: acceptUrl }),
+      note: emailDelivered
+        ? undefined
+        : mail.delivers
+          ? 'Email delivery failed — send this link to the invitee yourself.'
+          : `Email transport is "${mail.transportName}", which does not deliver mail. Send this link to the invitee yourself.`,
     });
   } catch (error) { next(error); }
 };

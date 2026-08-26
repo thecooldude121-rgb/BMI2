@@ -46,6 +46,29 @@ India, Middle East, and Africa.
     the email exists.
   - Workspace provisioning is explicit. No "first workspace wins" fallback: one workspace is
     used because it is the only one, and a second makes `workspace_slug` required.
+- **A foreign key supplied in a request body must be proven to belong to the caller's
+  workspace before insert or update.** Every FK here references its parent's GLOBAL primary
+  key (`deals_lead_id_fkey` is `REFERENCES leads(id)`, no tenant component), so Postgres
+  happily accepts a row in workspace A pointing at workspace B. Referential integrity is
+  satisfied and tenant isolation is not. Use `utils/tenantScope.ts`; the joins additionally
+  carry `AND parent.tenant_id = child.tenant_id` so a reference that already exists cannot
+  be read through either. Both halves are needed — the write creates the bad row, the join
+  is what leaks it.
+  - **The rejection is 400, and that is settled.** 403 and 422 were both considered; 400
+    won because it matches the executable contract in `src/__tests__/tenantIsolation.test.ts`
+    and is semantically defensible — from the caller's workspace that id simply is not a
+    valid reference. Do not re-litigate it without changing the suite in the same commit.
+  - The message names the FIELD and never discloses that the row exists elsewhere
+    ("company_id does not name a company in this workspace"), for the same reason login
+    returns one message for a bad password and an unknown email.
+- **Transactional email goes through `services/email`, never a provider SDK at a call
+  site.** Two consumers: workspace invites (built) and password reset (not built). The
+  contract is `sendTransactional({ to, subject, template, vars })` — callers say what to
+  send, not what it looks like. `EMAIL_TRANSPORT=log` renders to the log and **does not
+  deliver**; the server refuses to boot if that is combined with `NODE_ENV=production`,
+  because silently discarded invites and password resets are invisible until a customer
+  reports never receiving one. Report `email_sent` from `ok && transport.delivers`, never
+  from `ok` alone.
 - **Registration is INVITE-ONLY, and this is a security boundary, not a workflow
   preference.** Open self-registration was a live exposure: `POST /auth/register` was
   unauthenticated, accepted any email domain, and resolved "one workspace exists -> join
@@ -376,7 +399,12 @@ something directly, do that instead of reasoning about what should be true.**
    hours — once in `activitiesController` and once in `dealsController`, both while writing
    a comment that quoted a SQL fragment. Quote SQL in comments with plain text, not
    backticks.
-5. **Corollaries seen in practice:** a broken reachability grep once reported every file as
+5. **Verify cleanup by re-counting, not by the delete returning without error.** A probe
+   workspace and company survived a session because the cleanup script died part-way and the
+   earlier statements' success was taken as the whole thing having run. They were only found
+   by counting rows afterwards. Same shape as everything else here: check the end state, not
+   the absence of an error.
+6. **Corollaries seen in practice:** a broken reachability grep once reported every file as
    unimported and nearly caused a live, routed component to be deleted — resolve each import
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a
