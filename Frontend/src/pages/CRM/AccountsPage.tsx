@@ -19,7 +19,8 @@ const AccountsPage: React.FC = () => {
     selectedAccountIds,
     executeBulkAction,
     getKPIs,
-    deleteAccount
+    deleteAccount,
+    dealStats
   } = useAccounts();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,6 +40,39 @@ const AccountsPage: React.FC = () => {
   const [displayCount, setDisplayCount] = useState(3);
 
   const kpis = getKPIs();
+
+  /**
+   * Contact count for a row. `undefined` means the join has not resolved (still
+   * loading, or /contacts failed) and must NOT print as 0 — the previous code
+   * was `relatedContacts?.length || 0`, which collapsed "unknown" into "none".
+   */
+  const contactCountLabel = (account: EnhancedAccount): string => {
+    const n = account.relatedContacts?.length;
+    if (n === undefined) return '—';
+    return `${n} contact${n === 1 ? '' : 's'}`;
+  };
+
+  /**
+   * Deal count for a row, and why an empty result is shown as "—" not "0".
+   *
+   * `deals` has no account_id — only a free-text company_name — so a deal is
+   * matched to an account by name. Of 25 deals, 10 carry a name and 1 matches an
+   * account exactly. Printing "0 active" on the other 16 would assert those
+   * accounts have no deals, which is not something the data supports; "—" says
+   * we do not know. A real count is shown wherever a match exists.
+   */
+  const dealCountLabel = (account: EnhancedAccount): string => {
+    const n = account.relatedDeals?.length;
+    if (n === undefined || n === 0) return '—';
+    return `${n} active`;
+  };
+
+  const dealCountTitle = (account: EnhancedAccount): string => {
+    const n = account.relatedDeals?.length;
+    if (n === undefined) return 'Deals could not be loaded';
+    if (n === 0) return 'No deals could be matched to this account. Deals record a company name rather than a link to an account, so a deal naming this company differently will not appear here.';
+    return `${n} open deal${n === 1 ? '' : 's'} matched by company name`;
+  };
 
   const handleSearch = (term: string) => {
     setSearchTerm(term);
@@ -276,8 +310,16 @@ const AccountsPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Active Deals</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.totalDeals}</p>
+              <p className="text-xs text-gray-600">Open Deals</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {dealStats ? kpis.totalDeals : '—'}
+              </p>
+              {/* Says "across all accounts" because deals carry no account_id
+                  and cannot be attributed to one — see dealStats. Without this
+                  the number reads as "deals belonging to these accounts". */}
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {dealStats ? 'Across all accounts' : 'Could not load deals'}
+              </p>
             </div>
             <div className="p-2 bg-green-100 rounded-lg">
               <Briefcase className="h-5 w-5 text-green-600" />
@@ -291,8 +333,13 @@ const AccountsPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">${(kpis.totalRevenue / 1000000).toFixed(1)}M</p>
+              <p className="text-xs text-gray-600">Open Pipeline</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {dealStats ? `$${(kpis.totalRevenue / 1_000_000).toFixed(2)}M` : '—'}
+              </p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {dealStats ? 'Excludes closed deals' : 'Could not load deals'}
+              </p>
             </div>
             <div className="p-2 bg-purple-100 rounded-lg">
               <DollarSign className="h-5 w-5 text-purple-600" />
@@ -300,17 +347,10 @@ const AccountsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Active Deals</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">23</p>
-            </div>
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <Target className="h-5 w-5 text-yellow-600" />
-            </div>
-          </div>
-        </div>
+        {/* A second "Active Deals" card lived here with the literal value 23,
+            beside the derived one above that read 0. It had no click handler and
+            no data source; its agreement with today's open-deal count was
+            coincidence. Removed — one card, one number, from the API. */}
 
         <div
           onClick={() => handleKPIClick('hrms')}
@@ -332,6 +372,8 @@ const AccountsPage: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Total Contacts</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.totalContacts}</p>
+              {/* Real: contacts.company_id is a foreign key, so this IS per-account. */}
+              <p className="text-[11px] text-gray-500 mt-0.5">Linked to these accounts</p>
             </div>
             <div className="p-2 bg-teal-100 rounded-lg">
               <Users className="h-5 w-5 text-teal-600" />
@@ -596,15 +638,16 @@ const AccountsPage: React.FC = () => {
                         onClick={(e) => { e.stopPropagation(); navigate(`/crm/accounts/${account.id}#contacts`); }}
                         className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
                       >
-                        {account.relatedContacts?.length || 0} contact{(account.relatedContacts?.length || 0) !== 1 ? 's' : ''}
+                        {contactCountLabel(account)}
                       </button>
                     </td>
                     <td className="px-4 py-4">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/crm/accounts/${account.id}#deals`); }}
+                        title={dealCountTitle(account)}
                         className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
                       >
-                        {account.relatedDeals?.length || 0} active
+                        {dealCountLabel(account)}
                       </button>
                     </td>
                     <td className="px-4 py-4 relative" onClick={(e) => e.stopPropagation()}>
@@ -972,16 +1015,17 @@ const AccountsPage: React.FC = () => {
                     onClick={() => navigate(`/crm/accounts/${account.id}#contacts`)}
                     className="text-sm font-bold text-blue-600"
                   >
-                    {account.relatedContacts?.length || 0}
+                    {account.relatedContacts?.length ?? '—'}
                   </button>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Active Deals</p>
                   <button
                     onClick={() => navigate(`/crm/accounts/${account.id}#deals`)}
+                    title={dealCountTitle(account)}
                     className="text-sm font-bold text-blue-600"
                   >
-                    {account.relatedDeals?.length || 0}
+                    {dealCountLabel(account)}
                   </button>
                 </div>
               </div>

@@ -22,9 +22,16 @@ import {
   updateAccountViaAPI,
   deleteAccountViaAPI,
 } from '../utils/accountsApi';
+import { fetchContacts } from '../utils/contactsApi';
+import { fetchDeals } from '../utils/dealsApi';
 
 interface AccountsContextType {
   accounts: EnhancedAccount[];
+  /**
+   * Pipeline-wide open-deal figures. Null while loading or if /deals failed —
+   * the caller must render that differently from zero.
+   */
+  dealStats: { openCount: number; openValue: number } | null;
   /** True while accounts are being fetched. Show a skeleton, not an empty list. */
   loading: boolean;
   /** Non-null when the fetch failed. Distinguish "broken" from "no accounts". */
@@ -126,6 +133,16 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
   const [workflows, setWorkflows] = useState<AccountWorkflow[]>(sampleData.workflows);
   const [duplicates, setDuplicates] = useState<AccountDuplicate[]>([]);
 
+  /**
+   * Pipeline-wide deal figures, from /deals. Kept separate from the accounts
+   * list because deals cannot be attributed per account: `deals` has no
+   * account_id, only a free-text company_name, and of 25 deals just one matches
+   * a company name exactly. A per-account sum would therefore report 0 for
+   * almost every account, which is why the "Active Deals" KPI read 0 while a
+   * hardcoded twin next to it read 23.
+   */
+  const [dealStats, setDealStats] = useState<{ openCount: number; openValue: number } | null>(null);
+
   const [currentFilter, setCurrentFilter] = useState<AccountFilter>({});
   const [currentView, setCurrentView] = useState<AccountView | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
@@ -134,10 +151,89 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     setLoading(true);
     setError(null);
     try {
-      setAccounts(await fetchAccounts());
+      // Accounts, their contacts and the deal pipeline together. allSettled so a
+      // failing contacts or deals request costs the counts, not the whole list.
+      const [accountsRes, contactsRes, dealsRes] = await Promise.allSettled([
+        fetchAccounts(),
+        fetchContacts({ limit: 500 }),
+        fetchDeals(500),
+      ]);
+
+      if (accountsRes.status === 'rejected') {
+        // Surface the failure. Returning [] here is what hid the broken lead
+        // endpoints for so long — an error must not look like an empty list.
+        throw accountsRes.reason;
+      }
+      const loaded = accountsRes.value;
+
+      // contacts.company_id is a REAL foreign key, so this join is exact. It is
+      // the join that was missing entirely: nothing ever linked the two, which is
+      // why every row read "0 contacts" with 20 contacts pointing at those very
+      // accounts.
+      let contactsByAccount: Map<string, AccountContact[]> | null = null;
+      if (contactsRes.status === 'fulfilled') {
+        contactsByAccount = new Map<string, AccountContact[]>();
+        for (const c of contactsRes.value) {
+          if (!c.companyId) continue;
+          const list = contactsByAccount.get(c.companyId) ?? [];
+          list.push({
+            id: c.id,
+            accountId: c.companyId,
+            name: c.name,
+            role: c.position || undefined,
+            email: c.email,
+            phone: c.phone,
+            isPrimary: c.isPrimary,
+          });
+          contactsByAccount.set(c.companyId, list);
+        }
+      }
+
+      // Deals only carry a company NAME. Matched case-insensitively on the
+      // trimmed name — the best available and deliberately reported as "matched"
+      // rather than "belonging to".
+      let dealsByName: Map<string, AccountDeal[]> | null = null;
+      if (dealsRes.status === 'fulfilled') {
+        dealsByName = new Map();
+        let openCount = 0;
+        let openValue = 0;
+        for (const d of dealsRes.value) {
+          const stage = String(d.stage ?? '').toLowerCase();
+          if (stage === 'closed-won' || stage === 'closed-lost') continue;
+          const value = Number(d.value) || 0;
+          openCount += 1;
+          openValue += value;
+          const key = String(d.company_name ?? '').trim().toLowerCase();
+          if (!key) continue;
+          const list = dealsByName.get(key) ?? [];
+          list.push({
+            id: d.id,
+            accountId: '',           // filled in below, once the account is known
+            name: d.name || d.title || d.id,
+            amount: value,
+            stage: d.stage ?? undefined,
+            closeDate: d.expected_close_date ?? undefined,
+            probability: d.probability ?? undefined,
+          });
+          dealsByName.set(key, list);
+        }
+        setDealStats({ openCount, openValue });
+      } else {
+        setDealStats(null);
+      }
+
+      setAccounts(loaded.map(a => {
+        const matched = dealsByName?.get(a.name.trim().toLowerCase());
+        return {
+          ...a,
+          // undefined, not [], when the lookup did not run — see the type comment.
+          relatedContacts: contactsByAccount ? (contactsByAccount.get(a.id) ?? []) : undefined,
+          relatedDeals: dealsByName
+            ? (matched ?? []).map(d => ({ ...d, accountId: a.id }))
+            : undefined,
+        };
+      }));
     } catch (e: any) {
-      // Surface the failure. Returning [] here is what hid the broken lead
-      // endpoints for so long — an error must not look like an empty list.
       setError(e?.message ?? 'Could not load accounts');
     } finally {
       setLoading(false);
@@ -597,14 +693,18 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
       accountsByType[acc.type] = (accountsByType[acc.type] || 0) + 1;
     });
 
-    const totalDeals = accounts.reduce((sum, acc) => sum + (acc.relatedDeals?.length || 0), 0);
-    const totalRevenue = accounts.reduce((sum, acc) => {
-      // `?? 0`: deal.amount is optional, and one missing amount used to turn the
-      // whole revenue figure into NaN.
-      const dealsRevenue = acc.relatedDeals?.reduce((dealSum, deal) => dealSum + (deal.amount ?? 0), 0) || 0;
-      return sum + dealsRevenue;
-    }, 0);
-    const totalContacts = accounts.reduce((sum, acc) => sum + (acc.relatedContacts?.length || 0), 0);
+    // These three summed `relatedDeals`/`relatedContacts`, which mapRowToAccount
+    // deliberately never populates — so all three were structurally 0 forever,
+    // regardless of how much real data existed. That is what made the derived
+    // "Active Deals" card read 0 next to a hardcoded twin reading 23.
+    //
+    // Deals are pipeline-wide: they carry no account_id, so they cannot be
+    // attributed per account (see dealStats).
+    const totalDeals = dealStats?.openCount ?? 0;
+    const totalRevenue = dealStats?.openValue ?? 0;
+    // Contacts CAN be attributed — contacts.company_id is a real FK — and
+    // relatedContacts now holds the real records, so this sum is exact.
+    const totalContacts = accounts.reduce((sum, acc) => sum + (acc.relatedContacts?.length ?? 0), 0);
     const hrmsAccounts = accounts.filter(acc => acc.source === 'hrms' || acc.hrmsConnection?.hasConnection).length;
 
     return {
@@ -666,6 +766,7 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
 
   const value: AccountsContextType = {
     accounts,
+    dealStats,
     loading,
     error,
     refreshAccounts,

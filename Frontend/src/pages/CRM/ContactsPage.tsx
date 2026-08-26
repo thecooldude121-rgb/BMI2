@@ -855,7 +855,11 @@ const ContactsPage: React.FC = () => {
           {/* Pagination */}
           <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-between">
             <div className="text-sm text-gray-600">
-              Showing {filteredContacts.length} of 147 contacts
+              {/* Was "of 147 contacts" — a literal left behind when the KPI tiles
+                  above were put on real data in 13/n. The tiles said 20 and this
+                  line said 147, on the same screen. */}
+              Showing {filteredContacts.length} of {contacts.length} contact{contacts.length === 1 ? '' : 's'}
+              {filteredContacts.length !== contacts.length && ' (filtered)'}
             </div>
             <button className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium">
               Load More...

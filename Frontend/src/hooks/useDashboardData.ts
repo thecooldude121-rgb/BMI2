@@ -4,6 +4,10 @@ import { fetchLeadsFromAPI } from '../utils/leadsApi';
 import { fetchDeals } from '../utils/dealsApi';
 import { fetchTasks, fetchActivities } from '../utils/activitiesApi';
 import type { TaskRecord, ActivityRecord } from '../utils/activitiesApi';
+import { fetchContacts } from '../utils/contactsApi';
+import type { Contact } from '../types/contact';
+import { fetchAccounts } from '../utils/accountsApi';
+import type { EnhancedAccount } from '../types/accounts';
 
 /**
  * Real data for the dashboard.
@@ -31,6 +35,11 @@ export interface DashboardDeal {
   stage?: string | null;
   currency?: string | null;
   created_at?: string | null;
+  /** Real columns, needed by the CRM dashboard's pipeline and top-deals panels. */
+  company_name?: string | null;
+  expected_close_date?: string | null;
+  next_step?: string | null;
+  probability?: number | null;
 }
 
 export interface DashboardData {
@@ -38,6 +47,14 @@ export interface DashboardData {
   deals: DashboardDeal[];
   tasks: TaskRecord[];
   activities: ActivityRecord[];
+  /**
+   * Added so /crm/dashboard can read its Contacts and Accounts tiles from the
+   * same place /dashboard does. Both pages previously disagreed with the
+   * Contacts and Accounts pages because CRMDashboard held literals ('147'
+   * contacts against a real 20).
+   */
+  contacts: Contact[];
+  accounts: EnhancedAccount[];
   loading: boolean;
   error: string | null;
   /**
@@ -63,6 +80,8 @@ export function useDashboardData(): DashboardData {
   const [deals, setDeals] = useState<DashboardDeal[]>([]);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [activities, setActivities] = useState<ActivityRecord[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [accounts, setAccounts] = useState<EnhancedAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -82,12 +101,15 @@ export function useDashboardData(): DashboardData {
       // allSettled, not all: one failing endpoint should degrade one widget, not
       // blank the whole dashboard. A partial dashboard that says which part
       // failed is more useful than an error page.
-      const [leadsRes, dealsRes, tasksRes, activitiesRes] = await Promise.allSettled([
-        fetchLeadsFromAPI({ limit: LIST_LIMIT }),
-        fetchDeals(LIST_LIMIT),
-        fetchTasks({ limit: LIST_LIMIT }),
-        fetchActivities({ limit: 20 }),
-      ]);
+      const [leadsRes, dealsRes, tasksRes, activitiesRes, contactsRes, accountsRes] =
+        await Promise.allSettled([
+          fetchLeadsFromAPI({ limit: LIST_LIMIT }),
+          fetchDeals(LIST_LIMIT),
+          fetchTasks({ limit: LIST_LIMIT }),
+          fetchActivities({ limit: 20 }),
+          fetchContacts({ limit: LIST_LIMIT }),
+          fetchAccounts(LIST_LIMIT),
+        ]);
 
       if (!active) return;
 
@@ -105,7 +127,13 @@ export function useDashboardData(): DashboardData {
       if (activitiesRes.status === 'fulfilled') setActivities(activitiesRes.value);
       else failures.push('activity');
 
-      const atLimit = [leadsRes, dealsRes, tasksRes].some(
+      if (contactsRes.status === 'fulfilled') setContacts(contactsRes.value);
+      else failures.push('contacts');
+
+      if (accountsRes.status === 'fulfilled') setAccounts(accountsRes.value);
+      else failures.push('accounts');
+
+      const atLimit = [leadsRes, dealsRes, tasksRes, contactsRes, accountsRes].some(
         (r) => r.status === 'fulfilled' && (r.value as unknown[]).length >= LIST_LIMIT,
       );
       setTruncated(atLimit);
@@ -125,7 +153,7 @@ export function useDashboardData(): DashboardData {
     };
   }, [reloadToken]);
 
-  return { leads, deals, tasks, activities, loading, error, truncated, reload };
+  return { leads, deals, tasks, activities, contacts, accounts, loading, error, truncated, reload };
 }
 
 /** Deal value arrives as a numeric string from pg for NUMERIC columns. */

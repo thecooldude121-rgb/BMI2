@@ -73,8 +73,29 @@ export interface EnhancedAccount {
   deletedAt?: string;
 
   hierarchy?: AccountHierarchy;
+
+  /**
+   * RESOLVED FROM REAL DATA by AccountsContext.refreshAccounts.
+   *
+   * These were declared here from the start and never populated —
+   * mapRowToAccount leaves them out on purpose, since /companies returns no
+   * related records. Every consumer read `.length || 0`, so each account row
+   * reported "0 contacts / 0 active deals" while real contacts pointed straight
+   * at those accounts.
+   *
+   * `undefined` means the lookup did not run (still loading, or the request
+   * failed). That is deliberately distinct from `[]`, which means none — a
+   * failed join must not render as an authoritative zero.
+   *
+   * relatedContacts is EXACT: contacts.company_id is a foreign key.
+   * relatedDeals is BEST-EFFORT: `deals` has no account_id, only a free-text
+   * company_name, so it is matched on the name. Of 25 deals, 10 carry a name
+   * and 1 matches an account exactly — so an empty array here means "none we
+   * could match", not "none exist", and the UI must not print it as 0.
+   */
   relatedContacts?: AccountContact[];
   relatedDeals?: AccountDeal[];
+
   recentActivities?: AccountActivity[];
   stats?: AccountStats;
 }
