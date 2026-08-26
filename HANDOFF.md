@@ -40,7 +40,9 @@ not assume a file you did not write is yours to rewrite.
 Lead Gen and HRMS are **separate platforms consuming this CRM over SSO**, not modules in
 this repo. The Lead Generation *tool* was out of product, not just out of phase. It is gone.
 Approved by the repo owner against a full file-level mapping before a single file was
-deleted; the mapping is preserved as an artifact (see the commit message for the link).
+deleted. That mapping — tiers, the resolved import chains, the kept side, and the
+verification ledger — is preserved here:
+<https://claude.ai/code/artifact/8b5b1bab-f31b-4ed9-b0f2-966b7f0d8718>
 
 **What went, in two tiers:**
 
