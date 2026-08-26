@@ -69,7 +69,7 @@ const AdjustScoreModal: React.FC<AdjustScoreModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-3">
               New Score: {newScore}/100
             </label>
-            <input
+            <input aria-label="New Score: /100"
               type="range"
               min="0"
               max="100"
@@ -90,7 +90,7 @@ const AdjustScoreModal: React.FC<AdjustScoreModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Reason for Adjustment: <span className="text-red-600">*</span>
             </label>
-            <textarea
+            <textarea aria-label="Reason for Adjustment:"
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value);

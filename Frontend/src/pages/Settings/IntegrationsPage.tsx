@@ -335,7 +335,7 @@ const IntegrationsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Sync Frequency
                     </label>
-                    <select
+                    <select aria-label="Sync Frequency"
                       value={selectedIntegration.sync_frequency}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -351,7 +351,7 @@ const IntegrationsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Sync Direction
                     </label>
-                    <select
+                    <select aria-label="Sync Direction"
                       value={selectedIntegration.sync_direction}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -365,7 +365,7 @@ const IntegrationsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Conflict Resolution
                     </label>
-                    <select
+                    <select aria-label="Conflict Resolution"
                       value={selectedIntegration.conflict_resolution}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >

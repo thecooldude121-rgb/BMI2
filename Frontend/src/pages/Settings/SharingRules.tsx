@@ -734,7 +734,7 @@ const SharingRules: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Rule Name *
                 </label>
-                <input
+                <input aria-label="Rule Name"
                   type="text"
                   value={newRule.name}
                   onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
@@ -748,7 +748,7 @@ const SharingRules: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Module *
                   </label>
-                  <select
+                  <select aria-label="Module"
                     value={newRule.module}
                     onChange={(e) => setNewRule({ ...newRule, module: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -763,7 +763,7 @@ const SharingRules: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Rule Type *
                   </label>
-                  <select
+                  <select aria-label="Rule Type"
                     value={newRule.ruleType}
                     onChange={(e) => setNewRule({ ...newRule, ruleType: e.target.value as any })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -780,7 +780,7 @@ const SharingRules: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Access Level *
                 </label>
-                <select
+                <select aria-label="Access Level"
                   value={newRule.accessLevel}
                   onChange={(e) => setNewRule({ ...newRule, accessLevel: e.target.value as any })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

@@ -130,7 +130,7 @@ const ReengagementModal: React.FC<ReengagementModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Custom Message (Optional)
             </label>
-            <textarea
+            <textarea aria-label="Custom Message (Optional)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={4}

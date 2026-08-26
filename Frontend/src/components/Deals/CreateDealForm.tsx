@@ -183,7 +183,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Deal Name *
           </label>
-          <input
+          <input aria-label="Deal Name"
             type="text"
             value={formData.name || ''}
             onChange={(e) => handleFieldChange('name', e.target.value)}
@@ -199,7 +199,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Account (Company)
           </label>
-          <select
+          <select aria-label="Account (Company)"
             value={formData.accountId || ''}
             onChange={(e) => handleFieldChange('accountId', e.target.value)}
             className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -215,7 +215,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Primary Contact
           </label>
-          <select
+          <select aria-label="Primary Contact"
             value={formData.contactId || ''}
             onChange={(e) => handleFieldChange('contactId', e.target.value)}
             className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -231,7 +231,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Deal Owner *
           </label>
-          <select
+          <select aria-label="Deal Owner"
             value={formData.ownerId || ''}
             onChange={(e) => handleFieldChange('ownerId', e.target.value)}
             className={`w-full px-3 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${
@@ -250,7 +250,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Pipeline *
           </label>
-          <select
+          <select aria-label="Pipeline"
             value={formData.pipelineId || ''}
             onChange={(e) => {
               const pipeline = pipelines.find(p => p.id === e.target.value);
@@ -315,7 +315,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Currency
             </label>
-            <select
+            <select aria-label="Currency"
               value={formData.currency || 'USD'}
               onChange={(e) => handleFieldChange('currency', e.target.value)}
               className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -332,7 +332,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Stage
             </label>
-            <select
+            <select aria-label="Stage"
               value={formData.stageId || ''}
               onChange={(e) => handleFieldChange('stageId', e.target.value)}
               className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -347,7 +347,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Win Probability: {formData.probability}%
             </label>
-            <input
+            <input aria-label="Win Probability: %"
               type="range"
               min="0"
               max="100"
@@ -382,7 +382,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Deal Type
             </label>
-            <select
+            <select aria-label="Deal Type"
               value={formData.dealType || 'new-business'}
               onChange={(e) => handleFieldChange('dealType', e.target.value)}
               className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -440,7 +440,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Lead Source
           </label>
-          <select
+          <select aria-label="Lead Source"
             value={formData.leadSource || ''}
             onChange={(e) => handleFieldChange('leadSource', e.target.value)}
             className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -460,7 +460,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Priority
           </label>
-          <select
+          <select aria-label="Priority"
             value={formData.priority || 'medium'}
             onChange={(e) => handleFieldChange('priority', e.target.value)}
             className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -476,7 +476,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Description
           </label>
-          <textarea
+          <textarea aria-label="Description"
             rows={4}
             value={formData.description || ''}
             onChange={(e) => handleFieldChange('description', e.target.value)}
@@ -489,7 +489,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Next Steps
           </label>
-          <textarea
+          <textarea aria-label="Next Steps"
             rows={3}
             value={formData.nextSteps || ''}
             onChange={(e) => handleFieldChange('nextSteps', e.target.value)}
@@ -599,7 +599,7 @@ const CreateDealForm: React.FC<CreateDealFormProps> = ({
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Internal Notes
         </label>
-        <textarea
+        <textarea aria-label="Internal Notes"
           rows={4}
           value={formData.notes || ''}
           onChange={(e) => handleFieldChange('notes', e.target.value)}

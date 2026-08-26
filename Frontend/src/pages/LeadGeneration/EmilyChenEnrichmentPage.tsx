@@ -539,7 +539,7 @@ function ReviewFieldCard({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Edit Value:
           </label>
-          <input
+          <input aria-label="Edit Value:"
             type="text"
             value={editedValue}
             onChange={(e) => onEditValueChange(e.target.value)}

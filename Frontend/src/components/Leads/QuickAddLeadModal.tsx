@@ -180,7 +180,7 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Last Name</label>
-              <input
+              <input aria-label="Last Name"
                 name="lastName"
                 value={form.lastName}
                 onChange={handleChange}
@@ -284,7 +284,7 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
           {/* Source */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Source *</label>
-            <select
+            <select aria-label="Source"
               name="source"
               value={form.source}
               onChange={handleChange}
@@ -305,7 +305,7 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
                 <span className="text-xs text-blue-600">Suggested: {suggestion.label} based on source</span>
               </div>
             )}
-            <select
+            <select aria-label="Assigned To"
               value={form.ownerId}
               onChange={handleOwnerChange}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -2023,7 +2023,7 @@ const EnhancedAccountDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <select aria-label="To" className="w-full border border-gray-300 rounded-lg px-3 py-2">
                   <option>All contacts at {account?.name}</option>
                   {contacts.map(contact => (
                     <option key={contact.id}>{contact.name}</option>
@@ -2032,11 +2032,11 @@ const EnhancedAccountDetailView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                <input aria-label="Subject" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea rows={6} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                <textarea aria-label="Message" rows={6} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -2067,7 +2067,7 @@ const EnhancedAccountDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Participants</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <select aria-label="Participants" className="w-full border border-gray-300 rounded-lg px-3 py-2">
                   {contacts.map(contact => (
                     <option key={contact.id}>{contact.name}</option>
                   ))}
@@ -2075,25 +2075,25 @@ const EnhancedAccountDetailView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Meeting title" />
+                <input aria-label="Title" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Meeting title" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                  <input aria-label="Date" type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                  <input type="time" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                  <input aria-label="Time" type="time" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Meeting room or video link" />
+                <input aria-label="Location" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Meeting room or video link" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea rows={4} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Meeting agenda and notes" />
+                <textarea aria-label="Notes" rows={4} className="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="Meeting agenda and notes" />
               </div>
               <div className="flex justify-end gap-2">
                 <button

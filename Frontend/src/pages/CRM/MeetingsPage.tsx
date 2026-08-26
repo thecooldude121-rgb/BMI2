@@ -843,7 +843,7 @@ END:VCALENDAR`;
           <div className="grid grid-cols-4 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
-              <select
+              <select aria-label="Time Range"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.timeRange}
                 onChange={(e) => setFilters({ ...filters, timeRange: e.target.value as any })}
@@ -857,7 +857,7 @@ END:VCALENDAR`;
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
+              <select aria-label="Status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
@@ -870,7 +870,7 @@ END:VCALENDAR`;
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-              <select
+              <select aria-label="Type"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.type}
                 onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
@@ -883,7 +883,7 @@ END:VCALENDAR`;
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">AI Status</label>
-              <select
+              <select aria-label="AI Status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.aiStatus}
                 onChange={(e) => setFilters({ ...filters, aiStatus: e.target.value as any })}

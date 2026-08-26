@@ -69,7 +69,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-            <select
+            <select aria-label="Status"
               value={localFilters.status || ''}
               onChange={(e) => handleFilterChange('status', e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -83,7 +83,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Owner</label>
-            <select
+            <select aria-label="Owner"
               value={localFilters.ownerId || ''}
               onChange={(e) => handleFilterChange('ownerId', e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -97,7 +97,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Pipeline</label>
-            <select
+            <select aria-label="Pipeline"
               value={localFilters.pipelineId || ''}
               onChange={(e) => {
                 handleFilterChange('pipelineId', e.target.value || undefined);
@@ -114,7 +114,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Stage</label>
-            <select
+            <select aria-label="Stage"
               value={localFilters.stageId || ''}
               onChange={(e) => handleFilterChange('stageId', e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -132,7 +132,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Deal Type</label>
-            <select
+            <select aria-label="Deal Type"
               value={localFilters.dealType || ''}
               onChange={(e) => handleFilterChange('dealType', e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -147,7 +147,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-            <select
+            <select aria-label="Priority"
               value={localFilters.priority || ''}
               onChange={(e) => handleFilterChange('priority', e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -162,7 +162,7 @@ const DealFiltersPanel: React.FC<DealFiltersPanelProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Health</label>
-            <select
+            <select aria-label="Health"
               value={localFilters.health || ''}
               onChange={(e) => handleFilterChange('health', e.target.value || undefined)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

@@ -21,7 +21,7 @@ const GeneralPreferences: React.FC = () => {
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Date Format</label>
-          <select
+          <select aria-label="Date Format"
             value={preferences.dateFormat}
             onChange={(e) => setPreferences({ ...preferences, dateFormat: e.target.value })}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -34,7 +34,7 @@ const GeneralPreferences: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Time Format</label>
-          <select
+          <select aria-label="Time Format"
             value={preferences.timeFormat}
             onChange={(e) => setPreferences({ ...preferences, timeFormat: e.target.value })}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -46,7 +46,7 @@ const GeneralPreferences: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-          <select
+          <select aria-label="Currency"
             value={preferences.currency}
             onChange={(e) => setPreferences({ ...preferences, currency: e.target.value })}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -60,7 +60,7 @@ const GeneralPreferences: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Week Starts On</label>
-          <select
+          <select aria-label="Week Starts On"
             value={preferences.weekStart}
             onChange={(e) => setPreferences({ ...preferences, weekStart: e.target.value })}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -72,7 +72,7 @@ const GeneralPreferences: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Fiscal Year Starts</label>
-          <select
+          <select aria-label="Fiscal Year Starts"
             value={preferences.fiscalYearStart}
             onChange={(e) => setPreferences({ ...preferences, fiscalYearStart: e.target.value })}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

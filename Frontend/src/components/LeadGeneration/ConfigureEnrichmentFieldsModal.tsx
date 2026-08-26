@@ -442,7 +442,7 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-Enrich Frequency:
                 </label>
-                <select
+                <select aria-label="Auto-Enrich Frequency:"
                   value={frequency}
                   onChange={(e) => handleFrequencyChange(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -473,7 +473,7 @@ const ConfigureEnrichmentFieldsModal: React.FC<ConfigureEnrichmentFieldsModalPro
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Confidence Threshold:
                 </label>
-                <select
+                <select aria-label="Confidence Threshold:"
                   value={confidenceThreshold}
                   onChange={(e) => handleConfidenceThresholdChange(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

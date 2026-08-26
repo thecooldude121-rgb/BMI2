@@ -20,7 +20,7 @@ const LocationSection: React.FC<LocationSectionProps> = ({ formData, onChange, e
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Address Line 1 <span className="text-red-500">*</span>
           </label>
-          <input
+          <input aria-label="Address Line 1"
             type="text"
             value={formData.addressLine1}
             onChange={(e) => onChange('addressLine1', e.target.value)}
@@ -38,7 +38,7 @@ const LocationSection: React.FC<LocationSectionProps> = ({ formData, onChange, e
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Address Line 2
           </label>
-          <input
+          <input aria-label="Address Line 2"
             type="text"
             value={formData.addressLine2}
             onChange={(e) => onChange('addressLine2', e.target.value)}
@@ -52,7 +52,7 @@ const LocationSection: React.FC<LocationSectionProps> = ({ formData, onChange, e
             <label className="block text-sm font-medium text-gray-700 mb-1">
               City <span className="text-red-500">*</span>
             </label>
-            <input
+            <input aria-label="City"
               type="text"
               value={formData.city}
               onChange={(e) => onChange('city', e.target.value)}
@@ -70,7 +70,7 @@ const LocationSection: React.FC<LocationSectionProps> = ({ formData, onChange, e
             <label className="block text-sm font-medium text-gray-700 mb-1">
               State/Province <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="State/Province"
               value={formData.state}
               onChange={(e) => onChange('state', e.target.value)}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -96,7 +96,7 @@ const LocationSection: React.FC<LocationSectionProps> = ({ formData, onChange, e
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Postal Code
             </label>
-            <input
+            <input aria-label="Postal Code"
               type="text"
               value={formData.postalCode}
               onChange={(e) => onChange('postalCode', e.target.value)}
@@ -109,7 +109,7 @@ const LocationSection: React.FC<LocationSectionProps> = ({ formData, onChange, e
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Country <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Country"
               value={formData.country}
               onChange={(e) => onChange('country', e.target.value)}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${

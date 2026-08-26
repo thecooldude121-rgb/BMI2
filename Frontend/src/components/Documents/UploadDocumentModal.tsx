@@ -837,7 +837,7 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-sm font-medium mb-2" style={{ color: '#374151' }}>
               Document Name: <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <input
+            <input aria-label="Document Name:"
               type="text"
               value={documentName}
               onChange={(e) => setDocumentName(e.target.value)}
@@ -853,7 +853,7 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-sm font-medium mb-2" style={{ color: '#374151' }}>
               Category: <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <select
+            <select aria-label="Category:"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2"
@@ -1104,7 +1104,7 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-sm font-medium mb-2" style={{ color: '#374151' }}>
               Description: <span className="text-xs font-normal" style={{ color: '#9ca3af' }}>(optional)</span>
             </label>
-            <textarea
+            <textarea aria-label="Description: (optional)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter document description"

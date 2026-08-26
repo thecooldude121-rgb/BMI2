@@ -337,7 +337,7 @@ const ReportsPage: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select
+                <select aria-label="Date Range:"
                   value={selectedTimeframe}
                   onChange={(e) => setSelectedTimeframe(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -354,7 +354,7 @@ const ReportsPage: React.FC = () => {
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select
+                <select aria-label="Owner:"
                   value={selectedOwner}
                   onChange={(e) => setSelectedOwner(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -371,7 +371,7 @@ const ReportsPage: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select
+                <select aria-label="Category:"
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -422,7 +422,7 @@ const ReportsPage: React.FC = () => {
             <div className="mt-2 bg-white rounded-lg border border-gray-200 p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select
+                <select aria-label="Date Range:"
                   value={selectedTimeframe}
                   onChange={(e) => setSelectedTimeframe(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -439,7 +439,7 @@ const ReportsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select
+                <select aria-label="Owner:"
                   value={selectedOwner}
                   onChange={(e) => setSelectedOwner(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -453,7 +453,7 @@ const ReportsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select
+                <select aria-label="Category:"
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1640,7 +1640,7 @@ const ReportsPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Frequency" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option>Daily</option>
                     <option>Weekly</option>
                     <option>Monthly</option>
@@ -1648,7 +1648,7 @@ const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Recipients</label>
-                  <input
+                  <input aria-label="Recipients"
                     type="text"
                     placeholder="Enter email addresses..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1693,7 +1693,7 @@ const ReportsPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Share with</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Share with" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option>Entire Team</option>
                     <option>Sales Team</option>
                     <option>Specific Users...</option>
@@ -1701,7 +1701,7 @@ const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Permission</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Permission" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option>View Only</option>
                     <option>Can Edit</option>
                   </select>
@@ -1769,7 +1769,7 @@ const ReportsPage: React.FC = () => {
               <p className="text-sm text-gray-600 mb-4">Current name: <span className="font-medium">{selectedReport}</span></p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">New Name</label>
-                <input
+                <input aria-label="New Name"
                   type="text"
                   defaultValue={selectedReport || ''}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1804,7 +1804,7 @@ const ReportsPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
-                  <input
+                  <input aria-label="To"
                     type="email"
                     placeholder="Enter email addresses..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1812,7 +1812,7 @@ const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Message (optional)</label>
-                  <textarea
+                  <textarea aria-label="Message (optional)"
                     rows={3}
                     placeholder="Add a message..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"

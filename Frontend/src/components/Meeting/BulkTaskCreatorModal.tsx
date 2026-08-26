@@ -68,7 +68,7 @@ export default function BulkTaskCreatorModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Task Title
             </label>
-            <input
+            <input aria-label="Task Title"
               type="text"
               value={taskData.taskTitle}
               onChange={(e) => setTaskData({ ...taskData, taskTitle: e.target.value })}

@@ -1016,7 +1016,7 @@ const TechStartDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <select aria-label="To" className="w-full border border-gray-300 rounded-lg px-3 py-2">
                   <option>All contacts at TechStart Inc</option>
                   <option>Sarah Lee</option>
                   <option>Mike Chen</option>
@@ -1025,11 +1025,11 @@ const TechStartDetailView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                <input aria-label="Subject" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea rows={6} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                <textarea aria-label="Message" rows={6} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -1060,7 +1060,7 @@ const TechStartDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Participants</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <select aria-label="Participants" className="w-full border border-gray-300 rounded-lg px-3 py-2">
                   <option>Sarah Lee</option>
                   <option>Mike Chen</option>
                   <option>Lisa Wang</option>
@@ -1068,16 +1068,16 @@ const TechStartDetailView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                <input aria-label="Title" type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                  <input aria-label="Date" type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
-                  <input type="time" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                  <input aria-label="Time" type="time" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
                 </div>
               </div>
               <div className="flex justify-end gap-2">

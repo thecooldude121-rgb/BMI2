@@ -157,7 +157,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
               <Calendar className="w-4 h-4 mr-1.5 text-slate-500" />
               Date
             </label>
-            <input
+            <input aria-label="Date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -172,7 +172,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Subject <span className="text-red-500">*</span>
             </label>
-            <input
+            <input aria-label="Subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -186,7 +186,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Note Content <span className="text-red-500">*</span>
             </label>
-            <textarea
+            <textarea aria-label="Note Content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder={`${firstName}'s Q4 performance has been exceptional. Win rate of 72% exceeds team average. HRMS lead strategy is working well...`}
@@ -239,7 +239,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Development Goals (optional)
               </label>
-              <textarea
+              <textarea aria-label="Development Goals (optional)"
                 value={developmentGoals}
                 onChange={(e) => setDevelopmentGoals(e.target.value)}
                 placeholder={`- Lead HRMS training in Q1\n- Mentor junior reps\n- Improve negotiation skills`}

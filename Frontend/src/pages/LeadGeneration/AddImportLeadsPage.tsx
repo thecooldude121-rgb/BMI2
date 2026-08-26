@@ -461,7 +461,7 @@ const AddImportLeadsPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     First Name <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="First Name"
                     type="text"
                     value={manualForm.firstName}
                     onChange={(e) => setManualForm({ ...manualForm, firstName: e.target.value })}
@@ -473,7 +473,7 @@ const AddImportLeadsPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Last Name <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="Last Name"
                     type="text"
                     value={manualForm.lastName}
                     onChange={(e) => setManualForm({ ...manualForm, lastName: e.target.value })}
@@ -485,7 +485,7 @@ const AddImportLeadsPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="Email"
                     type="email"
                     value={manualForm.email}
                     onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })}
@@ -508,7 +508,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
+                  <input aria-label="Phone"
                     type="tel"
                     value={manualForm.phone}
                     onChange={(e) => setManualForm({ ...manualForm, phone: e.target.value })}
@@ -518,7 +518,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
-                  <input
+                  <input aria-label="Job Title"
                     type="text"
                     value={manualForm.title}
                     onChange={(e) => setManualForm({ ...manualForm, title: e.target.value })}
@@ -528,7 +528,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">LinkedIn URL</label>
-                  <input
+                  <input aria-label="LinkedIn URL"
                     type="url"
                     value={manualForm.linkedin}
                     onChange={(e) => setManualForm({ ...manualForm, linkedin: e.target.value })}
@@ -549,7 +549,7 @@ const AddImportLeadsPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Company Name <span className="text-red-600">*</span>
                   </label>
-                  <input
+                  <input aria-label="Company Name"
                     type="text"
                     value={manualForm.company}
                     onChange={(e) => setManualForm({ ...manualForm, company: e.target.value })}
@@ -559,7 +559,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
-                  <input
+                  <input aria-label="Website"
                     type="url"
                     value={manualForm.website}
                     onChange={(e) => setManualForm({ ...manualForm, website: e.target.value })}
@@ -569,7 +569,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-                  <select
+                  <select aria-label="Industry"
                     value={manualForm.industry}
                     onChange={(e) => setManualForm({ ...manualForm, industry: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -584,7 +584,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Company Size</label>
-                  <select
+                  <select aria-label="Company Size"
                     value={manualForm.companySize}
                     onChange={(e) => setManualForm({ ...manualForm, companySize: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -608,7 +608,7 @@ const AddImportLeadsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lead Source</label>
-                  <select
+                  <select aria-label="Lead Source"
                     value={manualForm.source}
                     onChange={(e) => setManualForm({ ...manualForm, source: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -622,7 +622,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Lead Owner</label>
-                  <select
+                  <select aria-label="Lead Owner"
                     value={manualForm.owner}
                     onChange={(e) => setManualForm({ ...manualForm, owner: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -637,7 +637,7 @@ const AddImportLeadsPage: React.FC = () => {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
-                <input
+                <input aria-label="Tags (comma-separated)"
                   type="text"
                   value={manualForm.tags}
                   onChange={(e) => setManualForm({ ...manualForm, tags: e.target.value })}
@@ -647,7 +647,7 @@ const AddImportLeadsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
+                <textarea aria-label="Notes"
                   value={manualForm.notes}
                   onChange={(e) => setManualForm({ ...manualForm, notes: e.target.value })}
                   rows={4}
@@ -1032,21 +1032,21 @@ const AddImportLeadsPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Lead Source:</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                      <select aria-label="Lead Source:" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         <option>CSV Import</option>
                         <option>Manual</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm text-gray-600 mb-1">Status:</label>
-                      <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                      <select aria-label="Status:" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                         <option>New</option>
                         <option>Contacted</option>
                       </select>
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm text-gray-600 mb-1">Tags:</label>
-                      <input
+                      <input aria-label="Tags:"
                         type="text"
                         value={csvData.defaultTags}
                         onChange={(e) => setCSVData({ ...csvData, defaultTags: e.target.value })}
@@ -1126,7 +1126,7 @@ const AddImportLeadsPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm text-gray-700 mb-1">Job Titles</label>
-                  <input
+                  <input aria-label="Job Titles"
                     type="text"
                     placeholder="VP Sales, CFO, CTO, Director"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -1134,7 +1134,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Company</label>
-                  <input
+                  <input aria-label="Company"
                     type="text"
                     placeholder="Enter company name"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -1142,7 +1142,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Industry</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <select aria-label="Industry" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option>Select Industry...</option>
                     <option>SaaS</option>
                     <option>FinTech</option>
@@ -1152,7 +1152,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Location</label>
-                  <input
+                  <input aria-label="Location"
                     type="text"
                     placeholder="San Francisco, CA"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -1160,7 +1160,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Company Size</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <select aria-label="Company Size" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option>Select Size...</option>
                     <option>1-10</option>
                     <option>11-50</option>
@@ -1172,7 +1172,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Revenue Range</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <select aria-label="Revenue Range" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option>Select Revenue...</option>
                     <option>$0-$1M</option>
                     <option>$1M-$10M</option>
@@ -1183,7 +1183,7 @@ const AddImportLeadsPage: React.FC = () => {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm text-gray-700 mb-1">Technologies Used</label>
-                  <input
+                  <input aria-label="Technologies Used"
                     type="text"
                     placeholder="Salesforce, HubSpot, AWS"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
@@ -1429,7 +1429,7 @@ const AddImportLeadsPage: React.FC = () => {
                   <label className="block text-sm text-gray-700 mb-2">
                     Upload Sales Navigator CSV:
                   </label>
-                  <input
+                  <input aria-label="Upload Sales Navigator CSV:"
                     type="file"
                     accept=".csv"
                     onChange={handleLinkedInCSVUpload}

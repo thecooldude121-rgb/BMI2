@@ -681,7 +681,7 @@ const NotificationsManagement: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-2 block">Frequency</label>
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <select aria-label="Frequency" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
                       <option value="immediate">Immediate</option>
                       <option value="hourly">Hourly Digest</option>
                       <option value="daily">Daily Digest</option>

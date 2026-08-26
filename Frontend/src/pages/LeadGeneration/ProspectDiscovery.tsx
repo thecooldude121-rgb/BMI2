@@ -1078,7 +1078,7 @@ const ProspectDiscovery: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Last Enriched</label>
-                <select
+                <select aria-label="Last Enriched"
                   value={filters.lastEnriched || ''}
                   onChange={(e) => setFilters(prev => ({ ...prev, lastEnriched: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1495,7 +1495,7 @@ const ProspectDiscovery: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Search Name</label>
-                <input
+                <input aria-label="Search Name"
                   type="text"
                   value={searchName}
                   onChange={(e) => setSearchName(e.target.value)}

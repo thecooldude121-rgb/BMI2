@@ -63,7 +63,7 @@ export default function ScheduleMeetingModal({ isOpen, onClose, onSchedule }: Sc
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Meeting Title <span className="text-red-500">*</span>
             </label>
-            <input
+            <input aria-label="Meeting Title"
               type="text"
               required
               value={formData.title}
@@ -150,7 +150,7 @@ export default function ScheduleMeetingModal({ isOpen, onClose, onSchedule }: Sc
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
-            <select
+            <select aria-label="Duration"
               value={formData.duration}
               onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -167,7 +167,7 @@ export default function ScheduleMeetingModal({ isOpen, onClose, onSchedule }: Sc
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Attendees <span className="text-red-500">*</span>
             </label>
-            <input
+            <input aria-label="Attendees"
               type="text"
               placeholder="Search contacts..."
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-2"
@@ -190,7 +190,7 @@ export default function ScheduleMeetingModal({ isOpen, onClose, onSchedule }: Sc
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Link to Deal (optional)</label>
-            <select
+            <select aria-label="Link to Deal (optional)"
               value={formData.dealId}
               onChange={(e) => setFormData({ ...formData, dealId: e.target.value })}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -249,7 +249,7 @@ export default function ScheduleMeetingModal({ isOpen, onClose, onSchedule }: Sc
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
-            <textarea
+            <textarea aria-label="Notes (optional)"
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}

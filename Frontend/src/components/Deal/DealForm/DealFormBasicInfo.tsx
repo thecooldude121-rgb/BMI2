@@ -392,7 +392,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
                     <label className="block text-xs font-medium text-amber-800 mb-1">
                       Reason for past close date (recommended)
                     </label>
-                    <textarea
+                    <textarea aria-label="Reason for past close date (recommended)"
                       value={formData.closeDateOverrideReason ?? ''}
                       onChange={(e) => onChange('closeDateOverrideReason', e.target.value)}
                       placeholder="e.g. Migrating deal from previous CRM, late entry after verbal close, admin correction…"
@@ -473,7 +473,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             Stage <span className="text-red-500">*</span>
           </label>
           {/* Mobile: native select */}
-          <select
+          <select aria-label="Stage"
             value={formData.stage}
             onChange={(e) => onChange('stage', e.target.value)}
             className="sm:hidden w-full px-3 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -512,7 +512,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Deal Type <span className="text-red-500">*</span>
           </label>
-          <select
+          <select aria-label="Deal Type"
             value={formData.dealType || ''}
             onChange={(e) => onChange('dealType', e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -712,7 +712,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
               {/* Reason textarea */}
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Reason for override (optional):</label>
-                <textarea
+                <textarea aria-label="Reason for override (optional):"
                   value={winProbOverrideReason}
                   onChange={(e) => onOverrideReasonChange(e.target.value.slice(0, 200))}
                   placeholder="e.g. Strong CEO relationship, verbal commitment received, incumbent vendor advantage..."

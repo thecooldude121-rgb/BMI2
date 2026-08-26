@@ -40,7 +40,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Infrastructure
             </label>
-            <input
+            <input aria-label="Infrastructure"
               type="text"
               value={formData.infrastructure}
               onChange={(e) => onChange('infrastructure', e.target.value)}
@@ -54,7 +54,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               CRM & Sales Tools
             </label>
-            <input
+            <input aria-label="CRM & Sales Tools"
               type="text"
               value={formData.crmTools}
               onChange={(e) => onChange('crmTools', e.target.value)}
@@ -72,7 +72,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Development Tools
             </label>
-            <input
+            <input aria-label="Development Tools"
               type="text"
               value={formData.devTools}
               onChange={(e) => onChange('devTools', e.target.value)}
@@ -95,7 +95,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Account Owner <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Account Owner"
               value={formData.accountOwner}
               onChange={(e) => onChange('accountOwner', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -111,7 +111,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Account Status <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Account Status"
               value={formData.accountStatus}
               onChange={(e) => onChange('accountStatus', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -127,7 +127,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Priority
             </label>
-            <select
+            <select aria-label="Priority"
               value={formData.priority}
               onChange={(e) => onChange('priority', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -199,7 +199,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Account Source
             </label>
-            <select
+            <select aria-label="Account Source"
               value={formData.accountSource}
               onChange={(e) => onChange('accountSource', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -245,7 +245,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Internal Notes
             </label>
-            <textarea
+            <textarea aria-label="Internal Notes"
               value={formData.notes}
               onChange={(e) => onChange('notes', e.target.value)}
               rows={4}

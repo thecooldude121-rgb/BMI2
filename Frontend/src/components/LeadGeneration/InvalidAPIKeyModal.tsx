@@ -163,7 +163,7 @@ const InvalidAPIKeyModal: React.FC<InvalidAPIKeyModalProps> = ({
                 <label className="block text-sm font-medium text-gray-900 mb-2">
                   New Apollo.io API Key:
                 </label>
-                <input
+                <input aria-label="New Apollo.io API Key:"
                   type="text"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}

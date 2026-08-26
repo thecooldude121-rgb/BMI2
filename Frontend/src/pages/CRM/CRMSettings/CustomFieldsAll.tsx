@@ -296,7 +296,7 @@ const CustomFieldsAll: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Apply to:
                 </label>
-                <select
+                <select aria-label="Apply to:"
                   value={newFieldModule}
                   onChange={(e) => setNewFieldModule(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -313,7 +313,7 @@ const CustomFieldsAll: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Field Label:
                 </label>
-                <input
+                <input aria-label="Field Label:"
                   type="text"
                   value={newFieldLabel}
                   onChange={(e) => setNewFieldLabel(e.target.value)}
@@ -326,7 +326,7 @@ const CustomFieldsAll: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Field Type:
                 </label>
-                <select
+                <select aria-label="Field Type:"
                   value={newFieldType}
                   onChange={(e) => setNewFieldType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

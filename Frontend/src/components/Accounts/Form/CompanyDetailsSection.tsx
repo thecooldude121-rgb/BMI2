@@ -64,7 +64,7 @@ const CompanyDetailsSection: React.FC<CompanyDetailsSectionProps> = ({
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Location
                     </label>
-                    <input
+                    <input aria-label="Location"
                       type="text"
                       value={office.location}
                       onChange={(e) => onUpdateOffice(office.id, 'location', e.target.value)}
@@ -76,7 +76,7 @@ const CompanyDetailsSection: React.FC<CompanyDetailsSectionProps> = ({
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Type
                     </label>
-                    <input
+                    <input aria-label="Type"
                       type="text"
                       value={office.type}
                       onChange={(e) => onUpdateOffice(office.id, 'type', e.target.value)}
@@ -88,7 +88,7 @@ const CompanyDetailsSection: React.FC<CompanyDetailsSectionProps> = ({
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Employees
                     </label>
-                    <input
+                    <input aria-label="Employees"
                       type="number"
                       value={office.employees}
                       onChange={(e) => onUpdateOffice(office.id, 'employees', parseInt(e.target.value) || 0)}

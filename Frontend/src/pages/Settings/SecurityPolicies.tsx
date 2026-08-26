@@ -456,7 +456,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Minimum Password Length
                 </label>
-                <input
+                <input aria-label="Minimum Password Length"
                   type="number"
                   min="6"
                   max="128"
@@ -471,7 +471,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Maximum Password Length
                 </label>
-                <input
+                <input aria-label="Maximum Password Length"
                   type="number"
                   min="8"
                   max="256"
@@ -532,7 +532,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Password History Count
                 </label>
-                <input
+                <input aria-label="Password History Count"
                   type="number"
                   min="0"
                   max="24"
@@ -548,7 +548,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Password Expiry (days)
                 </label>
-                <select
+                <select aria-label="Password Expiry (days)"
                   value={passwordPolicy.expiryDays}
                   onChange={(e) => setPasswordPolicy({ ...passwordPolicy, expiryDays: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -566,7 +566,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Max Login Attempts
                 </label>
-                <select
+                <select aria-label="Max Login Attempts"
                   value={passwordPolicy.maxLoginAttempts}
                   onChange={(e) => setPasswordPolicy({ ...passwordPolicy, maxLoginAttempts: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -581,7 +581,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Lockout Duration
                 </label>
-                <select
+                <select aria-label="Lockout Duration"
                   value={passwordPolicy.lockoutDuration}
                   onChange={(e) => setPasswordPolicy({ ...passwordPolicy, lockoutDuration: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -647,7 +647,7 @@ const SecurityPolicies: React.FC = () => {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Enforcement Mode
                     </label>
-                    <select
+                    <select aria-label="Enforcement Mode"
                       value={twoFactorSettings.enforcementMode}
                       onChange={(e) => setTwoFactorSettings({ ...twoFactorSettings, enforcementMode: e.target.value as any })}
                       className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -814,7 +814,7 @@ const SecurityPolicies: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Idle Timeout (minutes)
                   </label>
-                  <input
+                  <input aria-label="Idle Timeout (minutes)"
                     type="number"
                     min="5"
                     max="1440"
@@ -828,7 +828,7 @@ const SecurityPolicies: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Absolute Timeout (minutes)
                   </label>
-                  <input
+                  <input aria-label="Absolute Timeout (minutes)"
                     type="number"
                     min="30"
                     max="1440"
@@ -842,7 +842,7 @@ const SecurityPolicies: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Max Concurrent Sessions
                   </label>
-                  <input
+                  <input aria-label="Max Concurrent Sessions"
                     type="number"
                     min="1"
                     max="10"
@@ -1067,7 +1067,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Restriction Type
                 </label>
-                <select
+                <select aria-label="Restriction Type"
                   value={newIPRestriction.type}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, type: e.target.value as any })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1081,7 +1081,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   IP Address *
                 </label>
-                <input
+                <input aria-label="IP Address"
                   type="text"
                   value={newIPRestriction.ipAddress}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, ipAddress: e.target.value })}
@@ -1094,7 +1094,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description
                 </label>
-                <input
+                <input aria-label="Description"
                   type="text"
                   value={newIPRestriction.description}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, description: e.target.value })}
@@ -1107,7 +1107,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Country (Optional)
                 </label>
-                <input
+                <input aria-label="Country (Optional)"
                   type="text"
                   value={newIPRestriction.country}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, country: e.target.value })}

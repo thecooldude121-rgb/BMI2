@@ -1316,7 +1316,7 @@ const PermissionMatrix: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Copy From Role
                 </label>
-                <select
+                <select aria-label="Copy From Role"
                   value={copyFromRole}
                   onChange={(e) => setCopyFromRole(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

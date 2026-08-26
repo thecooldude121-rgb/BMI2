@@ -32,7 +32,7 @@ function EditModal({ territory, onSave, onClose }: {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Territory Name</label>
-          <input
+          <input aria-label="Territory Name"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="e.g. APAC, EMEA, North America"
@@ -42,7 +42,7 @@ function EditModal({ territory, onSave, onClose }: {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Countries (comma-separated)</label>
-          <textarea
+          <textarea aria-label="Countries (comma-separated)"
             value={countriesText}
             onChange={e => setCountriesText(e.target.value)}
             rows={3}
@@ -53,7 +53,7 @@ function EditModal({ territory, onSave, onClose }: {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Cities (comma-separated, optional)</label>
-          <input
+          <input aria-label="Cities (comma-separated, optional)"
             value={citiesText}
             onChange={e => setCitiesText(e.target.value)}
             placeholder="Mumbai, Singapore City"

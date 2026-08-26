@@ -532,7 +532,7 @@ Best,
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Touch Name
                             </label>
-                            <input
+                            <input aria-label="Touch Name"
                               type="text"
                               placeholder="Enter touch name..."
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -547,7 +547,7 @@ Best,
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Channel
                               </label>
-                              <select
+                              <select aria-label="Channel"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                                 defaultValue={touch.channel}
                                 onClick={(e) => e.stopPropagation()}
@@ -585,7 +585,7 @@ Best,
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Subject Line
                             </label>
-                            <input
+                            <input aria-label="Subject Line"
                               ref={el => subjectInputRefs.current[touch.touchNumber] = el}
                               type="text"
                               placeholder="Enter subject line..."
@@ -600,7 +600,7 @@ Best,
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               Email Body
                             </label>
-                            <textarea
+                            <textarea aria-label="Email Body"
                               placeholder="Enter email body..."
                               rows={6}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"

@@ -458,7 +458,7 @@ const ListsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">List Name</label>
-                <input
+                <input aria-label="List Name"
                   type="text"
                   className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter list name..."
@@ -467,7 +467,7 @@ const ListsPage: React.FC = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
+                <textarea aria-label="Description"
                   rows={3}
                   className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="Describe this list..."

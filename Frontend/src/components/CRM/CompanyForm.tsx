@@ -89,7 +89,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Company Name *
                 </label>
-                <input
+                <input aria-label="Company Name"
                   type="text"
                   name="name"
                   required
@@ -103,7 +103,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Domain
                 </label>
-                <input
+                <input aria-label="Domain"
                   type="text"
                   name="domain"
                   value={formData.domain}
@@ -117,7 +117,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Industry *
                 </label>
-                <select
+                <select aria-label="Industry"
                   name="industry"
                   required
                   value={formData.industry}
@@ -135,7 +135,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Company Size
                 </label>
-                <select
+                <select aria-label="Company Size"
                   name="size"
                   value={formData.size}
                   onChange={handleChange}
@@ -151,7 +151,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Website
                 </label>
-                <input
+                <input aria-label="Website"
                   type="url"
                   name="website"
                   value={formData.website}
@@ -165,7 +165,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Phone
                 </label>
-                <input
+                <input aria-label="Phone"
                   type="tel"
                   name="phone"
                   value={formData.phone}
@@ -178,7 +178,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Annual Revenue ($)
                 </label>
-                <input
+                <input aria-label="Annual Revenue ($)"
                   type="number"
                   name="revenue"
                   value={formData.revenue}
@@ -198,7 +198,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Street Address
                 </label>
-                <input
+                <input aria-label="Street Address"
                   type="text"
                   name="address.street"
                   value={formData.address.street}
@@ -211,7 +211,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   City
                 </label>
-                <input
+                <input aria-label="City"
                   type="text"
                   name="address.city"
                   value={formData.address.city}
@@ -224,7 +224,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   State/Province
                 </label>
-                <input
+                <input aria-label="State/Province"
                   type="text"
                   name="address.state"
                   value={formData.address.state}
@@ -237,7 +237,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Country
                 </label>
-                <input
+                <input aria-label="Country"
                   type="text"
                   name="address.country"
                   value={formData.address.country}
@@ -250,7 +250,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   ZIP/Postal Code
                 </label>
-                <input
+                <input aria-label="ZIP/Postal Code"
                   type="text"
                   name="address.zipCode"
                   value={formData.address.zipCode}
@@ -266,7 +266,7 @@ const CompanyForm: React.FC<CompanyFormProps> = ({ onClose, onSubmit }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Description
             </label>
-            <textarea
+            <textarea aria-label="Description"
               name="description"
               rows={3}
               value={formData.description}

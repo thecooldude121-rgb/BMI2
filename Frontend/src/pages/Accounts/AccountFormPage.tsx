@@ -765,7 +765,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Company Name <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Company Name"
                     type="text"
                     value={formData.companyName}
                     onChange={(e) => handleInputChange('companyName', e.target.value)}
@@ -783,7 +783,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Legal Name
                   </label>
-                  <input
+                  <input aria-label="Legal Name"
                     type="text"
                     value={formData.legalName}
                     onChange={(e) => handleInputChange('legalName', e.target.value)}
@@ -796,7 +796,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Trade Name
                   </label>
-                  <input
+                  <input aria-label="Trade Name"
                     type="text"
                     value={formData.tradeName}
                     onChange={(e) => handleInputChange('tradeName', e.target.value)}
@@ -809,7 +809,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Industry <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select aria-label="Industry"
                     value={formData.industry}
                     onChange={(e) => handleInputChange('industry', e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -834,7 +834,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Sub-Industry
                   </label>
-                  <input
+                  <input aria-label="Sub-Industry"
                     type="text"
                     value={formData.subIndustry}
                     onChange={(e) => handleInputChange('subIndustry', e.target.value)}
@@ -847,7 +847,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Specialization
                   </label>
-                  <input
+                  <input aria-label="Specialization"
                     type="text"
                     value={formData.specialization}
                     onChange={(e) => handleInputChange('specialization', e.target.value)}
@@ -860,7 +860,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Target Market
                   </label>
-                  <input
+                  <input aria-label="Target Market"
                     type="text"
                     value={formData.targetMarket}
                     onChange={(e) => handleInputChange('targetMarket', e.target.value)}
@@ -913,7 +913,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Company Phone
                   </label>
-                  <input
+                  <input aria-label="Company Phone"
                     type="tel"
                     value={formData.companyPhone}
                     onChange={(e) => handleInputChange('companyPhone', e.target.value)}
@@ -963,7 +963,7 @@ const AccountFormPage: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Company Email
                   </label>
-                  <input
+                  <input aria-label="Company Email"
                     type="email"
                     value={formData.companyEmail}
                     onChange={(e) => handleInputChange('companyEmail', e.target.value)}

@@ -443,7 +443,7 @@ const CreateCampaignPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Campaign Name *
               </label>
-              <input
+              <input aria-label="Campaign Name"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -464,7 +464,7 @@ const CreateCampaignPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Description (Optional)
               </label>
-              <textarea
+              <textarea aria-label="Description (Optional)"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Targeting VP and C-level at SaaS companies with 100-500 employees"
@@ -587,7 +587,7 @@ const CreateCampaignPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Target Open Rate (%)
               </label>
-              <input
+              <input aria-label="Target Open Rate (%)"
                 type="number"
                 value={formData.targetMetrics.openRate}
                 onChange={(e) => setFormData({
@@ -604,7 +604,7 @@ const CreateCampaignPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Target Reply Rate (%)
               </label>
-              <input
+              <input aria-label="Target Reply Rate (%)"
                 type="number"
                 value={formData.targetMetrics.replyRate}
                 onChange={(e) => setFormData({
@@ -621,7 +621,7 @@ const CreateCampaignPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Target Opportunities
               </label>
-              <input
+              <input aria-label="Target Opportunities"
                 type="number"
                 value={formData.targetMetrics.opportunities}
                 onChange={(e) => setFormData({
@@ -637,7 +637,7 @@ const CreateCampaignPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Target Revenue ($)
               </label>
-              <input
+              <input aria-label="Target Revenue ($)"
                 type="number"
                 value={formData.targetMetrics.revenue}
                 onChange={(e) => setFormData({
@@ -1056,7 +1056,7 @@ const CreateCampaignPage: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Subject Line <span className="text-red-500">*</span>
                         </label>
-                        <input
+                        <input aria-label="Subject Line"
                           type="text"
                           value={touch.subject}
                           onChange={(e) => updateTouch(touch.touch, 'subject', e.target.value)}
@@ -1082,7 +1082,7 @@ const CreateCampaignPage: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Email Body <span className="text-red-500">*</span>
                         </label>
-                        <textarea
+                        <textarea aria-label="Email Body"
                           value={touch.content}
                           onChange={(e) => updateTouch(touch.touch, 'content', e.target.value)}
                           placeholder="Enter email content..."
@@ -1166,7 +1166,7 @@ const CreateCampaignPage: React.FC = () => {
 
                             <div className="mt-3">
                               <label className="text-sm text-gray-700 font-medium">Winning Metric: </label>
-                              <select className="ml-2 px-3 py-1 border border-gray-300 rounded text-sm">
+                              <select aria-label="Winning Metric:" className="ml-2 px-3 py-1 border border-gray-300 rounded text-sm">
                                 <option>Open Rate</option>
                                 <option>Click Rate</option>
                                 <option>Reply Rate</option>
@@ -2205,7 +2205,7 @@ const CreateCampaignPage: React.FC = () => {
             {/* From Name */}
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">From Name</label>
-              <input
+              <input aria-label="From Name"
                 type="text"
                 defaultValue="Adithya from Moving Walls"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2215,7 +2215,7 @@ const CreateCampaignPage: React.FC = () => {
             {/* From Email */}
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">From Email</label>
-              <select
+              <select aria-label="From Email"
                 defaultValue="adithya@movingwalls.com"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
@@ -2232,7 +2232,7 @@ const CreateCampaignPage: React.FC = () => {
             {/* Reply-To Email */}
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">Reply-To Email (Optional)</label>
-              <input
+              <input aria-label="Reply-To Email (Optional)"
                 type="text"
                 defaultValue="Same as From Email"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2242,7 +2242,7 @@ const CreateCampaignPage: React.FC = () => {
             {/* Email Signature */}
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">Email Signature</label>
-              <textarea
+              <textarea aria-label="Email Signature"
                 rows={5}
                 defaultValue={`Best regards,\nAdithya\nProduct Manager, Moving Walls\n📧 adithya@movingwalls.com | 📱 +1 (555) 123-4567\n🌐 www.movingwalls.com`}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
@@ -2680,7 +2680,7 @@ const CreateCampaignPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-gray-700 mb-1">Test Email:</label>
-                  <input
+                  <input aria-label="Test Email:"
                     type="email"
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}

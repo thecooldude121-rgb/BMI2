@@ -215,7 +215,7 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
                 <Calendar className="w-4 h-4 mr-1.5 text-slate-500" />
                 Date
               </label>
-              <input
+              <input aria-label="Date"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
@@ -228,7 +228,7 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
                 <Clock className="w-4 h-4 mr-1.5 text-slate-500" />
                 Time
               </label>
-              <input
+              <input aria-label="Time"
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
@@ -384,7 +384,7 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
           {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Subject</label>
-            <input
+            <input aria-label="Subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -399,7 +399,7 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Agenda Template (for 1-on-1s)
               </label>
-              <select
+              <select aria-label="Agenda Template (for 1-on-1s)"
                 value={agendaTemplate}
                 onChange={(e) => setAgendaTemplate(e.target.value as keyof typeof agendaTemplates)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -416,7 +416,7 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
           {/* Agenda / Notes */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Agenda / Notes</label>
-            <textarea
+            <textarea aria-label="Agenda / Notes"
               value={agenda}
               onChange={(e) => setAgenda(e.target.value)}
               placeholder="Meeting agenda and notes..."

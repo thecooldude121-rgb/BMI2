@@ -403,7 +403,7 @@ export default function MeetingTranscriptViewer() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Speaker:</label>
-              <select
+              <select aria-label="Speaker:"
                 value={filterSpeaker}
                 onChange={(e) => setFilterSpeaker(e.target.value as any)}
                 className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -416,7 +416,7 @@ export default function MeetingTranscriptViewer() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Jump to:</label>
-              <select
+              <select aria-label="Jump to:"
                 onChange={(e) => {
                   const moment = keyMoments.find(m => m.id === e.target.value);
                   if (moment) {

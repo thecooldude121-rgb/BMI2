@@ -281,7 +281,7 @@ const ReportDetailView: React.FC = () => {
           <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-              <select
+              <select aria-label="Date Range:"
                 value={selectedDateRange}
                 onChange={(e) => setSelectedDateRange(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -299,7 +299,7 @@ const ReportDetailView: React.FC = () => {
 
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-              <select
+              <select aria-label="Owner:"
                 value={selectedOwner}
                 onChange={(e) => setSelectedOwner(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -314,7 +314,7 @@ const ReportDetailView: React.FC = () => {
 
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">Metric:</label>
-              <select
+              <select aria-label="Metric:"
                 value={selectedMetric}
                 onChange={(e) => setSelectedMetric(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -351,7 +351,7 @@ const ReportDetailView: React.FC = () => {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Stage:</label>
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Stage:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option>All Stages</option>
                   <option>Qualification</option>
                   <option>Proposal</option>
@@ -360,7 +360,7 @@ const ReportDetailView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Industry:</label>
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Industry:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option>All Industries</option>
                   <option>SaaS</option>
                   <option>Enterprise</option>
@@ -369,7 +369,7 @@ const ReportDetailView: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Deal Size:</label>
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Deal Size:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option>All Sizes</option>
                   <option>Small ($0-25K)</option>
                   <option>Medium ($25K-100K)</option>
@@ -663,7 +663,7 @@ const ReportDetailView: React.FC = () => {
                 {/* Time */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Time:</label>
-                  <select
+                  <select aria-label="Time:"
                     value={scheduleTime}
                     onChange={(e) => setScheduleTime(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -814,7 +814,7 @@ const ReportDetailView: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-3">
                     Share with:
                   </label>
-                  <input
+                  <input aria-label="Share with:"
                     type="text"
                     placeholder="Search team members..."
                     value={shareSearch}
@@ -857,7 +857,7 @@ const ReportDetailView: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Message (optional):
                   </label>
-                  <textarea
+                  <textarea aria-label="Message (optional):"
                     value={shareMessage}
                     onChange={(e) => setShareMessage(e.target.value)}
                     placeholder="Add a message..."

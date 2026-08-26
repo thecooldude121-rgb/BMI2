@@ -713,7 +713,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-assign to
                 </label>
-                <select
+                <select aria-label="Auto-assign to"
                   value={configForm.assignedTo}
                   onChange={(e) => setConfigForm({...configForm, assignedTo: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -729,7 +729,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Default Lead Status
                 </label>
-                <select
+                <select aria-label="Default Lead Status"
                   value={configForm.defaultStatus}
                   onChange={(e) => setConfigForm({...configForm, defaultStatus: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -745,7 +745,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tags (comma-separated)
                 </label>
-                <input
+                <input aria-label="Tags (comma-separated)"
                   type="text"
                   value={configForm.tags}
                   onChange={(e) => setConfigForm({...configForm, tags: e.target.value})}
@@ -758,7 +758,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-sync Frequency
                 </label>
-                <select
+                <select aria-label="Auto-sync Frequency"
                   value={configForm.syncFrequency}
                   onChange={(e) => setConfigForm({...configForm, syncFrequency: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -865,7 +865,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   API Key
                 </label>
-                <input
+                <input aria-label="API Key"
                   type="password"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your API key"

@@ -159,7 +159,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Rule Name <span className="text-red-500">*</span>
               </label>
-              <input
+              <input aria-label="Rule Name"
                 type="text"
                 value={rule.name}
                 onChange={(e) => setRule({ ...rule, name: e.target.value })}
@@ -171,7 +171,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-              <textarea
+              <textarea aria-label="Description"
                 value={rule.description}
                 onChange={(e) => setRule({ ...rule, description: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -249,7 +249,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                     <div className="flex-1 grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Field</label>
-                        <input
+                        <input aria-label="Field"
                           type="text"
                           value={condition.field}
                           onChange={(e) => updateCondition(condition.id, 'field', e.target.value)}
@@ -259,7 +259,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Operator</label>
-                        <select
+                        <select aria-label="Operator"
                           value={condition.operator}
                           onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -271,7 +271,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Value</label>
-                        <input
+                        <input aria-label="Value"
                           type="text"
                           value={condition.value}
                           onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
@@ -330,7 +330,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select {rule.targetType.charAt(0).toUpperCase() + rule.targetType.slice(1)} <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="Select"
                 value={rule.targetId}
                 onChange={(e) => setRule({ ...rule, targetId: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

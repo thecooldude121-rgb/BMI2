@@ -491,7 +491,7 @@ function FieldCard({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Edit Value:
           </label>
-          <input
+          <input aria-label="Edit Value:"
             type="text"
             value={editedValue}
             onChange={(e) => onValueChange(e.target.value)}
@@ -944,7 +944,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Direct Phone
                 </label>
-                <input
+                <input aria-label="Direct Phone"
                   type="tel"
                   placeholder="+1 555-0123"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -955,7 +955,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   LinkedIn Profile
                 </label>
-                <input
+                <input aria-label="LinkedIn Profile"
                   type="url"
                   placeholder="https://linkedin.com/in/..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -966,7 +966,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Mobile Phone
                 </label>
-                <input
+                <input aria-label="Mobile Phone"
                   type="tel"
                   placeholder="+1 555-0456"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -977,7 +977,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Office Location
                 </label>
-                <input
+                <input aria-label="Office Location"
                   type="text"
                   placeholder="San Francisco, CA"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -994,7 +994,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Company Website
                 </label>
-                <input
+                <input aria-label="Company Website"
                   type="url"
                   placeholder="https://startco.io"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1005,7 +1005,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Company Size
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Company Size" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option value="">Select size...</option>
                   <option value="1-10">1-10 employees</option>
                   <option value="11-50">11-50 employees</option>
@@ -1019,7 +1019,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Annual Revenue
                 </label>
-                <input
+                <input aria-label="Annual Revenue"
                   type="text"
                   placeholder="$1M - $5M"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1030,7 +1030,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Industry
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Industry" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option value="">Select industry...</option>
                   <option value="technology">Technology</option>
                   <option value="saas">SaaS</option>
@@ -1044,7 +1044,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Founded Year
                 </label>
-                <input
+                <input aria-label="Founded Year"
                   type="number"
                   placeholder="2020"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1061,7 +1061,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Seniority Level
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Seniority Level" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option value="">Select level...</option>
                   <option value="c-level">C-Level</option>
                   <option value="vp">VP</option>
@@ -1074,7 +1074,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Department
                 </label>
-                <input
+                <input aria-label="Department"
                   type="text"
                   placeholder="Executive"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1085,7 +1085,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Years in Role
                 </label>
-                <input
+                <input aria-label="Years in Role"
                   type="number"
                   placeholder="2"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1096,7 +1096,7 @@ function BulkAddModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Education
                 </label>
-                <input
+                <input aria-label="Education"
                   type="text"
                   placeholder="MBA, Stanford University"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1163,7 +1163,7 @@ function LinkedInImportModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               LinkedIn Profile URL
             </label>
-            <input
+            <input aria-label="LinkedIn Profile URL"
               type="url"
               value={linkedInUrl}
               onChange={(e) => onUrlChange(e.target.value)}

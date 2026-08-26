@@ -160,7 +160,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
               <Calendar className="w-4 h-4 mr-1.5 text-slate-500" />
               Date
             </label>
-            <input
+            <input aria-label="Date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -279,7 +279,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
           {callType === 'phone' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
-              <input
+              <input aria-label="Phone Number"
                 type="tel"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
@@ -335,7 +335,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Subject
             </label>
-            <input
+            <input aria-label="Subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -349,7 +349,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Notes (optional)
             </label>
-            <textarea
+            <textarea aria-label="Notes (optional)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Agenda items to discuss..."

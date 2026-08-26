@@ -1138,7 +1138,7 @@ const IntelligenceDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Reason</label>
-                <select
+                <select aria-label="Reason"
                   value={dismissReason}
                   onChange={(e) => setDismissReason(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1153,7 +1153,7 @@ const IntelligenceDetailView: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Note (optional)</label>
-                <textarea
+                <textarea aria-label="Note (optional)"
                   value={dismissNote}
                   onChange={(e) => setDismissNote(e.target.value)}
                   rows={3}
@@ -1194,7 +1194,7 @@ const IntelligenceDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-                <input
+                <input aria-label="Date"
                   type="date"
                   value={reminderDate}
                   onChange={(e) => setReminderDate(e.target.value)}
@@ -1204,7 +1204,7 @@ const IntelligenceDetailView: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
-                <input
+                <input aria-label="Time"
                   type="time"
                   value={reminderTime}
                   onChange={(e) => setReminderTime(e.target.value)}
@@ -1214,7 +1214,7 @@ const IntelligenceDetailView: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Note</label>
-                <textarea
+                <textarea aria-label="Note"
                   value={reminderNote}
                   onChange={(e) => setReminderNote(e.target.value)}
                   rows={3}
@@ -1281,7 +1281,7 @@ const IntelligenceDetailView: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Add Note (optional)</label>
-                <textarea
+                <textarea aria-label="Add Note (optional)"
                   value={shareNote}
                   onChange={(e) => setShareNote(e.target.value)}
                   rows={3}
@@ -1321,7 +1321,7 @@ const IntelligenceDetailView: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Sequence</label>
-                <select
+                <select aria-label="Select Sequence"
                   value={selectedSequence}
                   onChange={(e) => setSelectedSequence(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

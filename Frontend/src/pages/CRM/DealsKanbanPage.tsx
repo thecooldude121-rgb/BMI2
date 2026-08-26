@@ -2300,7 +2300,7 @@ const DealsKanbanPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Task
                 </label>
-                <input
+                <input aria-label="Task"
                   type="text"
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
@@ -2313,7 +2313,7 @@ const DealsKanbanPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Due Date
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Due Date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Tomorrow</option>
                   <option>In 2 days</option>
                   <option>This week</option>
@@ -2325,7 +2325,7 @@ const DealsKanbanPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Assign to
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Assign to" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Deal Owners</option>
                   <option>Me</option>
                   <option>My Team</option>

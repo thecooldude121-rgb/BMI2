@@ -781,7 +781,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                <input
+                <input aria-label="To"
                   type="email"
                   value={lead.leadInfo.email}
                   readOnly
@@ -790,7 +790,7 @@ const LeadDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                <input
+                <input aria-label="Subject"
                   type="text"
                   placeholder="Enter subject..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -799,7 +799,7 @@ const LeadDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                <textarea
+                <textarea aria-label="Message"
                   rows={10}
                   placeholder="Enter your message..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -840,14 +840,14 @@ const LeadDetailPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Call Type</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select aria-label="Call Type" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option>Outbound Call</option>
                   <option>Inbound Call</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-                <input
+                <input aria-label="Duration (minutes)"
                   type="number"
                   placeholder="15"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -855,7 +855,7 @@ const LeadDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select aria-label="Outcome" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option>Connected</option>
                   <option>Voicemail</option>
                   <option>No Answer</option>
@@ -864,7 +864,7 @@ const LeadDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
+                <textarea aria-label="Notes"
                   rows={4}
                   placeholder="Call notes..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"

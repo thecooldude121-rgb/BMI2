@@ -194,7 +194,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
                 <label className="text-sm font-semibold text-gray-900 mb-2 block">
                   Reassign {member.activeDeals || 0} deals to:
                 </label>
-                <select
+                <select aria-label="Reassign deals to:"
                   value={dealsReassignTo}
                   onChange={(e) => {
                     setDealsReassignTo(e.target.value);
@@ -218,7 +218,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
                 <label className="text-sm font-semibold text-gray-900 mb-2 block">
                   Reassign {member.assignedContacts || 0} contacts to:
                 </label>
-                <select
+                <select aria-label="Reassign contacts to:"
                   value={contactsReassignTo}
                   onChange={(e) => {
                     setContactsReassignTo(e.target.value);
@@ -242,7 +242,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
                 <label className="text-sm font-semibold text-gray-900 mb-2 block">
                   Reassign {member.openTasks || 0} open tasks to:
                 </label>
-                <select
+                <select aria-label="Reassign open tasks to:"
                   value={tasksReassignTo}
                   onChange={(e) => {
                     setTasksReassignTo(e.target.value);
@@ -268,7 +268,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
             <label className="block text-sm font-bold text-gray-900 mb-2">
               To confirm deletion, type the user's email:
             </label>
-            <input
+            <input aria-label="To confirm deletion, type the user's email:"
               type="text"
               value={confirmEmail}
               onChange={(e) => {

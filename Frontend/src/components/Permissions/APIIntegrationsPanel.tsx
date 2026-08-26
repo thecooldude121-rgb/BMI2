@@ -532,7 +532,7 @@ export const APIIntegrationsPanel: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Key Name <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Key Name"
                   type="text"
                   value={newAPIKey.name}
                   onChange={(e) => setNewAPIKey({ ...newAPIKey, name: e.target.value })}
@@ -544,7 +544,7 @@ export const APIIntegrationsPanel: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Expiration Date</label>
-                <input
+                <input aria-label="Expiration Date"
                   type="date"
                   value={newAPIKey.expires_at}
                   onChange={(e) => setNewAPIKey({ ...newAPIKey, expires_at: e.target.value })}
@@ -592,7 +592,7 @@ export const APIIntegrationsPanel: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Webhook Name <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Webhook Name"
                   type="text"
                   value={newWebhook.name}
                   onChange={(e) => setNewWebhook({ ...newWebhook, name: e.target.value })}
@@ -606,7 +606,7 @@ export const APIIntegrationsPanel: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Webhook URL <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Webhook URL"
                   type="url"
                   value={newWebhook.url}
                   onChange={(e) => setNewWebhook({ ...newWebhook, url: e.target.value })}

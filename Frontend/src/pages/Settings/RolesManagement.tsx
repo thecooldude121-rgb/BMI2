@@ -1118,7 +1118,7 @@ const RolesManagement: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Parent Role
                 </label>
-                <select
+                <select aria-label="Parent Role"
                   value={newRoleData.parent_role_id || parentRoleForNew || ''}
                   onChange={(e) => {
                     setNewRoleData({ ...newRoleData, parent_role_id: e.target.value });
@@ -1150,7 +1150,7 @@ const RolesManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
+                <textarea aria-label="Description"
                   value={newRoleData.description}
                   onChange={(e) => setNewRoleData({ ...newRoleData, description: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1161,7 +1161,7 @@ const RolesManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Business Unit</label>
-                <input
+                <input aria-label="Business Unit"
                   type="text"
                   value={newRoleData.business_unit}
                   onChange={(e) => setNewRoleData({ ...newRoleData, business_unit: e.target.value })}

@@ -375,7 +375,7 @@ const ProspectsDiscovery: React.FC = () => {
             <div className="grid grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input
+                <input aria-label="Title"
                   type="text"
                   placeholder="e.g., VP, Director"
                   value={filters.title}
@@ -385,7 +385,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                <input
+                <input aria-label="Location"
                   type="text"
                   placeholder="City, State"
                   value={filters.location}
@@ -395,7 +395,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
-                <input
+                <input aria-label="Company"
                   type="text"
                   placeholder="Company name"
                   value={filters.company}
@@ -405,7 +405,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-                <input
+                <input aria-label="Industry"
                   type="text"
                   placeholder="e.g., SaaS, Tech"
                   value={filters.industry}
@@ -415,7 +415,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Buying Intent</label>
-                <select
+                <select aria-label="Buying Intent"
                   value={filters.buyingIntent}
                   onChange={(e) => setFilters({ ...filters, buyingIntent: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -428,7 +428,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
+                <select aria-label="Status"
                   value={filters.status}
                   onChange={(e) => setFilters({ ...filters, status: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -443,7 +443,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Company Size</label>
-                <select
+                <select aria-label="Company Size"
                   value={filters.companySize}
                   onChange={(e) => setFilters({ ...filters, companySize: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -458,7 +458,7 @@ const ProspectsDiscovery: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Min Lead Score</label>
-                <input
+                <input aria-label="Min Lead Score"
                   type="range"
                   min="0"
                   max="100"

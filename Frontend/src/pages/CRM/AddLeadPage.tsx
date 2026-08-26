@@ -243,7 +243,7 @@ export default function AddLeadPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                  <input name="lastName" value={form.lastName} onChange={handleChange}
+                  <input aria-label="Last Name" name="lastName" value={form.lastName} onChange={handleChange}
                     placeholder="Smith" className={inputCls('lastName')} />
                 </div>
               </div>
@@ -312,7 +312,7 @@ export default function AddLeadPage() {
                 <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Referral Details</p>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Referring Contact *</label>
-                  <input name="sourceDetail" value={form.sourceDetail} onChange={handleChange}
+                  <input aria-label="Referring Contact" name="sourceDetail" value={form.sourceDetail} onChange={handleChange}
                     placeholder="e.g. Sarah Johnson (Acme) or sarah@acme.com"
                     className={inputCls('sourceDetail')} />
                   {errors.sourceDetail && <p className="text-xs text-red-600 mt-1">{errors.sourceDetail}</p>}
@@ -329,17 +329,17 @@ export default function AddLeadPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">UTM Source</label>
-                    <input name="utmSource" value={form.utmSource} onChange={handleChange}
+                    <input aria-label="UTM Source" name="utmSource" value={form.utmSource} onChange={handleChange}
                       placeholder="google" className={inputCls('utmSource')} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">UTM Medium</label>
-                    <input name="utmMedium" value={form.utmMedium} onChange={handleChange}
+                    <input aria-label="UTM Medium" name="utmMedium" value={form.utmMedium} onChange={handleChange}
                       placeholder="cpc" className={inputCls('utmMedium')} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">UTM Campaign</label>
-                    <input name="utmCampaign" value={form.utmCampaign} onChange={handleChange}
+                    <input aria-label="UTM Campaign" name="utmCampaign" value={form.utmCampaign} onChange={handleChange}
                       placeholder="summer-2026" className={inputCls('utmCampaign')} />
                   </div>
                 </div>
@@ -352,12 +352,12 @@ export default function AddLeadPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                    <input name="department" value={form.department} onChange={handleChange}
+                    <input aria-label="Department" name="department" value={form.department} onChange={handleChange}
                       placeholder="Engineering" className={inputCls('department')} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Company Size</label>
-                    <select name="companySize" value={form.companySize} onChange={handleChange}
+                    <select aria-label="Company Size" name="companySize" value={form.companySize} onChange={handleChange}
                       className={inputCls('companySize')}>
                       <option value="">Select size</option>
                       <option value="1-10">1–10</option>
@@ -384,14 +384,14 @@ export default function AddLeadPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
-                <select value={form.ownerId} onChange={handleOwnerChange} className={inputCls('ownerId')}>
+                <select aria-label="Assigned To" value={form.ownerId} onChange={handleOwnerChange} className={inputCls('ownerId')}>
                   <option value="">Unassigned</option>
                   {TEAM_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select name="priority" value={form.priority} onChange={handleChange} className={inputCls('priority')}>
+                <select aria-label="Priority" name="priority" value={form.priority} onChange={handleChange} className={inputCls('priority')}>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
@@ -415,12 +415,12 @@ export default function AddLeadPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Job Title</label>
-                      <input name="position" value={form.position} onChange={handleChange}
+                      <input aria-label="Job Title" name="position" value={form.position} onChange={handleChange}
                         placeholder="VP of Engineering" className={inputCls('position')} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
-                      <select name="industry" value={form.industry} onChange={handleChange} className={inputCls('industry')}>
+                      <select aria-label="Industry" name="industry" value={form.industry} onChange={handleChange} className={inputCls('industry')}>
                         <option value="">Select industry</option>
                         {['Technology','Healthcare','Finance','Manufacturing','Retail','Education','Real Estate','Consulting'].map(i =>
                           <option key={i} value={i}>{i}</option>)}
@@ -462,7 +462,7 @@ export default function AddLeadPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                    <textarea name="notes" rows={3} value={form.notes} onChange={handleChange}
+                    <textarea aria-label="Notes" name="notes" rows={3} value={form.notes} onChange={handleChange}
                       placeholder="Any additional context about this lead…"
                       className={`${inputCls('notes')} resize-none`} />
                   </div>

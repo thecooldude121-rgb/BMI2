@@ -125,7 +125,7 @@ const CustomViewManager: React.FC<CustomViewManagerProps> = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     View Name *
                   </label>
-                  <input
+                  <input aria-label="View Name"
                     type="text"
                     value={newViewName}
                     onChange={(e) => setNewViewName(e.target.value)}
@@ -138,7 +138,7 @@ const CustomViewManager: React.FC<CustomViewManagerProps> = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Description
                   </label>
-                  <textarea
+                  <textarea aria-label="Description"
                     rows={2}
                     value={newViewDescription}
                     onChange={(e) => setNewViewDescription(e.target.value)}

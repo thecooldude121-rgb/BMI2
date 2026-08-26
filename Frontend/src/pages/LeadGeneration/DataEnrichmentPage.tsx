@@ -474,7 +474,7 @@ const DataEnrichmentPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Job Name</label>
-                <input
+                <input aria-label="Job Name"
                   type="text"
                   className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   placeholder="Enter job name..."

@@ -267,7 +267,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Action Type
                 </label>
-                <select
+                <select aria-label="Action Type"
                   value={selectedActionType}
                   onChange={(e) => setSelectedActionType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -287,7 +287,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Entity Type
                 </label>
-                <select
+                <select aria-label="Entity Type"
                   value={selectedEntityType}
                   onChange={(e) => setSelectedEntityType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -306,7 +306,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   User
                 </label>
-                <select
+                <select aria-label="User"
                   value={selectedUser}
                   onChange={(e) => setSelectedUser(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -322,7 +322,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date From
                 </label>
-                <input
+                <input aria-label="Date From"
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
@@ -334,7 +334,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date To
                 </label>
-                <input
+                <input aria-label="Date To"
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}

@@ -147,7 +147,7 @@ export default function SimulationPanel() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Lead Source</label>
-            <select value={lead.source} onChange={e => set('source', e.target.value)}
+            <select aria-label="Lead Source" value={lead.source} onChange={e => set('source', e.target.value)}
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">— none —</option>
               {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -166,14 +166,14 @@ export default function SimulationPanel() {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Position / Title</label>
-            <input value={lead.position} onChange={e => set('position', e.target.value)}
+            <input aria-label="Position / Title" value={lead.position} onChange={e => set('position', e.target.value)}
               placeholder="e.g. VP of Sales"
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Company Size</label>
-            <select value={lead.company_size} onChange={e => set('company_size', e.target.value)}
+            <select aria-label="Company Size" value={lead.company_size} onChange={e => set('company_size', e.target.value)}
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">— none —</option>
               {COMPANY_SIZE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -182,14 +182,14 @@ export default function SimulationPanel() {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
-            <input value={lead.country} onChange={e => set('country', e.target.value)}
+            <input aria-label="Country" value={lead.country} onChange={e => set('country', e.target.value)}
               placeholder="e.g. India"
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
-            <input value={lead.city} onChange={e => set('city', e.target.value)}
+            <input aria-label="City" value={lead.city} onChange={e => set('city', e.target.value)}
               placeholder="e.g. Mumbai"
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
@@ -197,7 +197,7 @@ export default function SimulationPanel() {
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Tags (comma-separated)</label>
-          <input value={lead.tags} onChange={e => set('tags', e.target.value)}
+          <input aria-label="Tags (comma-separated)" value={lead.tags} onChange={e => set('tags', e.target.value)}
             placeholder="enterprise, vip"
             className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
@@ -206,7 +206,7 @@ export default function SimulationPanel() {
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Simulate Time <span className="text-gray-400">(leave blank for now)</span>
           </label>
-          <input type="datetime-local" value={simTime} onChange={e => { setSimTime(e.target.value); setResult(null); }}
+          <input aria-label="Simulate Time (leave blank for now)" type="datetime-local" value={simTime} onChange={e => { setSimTime(e.target.value); setResult(null); }}
             className="px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 

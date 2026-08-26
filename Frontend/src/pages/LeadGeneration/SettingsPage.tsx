@@ -90,7 +90,7 @@ const SettingsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
-                  <input
+                  <input aria-label="First Name"
                     type="text"
                     defaultValue="John"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -98,7 +98,7 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
-                  <input
+                  <input aria-label="Last Name"
                     type="text"
                     defaultValue="Smith"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -106,7 +106,7 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input
+                  <input aria-label="Email"
                     type="email"
                     defaultValue="john@company.com"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -114,7 +114,7 @@ const SettingsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
+                  <input aria-label="Phone"
                     type="tel"
                     defaultValue="+1 (555) 123-4567"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -279,14 +279,14 @@ const SettingsPage: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-                      <input
+                      <input aria-label="Current Password"
                         type="password"
                         className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-                      <input
+                      <input aria-label="New Password"
                         type="password"
                         className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />

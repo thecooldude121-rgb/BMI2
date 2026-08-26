@@ -244,7 +244,7 @@ export const DealFormProductDetails: React.FC<DealFormProductDetailsProps> = ({
       <div className="space-y-4 lg:space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Product/Package:</label>
-          <select
+          <select aria-label="Product/Package:"
             value={formData.product}
             onChange={(e) => onChange('product', e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -258,7 +258,7 @@ export const DealFormProductDetails: React.FC<DealFormProductDetailsProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Contract Term:</label>
-          <select
+          <select aria-label="Contract Term:"
             value={formData.contractTerm}
             onChange={(e) => onChange('contractTerm', e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -272,7 +272,7 @@ export const DealFormProductDetails: React.FC<DealFormProductDetailsProps> = ({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Payment Terms:</label>
-          <select
+          <select aria-label="Payment Terms:"
             value={formData.paymentTerms}
             onChange={(e) => onChange('paymentTerms', e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

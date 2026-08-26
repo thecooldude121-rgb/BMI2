@@ -155,7 +155,7 @@ const DeactivateUserModal: React.FC<DeactivateUserModalProps> = ({
             <label className="text-sm font-semibold text-gray-900 mb-2 block">
               Reassign deals and contacts to:
             </label>
-            <select
+            <select aria-label="Reassign deals and contacts to:"
               value={reassignTo}
               onChange={(e) => setReassignTo(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -192,7 +192,7 @@ const DeactivateUserModal: React.FC<DeactivateUserModalProps> = ({
             <label className="text-sm font-medium text-gray-700 mb-2 block">
               Reason for deactivation (optional):
             </label>
-            <textarea
+            <textarea aria-label="Reason for deactivation (optional):"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder='E.g., "Left company", "On leave", etc.'

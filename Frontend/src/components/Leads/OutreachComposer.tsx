@@ -273,7 +273,7 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">To</label>
-        <input type="email" value={lead.email || '—'} readOnly
+        <input aria-label="To" type="email" value={lead.email || '—'} readOnly
           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-default" />
       </div>
       <div>
@@ -293,12 +293,12 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Subject</label>
-        <input type="text" value={form.subject} onChange={set('subject')} placeholder="Enter subject…"
+        <input aria-label="Subject" type="text" value={form.subject} onChange={set('subject')} placeholder="Enter subject…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Message</label>
-        <textarea rows={6} value={form.body} onChange={set('body')} placeholder="Enter your message…"
+        <textarea aria-label="Message" rows={6} value={form.body} onChange={set('body')} placeholder="Enter your message…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
       </div>
     </div>
@@ -323,12 +323,12 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Duration (minutes)</label>
-        <input type="number" min="1" value={form.duration} onChange={set('duration')} placeholder="e.g. 15"
+        <input aria-label="Duration (minutes)" type="number" min="1" value={form.duration} onChange={set('duration')} placeholder="e.g. 15"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500" />
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</label>
-        <textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="Call notes…"
+        <textarea aria-label="Notes" rows={3} value={form.notes} onChange={set('notes')} placeholder="Call notes…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
       </div>
       <div>
@@ -371,7 +371,7 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Message</label>
-        <textarea rows={4} value={form.notes} onChange={set('notes')} placeholder="Message content…"
+        <textarea aria-label="Message" rows={4} value={form.notes} onChange={set('notes')} placeholder="Message content…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none" />
       </div>
       <div>
@@ -396,18 +396,18 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Title</label>
-        <input type="text" value={form.title} onChange={set('title')} placeholder="e.g. Discovery Call"
+        <input aria-label="Title" type="text" value={form.title} onChange={set('title')} placeholder="e.g. Discovery Call"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Date & Time</label>
-          <input type="datetime-local" value={form.dateTime} onChange={set('dateTime')}
+          <input aria-label="Date & Time" type="datetime-local" value={form.dateTime} onChange={set('dateTime')}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Duration</label>
-          <select value={form.durationSelect} onChange={set('durationSelect')}
+          <select aria-label="Duration" value={form.durationSelect} onChange={set('durationSelect')}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
             <option value="15">15 min</option>
             <option value="30">30 min</option>
@@ -420,12 +420,12 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Meeting URL</label>
-        <input type="url" value={form.meetingUrl} onChange={set('meetingUrl')} placeholder="https://meet.google.com/…"
+        <input aria-label="Meeting URL" type="url" value={form.meetingUrl} onChange={set('meetingUrl')} placeholder="https://meet.google.com/…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</label>
-        <textarea rows={2} value={form.notes} onChange={set('notes')} placeholder="Agenda, talking points…"
+        <textarea aria-label="Notes" rows={2} value={form.notes} onChange={set('notes')} placeholder="Agenda, talking points…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none" />
       </div>
       <div>
@@ -450,7 +450,7 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Note</label>
-        <textarea rows={8} value={form.content} onChange={set('content')} placeholder="Enter your note…"
+        <textarea aria-label="Note" rows={8} value={form.content} onChange={set('content')} placeholder="Enter your note…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 resize-none" />
       </div>
       <div className="flex items-center gap-2">
@@ -466,12 +466,12 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
     <div className="space-y-4">
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Title</label>
-        <input type="text" value={form.taskTitle} onChange={set('taskTitle')} placeholder="Task title…"
+        <input aria-label="Title" type="text" value={form.taskTitle} onChange={set('taskTitle')} placeholder="Task title…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" />
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Due Date</label>
-        <input type="date" value={form.taskDueDate} onChange={set('taskDueDate')}
+        <input aria-label="Due Date" type="date" value={form.taskDueDate} onChange={set('taskDueDate')}
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500" />
       </div>
       <div>
@@ -508,7 +508,7 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
       </div>
       <div>
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</label>
-        <textarea rows={2} value={form.notes} onChange={set('notes')} placeholder="Additional details…"
+        <textarea aria-label="Notes" rows={2} value={form.notes} onChange={set('notes')} placeholder="Additional details…"
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none" />
       </div>
     </div>

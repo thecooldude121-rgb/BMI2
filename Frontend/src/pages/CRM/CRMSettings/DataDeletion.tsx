@@ -26,7 +26,7 @@ const DataDeletion: React.FC = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Type "DELETE" to confirm
           </label>
-          <input
+          <input aria-label="Type &quot;DELETE&quot; to confirm"
             type="text"
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}

@@ -375,7 +375,7 @@ const SettingsPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Role Name <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="Role Name"
                 value={newRole.name}
                 onChange={(e) => setNewRole({ ...newRole, name: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -388,7 +388,7 @@ const SettingsPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
+              <textarea aria-label="Description"
                 value={newRole.description}
                 onChange={(e) => setNewRole({ ...newRole, description: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -398,7 +398,7 @@ const SettingsPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Hierarchy Level</label>
-              <input
+              <input aria-label="Hierarchy Level"
                 type="number"
                 value={newRole.hierarchy_level}
                 onChange={(e) => setNewRole({ ...newRole, hierarchy_level: parseInt(e.target.value) || 1 })}
@@ -409,7 +409,7 @@ const SettingsPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Parent Role</label>
-              <select
+              <select aria-label="Parent Role"
                 value={newRole.parent_role_id}
                 onChange={(e) => setNewRole({ ...newRole, parent_role_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

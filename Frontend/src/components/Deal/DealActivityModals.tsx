@@ -144,7 +144,7 @@ export const LogActivityModal: React.FC<LogActivityModalProps> = ({ isOpen, onCl
         <div className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Activity Type</label>
-            <select
+            <select aria-label="Activity Type"
               value={activityType}
               onChange={(e) => setActivityType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -157,7 +157,7 @@ export const LogActivityModal: React.FC<LogActivityModalProps> = ({ isOpen, onCl
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-            <input
+            <input aria-label="Subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -167,7 +167,7 @@ export const LogActivityModal: React.FC<LogActivityModalProps> = ({ isOpen, onCl
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-            <input
+            <input aria-label="Date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -176,7 +176,7 @@ export const LogActivityModal: React.FC<LogActivityModalProps> = ({ isOpen, onCl
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-            <textarea
+            <textarea aria-label="Notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add details..."

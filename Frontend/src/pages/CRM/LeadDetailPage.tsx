@@ -1186,7 +1186,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Type</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select aria-label="Reminder Type" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option>Follow up call</option>
                   <option>Send email</option>
                   <option>Check status</option>
@@ -1195,11 +1195,11 @@ const LeadDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Date & Time</label>
-                <input type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                <input aria-label="Reminder Date & Time" type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea rows={3} placeholder="Reminder notes…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                <textarea aria-label="Notes" rows={3} placeholder="Reminder notes…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">

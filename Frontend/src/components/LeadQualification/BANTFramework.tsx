@@ -149,7 +149,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Budget Range:
                 </label>
-                <select
+                <select aria-label="Budget Range:"
                   value={localData.budget.range}
                   onChange={(e) => handleUpdate('budget', 'range', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -166,7 +166,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Budget Timeline:
                 </label>
-                <select
+                <select aria-label="Budget Timeline:"
                   value={localData.budget.timeline}
                   onChange={(e) => handleUpdate('budget', 'timeline', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -181,7 +181,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Notes:</label>
-                <textarea
+                <textarea aria-label="Notes:"
                   value={localData.budget.notes}
                   onChange={(e) => handleUpdate('budget', 'notes', e.target.value)}
                   rows={2}
@@ -225,7 +225,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Decision-Making Role:
                 </label>
-                <select
+                <select aria-label="Decision-Making Role:"
                   value={localData.authority.role}
                   onChange={(e) => handleUpdate('authority', 'role', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -242,7 +242,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Other Stakeholders:
                 </label>
-                <input
+                <input aria-label="Other Stakeholders:"
                   type="text"
                   value={localData.authority.stakeholders}
                   onChange={(e) => handleUpdate('authority', 'stakeholders', e.target.value)}
@@ -255,7 +255,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Approval Process:
                 </label>
-                <textarea
+                <textarea aria-label="Approval Process:"
                   value={localData.authority.process}
                   onChange={(e) => handleUpdate('authority', 'process', e.target.value)}
                   rows={2}
@@ -324,7 +324,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Business Impact:
                 </label>
-                <textarea
+                <textarea aria-label="Business Impact:"
                   value={localData.need.impact}
                   onChange={(e) => handleUpdate('need', 'impact', e.target.value)}
                   rows={2}
@@ -371,7 +371,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Expected Close Date:
                 </label>
-                <input
+                <input aria-label="Expected Close Date:"
                   type="date"
                   value={localData.timeline.closeDate}
                   onChange={(e) => handleUpdate('timeline', 'closeDate', e.target.value)}
@@ -397,7 +397,7 @@ const BANTFramework: React.FC<BANTFrameworkProps> = ({ bantData, onUpdate }) => 
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Urgency Drivers:
                 </label>
-                <textarea
+                <textarea aria-label="Urgency Drivers:"
                   value={localData.timeline.drivers}
                   onChange={(e) => handleUpdate('timeline', 'drivers', e.target.value)}
                   rows={2}

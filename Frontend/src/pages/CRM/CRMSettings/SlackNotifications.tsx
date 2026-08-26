@@ -31,7 +31,7 @@ const SlackNotifications: React.FC = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Default Channel</label>
-            <input
+            <input aria-label="Default Channel"
               type="text"
               value={settings.channel}
               onChange={(e) => setSettings({ ...settings, channel: e.target.value })}

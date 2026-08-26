@@ -2762,7 +2762,7 @@ const DocumentsLibrary: React.FC = () => {
                 <label className="block text-sm font-medium mb-2" style={{ color: '#1f2937' }}>
                   Share with:
                 </label>
-                <input
+                <input aria-label="Share with:"
                   type="text"
                   placeholder="Search team members..."
                   className="w-full px-3 py-2 rounded-lg text-sm"
@@ -2873,7 +2873,7 @@ const DocumentsLibrary: React.FC = () => {
                 <label className="block text-sm font-medium mb-2" style={{ color: '#1f2937' }}>
                   Document Name
                 </label>
-                <input
+                <input aria-label="Document Name"
                   type="text"
                   defaultValue={editDocument.document_name}
                   className="w-full px-3 py-2 rounded-lg text-sm"
@@ -2885,7 +2885,7 @@ const DocumentsLibrary: React.FC = () => {
                 <label className="block text-sm font-medium mb-2" style={{ color: '#1f2937' }}>
                   Category
                 </label>
-                <select
+                <select aria-label="Category"
                   defaultValue={editDocument.category}
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ border: '1px solid #e5e7eb' }}
@@ -2903,7 +2903,7 @@ const DocumentsLibrary: React.FC = () => {
                 <label className="block text-sm font-medium mb-2" style={{ color: '#1f2937' }}>
                   Description
                 </label>
-                <textarea
+                <textarea aria-label="Description"
                   rows={3}
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ border: '1px solid #e5e7eb' }}

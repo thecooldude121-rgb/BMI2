@@ -276,7 +276,7 @@ export const PermissionSetBuilder: React.FC<PermissionSetBuilderProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Set Name <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Set Name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -289,7 +289,7 @@ export const PermissionSetBuilder: React.FC<PermissionSetBuilderProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Visibility
                 </label>
-                <select
+                <select aria-label="Visibility"
                   value={visibility}
                   onChange={(e) => setVisibility(e.target.value as 'global' | 'specific')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -304,7 +304,7 @@ export const PermissionSetBuilder: React.FC<PermissionSetBuilderProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Description
               </label>
-              <textarea
+              <textarea aria-label="Description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe what this permission set is for..."

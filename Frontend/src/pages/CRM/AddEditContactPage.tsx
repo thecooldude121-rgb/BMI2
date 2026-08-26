@@ -791,7 +791,7 @@ const AddEditContactPage: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     First Name <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="First Name"
                     type="text"
                     value={formData.firstName}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
@@ -804,7 +804,7 @@ const AddEditContactPage: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Last Name <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Last Name"
                     type="text"
                     value={formData.lastName}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
@@ -818,7 +818,7 @@ const AddEditContactPage: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Email <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
@@ -876,7 +876,7 @@ const AddEditContactPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Phone</label>
-                  <input
+                  <input aria-label="Phone"
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
@@ -889,7 +889,7 @@ const AddEditContactPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Mobile</label>
-                  <input
+                  <input aria-label="Mobile"
                     type="tel"
                     value={formData.mobile}
                     onChange={(e) => handleInputChange('mobile', e.target.value)}
@@ -1001,7 +1001,7 @@ const AddEditContactPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Job Title</label>
-                  <input
+                  <input aria-label="Job Title"
                     type="text"
                     value={formData.jobTitle}
                     onChange={(e) => handleInputChange('jobTitle', e.target.value)}
@@ -1011,7 +1011,7 @@ const AddEditContactPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
-                  <select
+                  <select aria-label="Department"
                     value={formData.department}
                     onChange={(e) => handleInputChange('department', e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1024,7 +1024,7 @@ const AddEditContactPage: React.FC = () => {
               </div>
               <div className="mt-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Reports To (Optional)</label>
-                <input
+                <input aria-label="Reports To (Optional)"
                   type="text"
                   value={formData.reportsTo}
                   onChange={(e) => handleInputChange('reportsTo', e.target.value)}
@@ -1043,7 +1043,7 @@ const AddEditContactPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Street Address</label>
-                  <input
+                  <input aria-label="Street Address"
                     type="text"
                     value={formData.street}
                     onChange={(e) => handleInputChange('street', e.target.value)}
@@ -1054,7 +1054,7 @@ const AddEditContactPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">City</label>
-                    <input
+                    <input aria-label="City"
                       type="text"
                       value={formData.city}
                       onChange={(e) => handleInputChange('city', e.target.value)}
@@ -1064,7 +1064,7 @@ const AddEditContactPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">State/Province</label>
-                    <input
+                    <input aria-label="State/Province"
                       type="text"
                       value={formData.state}
                       onChange={(e) => handleInputChange('state', e.target.value)}
@@ -1076,7 +1076,7 @@ const AddEditContactPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Postal Code</label>
-                    <input
+                    <input aria-label="Postal Code"
                       type="text"
                       value={formData.postalCode}
                       onChange={(e) => handleInputChange('postalCode', e.target.value)}
@@ -1086,7 +1086,7 @@ const AddEditContactPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Country</label>
-                    <select
+                    <select aria-label="Country"
                       value={formData.country}
                       onChange={(e) => handleInputChange('country', e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1100,7 +1100,7 @@ const AddEditContactPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Timezone (Auto-detected)</label>
-                  <select
+                  <select aria-label="Timezone (Auto-detected)"
                     value={formData.timezone}
                     onChange={(e) => handleInputChange('timezone', e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1125,7 +1125,7 @@ const AddEditContactPage: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Source <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <select aria-label="Source"
                     value={formData.source}
                     onChange={(e) => handleInputChange('source', e.target.value)}
                     className={`w-full px-4 py-2 border ${errors.source ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
@@ -1164,7 +1164,7 @@ const AddEditContactPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Contact Owner</label>
-                    <select
+                    <select aria-label="Contact Owner"
                       value={formData.owner}
                       onChange={(e) => handleInputChange('owner', e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1176,7 +1176,7 @@ const AddEditContactPage: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
-                    <select
+                    <select aria-label="Status"
                       value={formData.status}
                       onChange={(e) => handleInputChange('status', e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1198,7 +1198,7 @@ const AddEditContactPage: React.FC = () => {
               </h2>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Description/Notes</label>
-                <textarea
+                <textarea aria-label="Description/Notes"
                   value={formData.notes}
                   onChange={(e) => handleInputChange('notes', e.target.value)}
                   rows={6}

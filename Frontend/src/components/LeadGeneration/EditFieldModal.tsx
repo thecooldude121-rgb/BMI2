@@ -142,7 +142,7 @@ export function EditFieldModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Edit Value:
             </label>
-            <input
+            <input aria-label="Edit Value:"
               type="text"
               value={editedValue}
               onChange={(e) => setEditedValue(e.target.value)}
@@ -200,7 +200,7 @@ export function EditFieldModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Additional Notes:
             </label>
-            <textarea
+            <textarea aria-label="Additional Notes:"
               value={additionalNotes}
               onChange={(e) => setAdditionalNotes(e.target.value)}
               rows={3}

@@ -182,7 +182,7 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Disqualification Reason (if applicable):
               </label>
-              <textarea
+              <textarea aria-label="Disqualification Reason (if applicable):"
                 rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Provide reason for disqualification..."
@@ -194,7 +194,7 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Assign to Sales Rep:
             </label>
-            <select
+            <select aria-label="Assign to Sales Rep:"
               value={assignedTo}
               onChange={(e) => onUpdateAssignee(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -211,7 +211,7 @@ const QualificationDecision: React.FC<QualificationDecisionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Additional Notes:
             </label>
-            <textarea
+            <textarea aria-label="Additional Notes:"
               value={notes}
               onChange={(e) => onUpdateNotes(e.target.value)}
               rows={5}

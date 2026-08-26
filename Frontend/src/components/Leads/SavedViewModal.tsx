@@ -114,7 +114,7 @@ const ViewForm: React.FC<ViewFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             View name <span className="text-red-500">*</span>
           </label>
-          <input
+          <input aria-label="View name"
             type="text"
             value={name}
             onChange={e => { setName(e.target.value); setError(''); }}

@@ -449,7 +449,7 @@ const SalesIntelligenceFeed: React.FC = () => {
           <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Date Range:</label>
-              <select
+              <select aria-label="Date Range:"
                 value={selectedDateRange}
                 onChange={(e) => setSelectedDateRange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -462,7 +462,7 @@ const SalesIntelligenceFeed: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Industry:</label>
-              <select
+              <select aria-label="Industry:"
                 value={selectedIndustry}
                 onChange={(e) => setSelectedIndustry(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -478,7 +478,7 @@ const SalesIntelligenceFeed: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Company Size:</label>
-              <select
+              <select aria-label="Company Size:"
                 value={selectedCompanySize}
                 onChange={(e) => setSelectedCompanySize(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -869,7 +869,7 @@ const SalesIntelligenceFeed: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Add to Sequence (Optional):
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select aria-label="Add to Sequence (Optional):" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option value="">No sequence</option>
                   <option value="1">Cold Outreach Sequence</option>
                   <option value="2">Warm Introduction Sequence</option>
@@ -924,7 +924,7 @@ const SalesIntelligenceFeed: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Reason:
                 </label>
-                <select
+                <select aria-label="Reason:"
                   value={dismissReason}
                   onChange={(e) => setDismissReason(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -942,7 +942,7 @@ const SalesIntelligenceFeed: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Note (Optional):
                 </label>
-                <textarea
+                <textarea aria-label="Note (Optional):"
                   value={dismissNote}
                   onChange={(e) => setDismissNote(e.target.value)}
                   rows={3}

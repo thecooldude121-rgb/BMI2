@@ -296,7 +296,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Document Title
               </label>
-              <input
+              <input aria-label="Document Title"
                 type="text"
                 value={documentTitle}
                 onChange={(e) => setDocumentTitle(e.target.value)}
@@ -311,7 +311,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Message (optional)
             </label>
-            <textarea
+            <textarea aria-label="Message (optional)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder={`Hi ${firstName}, here's the document we discussed...`}
@@ -360,7 +360,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
           {/* Expires */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Expires</label>
-            <select
+            <select aria-label="Expires"
               value={expires}
               onChange={(e) => setExpires(e.target.value as typeof expires)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

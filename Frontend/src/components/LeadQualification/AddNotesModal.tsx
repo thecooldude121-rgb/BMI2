@@ -100,7 +100,7 @@ const AddNotesModal: React.FC<AddNotesModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Note Content: <span className="text-red-600">*</span>
             </label>
-            <textarea
+            <textarea aria-label="Note Content:"
               value={note}
               onChange={(e) => {
                 setNote(e.target.value);

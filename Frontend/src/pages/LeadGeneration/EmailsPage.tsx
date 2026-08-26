@@ -473,7 +473,7 @@ const EmailsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
-                  <input
+                  <input aria-label="To"
                     type="email"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="recipient@company.com"
@@ -481,7 +481,7 @@ const EmailsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
-                  <input
+                  <input aria-label="Subject"
                     type="text"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Email subject..."
@@ -491,7 +491,7 @@ const EmailsPage: React.FC = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
-                <textarea
+                <textarea aria-label="Message"
                   rows={12}
                   className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="Compose your email..."

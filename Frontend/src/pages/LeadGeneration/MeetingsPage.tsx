@@ -511,7 +511,7 @@ const MeetingsPage: React.FC = () => {
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title</label>
-                <input
+                <input aria-label="Meeting Title"
                   type="text"
                   className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   placeholder="Enter meeting title..."
@@ -521,14 +521,14 @@ const MeetingsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
-                  <input
+                  <input aria-label="Start Time"
                     type="datetime-local"
                     className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
-                  <select className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  <select aria-label="Duration (minutes)" className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
                     <option value="30">30 minutes</option>
                     <option value="45">45 minutes</option>
                     <option value="60">1 hour</option>
@@ -539,7 +539,7 @@ const MeetingsPage: React.FC = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Type</label>
-                <select className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <select aria-label="Meeting Type" className="w-full px-3 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
                   <option value="discovery">Discovery Call</option>
                   <option value="demo">Product Demo</option>
                   <option value="proposal">Proposal Review</option>

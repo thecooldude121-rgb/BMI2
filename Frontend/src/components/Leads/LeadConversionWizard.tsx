@@ -579,7 +579,7 @@ export default function LeadConversionWizard({
                   {/* Contact search */}
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-600">Link to Contact</label>
-                    <input
+                    <input aria-label="Link to Contact"
                       type="text"
                       placeholder="Search by name or email…"
                       value={linkContactSearch}
@@ -615,7 +615,7 @@ export default function LeadConversionWizard({
                   {/* Account search */}
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-600">Link to Account</label>
-                    <input
+                    <input aria-label="Link to Account"
                       type="text"
                       placeholder="Search by company name…"
                       value={linkAccountSearch}
@@ -746,7 +746,7 @@ export default function LeadConversionWizard({
               {/* Owner */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Owner</label>
-                <select
+                <select aria-label="Owner"
                   value={ownerId}
                   onChange={e => setOwnerId(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white"
@@ -787,7 +787,7 @@ export default function LeadConversionWizard({
                   <div className="space-y-2.5">
                     <div>
                       <label className="text-xs font-medium text-gray-600 mb-1 block">Deal Name</label>
-                      <input
+                      <input aria-label="Deal Name"
                         type="text"
                         value={dealName}
                         onChange={e => setDealName(e.target.value)}
@@ -797,7 +797,7 @@ export default function LeadConversionWizard({
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
                         <label className="text-xs font-medium text-gray-600 mb-1 block">Est. Value</label>
-                        <input
+                        <input aria-label="Est. Value"
                           type="number"
                           min={0}
                           value={dealValue}
@@ -807,7 +807,7 @@ export default function LeadConversionWizard({
                       </div>
                       <div>
                         <label className="text-xs font-medium text-gray-600 mb-1 block">Stage</label>
-                        <select
+                        <select aria-label="Stage"
                           value={dealStage}
                           onChange={e => setDealStage(e.target.value)}
                           className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white"

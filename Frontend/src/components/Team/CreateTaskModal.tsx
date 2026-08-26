@@ -115,7 +115,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           {/* Assign To */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Assign To</label>
-            <select
+            <select aria-label="Assign To"
               value={assignedTo}
               onChange={(e) => setAssignedTo(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -133,7 +133,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Task Title <span className="text-red-500">*</span>
             </label>
-            <input
+            <input aria-label="Task Title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -145,7 +145,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
-            <textarea
+            <textarea aria-label="Description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Please review your Q4 numbers and prepare for our 1-on-1 on Dec 20..."
@@ -160,7 +160,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <Calendar className="w-4 h-4 mr-1.5 text-slate-500" />
               Due Date <span className="text-red-500 ml-1">*</span>
             </label>
-            <input
+            <input aria-label="Due Date"
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}

@@ -2225,7 +2225,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
                   <div className="mb-3">
                     <label className="text-xs text-gray-500 mb-1 block">Primary competitor</label>
-                    <select
+                    <select aria-label="Primary competitor"
                       value={effectiveForComp.primaryCompetitor ?? ''}
                       onChange={e => {
                         const val = e.target.value || undefined;
@@ -3996,19 +3996,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Date</label>
-                  <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)}
+                  <input aria-label="Date" type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Time</label>
-                  <input type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)}
+                  <input aria-label="Time" type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Notes (optional)</label>
-                <textarea value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)}
+                <textarea aria-label="Notes (optional)" value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)}
                   placeholder="What to discuss, prep notes..."
                   rows={3}
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400 resize-none" />
@@ -4052,19 +4052,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Task title</label>
-                <input type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)}
+                <input aria-label="Task title" type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)}
                   placeholder="e.g. Send follow-up email, Prepare proposal..."
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Due date</label>
-                  <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)}
+                  <input aria-label="Due date" type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Priority</label>
-                  <select value={taskPriority} onChange={e => setTaskPriority(e.target.value as 'high' | 'medium' | 'low')}
+                  <select aria-label="Priority" value={taskPriority} onChange={e => setTaskPriority(e.target.value as 'high' | 'medium' | 'low')}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 bg-white">
                     <option value="high">🔴 High</option>
                     <option value="medium">🟡 Medium</option>
@@ -4074,7 +4074,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Assign to</label>
-                <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}
+                <select aria-label="Assign to" value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 bg-white">
                   <option value="">Select owner...</option>
                   {ownerFilterOptions.map(o => <option key={o} value={o}>{o}</option>)}
@@ -4142,14 +4142,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Meeting notes</label>
-                <textarea value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)}
+                <textarea aria-label="Meeting notes" value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)}
                   placeholder="What was discussed, key objections, decisions made..."
                   rows={3}
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400 resize-none" />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Next step</label>
-                <input type="text" value={meetingNextStep} onChange={e => setMeetingNextStep(e.target.value)}
+                <input aria-label="Next step" type="text" value={meetingNextStep} onChange={e => setMeetingNextStep(e.target.value)}
                   placeholder="e.g. Send revised proposal by Friday..."
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
               </div>
@@ -4413,7 +4413,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                  <input
+                  <input aria-label="To"
                     type="email"
                     defaultValue={showEmailModal.contactName}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -4421,7 +4421,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                  <input
+                  <input aria-label="Subject"
                     type="text"
                     defaultValue={`Re: ${showEmailModal.dealName}`}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -4429,7 +4429,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                  <textarea
+                  <textarea aria-label="Message"
                     rows={8}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Type your message..."
@@ -4465,7 +4465,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                  <input
+                  <input aria-label="Contact"
                     type="text"
                     defaultValue={showCallModal.contactName}
                     disabled
@@ -4474,7 +4474,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Call Duration</label>
-                  <input
+                  <input aria-label="Call Duration"
                     type="text"
                     placeholder="e.g., 15 minutes"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -4482,7 +4482,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Call Notes</label>
-                  <textarea
+                  <textarea aria-label="Call Notes"
                     rows={5}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="What was discussed..."
@@ -4490,7 +4490,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Outcome" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option>Successful</option>
                     <option>No Answer</option>
                     <option>Left Voicemail</option>

@@ -139,7 +139,7 @@ export const UpdateAmountModal: React.FC<UpdateAmountModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">New Amount:</label>
-            <input
+            <input aria-label="New Amount:"
               type="number"
               value={newAmount}
               onChange={(e) => setNewAmount(e.target.value)}
@@ -150,7 +150,7 @@ export const UpdateAmountModal: React.FC<UpdateAmountModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Reason:</label>
-            <input
+            <input aria-label="Reason:"
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -386,7 +386,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search existing contacts:</label>
-            <input
+            <input aria-label="Search existing contacts:"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -479,7 +479,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
         <div className="p-6 space-y-4 overflow-y-auto">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">To:</label>
-            <input
+            <input aria-label="To:"
               type="text"
               value={to}
               readOnly
@@ -489,7 +489,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Subject:</label>
-            <input
+            <input aria-label="Subject:"
               type="text"
               value={emailSubject}
               onChange={(e) => setEmailSubject(e.target.value)}
@@ -500,7 +500,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Message:</label>
-            <textarea
+            <textarea aria-label="Message:"
               value={emailBody}
               onChange={(e) => setEmailBody(e.target.value)}
               placeholder="Type your message..."
@@ -552,7 +552,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Contact:</label>
-            <input
+            <input aria-label="Contact:"
               type="text"
               value={contactName}
               readOnly
@@ -562,7 +562,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Outcome:</label>
-            <select
+            <select aria-label="Outcome:"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -576,7 +576,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes:</label>
-            <textarea
+            <textarea aria-label="Notes:"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Call notes..."
@@ -635,7 +635,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title:</label>
-            <input
+            <input aria-label="Title:"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -646,7 +646,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date:</label>
-            <input
+            <input aria-label="Date:"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -656,7 +656,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Time:</label>
-            <input
+            <input aria-label="Time:"
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -754,7 +754,7 @@ export const DuplicateDealModal: React.FC<DuplicateDealModalProps> = ({
         {/* Editable name */}
         <div className="mb-5">
           <label className="block text-sm font-medium text-gray-700 mb-1">New Deal Name</label>
-          <input
+          <input aria-label="New Deal Name"
             type="text"
             value={newName}
             onChange={e => setNewName(e.target.value)}

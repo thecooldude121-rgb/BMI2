@@ -230,7 +230,7 @@ As discussed, I've attached our proposal for {{deal_name}}...`,
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Template Name:
                 </label>
-                <input
+                <input aria-label="Template Name:"
                   type="text"
                   value={newTemplateName}
                   onChange={(e) => setNewTemplateName(e.target.value)}
@@ -243,7 +243,7 @@ As discussed, I've attached our proposal for {{deal_name}}...`,
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Subject Line:
                 </label>
-                <input
+                <input aria-label="Subject Line:"
                   type="text"
                   value={newTemplateSubject}
                   onChange={(e) => setNewTemplateSubject(e.target.value)}
@@ -256,7 +256,7 @@ As discussed, I've attached our proposal for {{deal_name}}...`,
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Body:
                 </label>
-                <textarea
+                <textarea aria-label="Email Body:"
                   value={newTemplateBody}
                   onChange={(e) => setNewTemplateBody(e.target.value)}
                   placeholder="Hi {{first_name}},&#10;&#10;I noticed..."

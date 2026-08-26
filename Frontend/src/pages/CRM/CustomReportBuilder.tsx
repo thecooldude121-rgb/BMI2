@@ -1084,7 +1084,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Report Name: *
                     </label>
-                    <input
+                    <input aria-label="Report Name:"
                       type="text"
                       value={config.name}
                       onChange={(e) => {
@@ -1112,7 +1112,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Description: (optional)
                     </label>
-                    <textarea
+                    <textarea aria-label="Description: (optional)"
                       value={config.description}
                       onChange={(e) => {
                         setConfig({ ...config, description: e.target.value });
@@ -1137,7 +1137,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Category:
                     </label>
-                    <select
+                    <select aria-label="Category:"
                       value={config.category}
                       onChange={(e) => setConfig({ ...config, category: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1512,7 +1512,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Group By:
                     </label>
-                    <select
+                    <select aria-label="Group By:"
                       value={config.groupBy}
                       onChange={(e) => setConfig({ ...config, groupBy: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -1537,7 +1537,7 @@ export default function CustomReportBuilder() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Field</label>
-                        <select
+                        <select aria-label="Field"
                           value={config.sortBy}
                           onChange={(e) => setConfig({ ...config, sortBy: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -1551,7 +1551,7 @@ export default function CustomReportBuilder() {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Order</label>
-                        <select
+                        <select aria-label="Order"
                           value={config.sortDirection}
                           onChange={(e) => setConfig({ ...config, sortDirection: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -1605,7 +1605,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Custom Formula: <span className="text-gray-500 font-normal text-xs">(Optional - Advanced users)</span>
                     </label>
-                    <input
+                    <input aria-label="Custom Formula: (Optional - Advanced users)"
                       type="text"
                       value={customFormula}
                       onChange={(e) => handleCustomFormulaChange(e.target.value)}
@@ -1731,7 +1731,7 @@ export default function CustomReportBuilder() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Frequency:
                             </label>
-                            <select
+                            <select aria-label="Frequency:"
                               value={emailFrequency}
                               onChange={(e) => setEmailFrequency(e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"

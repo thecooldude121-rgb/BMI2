@@ -340,7 +340,7 @@ const ProfileSettings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
-                    <input
+                    <input aria-label="First Name"
                       type="text"
                       value={editFormData.firstName}
                       onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
@@ -349,7 +349,7 @@ const ProfileSettings: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
-                    <input
+                    <input aria-label="Last Name"
                       type="text"
                       value={editFormData.lastName}
                       onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
@@ -361,7 +361,7 @@ const ProfileSettings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                    <input
+                    <input aria-label="Email Address"
                       type="email"
                       value={editFormData.email}
                       onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
@@ -370,7 +370,7 @@ const ProfileSettings: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                    <input
+                    <input aria-label="Phone Number"
                       type="tel"
                       value={editFormData.phone}
                       onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
@@ -382,7 +382,7 @@ const ProfileSettings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Job Title</label>
-                    <input
+                    <input aria-label="Job Title"
                       type="text"
                       value={editFormData.jobTitle}
                       onChange={(e) => setEditFormData({ ...editFormData, jobTitle: e.target.value })}
@@ -391,7 +391,7 @@ const ProfileSettings: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                    <select
+                    <select aria-label="Department"
                       value={editFormData.department}
                       onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -407,7 +407,7 @@ const ProfileSettings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                    <input
+                    <input aria-label="Location"
                       type="text"
                       value={editFormData.location}
                       onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
@@ -416,7 +416,7 @@ const ProfileSettings: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
-                    <select
+                    <select aria-label="Timezone"
                       value={editFormData.timezone}
                       onChange={(e) => setEditFormData({ ...editFormData, timezone: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -432,7 +432,7 @@ const ProfileSettings: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
-                  <select
+                  <select aria-label="Language"
                     value={editFormData.language}
                     onChange={(e) => setEditFormData({ ...editFormData, language: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -687,7 +687,7 @@ const ProfileSettings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               New Email:
             </label>
-            <input
+            <input aria-label="New Email:"
               type="email"
               value={changeEmailData.newEmail}
               onChange={(e) => setChangeEmailData({ ...changeEmailData, newEmail: e.target.value })}
@@ -700,7 +700,7 @@ const ProfileSettings: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Password (for verification):
             </label>
-            <input
+            <input aria-label="Password (for verification):"
               type="password"
               value={changeEmailData.password}
               onChange={(e) => setChangeEmailData({ ...changeEmailData, password: e.target.value })}

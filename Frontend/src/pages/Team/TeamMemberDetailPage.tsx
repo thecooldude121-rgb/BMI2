@@ -2517,7 +2517,7 @@ export default function TeamMemberDetailPage() {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Note Content</label>
-                    <textarea
+                    <textarea aria-label="Note Content"
                       className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows={5}
                       placeholder="Enter detailed coaching note..."
@@ -2525,7 +2525,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Focus Areas (comma separated)</label>
-                    <input
+                    <input aria-label="Focus Areas (comma separated)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., Scale HRMS strategy, Mentor team, Improve qualification"
@@ -2533,7 +2533,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Development Goals (comma separated)</label>
-                    <input
+                    <input aria-label="Development Goals (comma separated)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., Complete certification, Document playbook"
@@ -2541,7 +2541,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Performance Rating</label>
-                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select aria-label="Performance Rating" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option>Exceeding Expectations</option>
                       <option>Exceeds Expectations</option>
                       <option>Meets Expectations</option>
@@ -2550,7 +2550,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Achievement (optional)</label>
-                    <input
+                    <input aria-label="Achievement (optional)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Notable achievements or milestones"
@@ -2725,15 +2725,15 @@ export default function TeamMemberDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Date</label>
-                <input type="date" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Date" type="date" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Time</label>
-                <input type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Time" type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Duration</label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Duration" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>30 minutes</option>
                   <option>1 hour</option>
                   <option>2 hours</option>
@@ -2741,11 +2741,11 @@ export default function TeamMemberDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Meeting Topic</label>
-                <input type="text" placeholder="e.g., Q4 Performance Review" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Meeting Topic" type="text" placeholder="e.g., Q4 Performance Review" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Location / Link</label>
-                <input type="text" placeholder="Office or Zoom link" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Location / Link" type="text" placeholder="Office or Zoom link" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex gap-3 mt-6">
                 <Button onClick={saveSchedule} fullWidth>
@@ -2869,19 +2869,19 @@ export default function TeamMemberDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Note Content</label>
-                <textarea rows={6} defaultValue={selectedNote.content} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                <textarea aria-label="Note Content" rows={6} defaultValue={selectedNote.content} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Focus Areas (comma separated)</label>
-                <input type="text" defaultValue={selectedNote.focusAreas.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Focus Areas (comma separated)" type="text" defaultValue={selectedNote.focusAreas.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Development Goals (comma separated)</label>
-                <input type="text" defaultValue={selectedNote.developmentGoals?.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Development Goals (comma separated)" type="text" defaultValue={selectedNote.developmentGoals?.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Performance Rating</label>
-                <select defaultValue={selectedNote.performanceRating} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Performance Rating" defaultValue={selectedNote.performanceRating} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Exceeding Expectations</option>
                   <option>Exceeds Expectations</option>
                   <option>Meets Expectations</option>
@@ -2996,7 +2996,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Team Member
                 </label>
-                <input
+                <input aria-label="Team Member"
                   type="text"
                   value={member.directReports?.find(r => r.id === selectedReportId)?.name || ''}
                   disabled
@@ -3007,7 +3007,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Meeting Date & Time
                 </label>
-                <input
+                <input aria-label="Meeting Date & Time"
                   type="datetime-local"
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -3016,7 +3016,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Meeting Type
                 </label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Meeting Type" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option>Performance Review</option>
                   <option>Career Development</option>
                   <option>Goal Setting</option>
@@ -3028,7 +3028,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Agenda Items
                 </label>
-                <textarea
+                <textarea aria-label="Agenda Items"
                   rows={4}
                   placeholder="List topics to discuss..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3074,7 +3074,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Document
                 </label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Document" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option>Q4 Performance Review.pdf</option>
                   <option>Sales Playbook 2026.pdf</option>
                   <option>Product Training Guide.pdf</option>
@@ -3085,7 +3085,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Share with
                 </label>
-                <input
+                <input aria-label="Share with"
                   type="text"
                   defaultValue={member.email}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3095,7 +3095,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Message (Optional)
                 </label>
-                <textarea
+                <textarea aria-label="Message (Optional)"
                   rows={3}
                   placeholder="Add a message..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3147,7 +3147,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Task Title
                 </label>
-                <input
+                <input aria-label="Task Title"
                   type="text"
                   placeholder="e.g., Follow up with customer..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3157,7 +3157,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Assign To
                 </label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Assign To" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option>{member.name}</option>
                   <option>Myself</option>
                   <option>Other team member...</option>
@@ -3168,7 +3168,7 @@ export default function TeamMemberDetailPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Due Date
                   </label>
-                  <input
+                  <input aria-label="Due Date"
                     type="date"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -3177,7 +3177,7 @@ export default function TeamMemberDetailPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Priority
                   </label>
-                  <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <select aria-label="Priority" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                     <option>High</option>
                     <option>Medium</option>
                     <option>Low</option>
@@ -3188,7 +3188,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Description
                 </label>
-                <textarea
+                <textarea aria-label="Description"
                   rows={4}
                   placeholder="Task details..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
