@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
 
 /**
  * Tasks.
@@ -26,9 +27,49 @@ const VALID_STATUSES = ['pending', 'in-progress', 'completed'] as const;
 const VALID_PRIORITIES = ['low', 'medium', 'high'] as const;
 const VALID_RELATED_TYPES = ['lead', 'deal', 'employee'] as const;
 
+/**
+ * Which table a related_to_type points at, for the workspace check on write.
+ *
+ * `employee` is deliberately absent and this is a KNOWN GAP, not an oversight:
+ * the `employees` table has no `tenant_id` column at all (it is one of the
+ * tables that predates workspace scoping), so there is nothing to check a
+ * related_to_id against. A task in this workspace can therefore name any
+ * employee row in the database.
+ *
+ * Impact today is limited to the reference itself: `tasks` is a polymorphic
+ * related_to_type/related_to_id pair with no FK, and no query joins it, so
+ * nothing of the employee's is projected — GET /tasks only ever returns this
+ * workspace's task rows. It becomes a real leak the moment someone joins
+ * `employees` to render a name. Scoping that table is the fix and it needs a
+ * migration; until then this must not be joined.
+ */
+const RELATED_TABLE: Partial<Record<typeof VALID_RELATED_TYPES[number], ScopedTable>> = {
+  lead: 'leads',
+  deal: 'deals',
+};
+
+/** Reject a related_to_id that names a record in another workspace. */
+async function relatedRefError(
+  body: Record<string, unknown>,
+  tenantId: string,
+): Promise<string | null> {
+  const type = body.related_to_type as typeof VALID_RELATED_TYPES[number] | undefined;
+  if (!type) return null;
+  const table = RELATED_TABLE[type];
+  if (!table) return null; // 'employee' — see RELATED_TABLE.
+  return foreignIdsInTenant(
+    [{ field: 'related_to_id', table, value: body.related_to_id }],
+    tenantId,
+  );
+}
+
+// Scoped by tenant as well as id -- see the note in activitiesController.
 const resolveActorName = async (req: AuthRequest): Promise<string> => {
   if (req.user?.id) {
-    const row = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id]);
+    const row = await pool.query(
+      'SELECT first_name, last_name FROM users WHERE id = $1 AND tenant_id = $2',
+      [req.user.id, req.user.workspace_id],
+    );
     if (row.rows[0]) return `${row.rows[0].first_name} ${row.rows[0].last_name}`.trim();
   }
   return req.user?.email || 'Unknown';
@@ -127,7 +168,20 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
+    const badRef = await relatedRefError(req.body, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
+
     // tasks.id is a T001-style varchar with no default, like companies/contacts.
+    // DELIBERATELY NOT SCOPED BY TENANT, and this is load-bearing.
+    // tasks.id is a GLOBAL primary key (tasks_pkey PRIMARY KEY (id)), so ids must be
+    // unique across every workspace. Adding `AND tenant_id = $n` here would make
+    // the second workspace generate T001 again and every insert would fail with
+    // a duplicate-key error. The scan for missing tenant filters flags this line;
+    // it is a false positive.
+    //
+    // It IS a small information leak: the id a caller receives reveals the global
+    // row count. The fix for that is a per-workspace sequence or a uuid, NOT a
+    // tenant predicate.
     const maxResult = await pool.query(
       `SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM tasks WHERE id ~ '^T[0-9]+$'`,
     );
@@ -176,6 +230,9 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
         return;
       }
     }
+
+    const badRef = await relatedRefError(req.body, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     const updates: string[] = [];
     const params: any[] = [];

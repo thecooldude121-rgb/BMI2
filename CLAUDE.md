@@ -213,6 +213,32 @@ Key indexes: `contacts(workspace_id, email)`, `companies(workspace_id, domain)`,
 `deals(workspace_id, owner_id, stage)`, `activities(workspace_id, contact_id, occurred_at)`,
 `tasks(workspace_id, owner_id, status, due_date)`.
 
+### Open architecture question — `employees` belongs to HRMS, not here
+The `employees` table exists in this repo and has **no `tenant_id` column at all**, so an
+employee reference cannot be workspace-scoped. Do **not** write a migration to scope it:
+HRMS is a separate platform reached over the SSO/API boundary, so an employees table
+probably should not live in the CRM at all.
+
+Decide first: **drop it here and reference employees across the API boundary, or keep a
+local mirror.** Until that is decided:
+- **Do not JOIN `employees` to anything.** `tasks.related_to_type = 'employee'` is
+  therefore the one `related_to_id` value that is not validated against the caller's
+  workspace (`tasksController.RELATED_TABLE` omits it deliberately, with a comment). That
+  is safe only for as long as nothing joins the table — the moment a query renders an
+  employee name next to a task, it is a cross-workspace read.
+
+### Known defect — `MAX(id) + 1` is a race, independent of tenancy
+`companies`, `contacts`, `deals` and `tasks` all generate their `C001`/`CT001`/`D001`/`T001`
+ids with `SELECT MAX(CAST(SUBSTRING(id, n) AS INTEGER)) + 1`. Two concurrent creates read
+the same maximum and the second one violates the primary key — this has nothing to do with
+workspaces and is not fixed by any tenant predicate.
+
+Note also that these four queries are deliberately **not** scoped by `tenant_id`, and must
+not be: `id` is a global primary key on all four tables, so scoping the scan would make the
+second workspace regenerate `C001` and every insert would fail. The residual leak (the id
+reveals a global row count) and the race have **one shared fix**: move to
+`gen_random_uuid()`, or a per-table sequence. Do them together, not separately.
+
 ### Known schema drift (do not assume the spec above is what's deployed)
 - `EnhancedAccount` uses `billingAddress`, **not** `address` — an earlier bug had the edit
   form reading `address.street`, silently discarding saved addresses.
@@ -290,6 +316,21 @@ dead third option.
 - Build one vertical slice at a time (e.g. Contacts fully working end-to-end) before moving
   to the next, rather than scaffolding all pages shallowly at once.
 - Check in between stages. Don't run through a multi-item list in a single pass.
+
+### One session per worktree
+Two Claude Code sessions ran in this tree at once and it cost real time: one committed the
+other's **uncommitted** `index.ts` refactor without the `app.ts` it imports, leaving a HEAD
+that did not compile, and left an isolation-probe tenant behind in `bmi_crm` while the other
+session was auditing live-data hygiene. Each session also saw `CLAUDE.md` and
+`tsconfig.json` change underneath it mid-task.
+
+Run **one session at a time in a given worktree**, or give each session its own
+(`git worktree add`). And in any session:
+- **Check `git status` before starting**, and again before committing.
+- **Never stage a file you did not edit.** An unfamiliar uncommitted change is far more
+  likely to be another session's work in progress than something abandoned — ask, don't
+  assume, and don't commit around it.
+- If a file changes under you mid-task, stop and reconcile rather than overwriting.
 
 ### Replacing this file — diff it first
 When a replacement CLAUDE.md is handed over, **diff it against the existing one and report

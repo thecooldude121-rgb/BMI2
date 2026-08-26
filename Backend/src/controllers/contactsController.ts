@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { foreignIdsInTenant } from '../utils/tenantScope';
 
 /**
  * Vocabularies. These MIRROR the CHECK constraints contacts_source_check and
@@ -35,7 +36,12 @@ const SELECT_COLUMNS = `
 `;
 const FROM_JOINS = `
   FROM contacts c
-  LEFT JOIN companies co ON c.company_id = co.id
+  -- Both joins carry the tenant predicate. The users one always did; the
+  -- companies one did not, and contacts_company_id_fkey references
+  -- companies(id) globally — so a contact whose company_id pointed at another
+  -- workspace's company rendered that company's NAME in this workspace's list,
+  -- and matched it in the ?search= filter. A join is a read.
+  LEFT JOIN companies co ON c.company_id = co.id AND co.tenant_id = c.tenant_id
   LEFT JOIN users u ON c.owner_id = u.id AND u.tenant_id = c.tenant_id
 `;
 
@@ -67,17 +73,32 @@ function validate(body: Record<string, unknown>): string | null {
 }
 
 /**
- * An owner_id must name a user in the CALLER's tenant. Without this check a
- * client could attach any user id in the database to its own contact, and the
- * owner_name join would then read that other tenant's user back out — the same
- * shape of cross-tenant leak that createTag's ON CONFLICT had (migration 010).
+ * Every foreign id a client may send must name a row in the CALLER's workspace.
+ *
+ * owner_id was checked here from the start, and the reasoning was right:
+ * without it a client could attach any user id in the database to its own
+ * contact and the owner_name join would read that other workspace's user back
+ * out — the same shape of cross-tenant leak createTag's ON CONFLICT had
+ * (migration 010).
+ *
+ * company_id was NOT checked, and had exactly the same problem: contacts_
+ * company_id_fkey references companies(id) globally, so a contact could name
+ * another workspace's company and the list projected that company's name. Both
+ * now go through the shared helper, so the next FK column added to WRITABLE is
+ * checked by adding one line here rather than by remembering to write a new
+ * function.
  */
-async function ownerIsInTenant(ownerId: unknown, tenantId: string): Promise<boolean> {
-  const result = await pool.query(
-    'SELECT 1 FROM users WHERE id = $1 AND tenant_id = $2',
-    [ownerId, tenantId],
+async function foreignRefError(
+  body: Record<string, unknown>,
+  tenantId: string,
+): Promise<string | null> {
+  return foreignIdsInTenant(
+    [
+      { field: 'owner_id', table: 'users', value: body.owner_id },
+      { field: 'company_id', table: 'companies', value: body.company_id },
+    ],
+    tenantId,
   );
-  return result.rowCount === 1;
 }
 
 export const getContacts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -120,13 +141,21 @@ export const createContact = async (req: AuthRequest, res: Response, next: NextF
     const invalid = validate(req.body);
     if (invalid) { res.status(400).json({ success: false, message: invalid }); return; }
 
-    if (req.body.owner_id != null && !(await ownerIsInTenant(req.body.owner_id, tenantId))) {
-      res.status(400).json({ success: false, message: 'owner_id does not name a user in this tenant' });
-      return;
-    }
+    const badRef = await foreignRefError(req.body, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     // contacts.id is a CT001-style varchar with no DB default — generate it here,
     // matching the D001 scheme in dealsController.
+    // DELIBERATELY NOT SCOPED BY TENANT, and this is load-bearing.
+    // contacts.id is a GLOBAL primary key (contacts_pkey PRIMARY KEY (id)), so ids must be
+    // unique across every workspace. Adding `AND tenant_id = $n` here would make
+    // the second workspace generate CT001 again and every insert would fail with
+    // a duplicate-key error. The scan for missing tenant filters flags this line;
+    // it is a false positive.
+    //
+    // It IS a small information leak: the id a caller receives reveals the global
+    // row count. The fix for that is a per-workspace sequence or a uuid, NOT a
+    // tenant predicate.
     const maxResult = await pool.query(`SELECT MAX(CAST(SUBSTRING(id, 3) AS INTEGER)) AS max_num FROM contacts WHERE id ~ '^CT[0-9]+$'`);
     const id = `CT${String((maxResult.rows[0].max_num || 0) + 1).padStart(3, '0')}`;
 
@@ -169,10 +198,8 @@ export const updateContact = async (req: AuthRequest, res: Response, next: NextF
     const invalid = validate(req.body);
     if (invalid) { res.status(400).json({ success: false, message: invalid }); return; }
 
-    if (req.body.owner_id != null && !(await ownerIsInTenant(req.body.owner_id, tenantId))) {
-      res.status(400).json({ success: false, message: 'owner_id does not name a user in this tenant' });
-      return;
-    }
+    const badRef = await foreignRefError(req.body, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     const updates: string[] = [];
     const params: any[] = [];
@@ -281,10 +308,9 @@ export const bulkUpdateContacts = async (req: AuthRequest, res: Response, next: 
         res.status(400).json({ success: false, message: 'payload.owner_id is required for the owner action (null to unassign)' });
         return;
       }
-      if (payload.owner_id !== null && !(await ownerIsInTenant(payload.owner_id, tenantId))) {
-        res.status(400).json({ success: false, message: 'owner_id does not name a user in this tenant' });
-        return;
-      }
+      const badOwner = await foreignIdsInTenant(
+        [{ field: 'owner_id', table: 'users', value: payload.owner_id }], tenantId);
+      if (badOwner) { res.status(400).json({ success: false, message: badOwner }); return; }
     }
 
     await client.query('BEGIN');

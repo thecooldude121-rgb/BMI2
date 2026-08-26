@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
 import {
   buildStorageKey,
   writeFile,
@@ -24,9 +25,13 @@ import {
  * attachment download.
  */
 
+// Scoped by tenant as well as id -- see the note in activitiesController.
 const resolveActorName = async (req: AuthRequest): Promise<string> => {
   if (req.user?.id) {
-    const row = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id]);
+    const row = await pool.query(
+      'SELECT first_name, last_name FROM users WHERE id = $1 AND tenant_id = $2',
+      [req.user.id, req.user.workspace_id],
+    );
     if (row.rows[0]) return `${row.rows[0].first_name} ${row.rows[0].last_name}`.trim();
   }
   return req.user?.email || 'Unknown';
@@ -34,6 +39,38 @@ const resolveActorName = async (req: AuthRequest): Promise<string> => {
 
 /** The polymorphic parent, matching the existing `module` / `record_id` pair. */
 const VALID_MODULES = ['lead', 'deal', 'contact', 'account', 'activity'] as const;
+
+/**
+ * Which table each module names, for the workspace check on write. Unlike
+ * tasks' related_to_type, every module here maps to a workspace-scoped table,
+ * so this check is complete.
+ *
+ * No query joins these, so an unchecked record_id was not a read leak — a
+ * document list is filtered by tenant_id and only ever returns this workspace's
+ * documents. It is checked anyway so a document cannot claim to belong to
+ * another workspace's deal, which would start leaking the day someone renders
+ * the parent's name next to the file.
+ */
+const MODULE_TABLE: Record<typeof VALID_MODULES[number], ScopedTable> = {
+  lead: 'leads',
+  deal: 'deals',
+  contact: 'contacts',
+  account: 'companies',
+  activity: 'activities',
+};
+
+/** Reject a record_id that names a record in another workspace. */
+async function parentRefError(
+  body: Record<string, unknown>,
+  tenantId: string,
+): Promise<string | null> {
+  const mod = body.module as typeof VALID_MODULES[number] | undefined;
+  if (!mod || !MODULE_TABLE[mod]) return null;
+  return foreignIdsInTenant(
+    [{ field: 'record_id', table: MODULE_TABLE[mod], value: body.record_id }],
+    tenantId,
+  );
+}
 
 /**
  * GET /api/v1/documents
@@ -107,6 +144,8 @@ export const createDocument = async (req: AuthRequest, res: Response, next: Next
       res.status(400).json({ success: false, message: 'module and record_id must be supplied together' });
       return;
     }
+    const badRef = await parentRefError(req.body, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     const uploadedBy = await resolveActorName(req);
     const result = await pool.query(
@@ -137,6 +176,8 @@ export const updateDocument = async (req: AuthRequest, res: Response, next: Next
       res.status(400).json({ success: false, message: `module must be one of: ${VALID_MODULES.join(', ')}` });
       return;
     }
+    const badRef = await parentRefError(req.body, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     const updates: string[] = [];
     const params: any[] = [];
@@ -221,8 +262,10 @@ export const toggleFavorite = async (req: AuthRequest, res: Response, next: Next
     if (!doc.rows[0]) { res.status(404).json({ success: false, message: 'Document not found' }); return; }
 
     const removed = await pool.query(
-      'DELETE FROM document_favorites WHERE document_id = $1 AND user_id = $2 RETURNING document_id',
-      [req.params.id, userId],
+      `DELETE FROM document_favorites
+        WHERE document_id = $1 AND user_id = $2 AND tenant_id = $3
+        RETURNING document_id`,
+      [req.params.id, userId, tenantId],
     );
     if (removed.rowCount) {
       res.json({ success: true, is_starred: false });
@@ -268,6 +311,9 @@ export const uploadDocument = async (req: AuthRequest, res: Response, next: Next
       res.status(400).json({ success: false, message: 'module and record_id must be supplied together' });
       return;
     }
+    // Checked before writeFile, so a rejected upload never leaves bytes on disk.
+    const badRef = await parentRefError({ module, record_id }, tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     // The client filename is metadata only. The path comes from the tenant id
     // and a generated uuid — see buildStorageKey.

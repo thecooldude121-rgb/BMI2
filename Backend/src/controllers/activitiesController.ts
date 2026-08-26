@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
 
 /**
  * Activities — the CRM timeline.
@@ -48,12 +49,32 @@ const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
  * whatever offset it carried, and NOW() agrees with it.
  */
 
-/** Exactly one parent must be supplied. */
+/**
+ * Exactly one parent must be supplied — and it must live in the caller's
+ * workspace. Each of these four columns is an FK to its parent's GLOBAL primary
+ * key, so Postgres will happily accept an activity in workspace A whose
+ * contact_id names a contact in workspace B; the timeline then rendered that
+ * contact's name. The table each column points at is recorded here so the
+ * check and the "exactly one parent" rule cannot drift apart.
+ */
 const PARENTS = ['lead_id', 'deal_id', 'contact_id', 'company_id'] as const;
+const PARENT_TABLE: Record<typeof PARENTS[number], ScopedTable> = {
+  lead_id: 'leads',
+  deal_id: 'deals',
+  contact_id: 'contacts',
+  company_id: 'companies',
+};
 
+// Scoped by tenant as well as id. The id comes from the caller's own verified
+// token so this cannot leak today, but "every query filters by workspace" only
+// holds as an invariant if it has no exceptions — an unscoped lookup is the one
+// a later refactor copies.
 const resolveActorName = async (req: AuthRequest): Promise<string> => {
   if (req.user?.id) {
-    const row = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [req.user.id]);
+    const row = await pool.query(
+      'SELECT first_name, last_name FROM users WHERE id = $1 AND tenant_id = $2',
+      [req.user.id, req.user.workspace_id],
+    );
     if (row.rows[0]) return `${row.rows[0].first_name} ${row.rows[0].last_name}`.trim();
   }
   return req.user?.email || 'Unknown';
@@ -78,10 +99,15 @@ export const getActivities = async (req: AuthRequest, res: Response, next: NextF
              d.name   AS deal_name,
              l.name   AS lead_name
       FROM activities a
-      LEFT JOIN contacts  c  ON a.contact_id = c.id
-      LEFT JOIN companies co ON a.company_id = co.id
-      LEFT JOIN deals     d  ON a.deal_id    = d.id
-      LEFT JOIN leads     l  ON a.lead_id    = l.id
+      -- Every one of these four FKs references its parent's GLOBAL primary key,
+      -- so an activity in this workspace can name a parent in another one. The
+      -- WHERE below scopes the activities table; without the tenant predicate on
+      -- each JOIN the parent NAMES came from whichever workspace owned the parent.
+      -- A join is a read.
+      LEFT JOIN contacts  c  ON a.contact_id = c.id  AND c.tenant_id  = a.tenant_id
+      LEFT JOIN companies co ON a.company_id = co.id AND co.tenant_id = a.tenant_id
+      LEFT JOIN deals     d  ON a.deal_id    = d.id  AND d.tenant_id  = a.tenant_id
+      LEFT JOIN leads     l  ON a.lead_id    = l.id  AND l.tenant_id  = a.tenant_id
       WHERE a.tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
@@ -120,10 +146,11 @@ export const getActivityById = async (req: AuthRequest, res: Response, next: Nex
               c.first_name || ' ' || COALESCE(c.last_name, '') AS contact_name,
               co.name AS company_name, d.name AS deal_name, l.name AS lead_name
        FROM activities a
-       LEFT JOIN contacts  c  ON a.contact_id = c.id
-       LEFT JOIN companies co ON a.company_id = co.id
-       LEFT JOIN deals     d  ON a.deal_id    = d.id
-       LEFT JOIN leads     l  ON a.lead_id    = l.id
+       -- Scoped for the same reason as getActivities: see the comment there.
+       LEFT JOIN contacts  c  ON a.contact_id = c.id  AND c.tenant_id  = a.tenant_id
+       LEFT JOIN companies co ON a.company_id = co.id AND co.tenant_id = a.tenant_id
+       LEFT JOIN deals     d  ON a.deal_id    = d.id  AND d.tenant_id  = a.tenant_id
+       LEFT JOIN leads     l  ON a.lead_id    = l.id  AND l.tenant_id  = a.tenant_id
        WHERE a.id = $1 AND a.tenant_id = $2`,
       [req.params.id, tenantId],
     );
@@ -181,6 +208,16 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
       });
       return;
     }
+
+    const badRef = await foreignIdsInTenant(
+      supplied.map(([field, value]) => ({
+        field,
+        table: PARENT_TABLE[field as typeof PARENTS[number]],
+        value,
+      })),
+      tenantId,
+    );
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     const actor = await resolveActorName(req);
     const resolvedStatus = status || 'planned';

@@ -54,6 +54,16 @@ export const createCompany = async (req: AuthRequest, res: Response, next: NextF
     // dealsController/contactsController.
     let companyId = id;
     if (!companyId) {
+      // DELIBERATELY NOT SCOPED BY TENANT, and this is load-bearing.
+      // companies.id is a GLOBAL primary key (companies_pkey PRIMARY KEY (id)), so ids must be
+      // unique across every workspace. Adding `AND tenant_id = $n` here would make
+      // the second workspace generate C001 again and every insert would fail with
+      // a duplicate-key error. The scan for missing tenant filters flags this line;
+      // it is a false positive.
+      //
+      // It IS a small information leak: the id a caller receives reveals the global
+      // row count. The fix for that is a per-workspace sequence or a uuid, NOT a
+      // tenant predicate.
       const maxResult = await pool.query(
         `SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM companies WHERE id ~ '^C[0-9]+$'`
       );

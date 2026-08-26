@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { foreignIdsInTenant } from '../utils/tenantScope';
 
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -25,7 +26,13 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
              l.email AS lead_email,
              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
       FROM deals d
-      LEFT JOIN leads l ON d.lead_id = l.id
+      -- The tenant predicate on the JOIN is load-bearing, not redundant with
+      -- the WHERE below. deals_lead_id_fkey references leads(id) globally, so a
+      -- deal in this workspace CAN carry a lead_id from another one; without
+      -- the AND l.tenant_id = d.tenant_id below, this projected that other
+      -- workspace's lead email. Filtering the base table is not enough:
+      -- a join is a read.
+      LEFT JOIN leads l ON d.lead_id = l.id AND l.tenant_id = d.tenant_id
       WHERE d.tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
@@ -74,7 +81,10 @@ export const getDealById = async (req: AuthRequest, res: Response, next: NextFun
               l.name AS lead_name,
               l.email AS lead_email,
               GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
-       FROM deals d LEFT JOIN leads l ON d.lead_id = l.id WHERE d.id = $1 AND d.tenant_id = $2`,
+       FROM deals d
+       -- Scoped for the same reason as getDeals: see the comment there.
+       LEFT JOIN leads l ON d.lead_id = l.id AND l.tenant_id = d.tenant_id
+       WHERE d.id = $1 AND d.tenant_id = $2`,
       [req.params.id, tenantId]
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Deal not found' }); return; }
@@ -108,7 +118,25 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
+    // lead_id comes straight from the request body into an FK that references
+    // leads(id) globally, so without this a caller could attach ANY lead in the
+    // database to their own deal — and leads.id is a serial, so the ids are
+    // trivially enumerable. getDeals then read that lead's email back out.
+    const badRef = await foreignIdsInTenant(
+      [{ field: 'lead_id', table: 'leads', value: lead_id }], tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
+
     // Auto-generate ID in D001 format
+    // DELIBERATELY NOT SCOPED BY TENANT, and this is load-bearing.
+    // deals.id is a GLOBAL primary key (deals_pkey PRIMARY KEY (id)), so ids must be
+    // unique across every workspace. Adding `AND tenant_id = $n` here would make
+    // the second workspace generate D001 again and every insert would fail with
+    // a duplicate-key error. The scan for missing tenant filters flags this line;
+    // it is a false positive.
+    //
+    // It IS a small information leak: the id a caller receives reveals the global
+    // row count. The fix for that is a per-workspace sequence or a uuid, NOT a
+    // tenant predicate.
     const maxResult = await pool.query(`SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM deals WHERE id ~ '^D[0-9]+$'`);
     const nextNum = (maxResult.rows[0].max_num || 0) + 1;
     const id = `D${String(nextNum).padStart(3, '0')}`;
@@ -169,6 +197,13 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
 export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
+
+    // Same check as createDeal: an update must not be able to re-point an
+    // existing deal at another workspace's lead.
+    const badRef = await foreignIdsInTenant(
+      [{ field: 'lead_id', table: 'leads', value: req.body.lead_id }], tenantId);
+    if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
+
     const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];
