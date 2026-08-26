@@ -1,20 +1,39 @@
-// 12-state lifecycle — replaces the old 8-state LeadStatus.
-// Production SQL migration (not yet applied):
+// Lead lifecycle stages.
+//
+// This union is the aspirational 12-state model PLUS the six states the
+// database actually stores. Both halves are listed because both are real: the
+// migration below is still unapplied, so live rows hold the DB values, and code
+// that only handles the aspirational names silently mishandles every row.
+//
+// The authority is leads_stage_check, not this file:
+//   CHECK (stage IN ('new','contacted','qualified','proposal','won','lost'))
+//
+// Marking the live values as legacy and omitting them is what caused a
+// dashboard funnel to bucket every real lead into nothing, and made 'contacted'
+// sort behind 'lost'. Delete them from this union only once the migration below
+// has actually run.
+//
+// Production SQL migration (NOT YET APPLIED):
 //   UPDATE leads SET status = 'attempting_contact' WHERE status IN ('contacted', 'working');
 //   UPDATE leads SET status = 'nurture'            WHERE status = 'nurturing';
 //   UPDATE leads SET status = 'disqualified'       WHERE status = 'unqualified';
 export type LeadLifecycleStage =
+  // Currently in the database (leads_stage_check).
   | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'proposal'
+  | 'won'
+  | 'lost'
+  // Target model, not yet present in any row.
   | 'assigned'
   | 'enriching'
   | 'attempting_contact'
   | 'engaged'
-  | 'qualified'
   | 'sales_accepted'
   | 'nurture'
   | 'disqualified'
-  | 'converted'
-  | 'lost';
+  | 'converted';
 
 /** @deprecated Use LeadLifecycleStage */
 export type LeadStatus = LeadLifecycleStage;
@@ -357,6 +376,8 @@ export interface LeadFilters {
   created_before?: string;
   last_activity_after?: string;
   last_activity_before?: string;
+  /** Row cap. The leads controller clamps this server-side. */
+  limit?: number;
 }
 
 export interface BulkOperation {

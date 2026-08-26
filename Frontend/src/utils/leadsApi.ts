@@ -82,20 +82,27 @@ export function mapRowToLead(row: any): Lead {
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
+/**
+ * THROWS on failure, deliberately. It used to `return []` for both a non-ok
+ * response and a thrown fetch, which meant an expired token or a 500 rendered
+ * as "0 leads" — indistinguishable from an empty pipeline, and the more
+ * alarming of the two readings is the one the user does not get shown.
+ *
+ * Both call sites were already written for a throw: LeadContext.fetchLeads has
+ * a catch that sets its error state (dead code until now), and
+ * useDashboardData treats a rejection as "leads unavailable" rather than zero.
+ */
 export async function fetchLeadsFromAPI(filters?: LeadFilters): Promise<Lead[]> {
-  try {
-    const params = new URLSearchParams();
-    if (filters?.search)   params.set('search', filters.search);
-    if (filters?.owner_id?.length) params.set('owner_id', filters.owner_id[0]);
+  const params = new URLSearchParams();
+  if (filters?.search) params.set('search', filters.search);
+  if (filters?.owner_id?.length) params.set('owner_id', filters.owner_id[0]);
+  if (filters?.limit) params.set('limit', String(filters.limit));
 
-    const url = `${API_BASE}/leads${params.toString() ? '?' + params : ''}`;
-    const res  = await fetch(url, { headers: getAuthHeaders() });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return (json.success ? json.data : []).map(mapRowToLead);
-  } catch {
-    return [];
-  }
+  const url = `${API_BASE}/leads${params.toString() ? '?' + params : ''}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Failed to load leads (HTTP ${res.status})`);
+  const json = await res.json();
+  return (json.success ? json.data : []).map(mapRowToLead);
 }
 
 export async function fetchLeadByIdFromAPI(id: string): Promise<Lead | null> {
