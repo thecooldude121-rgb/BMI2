@@ -266,6 +266,13 @@ dead third option.
   is the decision that blocks everything else; a `password_resets` table of single-use
   expiring tokens stored **hashed**, so a leaked table is not a set of live keys; rate
   limiting per email and per IP; request and confirm endpoints; and two screens.
+- **Login rate limiting is NOT production-ready.** The limiter works and is verified, but
+  its store is in-process memory: counters reset on every deploy and are not shared between
+  instances, so N instances multiply every budget by N and a rolling restart clears an
+  attacker's accumulated count. Redis is already named in the stack; `store` in
+  `middleware/rateLimit.ts` is the single seam for `rate-limit-redis`. Treat the current
+  state as a speed bump, not a control — and note a DAST scan against one instance will
+  pass it while a real deployment behind several would not.
 - **Workspace creation, user invites and the workspace switcher are deferred** to the
   Settings module. Registration joins the single existing workspace, and the server asks for
   a `workspace_slug` once more than one exists rather than guessing.
@@ -283,6 +290,14 @@ dead third option.
 - Build one vertical slice at a time (e.g. Contacts fully working end-to-end) before moving
   to the next, rather than scaffolding all pages shallowly at once.
 - Check in between stages. Don't run through a multi-item list in a single pass.
+
+### Replacing this file — diff it first
+When a replacement CLAUDE.md is handed over, **diff it against the existing one and report
+which rules are being dropped before accepting it.** This is not bureaucracy: the rule
+"never put a backtick in SQL inside a JS template literal" was in an earlier version of
+this file, did not survive a replacement, and the same bug broke the backend build within
+hours — in a different controller, written by someone else. A rule that only exists in one
+session's memory is a rule that will be relearned the expensive way.
 
 ### Recorded lessons — prefer a check over an inference
 These were learned the hard way in this project. The shared principle: **when you can verify
