@@ -65,6 +65,23 @@ interface LeadContextType {
   getLead: (id: string) => Promise<Lead | null>;
   createLead: (lead: Partial<Lead>) => Promise<Lead | null>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
+<<<<<<< Updated upstream
+=======
+  /** Server message from the last rejected write, so a caller can show the real
+   *  reason instead of reporting success. Cleared on the next successful write.
+   *  Use for RENDERING. */
+  lastWriteError: string | null;
+  /** Same, for failed READS. Separate channel on purpose: a successful background
+   *  refresh must not wipe the reason a save failed before the user sees it. */
+  lastReadError: string | null;
+  lastReadErrorRef: React.MutableRefObject<string | null>;
+  /** The same message, readable synchronously. A caller that awaits updateLead()
+   *  and then reads state still holds the pre-call closure value, so it would see
+   *  null and fall back to a generic string — which is how the conversion wizard
+   *  reported "the server rejected it" without saying why. Read this instead when
+   *  you need the reason immediately after the await. */
+  lastWriteErrorRef: React.MutableRefObject<string | null>;
+>>>>>>> Stashed changes
   deleteLead: (id: string) => Promise<boolean>;
   bulkDeleteLeads: (ids: string[]) => Promise<boolean>;
 
@@ -141,12 +158,71 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+<<<<<<< Updated upstream
+=======
+  const [lastWriteError, setLastWriteError] = useState<string | null>(null);
+  const lastWriteErrorRef = useRef<string | null>(null);
+  const [lastReadError, setLastReadError] = useState<string | null>(null);
+  const lastReadErrorRef = useRef<string | null>(null);
+>>>>>>> Stashed changes
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [currentFilters, setCurrentFilters] = useState<LeadFilters>({});
   const [currentView, setCurrentView] = useState<LeadView | null>(null);
   const [views, setViews] = useState<LeadView[]>([]);
   const [pipelines, setPipelines] = useState<LeadPipeline[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+
+  // ── Error plumbing ────────────────────────────────────────────────────────
+  //
+  // Every function in leadsApi now THROWS on a rejected request; it used to
+  // catch and return null / false / [], which made a 400, an expired token and a
+  // genuinely empty list the same value at the call site. These two guards keep
+  // each wrapper's existing return contract — consumers already treat null/false
+  // /[] as "no result" — while recording the real server message so a caller can
+  // show it.
+  //
+  // Two deliberate details, both learned the hard way in this module:
+  //
+  //  1. Reads and writes record to SEPARATE channels. If a read cleared
+  //     lastWriteError, a background refresh succeeding right after a failed
+  //     save would wipe the reason before the user ever saw it.
+  //  2. Each channel has a ref as well as state. A caller that awaits a wrapper
+  //     and then reads the state variable still holds its pre-call closure value,
+  //     because React has not re-rendered yet — it would see null and fall back to
+  //     a generic string. Read the ref when you need the reason immediately after
+  //     an await; read the state when you are rendering.
+  const recordWrite = (scope: string, message: string | null) => {
+    lastWriteErrorRef.current = message;
+    setLastWriteError(message);
+    if (message) console.error(`[LeadContext] ${scope}:`, message);
+  };
+  const recordRead = (scope: string, message: string | null) => {
+    lastReadErrorRef.current = message;
+    setLastReadError(message);
+    if (message) console.error(`[LeadContext] ${scope}:`, message);
+  };
+
+  async function guardWrite<T>(scope: string, op: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      const result = await op();
+      recordWrite(scope, null);
+      return result;
+    } catch (err: any) {
+      recordWrite(scope, err?.message || `${scope} failed.`);
+      return fallback;
+    }
+  }
+
+  async function guardRead<T>(scope: string, op: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      const result = await op();
+      recordRead(scope, null);
+      return result;
+    } catch (err: any) {
+      recordRead(scope, err?.message || `${scope} failed.`);
+      return fallback;
+    }
+  }
 
   const fetchLeads = useCallback(async (filters?: LeadFilters) => {
     setLoading(true);
@@ -163,13 +239,12 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const getLead = async (id: string): Promise<Lead | null> => {
-    return fetchLeadByIdFromAPI(id);
-  };
+  const getLead = (id: string): Promise<Lead | null> =>
+    guardRead('getLead', () => fetchLeadByIdFromAPI(id), null);
 
   const createLead = async (lead: Partial<Lead>): Promise<Lead | null> => {
     const payload = { ...lead, owner_id: lead.owner_id || user?.id };
-    const created = await createLeadViaAPI(payload);
+    const created = await guardWrite('createLead', () => createLeadViaAPI(payload), null);
     if (created) setLeads(prev => [created, ...prev]);
     return created;
   };
@@ -184,87 +259,98 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   };
 
   const deleteLead = async (id: string): Promise<boolean> => {
-    const ok = await deleteLeadViaAPI(id);
+    const ok = await guardWrite('deleteLead', () => deleteLeadViaAPI(id), false);
     if (ok) setLeads(prev => prev.filter(l => l.id !== id));
     return ok;
   };
 
   const bulkDeleteLeads = async (ids: string[]): Promise<boolean> => {
-    try {
-      await Promise.all(ids.map(id => deleteLeadViaAPI(id)));
-      setLeads(prev => prev.filter(l => !ids.includes(l.id)));
-      return true;
-    } catch {
-      return false;
-    }
+    const ok = await guardWrite(
+      'bulkDeleteLeads',
+      async () => { await Promise.all(ids.map(id => deleteLeadViaAPI(id))); return true; },
+      false,
+    );
+    if (ok) setLeads(prev => prev.filter(l => !ids.includes(l.id)));
+    return ok;
   };
 
   // ── Activities ────────────────────────────────────────────────────────────
-  const getLeadActivities = (leadId: string) => fetchActivitiesFromAPI(leadId);
+  const getLeadActivities = (leadId: string) =>
+    guardRead('getLeadActivities', () => fetchActivitiesFromAPI(leadId), []);
 
   const createActivity = async (activity: Partial<LeadActivity>): Promise<LeadActivity | null> => {
     if (!activity.lead_id) return null;
-    return createActivityViaAPI(activity.lead_id, activity);
+    return guardWrite('createActivity', () => createActivityViaAPI(activity.lead_id!, activity), null);
   };
 
   const updateActivity = async (id: string, updates: Partial<LeadActivity>): Promise<boolean> => {
     if (!updates.lead_id) return false;
-    return updateActivityViaAPI(updates.lead_id, id, updates);
+    return guardWrite('updateActivity', () => updateActivityViaAPI(updates.lead_id!, id, updates), false);
   };
 
   // ── Notes ─────────────────────────────────────────────────────────────────
-  const getLeadNotes = (leadId: string) => fetchNotesFromAPI(leadId);
+  const getLeadNotes = (leadId: string) =>
+    guardRead('getLeadNotes', () => fetchNotesFromAPI(leadId), []);
 
   const createNote = async (note: Partial<LeadNote>): Promise<LeadNote | null> => {
     if (!note.lead_id) return null;
-    return createNoteViaAPI(note.lead_id, note);
+    return guardWrite('createNote', () => createNoteViaAPI(note.lead_id!, note), null);
   };
 
   const updateNote = async (id: string, updates: Partial<LeadNote>): Promise<boolean> => {
     if (!updates.lead_id) return false;
-    return updateNoteViaAPI(updates.lead_id, id, updates);
+    return guardWrite('updateNote', () => updateNoteViaAPI(updates.lead_id!, id, updates), false);
   };
 
+<<<<<<< Updated upstream
   const deleteNote = async (id: string, leadId?: string): Promise<boolean> => {
     if (!leadId) return false;
     return deleteNoteViaAPI(leadId, id);
   };
+=======
+  const deleteNote = (id: string, leadId: string): Promise<boolean> =>
+    guardWrite('deleteNote', () => deleteNoteViaAPI(leadId, id), false);
+>>>>>>> Stashed changes
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
-  const getLeadTasks = (leadId: string) => fetchTasksFromAPI(leadId);
+  const getLeadTasks = (leadId: string) =>
+    guardRead('getLeadTasks', () => fetchTasksFromAPI(leadId), []);
 
   const createTask = async (task: Partial<LeadTask>): Promise<LeadTask | null> => {
     if (!task.lead_id) return null;
-    return createTaskViaAPI(task.lead_id, task);
+    return guardWrite('createTask', () => createTaskViaAPI(task.lead_id!, task), null);
   };
 
   const updateTask = async (id: string, updates: Partial<LeadTask>): Promise<boolean> => {
     if (!updates.lead_id) return false;
-    return updateTaskViaAPI(updates.lead_id, id, updates);
+    return guardWrite('updateTask', () => updateTaskViaAPI(updates.lead_id!, id, updates), false);
   };
 
   // ── Emails ────────────────────────────────────────────────────────────────
-  const getLeadEmails = (leadId: string) => fetchEmailsFromAPI(leadId);
+  const getLeadEmails = (leadId: string) =>
+    guardRead('getLeadEmails', () => fetchEmailsFromAPI(leadId), []);
 
   const sendEmail = async (email: Partial<LeadEmail>): Promise<LeadEmail | null> => {
     if (!email.lead_id) return null;
-    return logEmailViaAPI(email.lead_id, { ...email, direction: 'outbound', sent_at: new Date().toISOString() });
+    return guardWrite('sendEmail', () => logEmailViaAPI(email.lead_id!, { ...email, direction: 'outbound', sent_at: new Date().toISOString() }), null);
   };
 
   // ── Calls ─────────────────────────────────────────────────────────────────
-  const getLeadCalls = (leadId: string) => fetchCallsFromAPI(leadId);
+  const getLeadCalls = (leadId: string) =>
+    guardRead('getLeadCalls', () => fetchCallsFromAPI(leadId), []);
 
   const logCall = async (call: Partial<LeadCall>): Promise<LeadCall | null> => {
     if (!call.lead_id) return null;
-    return logCallViaAPI(call.lead_id, call);
+    return guardWrite('logCall', () => logCallViaAPI(call.lead_id!, call), null);
   };
 
   // ── Meetings ──────────────────────────────────────────────────────────────
-  const getLeadMeetings = (leadId: string) => fetchMeetingsFromAPI(leadId);
+  const getLeadMeetings = (leadId: string) =>
+    guardRead('getLeadMeetings', () => fetchMeetingsFromAPI(leadId), []);
 
   const scheduleMeeting = async (meeting: Partial<LeadMeeting>): Promise<LeadMeeting | null> => {
     if (!meeting.lead_id) return null;
-    return scheduleMeetingViaAPI(meeting.lead_id, meeting);
+    return guardWrite('scheduleMeeting', () => scheduleMeetingViaAPI(meeting.lead_id!, meeting), null);
   };
 
   // ── AI Insights (no DB table yet — interface stubs) ───────────────────────
@@ -273,9 +359,8 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const dismissInsight     = async (_id: string): Promise<boolean> => false;
 
   // ── Enrichment ────────────────────────────────────────────────────────────
-  const enrichLead = async (request: LeadEnrichmentRequest): Promise<LeadEnrichmentResponse | null> => {
-    return enrichLeadViaAPI(request.lead_id);
-  };
+  const enrichLead = (request: LeadEnrichmentRequest): Promise<LeadEnrichmentResponse | null> =>
+    guardWrite('enrichLead', () => enrichLeadViaAPI(request.lead_id), null);
 
   const calculateLeadScore = (lead: Lead): number => {
     let score = 0;
@@ -334,31 +419,31 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
       await fetchLeads(currentFilters);
       return true;
     } catch (err: any) {
-      console.error('[LeadContext] executeBulkOperation:', err.message);
+      recordWrite('executeBulkOperation', err?.message || 'Bulk operation failed.');
       return false;
     }
   };
 
   // ── Views ─────────────────────────────────────────────────────────────────
   const fetchViews = useCallback(async () => {
-    const data = await fetchViewsFromAPI();
+    const data = await guardRead('fetchViews', () => fetchViewsFromAPI(), []);
     setViews(data);
   }, []);
 
   const createView = async (view: Partial<LeadView>): Promise<LeadView | null> => {
-    const created = await createViewViaAPI(view);
+    const created = await guardWrite('createView', () => createViewViaAPI(view), null);
     if (created) setViews(prev => [...prev, created]);
     return created;
   };
 
   const updateView = async (id: string, updates: Partial<LeadView>): Promise<boolean> => {
-    const ok = await updateViewViaAPI(id, updates);
+    const ok = await guardWrite('updateView', () => updateViewViaAPI(id, updates), false);
     if (ok) setViews(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
     return ok;
   };
 
   const deleteView = async (id: string): Promise<boolean> => {
-    const ok = await deleteViewViaAPI(id);
+    const ok = await guardWrite('deleteView', () => deleteViewViaAPI(id), false);
     if (ok) setViews(prev => prev.filter(v => v.id !== id));
     return ok;
   };
@@ -370,12 +455,12 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
 
   // ── Tags ──────────────────────────────────────────────────────────────────
   const fetchTags = async () => {
-    const data = await fetchTagsFromAPI();
+    const data = await guardRead('fetchTags', () => fetchTagsFromAPI(), []);
     setTags(data);
   };
 
   const createTag = async (tag: Partial<Tag>): Promise<Tag | null> => {
-    const created = await createTagViaAPI(tag);
+    const created = await guardWrite('createTag', () => createTagViaAPI(tag), null);
     if (created) setTags(prev => [...prev, created]);
     return created;
   };
@@ -411,6 +496,13 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     leads,
     loading,
     error,
+<<<<<<< Updated upstream
+=======
+    lastWriteError,
+    lastWriteErrorRef,
+    lastReadError,
+    lastReadErrorRef,
+>>>>>>> Stashed changes
     selectedLeadIds,
     currentFilters,
     currentView,
