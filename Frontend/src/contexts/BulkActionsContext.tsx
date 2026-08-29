@@ -3,7 +3,7 @@ import {
   BulkActionType,
   BulkActionResult,
   BulkActionOptions,
-  BulkActionProgress
+  BulkActionProgress 
 } from '../types/bulkActions';
 
 interface BulkActionsContextType {
