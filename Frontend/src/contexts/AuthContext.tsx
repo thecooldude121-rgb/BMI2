@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export interface User {
   id: string;
-  name: string;
+  name: string; 
   email: string;
   role: 'Admin' | 'Sales' | 'HR' | 'Manager';
   avatar?: string;
