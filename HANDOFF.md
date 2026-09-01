@@ -1,72 +1,103 @@
 # Handoff — read before starting work
 
-## NEXT TASK — build the Phase-1 deal-detail and account-detail pages (F24 + F25)
+## DONE — F24 and F25 are built. Read this before picking up the next item.
 
-**Framing matters here, and it is the owner's explicit instruction: these are not cleanup.**
-`ComprehensiveDealDetailPage` and `EnhancedAccountDetailView` ARE items 3 and 4 of the
-Phase-1 page list in `CLAUDE.md` ("account detail, related deals, account team" and "deal
-detail with timeline / tasks / stakeholders / documents, stage history audit trail").
-Fixing them properly **replaces those Phase-1 items rather than preceding them.** Build them;
-do not patch around the fabrication.
+Both are committed: `bf3f197` (F24, deal detail) and `007dad7` (F25, account
+detail), with `63904d1` adding lesson 9 to `CLAUDE.md` between them. The full
+reasoning is in those commit messages and in the RESOLVED blocks now attached to
+F14/F24/F25 in `FABRICATED_DATA_AUDIT.md`. What follows is only what a next
+session needs that is not obvious from the diff.
 
-### F24 — `pages/Deal/ComprehensiveDealDetailPage.tsx`, routed at `/crm/deals/:id`
+### Three migrations landed. 026 and 028 are one change; read 028 first.
 
-Reached by clicking any deal on the Kanban board, which renders genuine database rows. The
-page reaches real data, which is why the audit's structural pass cleared it — the fabrication
-is in four rendered blocks, all hardcoded, all identical for every deal opened:
+| # | What | State |
+|---|---|---|
+| 026 | `contacts.buying_role`, nullable, no default, **no backfill** | applied |
+| 027 | `deals.company_id` + FK + index, backfill of 3 rows | applied |
+| 028 | corrects 026's CHECK to the real `contactRoles.ts` ids | applied |
 
-- **`stageHistory` (~427)** — invented audit trail: `Prospecting 5 days (Nov 15 → Nov 20,
-  benchmark 7)`, `Qualified 12 days`, `Proposal 8 days`, with benchmark ranges.
-  **A real `deal_stage_history` table exists** — wire it. "Stage history audit trail" is
-  named in the Phase-1 list.
-- **`accountData` (~436)** — invented company intelligence: "Acme Corp", `revenue: '$12M
-  annually'`, `size: '75 employees'`, `fundingRound: 'Series B'`, `fundingAmount: '$8M'`,
-  `growthRate: '45% YoY'`, `hiringTrend`, `techStack`, `competitors`. There is no enrichment
-  provider and enrichment is out of phase — **delete these fields**, do not seek a source.
-  Company name/industry/size can come from the joined `companies` row.
-- **`contacts` (~451)** — invented stakeholders: `John Smith, VP Sales, Champion,
-  john@acme.com`. Rendered at ~1371, ~1386, ~1400. Contacts carry `company_id`, so real
-  stakeholders are a join away. "Stakeholders" is a named Phase-1 deliverable. Note there is
-  no buying-role column (champion/decision-maker/influencer/blocker) — that is a schema
-  addition to **propose, not invent**, per the no-fabricated-data rule.
-- **`activities` (~497)** — invented timeline. `activitiesApi.fetchActivities({ deal_id })`
-  is real and already used elsewhere.
+026 wrote its CHECK from memory as `end-user`/`blocker`; the actual ids are
+`user`/`blocker-detractor`. **028 exists because an applied migration must never
+be edited** — the runner refuses to start when a ledgered checksum changes. I
+edited 026 to annotate it, caught it, and reverted; if you see a note about 028
+missing from 026, that is why. The vocabulary now matches
+`config/contactRoles.ts` in three places: the DB CHECK, `BUYING_ROLES` in
+`contactsController`, and the role picker.
 
-### F25 — `pages/Accounts/EnhancedAccountDetailView.tsx`, routed at `/accounts/:accountId`
+**027's backfill is thin on purpose and will not improve on its own.** 3 of 25
+deals are linked (D052 exact; D019 and D020 inferred, written by id, reversible
+with `UPDATE deals SET company_id = NULL WHERE id IN ('D019','D020')`). The other
+22: **15 have an empty `company_name`** and 7 name a company with no row in
+`companies`. So "related deals" is built and correct and will show empty on
+almost every account until someone links them. The account page says which of
+the two it is; do not "fix" that empty state.
 
-Worse shape than F24 because it is **partially migrated**, which is harder to spot:
+### The two things most likely to bite you next
 
-- `mockDeals` (~267) maps over deals and injects `probability: 70`, `health: 'good'`,
-  `lastActivity: '2 days ago'`, `daysInStage: 15`, `nextStep: 'Schedule demo with decision
-  maker'` into **every** row. Name, stage and value are real; the rest is constant.
-- `mockContacts` (~282) maps over **really-fetched** contacts and injects
-  `engagementScore: idx === 0 ? 95 : idx === 1 ? 90 : 75` — index-based fabrication sitting
-  two lines below a comment explaining that the adjacent index-based `role` was removed for
-  being exactly that.
-- `mockActivities` (~300) is entirely invented ("Product Demo with Sarah Chen", an
-  `aiSummary`, `timestamp: '2 hours ago'`) **and it is what renders**, at ~716. The real
-  `accountActivities`, fetched from `/activities?company_id=`, is used only for a filtered
-  computation at ~157 and never displayed.
-- `AccountsContext` seeds seven collections from `generateSampleAccounts()` — the same
-  provider-level defect as F1, and `getAccountDeals` (~493) filters the sample-seeded
-  `accountDeals`. **Fix the provider as well as the page**, or this recurs.
+1. **`getContactRole()` falls back to Champion.** `config/contactRoles.ts` exports
+   both `getContactRole` (defaults to `CONTACT_ROLES[0]`, correct for a form
+   control that must show something selected) and the new **`findContactRole`**
+   (returns `undefined`, correct for rendering stored data). Using the wrong one
+   labels every unassigned person the deal's champion. That is the same defect
+   class as the `'influencer'` fallback this work removed, and the compiler
+   cannot see it.
+2. **A default parameter value is fabrication you cannot see from the page.**
+   Three deleted account components carried invented defaults in their own
+   signatures (`healthScore = 92`, `contactName = 'Sarah Chen'`,
+   `employeeCount = 450`). Stripping the invented prop at the call site would
+   have left the screen unchanged. When you remove a fabricated prop, open the
+   component and check its signature. This is a sibling of lesson 9 and is
+   recorded in the F25 block of `FABRICATED_DATA_AUDIT.md`.
 
-**The single most dangerous fact in the audit lives here:** this page issues real, successful
-network requests and then renders invented data. Anyone applying "check the network log"
-sees 200s and concludes the page is sound. Cross-check rendered values against Postgres rows
-— see recorded lesson 4 in `CLAUDE.md`.
+### Verified live, and what was NOT
 
-### Before starting
+Real login, real sidebar nav, every rendered value cross-checked against its
+Postgres row — never against a 200, because `/accounts/:accountId` is the page
+where the network log misleads. A real Move Stage click wrote the first row
+`deal_stage_history` has ever held; a real role click wrote `buying_role` and
+moved both coverage advisories.
 
-1. `git status` first. Another session was active in this worktree this evening; three
-   uncommitted files (`.gitignore`, `Backend/src/scripts/seedUsers.ts`,
-   `Frontend/src/pages/Auth/Login.tsx`) are its dev-login-autofill feature and are **not
-   yours to touch or absorb** — it was asked to commit them.
-2. That autofill, once committed, writes the rotated seeded passwords to a gitignored
-   `Frontend/.env.development.local` and prefills the login form. It saves a real amount of
-   friction; check whether it landed before hand-typing passwords.
-3. Per lesson 3: verify **per consumer**. A page that destructures a context without reading
-   it looks wired and is not.
+**Unproven, and stated as such: the populated path for `activities` and
+`documents` on both pages.** Both tables hold 0 rows, so only the empty states
+were exercised. The moment either gets real rows, open both pages and check the
+timeline and file lists render — that is the one gap in this work. Do not
+fabricate a row to close it.
+
+All verification writes reverted and re-counted, not assumed: 20 contacts /
+0 with a `buying_role`, 15 companies, 25 deals / 3 linked, 0 activities,
+0 `deal_stage_history`.
+
+### Findings raised but deliberately NOT fixed — pick these up or decide against them
+
+- **`pages/CRM/AccountsPage.tsx` has the same "0 employees" bug** the account
+  hero had: it renders `employeeCount || 0` over a column that does not exist,
+  so every row in the accounts list reads "0 employees". Small, and the list page
+  was out of F25's scope.
+- **`CRMDashboard` greets "Welcome back, Alex!"** while logged in as David
+  Kumar. A hardcoded first name on a page that already has the real user.
+- **`AccountFormPage` has ~10 pre-existing type errors**, including the
+  `billingAddress` one `CLAUDE.md` cites as a worked example of a type error
+  concealing a live bug (line ~537). I removed the enrichment control from that
+  file and left the rest alone; it needs its own pass.
+- **`DealHeroSection` has 5 pre-existing `TS6133` unused-symbol errors.** Noise
+  by code, but the file is routed and load-bearing — triage by reachability.
+- **`deals` still has no `contact_id`.** `deals.contact_email` is the only link
+  to a contact and it is free text; `dealsController` documents why a backfill
+  would set zero rows today. Same shape as the `company_id` gap 027 just closed,
+  and the same fix applies when the deal form gets a contact picker.
+- **`deals.stakeholders` names are not FKs to `contacts`.** The deal committee
+  and the account team now speak one role vocabulary but are still two unlinked
+  sets of people. Worth resolving before either grows features.
+- **A real stage-duration average is now computable** from `deal_stage_history`
+  and should live in the API response beside `days_since_contact`, not in a
+  component. `DealHeroSection` keeps an optional `avgStageDuration` prop for it;
+  the hardcoded `VELOCITY_STAGE_AVG` map that used to fill it is gone.
+
+### Still open from the original fabricated-data tally
+
+F2 ReportsPage · F3 AICopilotPage · F5 `aiEngine` · F6–F13 · F16 · F26
+ImportLeadsPage · F27 DocumentDetailPage. F14 (TechStart) and F24/F25 are now
+closed; F14's entry carries the two extra findings from its removal.
 
 ---
 
@@ -782,8 +813,9 @@ URL, not internal state. **If you have to manufacture a credential to make somet
 that is a finding, not a setup step.** Check the database after a write, not the status
 code. And verify cleanup by re-counting rows, not by the delete returning without error.
 
-Current clean state: **1 workspace, 5 users, 20 contacts, 15 companies, 25 deals
-(1 `is_test`), 38 leads, 0 activities, 0 invites.**
+Current clean state: **1 workspace, 5 users, 20 contacts (0 with a
+`buying_role`), 15 companies, 25 deals (3 with a `company_id`, 1 `is_test`),
+38 leads, 0 activities, 0 `deal_stage_history`, 0 documents, 0 invites.**
 
 `D053` "Demo Company ABC" is flagged `is_test = true`, not deleted, pending a decision.
 Restore with `UPDATE deals SET is_test = false WHERE id = 'D053';`
