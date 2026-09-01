@@ -15,7 +15,6 @@ import {
   AccountKPI,
   AccountWorkflow
 } from '../types/accounts';
-import { generateSampleAccounts } from '../utils/sampleAccountsData';
 import {
   fetchAccounts,
   createAccountViaAPI,
@@ -69,7 +68,6 @@ interface AccountsContextType {
   linkContact: (accountId: string, contactId: string, data: Partial<AccountContact>) => Promise<void>;
   unlinkContact: (accountId: string, contactId: string) => Promise<void>;
 
-  getAccountDeals: (accountId: string) => AccountDeal[];
   linkDeal: (accountId: string, dealId: string) => Promise<void>;
   unlinkDeal: (accountId: string, dealId: string) => Promise<void>;
 
@@ -112,25 +110,74 @@ interface AccountsProviderProps {
 }
 
 export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) => {
-  // MOCK DATA — still the source for the sub-entities below (activities, notes,
-  // documents, accountContacts, accountDeals, views, workflows). Those have no
-  // backend: there is no API for account activities/notes/documents, and the
-  // account<->contact and account<->deal links are not modelled server-side.
-  // Accounts themselves are now loaded from /api/v1/companies.
-  const sampleData = generateSampleAccounts();
-
-  // Accounts start empty and are filled by the fetch below. Seeding from sample
-  // data would flash five fake companies before the real ones arrive.
+  /**
+   * generateSampleAccounts() is GONE, and the file with it.
+   *
+   * What it actually still supplied by the time this was written was narrower
+   * than its reputation — six of its seven collections already returned `[]`,
+   * and `accounts` was never read because the state below starts empty. Only
+   * `views` was live. But it still shipped five fabricated companies (Acme
+   * Corp, TechStart Inc, BigCo…) one line away from a `setAccounts`, which is
+   * the standing hazard CLAUDE.md describes: a provider is where fabricated
+   * data spreads invisibly, because every consumer inherits it and no single
+   * component looks wrong.
+   *
+   * The six empty collections are now empty here, explicitly, with the reason
+   * each one is empty written down. `accountDeals` in particular was the cause
+   * of a wrong number on screen: getAccountDeals() filtered it, it was always
+   * `[]`, so every account reported "Active Deals 0 / Total Pipeline $0" while
+   * 25 real deals existed. An honest-looking zero is still a wrong answer.
+   */
   const [accounts, setAccounts] = useState<EnhancedAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activities, setActivities] = useState<AccountActivity[]>(sampleData.activities);
-  const [notes, setNotes] = useState<AccountNote[]>(sampleData.notes);
-  const [documents, setDocuments] = useState<AccountDocument[]>(sampleData.documents);
-  const [accountContacts, setAccountContacts] = useState<AccountContact[]>(sampleData.accountContacts);
-  const [accountDeals, setAccountDeals] = useState<AccountDeal[]>(sampleData.accountDeals);
-  const [views, setViews] = useState<AccountView[]>(sampleData.views);
-  const [workflows, setWorkflows] = useState<AccountWorkflow[]>(sampleData.workflows);
+
+  // No API for account-level activities, notes or documents as first-class
+  // account records. The account detail page reads the REAL /activities and
+  // /documents endpoints directly instead of going through these.
+  const [activities, setActivities] = useState<AccountActivity[]>([]);
+  const [notes, setNotes] = useState<AccountNote[]>([]);
+  const [documents, setDocuments] = useState<AccountDocument[]>([]);
+  // The account<->contact link is contacts.company_id, a real FK, resolved in
+  // refreshAccounts below rather than through this list.
+  const [accountContacts, setAccountContacts] = useState<AccountContact[]>([]);
+  // The account<->deal link is deals.company_id (migration 027). getAccountDeals
+  // now reads it; this list survives only for linkDeal/unlinkDeal, which are
+  // in-memory and have no callers.
+  // Write-only: linkDeal/unlinkDeal still push into it, but nothing reads it —
+  // getAccountDeals goes to the real company_id link now. Both of those
+  // mutators are in-memory and have zero callers; they go when the account
+  // edit form learns to set deals.company_id.
+  const [, setAccountDeals] = useState<AccountDeal[]>([]);
+  const [workflows, setWorkflows] = useState<AccountWorkflow[]>([]);
+
+  /**
+   * Saved views. UI presets, not business data, so defining them here is not
+   * fabrication — but two of the three that used to live in the sample file
+   * WERE broken: "HRMS Connections" filtered on `source: ['hrms']` and "High
+   * Priority" on `priority`, and it sorted by `healthScore`. None of those has
+   * a column on `companies`, so both views silently matched nothing while
+   * presenting themselves as working filters. They are dropped until there is
+   * something to filter on; only the unfiltered default remains.
+   */
+  const [views, setViews] = useState<AccountView[]>([
+    {
+      id: 'view_001',
+      name: 'All Accounts',
+      description: 'View all accounts',
+      isDefault: true,
+      isPublic: true,
+      // `filter` and `columns` — the sample fixture wrote `filters` and
+      // `visibleColumns`, neither of which exists on AccountView. It type-
+      // checked only because nothing ever read those keys back.
+      filter: {},
+      columns: ['name', 'industry', 'status'],
+      sortBy: 'name',
+      sortOrder: 'asc',
+      createdBy: 'system',
+      createdAt: new Date().toISOString(),
+    },
+  ]);
   const [duplicates, setDuplicates] = useState<AccountDuplicate[]>([]);
 
   /**
@@ -192,47 +239,52 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
       // Deals only carry a company NAME. Matched case-insensitively on the
       // trimmed name — the best available and deliberately reported as "matched"
       // rather than "belonging to".
-      let dealsByName: Map<string, AccountDeal[]> | null = null;
+      // Deals now group by the REAL foreign key, deals.company_id (migration
+      // 027), not by matching company_name text. The name match this replaces
+      // was documented as "matched rather than belonging to", and it was worse
+      // than that caveat implied: of 25 deals exactly one name matched a
+      // company row, so it attributed 1 deal and missed everything else.
+      //
+      // An unlinked deal (22 of 25) is now correctly attributed to NO account,
+      // rather than to whichever account happened to share its spelling.
+      let dealsByAccount: Map<string, AccountDeal[]> | null = null;
       if (dealsRes.status === 'fulfilled') {
-        dealsByName = new Map();
+        dealsByAccount = new Map();
         let openCount = 0;
         let openValue = 0;
         for (const d of dealsRes.value) {
           const stage = String(d.stage ?? '').toLowerCase();
           if (stage === 'closed-won' || stage === 'closed-lost') continue;
           const value = Number(d.value) || 0;
+          // Pipeline-wide totals count every open deal, linked or not — the
+          // pipeline exists regardless of whether anyone has attributed it.
           openCount += 1;
           openValue += value;
-          const key = String(d.company_name ?? '').trim().toLowerCase();
+          const key = String(d.company_id ?? '').trim();
           if (!key) continue;
-          const list = dealsByName.get(key) ?? [];
+          const list = dealsByAccount.get(key) ?? [];
           list.push({
             id: d.id,
-            accountId: '',           // filled in below, once the account is known
+            accountId: key,
             name: d.name || d.title || d.id,
             amount: value,
             stage: d.stage ?? undefined,
             closeDate: d.expected_close_date ?? undefined,
             probability: d.probability ?? undefined,
           });
-          dealsByName.set(key, list);
+          dealsByAccount.set(key, list);
         }
         setDealStats({ openCount, openValue });
       } else {
         setDealStats(null);
       }
 
-      setAccounts(loaded.map(a => {
-        const matched = dealsByName?.get(a.name.trim().toLowerCase());
-        return {
-          ...a,
-          // undefined, not [], when the lookup did not run — see the type comment.
-          relatedContacts: contactsByAccount ? (contactsByAccount.get(a.id) ?? []) : undefined,
-          relatedDeals: dealsByName
-            ? (matched ?? []).map(d => ({ ...d, accountId: a.id }))
-            : undefined,
-        };
-      }));
+      setAccounts(loaded.map(a => ({
+        ...a,
+        // undefined, not [], when the lookup did not run — see the type comment.
+        relatedContacts: contactsByAccount ? (contactsByAccount.get(a.id) ?? []) : undefined,
+        relatedDeals: dealsByAccount ? (dealsByAccount.get(a.id) ?? []) : undefined,
+      })));
     } catch (e: any) {
       setError(e?.message ?? 'Could not load accounts');
     } finally {
@@ -490,9 +542,23 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     ));
   };
 
-  const getAccountDeals = useCallback((accountId: string) => {
-    return accountDeals.filter(ad => ad.accountId === accountId);
-  }, [accountDeals]);
+  /*
+   * getAccountDeals() was removed rather than repaired.
+   *
+   * It filtered a sample-seeded `accountDeals` array that is permanently
+   * empty, so it returned [] for every account — which is why the detail page
+   * reported "Active Deals 0 / Total Pipeline $0" against 25 real deals. The
+   * obvious fix was to point it at `relatedDeals`; the reason not to is that
+   * NOTHING CONSUMES IT any more. The account detail page queries
+   * /deals?company_id= directly, which is the better path for a detail view:
+   * targeted rather than sliced out of a 500-row list, and it includes closed
+   * deals, which an account history needs and refreshAccounts filters out.
+   *
+   * A repaired-but-unread provider method is the trap recorded as lesson 3/9
+   * in CLAUDE.md, so it goes. `relatedDeals` itself IS still read — by
+   * AccountsPage, for the per-row deal counts — and that is where the switch
+   * from name-matching to company_id above actually lands.
+   */
 
   const linkDeal = async (accountId: string, dealId: string): Promise<void> => {
     const newLink: AccountDeal = {
@@ -802,7 +868,6 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     linkContact,
     unlinkContact,
 
-    getAccountDeals,
     linkDeal,
     unlinkDeal,
 

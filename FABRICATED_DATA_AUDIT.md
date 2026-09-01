@@ -185,6 +185,23 @@ built this phase. Every one of these is out of the Phase-1 page list in `CLAUDE.
 file. Reachable through the accounts module. This is a single fake company presented as a real
 account record. **Disposition: delete.** It is a demo fixture living in the product.
 
+**RESOLVED — both files deleted with the F25 account-detail rebuild.** Two details found on
+the way out that the original entry did not capture, and both sharpen the finding:
+
+1. **How it was reachable was worse than "through the accounts module".** `AccountsModule`
+   special-cased a single hardcoded id — `if (accountId === 'ACC-2024-0089') return
+   <TechStartDetailView />` — so the fake company sat behind one specific URL on a public
+   route, for an id format this database does not use (real company ids are `C001`..`C015`).
+   A reader of the route table sees `/:accountId -> AccountDetailRouter` and has no reason
+   to suspect a second detail page hides inside it.
+2. **Zero data calls across 1,103 lines** — no `fetch`, no API client, no context import.
+   That is the detection rule in `CLAUDE.md` firing again, and it makes this the **third**
+   whole feature in this repo backed entirely by literals, after the six-widget dashboard
+   and the second Deals implementation at `/lead-generation/deals`. All three read as
+   unfinished work; all three were finished, and fake.
+
+The route now goes straight to `EnhancedAccountDetailView` for every id.
+
 ### F15 · `pages/CRM/CRMSettings/TeamManagement.tsx` (1,081 loc) ← `utils/teamManagementMockData.ts` (959 loc)
 **Fabricates:** a full team roster with roles and permissions. Inside `CRMSettings/`, which
 `HANDOFF.md` §2 already marks as dead code awaiting the Settings rebuild.
@@ -426,6 +443,40 @@ dates**, regardless of which deal you opened. This is a decision surface, not a 
 (contacts carry `company_id`); **delete** `accountData`'s funding/growth/hiring fields — there
 is no enrichment provider and `CLAUDE.md` puts enrichment out of phase.
 
+**RESOLVED — page rebuilt against the database.** Corrections to this entry, all found while
+wiring it, and each one changes the picture:
+
+- **There were TEN hardcoded blocks, not four.** Also rendering: `aiIntelligenceData` (an
+  invented win probability, a four-category score breakdown, four "next best actions"),
+  `hrmsConnection`, `notes`, `files`, `sidebarData` (the entire AI Insights rail — deal score
+  78, win probability 67%, three "similar deals" with similarity percentages, a predicted
+  `$48K - $52K` range, churn and upsell figures, a data-sources panel claiming Clearbit and
+  LinkedIn were syncing), and — in `DealHeroSection`, one component up — `VELOCITY_STAGE_AVG`,
+  a hardcoded per-stage benchmark map driving a "Moving Fast / Slowing / Stalled" verdict and
+  "6d to avg". That last one is the same benchmark fabrication as `stageHistory`'s, which is
+  why a per-file literal scan missed it: it lived in the component, not the page.
+- **The stakeholders were already in the database and already being fetched.**
+  `deals.stakeholders` is a real jsonb column, written by the deal form, carrying buying roles
+  (champion / decision-maker / economic-buyer / technical-evaluator / legal-procurement) on 5
+  of 25 deals. The page mapped it into state at `:207` and then rendered the invented `contacts`
+  array beside it. So no schema addition was needed on the deal side at all — the fix was to
+  render data the page was already holding.
+- **`deal_stage_history` was empty for a reason, and the reason was a second bug.**
+  Nothing wrote to it: `handleStageSelect` called `updateDeal()` (a plain field update), and
+  the Move Stage modal's confirm handler called nothing at all — it fired
+  `showToast('Deal moved to Negotiation stage', 'success')` and returned. Both now go through
+  `POST /deals/:id/stage-transition`.
+- **And nothing rendered it either.** `DealDetailsPanel` declared `stageHistory?: Stage[]` and
+  never destructured it, so the fabricated array went nowhere. **The Phase-1 "stage history
+  audit trail" did not exist as a render**, and the fabrication concealed that by making the
+  prop look supplied. Now recorded as lesson 9 in `CLAUDE.md`.
+
+Wired: stage history (new `DealStageHistory` + `buildStageSpans`, 8 tests), activities, notes
+(activities of type `note`), files (documents), stakeholders, and the account via the new
+`deals.company_id`. Deleted: the AI Insights tab and its four components (1,593 loc), company
+enrichment, HRMS, the velocity benchmark, and `"TODAY (Dec 7)"` — printed on every deal, every
+day of the year.
+
 ### F25 · CORRECTION to F4 — `EnhancedAccountDetailView.tsx` is worse than reported
 F4 said the Related Deals panel reads sample data. That was incomplete. The real shape is
 **fabricated fields grafted onto genuine records, plus real data fetched and then discarded:**
@@ -452,6 +503,46 @@ page is sound. It defeats the primary verification heuristic in `CLAUDE.md`.
 *Already remediated on this page, for the record:* `similarAccounts` and `dataSources` were
 emptied (comment at `:249–264`); the latter had claimed five external enrichment integrations
 were "active, updated 2 hours ago".
+
+**RESOLVED — page rebuilt against the database.** The three mock consts were the visible layer;
+three more were underneath, and this entry understated the page by a wide margin:
+
+- **`mockOrgChart`** — a fourth invented block, a full reporting hierarchy (John Smith CEO ->
+  Sarah Chen VP HR, Mike Johnson CTO). No org-chart data exists in any table.
+- **FIVE components whose props could ONLY be satisfied with invented values.** The important
+  finding here is that three of them carried invented **default parameter values in their own
+  signatures**: `AIAccountInsightsPanel` defaults `healthScore = 92, engagementScore = 95,
+  dealPotentialScore = 90, relationshipScore = 95, companyHealthScore = 88, pipelineValue =
+  60000`; `HRMSIntelligencePanel` defaults `contactName = 'Sarah Chen', contactRole = 'VP of
+  HR', employeeCount = 450, recentHires = 35, attritionRate = 8`. **Removing the invented prop
+  at the call site would have changed nothing** — the component supplies the same invention
+  from its own signature, and the page looks clean while the screen does not. This is a
+  fabrication that is invisible from the consuming file, and it is a distinct variant worth
+  naming alongside the provider-level one. `AIAccountInsightsPanel`'s body was hardcoded too:
+  "Upsell Opportunity: High, +$35K in Q1 2026", "Churn Risk: Low (5%)", "Ask Sarah for a warm
+  intro". All five deleted (1,445 loc), plus `EnhancedContactsSection`, whose required
+  `engagementScore` / `lastContactDate` / `totalInteractions` props were the reason
+  `mockContacts` had to invent them in the first place.
+- **TWO ENTIRE TABS of inline fabricated JSX**, which no scan of the `mock*` consts would have
+  found because the literals are in the markup. The Activities tab rendered "24 Emails / 8
+  Calls / 5 Meetings / 12 Notes" and a timeline of "Sent proposal to Sarah Lee ... Opened on
+  Nov 14, 4:15 PM" — against an `activities` table holding **0 rows**. The Documents tab
+  rendered a storage quota ("24.5 MB / 100 MB", a quota this product does not have) and
+  `TechStart_Proposal_Q1_2025.pdf` — against **0 document rows**.
+- **`LastInteractionBar`** was called with `lastInteractionDate="Nov 14, 2025" daysAgo={2}
+  engagementScore={95}`: three literals, no source for any of them. Deleted.
+- **The hero printed "0 employees" on every account** — `{account.employeeCount || 0}`, where
+  `employeeCount` has no column and `accountsApi` correctly leaves it undefined. Not invented,
+  but a fabricated-looking zero produced by a `||` fallback over an honest absence. It now
+  shows the real `companies.size` band.
+
+**And the "Active Deals 0 / Total Pipeline $0" every account reported was itself the bug.**
+`getAccountDeals()` filtered `accountDeals`, seeded from `generateSampleAccounts()` — which
+by this point returned `[]` for six of its seven collections, so the filter always returned
+nothing while 25 real deals existed. An honest-looking zero is still a wrong answer, and it is
+harder to spot than an invented number because it looks like a correct empty state. Fixed by
+`deals.company_id` (migration 027) plus `/deals?company_id=`; `generateSampleAccounts` and its
+385-line file are deleted.
 
 ### F26 · `pages/CRM/ImportLeadsPage.tsx:60–80` — reachable, in-scope, misleading
 **Fabricates:** an integration roster — `Apollo.io` with `status: 'connected'`,

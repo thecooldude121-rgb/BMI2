@@ -26,7 +26,10 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     items: [
       { name: 'Leads',     href: '/crm/leads',     icon: UserPlus },
       { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
-      { name: 'Accounts',  href: '/accounts',      icon: Building },
+      // Was '/accounts', which rendered a placeholder telling the user to
+      // "navigate to CRM \u2192 Accounts" \u2014 a sidebar entry that does not exist.
+      // The real accounts list is CRMModule's /crm/accounts.
+      { name: 'Accounts',  href: '/crm/accounts',  icon: Building },
       { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
       {
         name: 'Pinned Views', icon: Bookmark,

@@ -49,7 +49,11 @@ const CompanyInformationPanel: React.FC<CompanyInformationPanelProps> = ({
             <Building2 className="h-6 w-6 text-blue-600" />
           </div>
           <h3 className="text-lg font-bold text-gray-900">COMPANY INFORMATION</h3>
-          <span className="text-xs text-gray-500">(🤖 AI-Enriched)</span>
+          {/* "(🤖 AI-Enriched)" was here, unconditionally, on every account.
+              Nothing enriches this panel: every field it shows comes from the
+              companies row a user typed. A false provenance claim is its own
+              kind of fabrication — it tells the user the data has a source and
+              an authority it does not have. */}
         </div>
 
         {/* Basic Info */}
@@ -206,12 +210,16 @@ const CompanyInformationPanel: React.FC<CompanyInformationPanelProps> = ({
           </div>
         )}
 
-        {/* AI Enrichment Note */}
-        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-xs text-gray-600">
-            <span className="font-semibold">AI Note:</span> This data is automatically enriched from multiple sources including company website, LinkedIn, Crunchbase, and public databases. Last updated: Today
-          </p>
-        </div>
+        {/* An "AI Note" block was here, reading: "This data is automatically
+            enriched from multiple sources including company website, LinkedIn,
+            Crunchbase, and public databases. Last updated: Today."
+            None of that is true — there is no enrichment provider configured,
+            enrichment is out of phase per CLAUDE.md, and every field on this
+            panel was typed by a user into the companies table. It is the same
+            false claim as the "(AI-Enriched)" badge removed from the header,
+            and it is worse than an invented number: it tells the user their
+            own data has an external authority behind it. "Last updated: Today"
+            was a literal too. */}
       </div>
     </div>
   );

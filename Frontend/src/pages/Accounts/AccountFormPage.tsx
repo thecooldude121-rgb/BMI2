@@ -7,7 +7,6 @@ import { useToast } from '../../contexts/ToastContext';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { validateURL, formatURL, formatLinkedInURL, formatPhoneNumber, calculateCompanyAge, calculateGrowthRate, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage } from '../../utils/accountFormUtils';
-import AIEnrichmentSection from '../../components/Accounts/Form/AIEnrichmentSection';
 import PreviewPanel from '../../components/Accounts/Form/PreviewPanel';
 import DataQualityPanel from '../../components/Accounts/Form/DataQualityPanel';
 import AISuggestionsPanel from '../../components/Accounts/Form/AISuggestionsPanel';
@@ -150,8 +149,6 @@ const AccountFormPage: React.FC = () => {
     notes: '',
   });
 
-  const [enrichedData, setEnrichedData] = useState<any>(null);
-  const [showEnrichment, setShowEnrichment] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -769,14 +766,26 @@ const AccountFormPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Form */}
           <div className="lg:col-span-2 space-y-6">
-            {/* AI Enrichment Section */}
-            <AIEnrichmentSection
-              onDataFound={setEnrichedData}
-              onApplyData={(data) => {
-                setFormData(prev => ({ ...prev, ...data }));
-                setShowEnrichment(false);
-              }}
-            />
+            {/*
+              AIEnrichmentSection was here, and it was the most serious
+              fabrication found on the accounts feature — because it WROTE.
+
+              "Find company data with AI" ran a setTimeout(1500) to imitate a
+              lookup and then returned a hardcoded object: TechStart Inc,
+              FinTech, New York NY, 45 employees, $8,000,000 revenue,
+              techstart.com, sourced from "LinkedIn, Crunchbase, Clearbit". Its
+              onApplyData spread that object straight into this form's state —
+              `setFormData(prev => ({ ...prev, ...data }))` — so an "Apply all"
+              click followed by Save persisted an invented company into the
+              real `companies` table under whatever name the user was creating.
+
+              Every other fabrication in this codebase misleads inside the app.
+              This one put fabricated data into Postgres, where the next
+              session reads it back as real. There is no enrichment provider,
+              and enrichment is out of phase per CLAUDE.md, so the control is
+              deleted rather than labelled: a PREVIEW badge on a button that
+              writes is not a safeguard.
+            */}
 
             {/* Basic Information */}
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">

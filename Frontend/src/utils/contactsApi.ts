@@ -41,6 +41,7 @@ export interface ContactRow {
   phone?: string | null;
   mobile?: string | null;
   position?: string | null;
+  buying_role?: string | null;
   department?: string | null;
   linkedin_url?: string | null;
   is_primary?: boolean | null;
@@ -87,6 +88,9 @@ export function mapRowToContact(row: ContactRow): Contact {
     company: row.company_name ?? '',
     companyId: row.company_id ?? undefined,
     position: row.position ?? '',
+    // undefined, not '', when unset: an empty string is a value the role chip
+    // would have to decide how to render. Absent is the truth.
+    buyingRole: row.buying_role ?? undefined,
     email: row.email,
     phone: row.phone ?? undefined,
     mobile: row.mobile ?? undefined,
@@ -136,6 +140,9 @@ export function mapContactToPayload(c: Partial<Contact>): Record<string, unknown
   if (c.phone !== undefined)        p.phone = c.phone;
   if (c.mobile !== undefined)       p.mobile = c.mobile;
   if (c.position !== undefined)     p.position = c.position;
+  // Passed through even when null: an explicit null CLEARS the role back to
+  // unassigned, which is a different operation from omitting the field.
+  if (c.buyingRole !== undefined)   p.buying_role = c.buyingRole === '' ? null : c.buyingRole;
   if (c.department !== undefined)   p.department = c.department;
   if (c.linkedinUrl !== undefined)  p.linkedin_url = c.linkedinUrl;
   if (c.isPrimary !== undefined)    p.is_primary = c.isPrimary;

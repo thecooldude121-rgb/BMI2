@@ -255,6 +255,8 @@ export interface RelatedDeal {
   assigned_to: string | null;
   contact_email: string | null;
   company_name: string | null;
+  /** The real account link (migration 027). Null on 22 of 25 deals today. */
+  company_id: string | null;
 }
 
 /**

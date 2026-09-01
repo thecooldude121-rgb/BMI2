@@ -41,6 +41,18 @@ export interface Contact {
   isPrimary?: boolean;
   mobile?: string;
 
+  /**
+   * Buying role on the parent account (migration 026).
+   *
+   * `undefined` means UNASSIGNED and must render as unknown — never as a
+   * default role. The account detail page invented this value twice before the
+   * column existed: first by array index (contact 0 was always the decision
+   * maker), then by hardcoding every contact to 'influencer'. Use
+   * findContactRole() from config/contactRoles, not getContactRole(), which
+   * falls back to Champion.
+   */
+  buyingRole?: string;
+
   // Added by migration 020, so the contact form stops discarding these.
   street?: string;
   city?: string;

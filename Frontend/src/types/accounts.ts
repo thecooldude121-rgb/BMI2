@@ -87,11 +87,15 @@ export interface EnhancedAccount {
    * failed). That is deliberately distinct from `[]`, which means none — a
    * failed join must not render as an authoritative zero.
    *
-   * relatedContacts is EXACT: contacts.company_id is a foreign key.
-   * relatedDeals is BEST-EFFORT: `deals` has no account_id, only a free-text
-   * company_name, so it is matched on the name. Of 25 deals, 10 carry a name
-   * and 1 matches an account exactly — so an empty array here means "none we
-   * could match", not "none exist", and the UI must not print it as 0.
+   * BOTH ARE NOW EXACT. relatedContacts joins on contacts.company_id and
+   * relatedDeals on deals.company_id (migration 027), which replaced the
+   * free-text company_name match this note used to describe — that match
+   * attributed exactly 1 of 25 deals and silently missed the rest.
+   *
+   * An empty array still does NOT mean "this account has no deals": 22 of 25
+   * deals carry no company_id, because the column is new and linking is a
+   * user's action. It means "no deals are LINKED", and the UI must say which
+   * of the two it is rather than printing a bare 0.
    */
   relatedContacts?: AccountContact[];
   relatedDeals?: AccountDeal[];
