@@ -4,6 +4,39 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
+/**
+ * DEV-ONLY LOGIN AUTOFILL.
+ *
+ * `npm run db:seed:users` rotates the seeded users' passwords and writes the two
+ * vars below into `Frontend/.env.development.local` (gitignored via `*.local`).
+ * This fills the form from them so nobody has to memorise a password that
+ * changes on every seed.
+ *
+ * Why it is safe, and why the alternative was refused: CLAUDE.md forbids
+ * advertised demo credentials, because this project once shipped a login page
+ * with a hardcoded "Demo Access" panel naming an account that did not exist.
+ * The login page is the one unauthenticated surface in the app, so anything
+ * rendered there is readable by anyone who can reach it, and anything hardcoded
+ * survives into a deployed bundle.
+ *
+ * This does neither:
+ *   - `import.meta.env.DEV` is a compile-time constant, so `npm run build`
+ *     evaluates this to false and dead-code-eliminates the whole block. Verified
+ *     by grepping the production bundle for the address.
+ *   - The values come from a gitignored env file, never from source. A
+ *     production build has no such file, so they are `undefined` and the gate
+ *     fails twice over.
+ *   - Nothing is DISPLAYED. It fills the inputs; the password stays masked. The
+ *     page never tells a reader what the credentials are.
+ */
+const DEV_LOGIN = {
+  email: import.meta.env.VITE_DEV_LOGIN_EMAIL as string | undefined,
+  password: import.meta.env.VITE_DEV_LOGIN_PASSWORD as string | undefined,
+};
+const DEV_LOGIN_AVAILABLE = Boolean(
+  import.meta.env.DEV && DEV_LOGIN.email && DEV_LOGIN.password,
+);
+
 interface FormErrors {
   email?: string;
   password?: string;
@@ -508,6 +541,42 @@ const Login: React.FC = () => {
                 </>
               )}
             </Button>
+
+            {/*
+              * `import.meta.env.DEV` is FIRST and inline, deliberately. Vite
+              * replaces it with the literal `false` in a production build, so
+              * the minifier drops this whole subtree. Gating only on the
+              * module-scope constant left the button's markup (though never the
+              * credentials) in the production bundle — verified by grepping
+              * dist/ for the label.
+              */}
+            {import.meta.env.DEV && DEV_LOGIN_AVAILABLE && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      email: DEV_LOGIN.email!,
+                      password: DEV_LOGIN.password!,
+                    }));
+                    // Clear any stale validation state from a previous attempt so
+                    // the filled form does not render as invalid.
+                    setErrors({});
+                    setTouched({ email: true, password: true });
+                  }}
+                  className="w-full rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2
+                             text-xs font-medium text-gray-600 hover:bg-gray-100
+                             focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+                  title="Fills the form from Frontend/.env.development.local (dev builds only)"
+                >
+                  Fill dev login
+                  <span className="ml-2 font-normal text-gray-500">
+                    · local dev only, not in production builds
+                  </span>
+                </button>
+              </div>
+            )}
           </form>
 
           {/* Registration had no UI at all — POST /auth/register existed but the

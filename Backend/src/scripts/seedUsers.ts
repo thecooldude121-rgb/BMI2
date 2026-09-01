@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import bcrypt from 'bcryptjs';
 import { pool } from '../config/database';
 
@@ -23,6 +25,22 @@ import { pool } from '../config/database';
  *   than inventing people.
  *
  * Run: cd Backend && npm run db:seed:users
+ *
+ * DEV-LOGIN AUTOFILL
+ * Also writes `Frontend/.env.development.local` with ONE account's credentials,
+ * so the login page can offer a dev-only autofill button instead of anyone
+ * memorising a password that this script rotates.
+ *
+ * That file is the reason the autofill is safe to have at all:
+ *   - It is gitignored (`*.local`) — the passwords never enter the repo.
+ *   - Vite only exposes `VITE_`-prefixed vars, and only in a build that reads
+ *     this file. A production build has no such file, so the vars are
+ *     `undefined` and the button does not render — see Login.tsx, which also
+ *     gates on `import.meta.env.DEV`.
+ *   - It is rewritten on every run, so the autofill cannot drift from the real
+ *     password. A hardcoded credential panel on the login page (which this
+ *     project shipped once) goes stale immediately and is readable by anyone
+ *     who can reach the page. See CLAUDE.md.
  */
 
 /** Same cost factor as authController.register. Keep them in step. */
@@ -82,7 +100,49 @@ async function main(): Promise<void> {
     console.log(`    ${i.email.padEnd(width)}  ${i.password}   (${i.role} · ${i.workspace})`);
   }
   console.log(`\n  Sign in at http://localhost:5173/login`);
-  console.log(`  Re-run this script to rotate them.\n`);
+  console.log(`  Re-run this script to rotate them.`);
+
+  writeDevLoginEnv(issued);
+}
+
+/**
+ * Write the dev-only autofill credentials for the login page.
+ *
+ * Picks the manager account when there is one — it has the widest read access,
+ * so it is the most useful account to land in for verification. Falls back to
+ * the first issued account.
+ *
+ * Failure here must never fail the seed: the printed passwords above are the
+ * real output, and this file is a convenience on top of them.
+ */
+function writeDevLoginEnv(
+  issued: { email: string; password: string; role: string; workspace: string }[],
+): void {
+  const pick = issued.find(i => i.role === 'manager') ?? issued[0];
+  if (!pick) return;
+
+  const target = path.resolve(__dirname, '../../../Frontend/.env.development.local');
+  const body = [
+    '# Written by `cd Backend && npm run db:seed:users`. DO NOT COMMIT — gitignored',
+    '# via `*.local`. Rewritten on every run, so it always matches the live password.',
+    '#',
+    '# Consumed only by the dev-only autofill button on the login page, which is',
+    '# additionally gated on `import.meta.env.DEV`. A production build has no such',
+    '# file, so these are undefined and the button does not render.',
+    `VITE_DEV_LOGIN_EMAIL=${pick.email}`,
+    `VITE_DEV_LOGIN_PASSWORD=${pick.password}`,
+    '',
+  ].join('\n');
+
+  try {
+    fs.writeFileSync(target, body, { mode: 0o600 });
+    console.log(`\n  Dev-login autofill written for ${pick.email} (${pick.role}).`);
+    console.log(`  ${path.relative(process.cwd(), target)} — gitignored, dev builds only.`);
+    console.log(`  Restart Vite to pick it up; the button appears on /login.\n`);
+  } catch (err) {
+    console.warn(`\n  Could not write the dev-login autofill file (${(err as Error).message}).`);
+    console.warn(`  Not fatal — the passwords above are still valid.\n`);
+  }
 }
 
 main()

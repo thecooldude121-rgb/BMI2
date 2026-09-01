@@ -1,5 +1,75 @@
 # Handoff — read before starting work
 
+## NEXT TASK — build the Phase-1 deal-detail and account-detail pages (F24 + F25)
+
+**Framing matters here, and it is the owner's explicit instruction: these are not cleanup.**
+`ComprehensiveDealDetailPage` and `EnhancedAccountDetailView` ARE items 3 and 4 of the
+Phase-1 page list in `CLAUDE.md` ("account detail, related deals, account team" and "deal
+detail with timeline / tasks / stakeholders / documents, stage history audit trail").
+Fixing them properly **replaces those Phase-1 items rather than preceding them.** Build them;
+do not patch around the fabrication.
+
+### F24 — `pages/Deal/ComprehensiveDealDetailPage.tsx`, routed at `/crm/deals/:id`
+
+Reached by clicking any deal on the Kanban board, which renders genuine database rows. The
+page reaches real data, which is why the audit's structural pass cleared it — the fabrication
+is in four rendered blocks, all hardcoded, all identical for every deal opened:
+
+- **`stageHistory` (~427)** — invented audit trail: `Prospecting 5 days (Nov 15 → Nov 20,
+  benchmark 7)`, `Qualified 12 days`, `Proposal 8 days`, with benchmark ranges.
+  **A real `deal_stage_history` table exists** — wire it. "Stage history audit trail" is
+  named in the Phase-1 list.
+- **`accountData` (~436)** — invented company intelligence: "Acme Corp", `revenue: '$12M
+  annually'`, `size: '75 employees'`, `fundingRound: 'Series B'`, `fundingAmount: '$8M'`,
+  `growthRate: '45% YoY'`, `hiringTrend`, `techStack`, `competitors`. There is no enrichment
+  provider and enrichment is out of phase — **delete these fields**, do not seek a source.
+  Company name/industry/size can come from the joined `companies` row.
+- **`contacts` (~451)** — invented stakeholders: `John Smith, VP Sales, Champion,
+  john@acme.com`. Rendered at ~1371, ~1386, ~1400. Contacts carry `company_id`, so real
+  stakeholders are a join away. "Stakeholders" is a named Phase-1 deliverable. Note there is
+  no buying-role column (champion/decision-maker/influencer/blocker) — that is a schema
+  addition to **propose, not invent**, per the no-fabricated-data rule.
+- **`activities` (~497)** — invented timeline. `activitiesApi.fetchActivities({ deal_id })`
+  is real and already used elsewhere.
+
+### F25 — `pages/Accounts/EnhancedAccountDetailView.tsx`, routed at `/accounts/:accountId`
+
+Worse shape than F24 because it is **partially migrated**, which is harder to spot:
+
+- `mockDeals` (~267) maps over deals and injects `probability: 70`, `health: 'good'`,
+  `lastActivity: '2 days ago'`, `daysInStage: 15`, `nextStep: 'Schedule demo with decision
+  maker'` into **every** row. Name, stage and value are real; the rest is constant.
+- `mockContacts` (~282) maps over **really-fetched** contacts and injects
+  `engagementScore: idx === 0 ? 95 : idx === 1 ? 90 : 75` — index-based fabrication sitting
+  two lines below a comment explaining that the adjacent index-based `role` was removed for
+  being exactly that.
+- `mockActivities` (~300) is entirely invented ("Product Demo with Sarah Chen", an
+  `aiSummary`, `timestamp: '2 hours ago'`) **and it is what renders**, at ~716. The real
+  `accountActivities`, fetched from `/activities?company_id=`, is used only for a filtered
+  computation at ~157 and never displayed.
+- `AccountsContext` seeds seven collections from `generateSampleAccounts()` — the same
+  provider-level defect as F1, and `getAccountDeals` (~493) filters the sample-seeded
+  `accountDeals`. **Fix the provider as well as the page**, or this recurs.
+
+**The single most dangerous fact in the audit lives here:** this page issues real, successful
+network requests and then renders invented data. Anyone applying "check the network log"
+sees 200s and concludes the page is sound. Cross-check rendered values against Postgres rows
+— see recorded lesson 4 in `CLAUDE.md`.
+
+### Before starting
+
+1. `git status` first. Another session was active in this worktree this evening; three
+   uncommitted files (`.gitignore`, `Backend/src/scripts/seedUsers.ts`,
+   `Frontend/src/pages/Auth/Login.tsx`) are its dev-login-autofill feature and are **not
+   yours to touch or absorb** — it was asked to commit them.
+2. That autofill, once committed, writes the rotated seeded passwords to a gitignored
+   `Frontend/.env.development.local` and prefills the login form. It saves a real amount of
+   friction; check whether it landed before hand-typing passwords.
+3. Per lesson 3: verify **per consumer**. A page that destructures a context without reading
+   it looks wired and is not.
+
+---
+
 ## RESOLVED — main has been merged in. Audit was completed first; findings below.
 
 The block that stood here is lifted. main is fully merged into this branch as of `db785fb`
@@ -383,6 +453,30 @@ previously-rejected stage (`engaged`) through the real dropdown returned `PUT 20
 persisted, with the UI and Postgres agreeing. Both test records removed and re-counted —
 38/20/15/25, zero residue.
 
+### PROCESS HAZARD — resurrected files reappear as untracked after git operations
+
+**This happened TWICE in one evening: 79 files, then 50.** Every one was a file this branch
+had deliberately deleted and that `main` still carries. All byte-identical to main's versions,
+all appearing as untracked (`??`) in the working tree, git itself always correct — HEAD never
+contained them and nothing was re-indexed.
+
+**Why it is dangerous rather than merely untidy:** a single `git add -A` re-commits the
+entire 56,000-line Lead Generation tool, the fabricated mock data, and
+`pages/Auth/LoginWireframe.tsx` — a publicly reachable page asserting "CSRF Protection:
+Handled by Supabase" and HTTP-only cookie storage for a product that has neither. One
+careless command undoes the whole removal effort.
+
+**Cause not established.** Both waves carried a single mtime consistent with a git operation
+writing main's tree to disk (a merge, an aborted rebase, or a checkout), but it could not be
+reconstructed from timestamps alone. If you discover the cause, record it here.
+
+**The check, and the corrected way to run it:** keep a manifest of what this branch deleted
+(`comm -13` HEAD's tree against main's), then after any merge/rebase/checkout compare it
+against `git status --porcelain | grep '^??'` — **not** `test -f` in isolation, and **after**
+the merge commit exists rather than during conflict resolution. A check run mid-merge reported
+"zero resurrected" when the answer was 79. Both waves were cleared with `git clean -fd` after
+confirming zero strays against the manifest and diffing `git clean -nd` against that list.
+
 ### PROCESS HAZARD — a session's working tree was committed to a misleadingly-named branch
 
 Recognise this pattern rather than re-deriving it. During this work:
@@ -498,11 +592,67 @@ Verified live: it correctly flagged "Liam Johnson · Similar name (medium)" agai
 is a place where a rejected write can read as a successful one.
 
 
-### Fabricated data still in the tree — three finds, one pattern
+### RESOLVED — F1: DataContext reads the database (commit 69dfefc)
 
-Tracked here rather than mentioned in passing, because this is now a **recurring class of
-defect in this codebase, not three coincidences**. Each was a finished-looking surface with
-nothing behind it, and each was initially read as unfinished work rather than as fabrication.
+The audit's root cause. Six collections now come from the API (leads, contacts, companies,
+deals, activities, tasks) through six adapters that map DB shapes to the provider's camelCase
+vocabulary. Fields with no source are left `null`/`0`/`[]`, never a plausible default.
+Failures surface on `error`; returning `[]` would claim something about the data rather than
+the request. `utils/sampleData.ts` (433 loc) and `utils/sampleDeals.ts` (103 loc) are
+deleted, and fifteen unconsumed mutators went with them — with real data behind the provider,
+an in-memory-only `addLead` would inject a phantom row into a real dataset.
+
+Two collections are empty on purpose, and the difference is the point:
+- **`employees` — permanently empty.** No `tenant_id` on that table, and HRMS is a separate
+  platform over the SSO boundary. The three HRMS pages render `<NotAvailable>` — "not built
+  yet", accurate for a future platform. **The HRMS boundary question stays open in CLAUDE.md;
+  this does not pre-empt it.**
+- **`meetings` — empty because there are no rows,** not because the feature is missing.
+  Calendar says "No upcoming meetings". No data is not the same as no feature; keep that
+  distinction in any new empty state.
+
+Verified against Postgres rather than merely observed: Analytics matches on three independent
+figures — Total Pipeline $1,644,000 = `sum(value)`, Won Revenue $55,000 = the single
+closed-won deal, Active Deals 22 = 24 − 1 won − 1 lost. All six fetches return 200.
+
+**Honest scope of that verification: ONE consumer was confirmed rendering real values, not
+three.** The others render correct absences. See F14 immediately below for why — it is the
+more useful half of this finding.
+
+### F14 — GamificationPage. OPEN. Disposition decided: LABEL, do not build.
+
+`pages/CRM/GamificationPage.tsx` destructured `leads, deals, tasks, employees` from
+`useData()` and never read one of them. Every figure is a hardcoded literal in local state:
+Level 12, 2.8K XP, a 7-day streak, a three-person leaderboard, "92% confident" AI coach
+insights, challenge progress bars, "Team Average 720 / Top Performer 1240". Fixing
+`DataContext` could not reach it, because it never consumed `DataContext`. The dead
+destructure and import are removed so the page no longer misrepresents itself as data-driven;
+the fabrication is untouched.
+
+**Disposition, decided by the owner: label it `PREVIEW · SAMPLE CONTENT`, do not build it.**
+Gamification is Phase-2 work and is absent from the Phase-1 page list. Building real scoring
+would mean designing an XP and levelling model nobody has specified — inventing a system to
+justify invented numbers. Labelling is the honest treatment, and it is the same treatment
+already applied successfully to the two panels on `CRMDashboard`. Copy that pattern: a
+visible badge plus an explicit "these are not calculated from your data" note. Do not
+partially wire it — a real deal count next to an invented XP total is worse than either.
+
+### Fabricated data — the running tally
+
+Tracked here because this is a **recurring class of defect, not a series of coincidences.**
+Each was a finished-looking surface with nothing behind it, and each was first read as
+unfinished work rather than as fabrication.
+
+**Fixed:** F1 `DataContext` (the root cause, 69dfefc) · the CRM dashboard widgets · the
+second Deals implementation (deleted with the Lead Gen tool) · F22 `IntegrationsContext`
+including its copyable fake `sk_live_` key · F28 `MOCK_ACCOUNTS` in the conversion wizard.
+
+**Open, with dispositions:** F14 GamificationPage (label — see above) · F24
+`ComprehensiveDealDetailPage` and F25 `/accounts/:accountId` (**build properly — these ARE
+the Phase-1 deal-detail and account-detail pages**) · F27 `DocumentDetailPage`
+(`getMockDocuments()`) · F2 ReportsPage catalogue (33 cards, 30 fake `updated="5m"` stamps) ·
+F3 AICopilotPage (1,207 lines of scripted AI) · F5 `aiEngine` persona benchmarks · F6–F13 and
+F16 as listed in FABRICATED_DATA_AUDIT.md.
 
 | # | Where | What | Status |
 |---|---|---|---|

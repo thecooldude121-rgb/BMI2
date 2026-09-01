@@ -451,7 +451,20 @@ something directly, do that instead of reasoning about what should be true.**
    server — request count, backend log, network tab — and only then read the screen.** This
    is the same failure as a success toast over an unchanged database, one layer earlier.
 
-3. **Verify the network response before reporting a failure — but a 200 is not evidence the
+3. **Fixing a data provider does not fix consumers that bypass it. When verifying a
+   provider fix, confirm each consumer actually READS the provider.** A component that
+   destructures a context and never uses it looks wired and is not. `GamificationPage` did
+   exactly that: `const { leads, deals, tasks, employees } = useData()` followed by not one
+   reference to any of them, while every figure on the page — level, XP, a 7-day streak, a
+   team leaderboard, "92% confident" coach insights, challenge progress — was a hardcoded
+   literal in local state. Rewiring `DataContext` to the database could not reach it,
+   because it never consumed `DataContext`. The tell is cheap: TypeScript reports it as
+   `TS6198: All destructured elements are unused`, which is one of the "noise" codes this
+   project has twice been burned by ignoring. **A provider fix is verified per consumer,
+   never once at the provider** — and the count of consumers you claim is the count you
+   actually opened and cross-checked, not the count that imports the context.
+
+4. **Verify the network response before reporting a failure — but a 200 is not evidence the
    screen is right.** A page was twice reported as broken ("0 accounts / could not load
    deals") when all three requests were returning 200; the screenshots were simply taken
    before the fetch resolved. So check the network log first, and note precisely what it
@@ -464,7 +477,7 @@ something directly, do that instead of reasoning about what should be true.**
    then `SELECT name, company, score FROM leads WHERE id = 36`, and FinSolve $120K on a deal
    card against `value = 120000.00`. Network log for "did it load"; a SQL query for "is it
    true". The two questions are separate and need separate evidence.
-4. **Verify through the same entry point a real user uses.** Not the file you edited, not a
+5. **Verify through the same entry point a real user uses.** Not the file you edited, not a
    direct URL, not hand-supplied state — a real login, the real nav, a real session. This
    rule has now been earned three times in three different disguises:
    - A dashboard fix was correct and invisible for three commits, because `Sidebar.tsx`
@@ -494,7 +507,7 @@ something directly, do that instead of reasoning about what should be true.**
      `activities` is 0 rows and the feed renders its empty state. Reported as not proven
      rather than counted as passing; fabricating an activity to force the path would have
      broken the no-fabricated-data rule to satisfy a verification rule.
-5. **Type errors in this project have twice concealed live, user-facing bugs — treat the
+6. **Type errors in this project have twice concealed live, user-facing bugs — treat the
    count as a signal, not noise.** `AccountFormPage` read `account.address` (the field is
    `billingAddress`) and wrote a key the payload mapper never read, so the account edit form
    loaded a blank address and saved nothing under a success toast — the compiler had been
@@ -503,17 +516,17 @@ something directly, do that instead of reasoning about what should be true.**
    did `if (success)` and `if (object)` is always truthy — every failed sign-in would have
    looked successful. Triage the backlog by REACHABILITY (is the file routed? does it touch
    a real API?), never by error code.
-6. **Never put a backtick inside SQL written in a JS template literal.** It closes the
+7. **Never put a backtick inside SQL written in a JS template literal.** It closes the
    string and the file stops compiling. This has now happened twice in this project within
    hours — once in `activitiesController` and once in `dealsController`, both while writing
    a comment that quoted a SQL fragment. Quote SQL in comments with plain text, not
    backticks.
-7. **Verify cleanup by re-counting, not by the delete returning without error.** A probe
+8. **Verify cleanup by re-counting, not by the delete returning without error.** A probe
    workspace and company survived a session because the cleanup script died part-way and the
    earlier statements' success was taken as the whole thing having run. They were only found
    by counting rows afterwards. Same shape as everything else here: check the end state, not
    the absence of an error.
-8. **Corollaries seen in practice:** a broken reachability grep once reported every file as
+9. **Corollaries seen in practice:** a broken reachability grep once reported every file as
    unimported and nearly caused a live, routed component to be deleted — resolve each import
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a
