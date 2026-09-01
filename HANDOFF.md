@@ -466,9 +466,22 @@ entire 56,000-line Lead Generation tool, the fabricated mock data, and
 Handled by Supabase" and HTTP-only cookie storage for a product that has neither. One
 careless command undoes the whole removal effort.
 
-**Cause not established.** Both waves carried a single mtime consistent with a git operation
-writing main's tree to disk (a merge, an aborted rebase, or a checkout), but it could not be
-reconstructed from timestamps alone. If you discover the cause, record it here.
+**CAUSE ESTABLISHED — it was an aborted rebase, and it leaves a trap behind.**
+`git rebase main` on this branch replays 49 commits; its first step checks out main's tree,
+which writes every file this branch deleted back to disk. `git rebase --abort` restores the
+branch ref and the tracked files but does **not** remove files that are untracked on the
+branch being returned to — so main's deleted files stay on disk as untracked. Confirmed by
+mtime: `.git/rebase-merge` and the first 79 resurrected files shared the timestamp
+`17:10:19`.
+
+Worse, the abort left `.git/rebase-merge` in place, so `git status` reported
+"You are currently editing a commit while rebasing... 48 remaining" hours later, on a branch
+that was not mid-rebase at all — the reflog showed a clean linear history. Cleared with
+`git rebase --quit`, which discards the stale state without touching the branch.
+
+**So: after any aborted rebase on this branch, do both** — `git rebase --quit` if
+`.git/rebase-merge` survives, and re-check untracked files against the deletion manifest.
+Do not rebase this branch onto main at all; see the merge rationale in `db785fb`.
 
 **The check, and the corrected way to run it:** keep a manifest of what this branch deleted
 (`comm -13` HEAD's tree against main's), then after any merge/rebase/checkout compare it
@@ -476,6 +489,23 @@ against `git status --porcelain | grep '^??'` — **not** `test -f` in isolation
 the merge commit exists rather than during conflict resolution. A check run mid-merge reported
 "zero resurrected" when the answer was 79. Both waves were cleared with `git clean -fd` after
 confirming zero strays against the manifest and diffing `git clean -nd` against that list.
+
+### PROCESS HAZARD — a broad `git add` absorbs whatever another session is holding
+
+Seen in both directions in one evening, which is why it is recorded as a pattern rather than
+an incident:
+
+- This session's uncommitted sweep was committed by another session onto
+  `user/venkat/crmsettingmodule` and merged as PR #1 (see below).
+- Then commit `884c716` ("Dev-login autofill"), written by that other session, swept up this
+  session's uncommitted `CLAUDE.md` (+25) and `HANDOFF.md` (+160) edits along with its own
+  three files. The content survived and is correct — but the documentation for F1, F14, the
+  F24/F25 handoff and two CLAUDE.md lessons are attributed to a commit about login autofill.
+
+Nothing was lost either time, and neither session did anything malicious — `git add -A` and
+`git commit -a` simply take everything in the tree. **The rule that prevents it: stage by
+explicit path, never `-A` or `-a`, whenever `git status` shows a file you did not edit.**
+And read the commit above yours before assuming your own work is missing.
 
 ### PROCESS HAZARD — a session's working tree was committed to a misleadingly-named branch
 
