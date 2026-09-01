@@ -40,6 +40,20 @@ export interface FundingRound {
   isRecent?: boolean;
 }
 
+/**
+ * Industry values the account form offers.
+ *
+ * Sourced from what `companies.industry` actually holds today, not invented:
+ * the column is free-text VARCHAR(50) with no CHECK, so this is a convenience
+ * list rather than a constraint, and the select additionally keeps any stored
+ * value selectable (see the note at the control).
+ */
+const INDUSTRY_OPTIONS = [
+  'Automotive', 'Consulting', 'E-Commerce', 'Education', 'Energy', 'Finance',
+  'FinTech', 'Food & Beverage', 'Healthcare', 'Logistics', 'Manufacturing',
+  'Real Estate', 'Retail', 'SaaS', 'Technology', 'Travel',
+] as const as readonly string[];
+
 export interface AccountFormData {
   companyName: string;
   legalName: string;
@@ -874,13 +888,34 @@ const AccountFormPage: React.FC = () => {
                     }`}
                   >
                     <option value="">Select Industry</option>
-                    <option value="SaaS">SaaS</option>
-                    <option value="FinTech">FinTech</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Manufacturing">Manufacturing</option>
-                    <option value="Retail">Retail</option>
-                    <option value="Technology">Technology</option>
-                    <option value="Consulting">Consulting</option>
+                    {/*
+                      This list was seven values: SaaS, FinTech, Healthcare,
+                      Manufacturing, Retail, Technology, Consulting. The database
+                      holds thirteen, and NINE OF FIFTEEN accounts had an
+                      industry that was not an option here — Education, Energy,
+                      Logistics, Automotive, E-Commerce, Travel, Finance, Real
+                      Estate, Food & Beverage.
+
+                      The consequence was not cosmetic. A stored value with no
+                      matching <option> makes the select fall back to "", and
+                      Industry is REQUIRED, so validateForm() failed on open and
+                      those nine accounts COULD NOT BE SAVED AT ALL — click Save,
+                      nothing happens, no request, and the only clue is a red
+                      asterisk further up the form. Found while verifying the
+                      Company Size select, which is what it was blocking.
+
+                      INDUSTRY_OPTIONS below covers what the database actually
+                      contains. The extra option after it is the durable half of
+                      the fix: whatever the stored industry is, it is always
+                      selectable, so no future drift in this list can silently
+                      strip an account's industry on edit.
+                    */}
+                    {INDUSTRY_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                    {formData.industry && !INDUSTRY_OPTIONS.includes(formData.industry) && (
+                      <option value={formData.industry}>{formData.industry}</option>
+                    )}
                   </select>
                   {errors.industry && (
                     <p className="mt-1 text-sm text-red-600">{errors.industry}</p>
