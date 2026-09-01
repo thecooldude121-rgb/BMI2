@@ -648,7 +648,17 @@ const AccountsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
-                      <div className="text-sm text-gray-900">{account.employeeCount || 0} employees</div>
+                      {/* Was `{account.employeeCount || 0} employees`, which
+                          printed "0 employees" on every row: employeeCount has
+                          no column, mapRowToAccount deliberately leaves it
+                          undefined, and `|| 0` turned that honest absence into
+                          a number. companies.size IS real and is what the size
+                          filter above already uses. */}
+                      <div className="text-sm text-gray-900">
+                        {account.accountSize
+                          ? `${account.accountSize} employees`
+                          : <span className="text-gray-400">Not specified</span>}
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <button
@@ -1031,7 +1041,9 @@ const AccountsPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Employees</p>
-                  <p className="text-sm font-medium text-gray-900">{account.employeeCount || 0}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {account.accountSize ?? <span className="text-gray-400">Not specified</span>}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Contacts</p>

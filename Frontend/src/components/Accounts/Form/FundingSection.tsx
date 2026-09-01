@@ -1,12 +1,13 @@
 import React from 'react';
 import { X, TrendingUp } from 'lucide-react';
+import type { AccountFormData, FundingRound } from '../../../pages/Accounts/AccountFormPage';
 
 interface FundingSectionProps {
   formData: any;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: keyof AccountFormData, value: any) => void;
   onAddFundingRound: () => void;
   onRemoveFundingRound: (id: string) => void;
-  onUpdateFundingRound: (id: string, field: string, value: any) => void;
+  onUpdateFundingRound: (id: string, field: keyof FundingRound, value: any) => void;
 }
 
 const FundingSection: React.FC<FundingSectionProps> = ({

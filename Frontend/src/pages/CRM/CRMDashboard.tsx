@@ -5,6 +5,7 @@ import { useDashboardData, dealValue, isOpen } from '../../hooks/useDashboardDat
 import { sortActivitiesNewestFirst } from '../../utils/activitiesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import PointsBreakdownModal from '../../components/gamification/PointsBreakdownModal';
 import LevelInfoPopover from '../../components/gamification/LevelInfoPopover';
 import ProgressDetailPopover from '../../components/gamification/ProgressDetailPopover';
@@ -35,6 +36,7 @@ import ChallengeDetailModal from '../../components/gamification/ChallengeDetailM
 const CRMDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { user } = useAuth();
   const { deals, contacts, accounts, activities, loading, error, truncated, reload } = useDashboardData();
 
   const [showPointsBreakdown, setShowPointsBreakdown] = useState(false);
@@ -444,7 +446,12 @@ const CRMDashboard: React.FC = () => {
       {/* Greeting Section */}
       <div className="bg-white border-b border-gray-200 px-8 py-6 shadow-sm">
         <h1 className="text-3xl font-bold mb-2" style={{ color: '#333333', fontSize: '28px' }}>
-          👋 Welcome back, Alex!
+          {/* Was the literal "Welcome back, Alex!", shown to every user on
+              every visit. The session was never the problem — the TopBar on
+              this same screen renders the real name correctly — the greeting
+              simply never asked. Falls back to a name-free greeting rather
+              than to a placeholder name. */}
+          👋 Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}!
         </h1>
         <p className="text-gray-600" style={{ fontSize: '14px' }}>Today is {dateString}</p>
       </div>

@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, X, Globe, Linkedin, Twitter, Building2 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
+import type { EnhancedAccount } from '../../types/accounts';
 import { useToast } from '../../contexts/ToastContext';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -16,20 +17,20 @@ import FundingSection from '../../components/Accounts/Form/FundingSection';
 import CRMSettingsSection from '../../components/Accounts/Form/CRMSettingsSection';
 import ValidationTipsPanel from '../../components/Accounts/Form/ValidationTipsPanel';
 
-interface Office {
+export interface Office {
   id: string;
   location: string;
   type: string;
   employees: number;
 }
 
-interface Founder {
+export interface Founder {
   id: string;
   name: string;
   role: string;
 }
 
-interface FundingRound {
+export interface FundingRound {
   id: string;
   roundName: string;
   amount: number;
@@ -39,7 +40,7 @@ interface FundingRound {
   isRecent?: boolean;
 }
 
-interface AccountFormData {
+export interface AccountFormData {
   companyName: string;
   legalName: string;
   tradeName: string;
@@ -62,7 +63,9 @@ interface AccountFormData {
   foundedMonth: string;
   foundedYear: number;
   founders: Founder[];
-  employeeCount: number;
+  /** companies.size band. The free-number employeeCount it replaces had no
+   *  column and was silently discarded on save. */
+  accountSize: EnhancedAccount['accountSize'] | '';
   employeeGrowth: { [year: string]: number };
   annualRevenue: number;
   currency: string;
@@ -125,7 +128,7 @@ const AccountFormPage: React.FC = () => {
     foundedMonth: '',
     foundedYear: 2018,
     founders: [],
-    employeeCount: existingAccount?.employeeCount || 0,
+    accountSize: existingAccount?.accountSize ?? '',
     employeeGrowth: {},
     annualRevenue: existingAccount?.annualRevenue || 0,
     currency: 'USD',
@@ -155,8 +158,11 @@ const AccountFormPage: React.FC = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [duplicateAccounts, setDuplicateAccounts] = useState<any[]>([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-  const [companyAge, setCompanyAge] = useState('');
-  const [growthRate, setGrowthRate] = useState('');
+  // Computed below and never rendered — the panels that showed them are gone.
+  // Kept as write-only rather than deleted, because the effects that set them
+  // also validate the founded-date and revenue-history inputs.
+  const [, setCompanyAge] = useState('');
+  const [, setGrowthRate] = useState('');
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { showToast } = useToast();
   const { filteredAccounts } = useAccounts();
@@ -188,7 +194,7 @@ const AccountFormPage: React.FC = () => {
         foundedMonth: '',
         foundedYear: 2018,
         founders: existingAccount.customFields?.founders || [],
-        employeeCount: existingAccount.employeeCount || 0,
+        accountSize: existingAccount.accountSize ?? '',
         employeeGrowth: existingAccount.customFields?.employeeGrowth || {},
         annualRevenue: existingAccount.annualRevenue || 0,
         currency: 'USD',
@@ -468,14 +474,24 @@ const AccountFormPage: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // A `await new Promise(r => setTimeout(r, 500))` sat here, padding every
+      // save with half a second of fake latency to make the spinner look busy.
+      // The request is real and takes as long as it takes.
       const accountData = {
-        id: isEditMode ? accountId : `ACC-${Date.now()}`,
+        // No client-minted id. This built `ACC-${Date.now()}` for new accounts —
+        // the same "invent an id and send it as if the record existed" pattern
+        // that made lead conversion silently impossible, and the source of the
+        // `ACC-2024-0089` format that TechStartDetailView was routed on.
+        // `companies.id` is assigned server-side (C001, C002, ...);
+        // mapAccountToPayload never sent this field, so the minted id was only
+        // ever misleading.
         name: formData.companyName,
         industry: formData.industry,
         website: formData.website,
         phone: formData.companyPhone,
-        email: formData.companyEmail,
+        // `email` was sent here and dropped: `companies` has no email column,
+        // and mapAccountToPayload never read it. The input is removed rather
+        // than the field silently collected — see the note at that input.
         // Was `address: { ..., zip }`. mapAccountToPayload reads ONLY
         // `billingAddress` and its `postalCode` key, so nothing here reached the
         // API: you could type a full address, press Save, be told "Account
@@ -488,7 +504,9 @@ const AccountFormPage: React.FC = () => {
           postalCode: formData.postalCode,
           country: formData.country,
         },
-        employeeCount: formData.employeeCount,
+        // employeeCount likewise had no column. accountSize maps to
+        // companies.size, which mapAccountToPayload DOES send.
+        accountSize: formData.accountSize || undefined,
         annualRevenue: formData.annualRevenue,
         // `owner` is not a field on EnhancedAccount (it is `ownerId`) and
         // `status` is a constrained union, not the form's free-text
@@ -584,7 +602,7 @@ const AccountFormPage: React.FC = () => {
             foundedMonth: '',
             foundedYear: 2018,
             founders: [],
-            employeeCount: 0,
+            accountSize: '',
             employeeGrowth: {},
             annualRevenue: 0,
             currency: 'USD',
@@ -645,6 +663,11 @@ const AccountFormPage: React.FC = () => {
     }
   };
 
+  // These two were written, never attached to an input, and reported by the
+  // compiler as unused for as long as they have existed — so URL and phone
+  // normalisation silently never ran. Wired to onBlur on the website and phone
+  // fields below rather than deleted: they are the intended behaviour, and
+  // formatURL/formatPhoneNumber are already imported and tested.
   const handleURLBlur = (field: 'website' | 'linkedin') => {
     if (formData[field]) {
       const formatted = field === 'linkedin'
@@ -921,6 +944,7 @@ const AccountFormPage: React.FC = () => {
                     <input
                       type="url"
                       value={formData.website}
+                      onBlur={() => handleURLBlur('website')}
                       onChange={(e) => handleInputChange('website', e.target.value)}
                       className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                         errors.website ? 'border-red-500' : 'border-gray-300'
@@ -950,6 +974,7 @@ const AccountFormPage: React.FC = () => {
                   <input aria-label="Company Phone"
                     type="tel"
                     value={formData.companyPhone}
+                    onBlur={handlePhoneBlur}
                     onChange={(e) => handleInputChange('companyPhone', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="+1 (212) 555-0100"

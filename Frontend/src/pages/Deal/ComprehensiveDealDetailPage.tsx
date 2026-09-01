@@ -1062,7 +1062,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onAssignOwner={handleAssignOwner}
         onSaveAmount={(amount) => handleUpdateAmount(amount, '')}
         onSaveCloseDate={handleSaveCloseDate}
-        onShowShortcuts={() => setShowShortcuts(true)}
+        // onShowShortcuts removed: DealHeroSection declared the prop and never
+        // read it, so this was passing a callback into nothing. The '?' key
+        // still opens the modal through this page's own keydown listener.
         momentumResult={momentumResult}
         revenueSchedule={activeRevenueSchedule}
         onViewRevenue={handleViewRevenue}

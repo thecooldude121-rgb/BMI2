@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '../../ui/Button';
 import { Settings, Tag, X } from 'lucide-react';
+import type { AccountFormData } from '../../../pages/Accounts/AccountFormPage';
 
 interface CRMSettingsSectionProps {
   formData: any;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: keyof AccountFormData, value: any) => void;
   onAddTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
 }

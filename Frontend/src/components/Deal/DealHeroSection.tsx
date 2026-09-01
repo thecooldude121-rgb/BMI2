@@ -27,24 +27,10 @@ const ORDERED_STAGES: Record<number, string> = {
 };
 
 // Item 2: avatar gradient per stage
-const STAGE_AVATAR_GRADIENT: Record<string, string> = {
-  prospecting:  'from-blue-500 to-blue-600',
-  qualified:    'from-green-500 to-green-600',
-  proposal:     'from-orange-500 to-orange-600',
-  negotiation:  'from-purple-500 to-purple-600',
-  'closed-won': 'from-emerald-500 to-emerald-600',
-  'closed-lost':'from-red-500 to-red-600',
-};
+// STAGE_AVATAR_GRADIENT removed: declared, never read.
 
 // Item 5: stage dot color (Tailwind class)
-const STAGE_DOT_COLOR: Record<string, string> = {
-  prospecting:  'bg-blue-500',
-  qualified:    'bg-green-500',
-  proposal:     'bg-orange-500',
-  negotiation:  'bg-purple-500',
-  'closed-won': 'bg-emerald-500',
-  'closed-lost':'bg-red-500',
-};
+// STAGE_DOT_COLOR removed: declared, never read.
 
 // Inline CSS gradient per stage (avoids Tailwind JIT dynamic-class purge)
 const STAGE_GRADIENT_CSS: Record<string, string> = {
@@ -143,7 +129,12 @@ interface DealHeroSectionProps {
   onAssignOwner?: (ownerName: string) => void;
   onSaveAmount?: (amount: number) => void;
   onSaveCloseDate?: (isoDate: string) => void;
-  onShowShortcuts?: () => void;
+  // onShowShortcuts was declared here and NEVER READ — the page passed
+  // `() => setShowShortcuts(true)` into a prop this component ignores, so the
+  // hero has no shortcuts affordance at all. Lesson 9 in CLAUDE.md, found by
+  // the compiler's TS6133 in the file that lesson was written about. The `?`
+  // key still opens the modal via the page's own listener; only the unused
+  // prop is gone.
   momentumResult?: MomentumResult;
   revenueSchedule?: RevenueSchedule | null;
   onViewRevenue?: () => void;
@@ -171,7 +162,6 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onAssignOwner,
   onSaveAmount,
   onSaveCloseDate,
-  onShowShortcuts,
   momentumResult,
   revenueSchedule,
   onViewRevenue,
@@ -387,22 +377,11 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     return 'text-red-600';
   };
 
-  const getHealthBarColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
+  // getHealthBarColor removed: declared, never read.
 
   // ── Stage helpers ──────────────────────────────────────────────────────────
 
-  const getStageEmoji = (stage: string) => {
-    const emojiMap: Record<string, string> = {
-      'prospecting': '🔍', 'qualified': '✅', 'proposal': '🟠',
-      'negotiation': '🤝', 'closed-won': '🎉', 'closed-lost': '❌',
-    };
-    return emojiMap[stage.toLowerCase()] || '📊';
-  };
+  // getStageEmoji removed: declared, never read.
 
   const hasNextStage   = deal.stageNumber < deal.totalStages;
   const nextStageNum   = deal.stageNumber + 1;

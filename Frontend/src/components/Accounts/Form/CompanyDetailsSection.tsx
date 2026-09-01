@@ -1,15 +1,16 @@
 import React from 'react';
 import { Building2, X } from 'lucide-react';
+import type { AccountFormData, Office, Founder } from '../../../pages/Accounts/AccountFormPage';
 
 interface CompanyDetailsSectionProps {
   formData: any;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: keyof AccountFormData, value: any) => void;
   onAddOffice: () => void;
   onRemoveOffice: (id: string) => void;
-  onUpdateOffice: (id: string, field: string, value: any) => void;
+  onUpdateOffice: (id: string, field: keyof Office, value: any) => void;
   onAddFounder: () => void;
   onRemoveFounder: (id: string) => void;
-  onUpdateFounder: (id: string, field: string, value: string) => void;
+  onUpdateFounder: (id: string, field: keyof Founder, value: string) => void;
 }
 
 const CompanyDetailsSection: React.FC<CompanyDetailsSectionProps> = ({
@@ -30,15 +31,7 @@ const CompanyDetailsSection: React.FC<CompanyDetailsSectionProps> = ({
     return `${years} years, ${months} months`;
   };
 
-  const calculateGrowthRate = () => {
-    const history = formData.employeeGrowth;
-    const years = Object.keys(history).sort();
-    if (years.length < 2) return 0;
-    const firstYear = years[0];
-    const lastYear = years[years.length - 1];
-    const growth = ((history[lastYear] - history[firstYear]) / history[firstYear]) * 100;
-    return Math.round(growth);
-  };
+  // calculateGrowthRate removed: declared, never read.
 
   return (
     <>
@@ -213,21 +206,45 @@ const CompanyDetailsSection: React.FC<CompanyDetailsSectionProps> = ({
             </button>
           </div>
 
-          {/* Employee Count */}
+          {/* The "Number of Employees" input was here, and it was a live
+              data-loss bug of the same shape as the address one fixed above it:
+              the user typed a headcount, pressed Save, was told the account was
+              saved, and the value went nowhere. `companies` has no headcount
+              column, so mapAccountToPayload never sent it — and the accounts
+              list then rendered `employeeCount || 0`, turning that absence into
+              "0 employees" on every row.
+
+              Removed rather than backed by a new column, by the owner's
+              decision: `companies.size` already stores an employee BAND
+              ('201-500'), it is what the list column and the size filter both
+              read, and a second headcount field would duplicate it. The size
+              band is edited through the Company Size select below, which did
+              not previously exist anywhere on this form — so `companies.size`
+              was a real, list-filterable column with no way to set it. */}
+
+          {/* Company Size */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Number of Employees
+              Company Size
             </label>
-            <div className="flex items-center">
-              <input
-                type="number"
-                value={formData.employeeCount}
-                onChange={(e) => onChange('employeeCount', parseInt(e.target.value) || 0)}
-                className="w-32 px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="45"
-              />
-              <span className="ml-2 text-sm text-gray-600">employees</span>
-            </div>
+            <select
+              aria-label="Company Size"
+              value={formData.accountSize}
+              onChange={(e) => onChange('accountSize', e.target.value)}
+              className="w-56 px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              {/* Empty is a real choice: companies.size is nullable and an
+                  unknown size must stay unknown rather than defaulting into
+                  the smallest band. */}
+              <option value="">Not specified</option>
+              <option value="1-10">1-10 employees</option>
+              <option value="11-50">11-50 employees</option>
+              <option value="51-200">51-200 employees</option>
+              <option value="201-500">201-500 employees</option>
+              <option value="501-1000">501-1000 employees</option>
+              <option value="1001-5000">1001-5000 employees</option>
+              <option value="5000+">5000+ employees</option>
+            </select>
           </div>
 
           {/* Annual Revenue */}

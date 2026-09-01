@@ -1,9 +1,10 @@
 import React from 'react';
 import { MapPin, Map } from 'lucide-react';
+import type { AccountFormData } from '../../../pages/Accounts/AccountFormPage';
 
 interface LocationSectionProps {
   formData: any;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: keyof AccountFormData, value: any) => void;
   errors: { [key: string]: string };
 }
 

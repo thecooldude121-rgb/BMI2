@@ -46,7 +46,7 @@ interface AccountsContextType {
   getAccountHierarchy: (id: string) => EnhancedAccount[];
   getChildAccounts: (parentId: string) => EnhancedAccount[];
 
-  createAccount: (account: Omit<EnhancedAccount, 'id' | 'createdAt' | 'updatedAt'>) => Promise<EnhancedAccount>;
+  createAccount: (account: Partial<EnhancedAccount>) => Promise<EnhancedAccount>;
   updateAccount: (id: string, updates: Partial<EnhancedAccount>) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
   mergeAccounts: (request: MergeAccountsRequest) => Promise<EnhancedAccount>;
@@ -159,6 +159,16 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
    * a column on `companies`, so both views silently matched nothing while
    * presenting themselves as working filters. They are dropped until there is
    * something to filter on; only the unfiltered default remains.
+   *
+   * CORRECTION to an earlier note of mine: I justified keeping this state by
+   * saying AccountsPage consumes it. IT DOES NOT. AccountsPage destructures
+   * `views`, `currentView` and `applyView` from this context and reads none of
+   * them — the compiler has been saying so all along as three TS6133s. The
+   * whole saved-views surface here (views, currentView, applyView, createView,
+   * updateView, deleteView) is unwired: nothing renders a view picker. That is
+   * lesson 3/9 again and I walked into it while writing the fix for it.
+   * Left in place rather than ripped out mid-cleanup — removing a six-method
+   * slice of the context API is its own change, and it is logged in HANDOFF.
    */
   const [views, setViews] = useState<AccountView[]>([
     {
@@ -389,8 +399,18 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
   // on refresh. The interface is unchanged — it already returned Promises — so
   // no consumer needed touching.
 
+  /**
+   * Partial, not Omit<EnhancedAccount, 'id'|'createdAt'|'updatedAt'>.
+   *
+   * The Omit demanded every non-optional field on EnhancedAccount — type,
+   * revenueCurrency, status, source, ownerId, createdBy, updatedBy, rating,
+   * priority, dataConsent, doNotContact — none of which has a column on
+   * `companies` and none of which mapAccountToPayload sends. It matches what
+   * createAccountViaAPI already accepts, and it stops the account form having
+   * to manufacture values for fields that go nowhere in order to typecheck.
+   */
   const createAccount = async (
-    accountData: Omit<EnhancedAccount, 'id' | 'createdAt' | 'updatedAt'>,
+    accountData: Partial<EnhancedAccount>,
   ): Promise<EnhancedAccount> => {
     const created = await createAccountViaAPI(accountData);
     setAccounts(prev => [...prev, created]);

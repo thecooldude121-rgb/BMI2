@@ -58,7 +58,10 @@ const AccountMergePage: React.FC = () => {
               Source Account: {account.name}
             </h2>
             <p className="text-blue-700">
-              {account.industry} • {account.employeeCount || 0} employees
+              {/* See AccountsPage: employeeCount has no column, and `|| 0`
+                  rendered its absence as "0 employees". */}
+              {account.industry}
+              {account.accountSize ? ` • ${account.accountSize} employees` : ''}
             </p>
           </div>
 
