@@ -48,7 +48,7 @@ const leadAnnualRevenue = (lead: Lead) =>
 const LeadDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { updateLead, deleteLead, leads: allLeads } = useLeads();
+  const { updateLead, deleteLead, leads: allLeads, lastWriteErrorRef } = useLeads();
   const actions = useLeadActions(updateLead);
   const { can } = usePermissions();
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
@@ -128,10 +128,25 @@ const LeadDetailPage: React.FC = () => {
 
   const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
-    await actions.changeStatus(lead, newStatus as Lead['status']);
-    setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
+    // The write decides what is shown. This used to update local state and fire a
+    // "Status updated" toast regardless of the result, so picking a status the
+    // backend rejects (most of this dropdown — see below) left the badge showing a
+    // value Postgres never accepted, under a success toast. That is the exact
+    // pattern CLAUDE.md records from the account address form.
+    //
+    // NOTE: the dropdown offers the frontend's lead vocabulary (assigned,
+    // enriching, attempting_contact, engaged, sales_accepted, nurture) while the
+    // API validates against VALID_STAGES (new, contacted, qualified, proposal,
+    // won, lost). Most options therefore 400 today. That mismatch is a separate
+    // open item — see HANDOFF; this only stops it being reported as success.
+    const accepted = await actions.changeStatus(lead, newStatus as Lead['status']);
     setShowStatusDropdown(false);
     setPendingStatus(null);
+    if (!accepted) {
+      showToast(lastWriteErrorRef.current ?? 'Status change was rejected — nothing was saved.');
+      return;
+    }
+    setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
     showToast(`Status updated to ${newStatus}`);
   };
 

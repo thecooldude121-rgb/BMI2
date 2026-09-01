@@ -55,7 +55,7 @@ type FormState = typeof INIT_FORM;
 
 export default function AddLeadPage() {
   const navigate = useNavigate();
-  const { createLead, leads } = useLeads();
+  const { createLead, leads, lastWriteErrorRef } = useLeads();
 
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [form, setForm] = useState<FormState>(INIT_FORM);
@@ -155,10 +155,18 @@ export default function AddLeadPage() {
       if (result) {
         navigate('/crm/leads');
       } else {
-        setErrors({ submit: 'Failed to create lead — please try again.' });
+        // Show what the server actually said. "Please try again" is wrong advice
+        // for a duplicate email or a validation failure — retrying an identical
+        // payload fails identically. Read the ref, not the state: state set during
+        // the await above is not visible to this closure yet.
+        setErrors({
+          submit: lastWriteErrorRef.current ?? 'The server rejected the lead and nothing was saved.',
+        });
       }
-    } catch {
-      setErrors({ submit: 'Failed to create lead — please try again.' });
+    } catch (err: any) {
+      setErrors({
+        submit: err?.message || lastWriteErrorRef.current || 'The server rejected the lead and nothing was saved.',
+      });
     } finally {
       setIsLoading(false);
     }

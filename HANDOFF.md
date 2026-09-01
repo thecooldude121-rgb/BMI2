@@ -1,5 +1,23 @@
 # Handoff — read before starting work
 
+## BLOCKING — do not rebase remediation/phases-0-2 onto main until this is done
+
+main carries merged PRs #1 (user/venkat/crmsettingmodule) and #3 (user/radhar10/test)
+that landed while this branch was removing fabricated data and Supabase code. Both must
+be audited BEFORE rebase, because rebasing silently absorbs whatever they contain.
+
+Audit must answer, for each PR:
+- Does it query the backend API, or reintroduce direct-DB / Supabase access?
+  (CLAUDE.md forbids the frontend querying the database directly.)
+- Does it contain fabricated data? Apply the FABRICATED_DATA_AUDIT.md test: component
+  trees rendering business data with zero fetch calls, hardcoded literals, mock arrays.
+- Does it conflict with the 118-file deletion or the LeadContext rewrite?
+
+If the audit is skipped, the entire fabricated-data and Supabase removal effort can be
+undone by a merge without anyone noticing.
+
+---
+
 Written at the end of a long session, for a session that starts cold. `CLAUDE.md` is the
 authority on rules; this file is the authority on **current state and traps**.
 
@@ -211,6 +229,108 @@ sequence the two together rather than fixing files that are about to go.
 ---
 
 ## 4. Known gaps — real, and deliberately not fixed
+
+### SECURITY — the API leaks a stack trace with absolute filesystem paths
+
+**Not a nice-to-have. This is the class of finding a CASA DAST scan flags.**
+
+`POST /api/v1/leads` with an email that already exists returns **HTTP 500** with the raw
+Postgres error *and a `stack` field*:
+
+```
+{"success":false,
+ "message":"duplicate key value violates unique constraint \"leads_tenant_email_key\"",
+ "stack":"error: duplicate key ...\n  at /Users/venkatraj/Desktop/BMI2/Backend/node_modules/pg-pool/index.js:45:11\n  at createLead (/Users/venkatraj/Desktop/BMI2/Backend/src/controllers/leadsController.ts:100:20)"}
+```
+
+Three separate defects in one response:
+
+1. **Information disclosure.** The stack discloses the absolute directory layout, the
+   developer's home directory name, the dependency tree and internal source paths. Check
+   whether the error handler emits `stack` unconditionally or only outside production — if
+   unconditionally, every 500 in the app leaks this, not just this endpoint.
+2. **Wrong status code.** A unique-constraint violation on a user-supplied email is a
+   client error, not a server error. It should be **409 Conflict** (or 400) with a message
+   naming the field — the same shape settled for FK rejections in `CLAUDE.md`. A 500 also
+   tells monitoring the server is broken when it is working correctly.
+3. **Raw database text as a user-facing message.** "duplicate key value violates unique
+   constraint leads_tenant_email_key" discloses the schema and is not a sentence a user can
+   act on. Reachable from the Add Lead form: enter an existing email, tick "Still add as a
+   separate lead", submit.
+
+Fix all three together, and audit the error middleware rather than this one controller.
+
+### Latent-broken: `sendEmail` cannot succeed as wired
+
+`POST /leads/:leadId/emails` requires `from_email` (`leadSubController.ts:231`), and
+`LeadContext.sendEmail` does not supply it — it adds only `direction` and `sent_at`. It has
+**zero UI callers today**, so nothing is visibly broken, but it will 400 the moment anyone
+wires it up. Verified: the endpoint returns 201 when `from_email` is present. Decide where
+the sender address comes from (the authenticated user's email is the obvious answer) when
+the feature is built.
+
+### Nine of eighteen lead write paths have no UI callers
+
+`createNote`, `updateNote`, `deleteNote`, `sendEmail`, `logCall`, `scheduleMeeting`,
+`createTag`, `deleteView`, `enrichLead` are reachable in code but called from nothing.
+They were fixed along with the rest in the error-swallowing sweep rather than skipped, so
+the swallow trap is not lying in wait for whoever wires them. Reachable paths, for contrast:
+`updateLead` (15 call sites), `updateView` (4), `createLead` / `deleteLead` (3 each),
+`createActivity` / `updateActivity` / `createTask` / `updateTask` / `createView` (2 each).
+
+### CORRECTION — the status/stage vocabulary mismatch breaks TWO more features
+
+Found by the error-swallowing sweep, which is the point of it: these were invisible while
+every failure returned null. **Both are one-line-ish fixes but they are behaviour changes,
+so they are recorded, not fixed.**
+
+The root cause is one asymmetry. `updateLeadViaAPI` maps `status` -> `stage` before sending
+(`leadsApi.ts`, and it must, because the frontend's `Lead.status` carries the *stage*
+vocabulary while the DB's `leads.status` is `active|inactive|nurturing`). **`createLeadViaAPI`
+does not do that mapping.** Everything downstream follows from that.
+
+**1. Creating a lead from the Add Lead form has NEVER worked.**
+`AddLeadPage.tsx:146` sends `status: 'new'`. Unmapped, that hits the controller's `status`
+validator and returns **400 `status must be one of: active, inactive, nurturing`**. Verified
+through the real form: nothing was written, `leads` stayed at 38. Before the sweep the page
+caught the null, reset itself, and showed nothing at all. The fix is to give
+`createLeadViaAPI` the same `status` -> `stage` mapping `updateLeadViaAPI` already has —
+but confirm that is the intended direction before applying it.
+
+**2. Most of the lead status dropdown is rejected.**
+`LeadDetailPage`'s dropdown offers the frontend vocabulary — New, Assigned, Enriching,
+Attempting Contact, Engaged, Qualified, Sales Accepted, Nurture, Disqualified, Converted,
+Lost. `VALID_STAGES` is `new, contacted, qualified, proposal, won, lost`. So **Assigned,
+Enriching, Attempting Contact, Engaged, Sales Accepted, Nurture, Disqualified and Converted
+all 400.** Only New, Qualified and Lost can succeed. Verified live: picking "Assigned"
+returns 400 and leaves `stage = new`.
+
+This needs a decision, not a patch: either the DB stage vocabulary grows to match the
+product's lead lifecycle (a migration plus the CHECK constraint), or the dropdown is
+narrowed to what the backend accepts. `EARLY_STAGES` in `LeadDetailPage.tsx:127` already
+hardcodes the richer vocabulary, so the frontend was built for the former.
+
+### Useful negative result — the API surface is sound
+
+Worth having written down because it bounds the problem. Every endpoint the frontend calls
+was probed with a real token against the running server:
+
+- **All 13 route groups exist** (`auth`, `leads`, `deals`, `companies`, `contacts`,
+  `pipelines`, `activities`, `tasks`, `documents`, `users`, `invites`, `quotas`, `forecast`).
+- **Every read returned 200.** Activities, notes, tasks, emails, calls, meetings, tags,
+  views, pipelines, users.
+- **Every write returned 201/200** — notes, tasks, activities, calls, meetings, tags, views,
+  enrich — except `logEmail`, which needs `from_email` (above).
+- **Every endpoint works when sent a payload it accepts.** Corrected claim: an earlier draft
+  of this note said lead conversion was the only structurally impossible feature. That was
+  based on curl probes that omitted `status`, so they passed where the real UI fails — see
+  the vocabulary-mismatch section above for the two features that also cannot succeed.
+  **Methodological lesson: a hand-written probe payload is not the UI's payload.** Probe
+  with exactly what the client sends, or drive the real form.
+
+So the swallowed errors were hiding *capability that works*, not a second dead feature. The
+9 probe records created during this sweep were deleted and verified by re-count: all
+`lead_*` sub-tables back to 0, `leads` back to 38, zero `AUDIT-PROBE` residue.
 
 ### Lead conversion has NEVER worked — scoped Phase 1 item, not a regression
 

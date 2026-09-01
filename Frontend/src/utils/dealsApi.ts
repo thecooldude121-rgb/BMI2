@@ -26,7 +26,13 @@ export async function getUsers(): Promise<any[]> {
 
 export async function getPipelines(): Promise<any[]> {
   const res = await fetch(`${API_BASE}/pipelines`, { headers: getAuthHeaders() });
-  if (!res.ok) return [];
+  // Was `return []`, the only swallow left in this file: a failed request and a
+  // workspace with no pipelines produced the same value, and "no pipelines" is a
+  // claim about the data, not about the request.
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.message || `Failed to load pipelines (HTTP ${res.status})`);
+  }
   const json = await res.json();
   return json.success ? json.data : [];
 }
