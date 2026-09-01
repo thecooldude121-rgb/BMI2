@@ -240,6 +240,49 @@ sequence the two together rather than fixing files that are about to go.
 
 ## 4. Known gaps — real, and deliberately not fixed
 
+### CORRECTION — `lib/supabase.ts` is NOT gone; the sweep item is still open
+
+A previous report of mine described it as "gone". It is not, and the distinction matters
+because "gone" would have closed a sweep item that remains open:
+
+- **This branch:** 12 lines. Client construction only — `createClient` plus the
+  `https://placeholder.supabase.co` fallback. **Zero `.from()` queries.**
+- **main:** 380 lines, **ten `.from()` query helpers.**
+
+So the *queries* are gone and the *client* is not. It still calls `createClient` at module
+scope, so it initialises at app boot and still emits the console warning. Its actual deletion
+is step 1 of the four-step checklist in §2, sequenced behind the Settings rebuild. Do not
+tick it off until `Frontend/src/lib/supabase.ts` does not exist and
+`@supabase/supabase-js` is out of `package.json`.
+
+### OPEN — 79 deleted files are sitting in the working tree as untracked
+
+Discovered after merging main. Every one of the 79 is on the manifest of files this branch
+deleted and main still carries — `components/LeadGeneration/` (11),
+`components/LeadQualification/` (11), `components/Deals/`, `components/Discovery/`,
+`components/Prospects/`, `components/Contact/`, and per-persona fabricated mock data
+(`johnSmithEnrichmentData`, `leadDiscoveryMockData`, `crmSyncMockData`,
+`intelligenceSignalMockData`, and more). All are byte-identical to main's versions and all
+carry mtime 17:10:05, which is the merge writing main's tree to disk.
+
+**Git itself is correct.** HEAD contains zero `components/LeadGeneration/` files, the
+deletions are committed, and nothing was re-added to the index — verified with
+`git ls-files --error-unmatch`, which reports them unknown to git. The build is clean and
+318/318 tests pass, so nothing imports them.
+
+**Why it still matters:** a single `git add -A` re-commits the entire Lead Generation tool
+and the fabricated mock data in one move, silently undoing the 118-file deletion. That is
+the exact resurrection risk this branch was guarding against, now sitting one careless
+command away. They should be removed (`git clean -fd` on those paths, after confirming the
+list), but that is 79 file deletions and is the owner's call to authorise.
+
+**Process note, and it is mine to own:** my post-merge verification reported "zero
+resurrected" and that was wrong. Re-running the identical check now returns 79, so the check
+is sound and I cannot reconstruct why it passed — most likely I ran it before the merge wrote
+the files. The lesson is that a passing resurrection check must be re-run *after* the merge
+commit exists, not during conflict resolution, and cross-checked against `git status` for
+untracked entries rather than against `test -f` alone.
+
 ### SECURITY — the API leaks a stack trace with absolute filesystem paths
 
 **Not a nice-to-have. This is the class of finding a CASA DAST scan flags.**
