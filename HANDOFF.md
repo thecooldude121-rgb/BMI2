@@ -67,27 +67,61 @@ All verification writes reverted and re-counted, not assumed: 20 contacts /
 0 with a `buying_role`, 15 companies, 25 deals / 3 linked, 0 activities,
 0 `deal_stage_history`.
 
+### OPEN DESIGN QUESTION — should deals reference contacts by id, or by name?
+
+**Not a bug. Do not "fix" it in a cleanup pass.** The owner's decision on
+2026-09-02 was explicitly *not now*: it deserves its own scoped session with the
+schema implications thought through, not a rider on a triage batch.
+
+Two symptoms, one question:
+
+- `deals` has **no `contact_id`**. The only link to a person is
+  `deals.contact_email`, free text. `dealsController` documents why a backfill
+  would set zero rows today: of 25 deals exactly one carries a contact_email and
+  it matches no contact.
+- `deals.stakeholders` is a jsonb array of `{ name, title, email, role }`
+  objects with **no FK to `contacts`**. It is real, user-entered data and it is
+  what the deal detail page now renders — but the people in it are strings. The
+  same human can exist as a `contacts` row and as a stakeholder name and nothing
+  connects them.
+
+Since migration 026 the deal committee and the account team share one role
+vocabulary (`config/contactRoles.ts`), so they *describe* people the same way
+while still being two unlinked sets. That is the state to resolve.
+
+What a session picking this up has to settle, in order:
+1. Is a stakeholder a **reference to a contact**, or a **deal-local record of a
+   person** who may not be in the CRM? Both are defensible; they give different
+   schemas. A reference means a join table (`deal_stakeholders`) with a role
+   column; a deal-local record means keeping jsonb and accepting the duplication.
+2. If a reference: what happens to the ~10 existing stakeholder entries whose
+   names may not match any contact? They cannot be dropped.
+3. `deals.contact_id` for the primary contact is the smaller, separable half and
+   may be worth doing first — but only alongside a contact picker in the deal
+   form, or the column is dead schema (the same trap `deals.company_id` avoided
+   by shipping with the account link already in the form).
+4. Every new FK references a GLOBAL primary key, so both halves of the tenant
+   rule apply: validate on write with `utils/tenantScope.ts`, and carry
+   `AND parent.tenant_id = child.tenant_id` on every join.
+
 ### Findings raised but deliberately NOT fixed — pick these up or decide against them
 
-- **`pages/CRM/AccountsPage.tsx` has the same "0 employees" bug** the account
-  hero had: it renders `employeeCount || 0` over a column that does not exist,
-  so every row in the accounts list reads "0 employees". Small, and the list page
-  was out of F25's scope.
-- **`CRMDashboard` greets "Welcome back, Alex!"** while logged in as David
-  Kumar. A hardcoded first name on a page that already has the real user.
-- **`AccountFormPage` has ~10 pre-existing type errors**, including the
-  `billingAddress` one `CLAUDE.md` cites as a worked example of a type error
-  concealing a live bug (line ~537). I removed the enrichment control from that
-  file and left the rest alone; it needs its own pass.
-- **`DealHeroSection` has 5 pre-existing `TS6133` unused-symbol errors.** Noise
-  by code, but the file is routed and load-bearing — triage by reachability.
-- **`deals` still has no `contact_id`.** `deals.contact_email` is the only link
-  to a contact and it is free text; `dealsController` documents why a backfill
-  would set zero rows today. Same shape as the `company_id` gap 027 just closed,
-  and the same fix applies when the deal form gets a contact picker.
-- **`deals.stakeholders` names are not FKs to `contacts`.** The deal committee
-  and the account team now speak one role vocabulary but are still two unlinked
-  sets of people. Worth resolving before either grows features.
+**RESOLVED in `ecf137a` + `3698114`** (the A/B/C/D triage batch): the dashboard's
+hardcoded "Welcome back, Alex!", the `employeeCount || 0` → "0 employees" bug in
+three more places, the account form's silently-discarded `employeeCount`/`email`
+(removed, with a real Company Size select added — `companies.size` had been a
+list-filterable column with no way to set it), the client-minted `ACC-${Date.now()}`
+id, a fake 500ms save delay, the form-section prop types, and the Industry select
+that made 9 of 15 accounts unsavable. Raw type errors 307 → 289.
+
+Still open:
+
+- **`AccountsPage` has ~9 `TS6133` unused symbols**, among them `views`,
+  `currentView` and `applyView` — destructured from `AccountsContext` and never
+  read. The whole saved-views surface (six context methods) is unwired: nothing
+  renders a view picker. Either build the picker or remove the slice; do not
+  leave it looking supported. I corrected a comment in `AccountsContext` that
+  wrongly claimed AccountsPage consumes it.
 - **A real stage-duration average is now computable** from `deal_stage_history`
   and should live in the API response beside `days_since_contact`, not in a
   component. `DealHeroSection` keeps an optional `avgStageDuration` prop for it;
