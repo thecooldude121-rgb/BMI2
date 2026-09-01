@@ -13,10 +13,11 @@
 // sort behind 'lost'. Delete them from this union only once the migration below
 // has actually run.
 //
-// Production SQL migration (NOT YET APPLIED):
-//   UPDATE leads SET status = 'attempting_contact' WHERE status IN ('contacted', 'working');
-//   UPDATE leads SET status = 'nurture'            WHERE status = 'nurturing';
-//   UPDATE leads SET status = 'disqualified'       WHERE status = 'unqualified';
+// Migration 025 widened leads_stage_check to the full union below, so both halves
+// are now storable and the DB values are no longer "legacy". A drafted migration
+// used to sit here proposing UPDATEs against `status`; it was deleted rather than
+// applied, because it targeted the record-state column while the runtime lifecycle
+// lives in `stage` (mapRowToLead reads row.stage and never reads row.status).
 export type LeadLifecycleStage =
   // Currently in the database (leads_stage_check).
   | 'new'

@@ -21,15 +21,18 @@ function mapStatus(status: string): LeadStatus {
 /**
  * Maps a lead's status onto a marketing lifecycle stage.
  *
- * LEGACY VALUES ARE NOT OPTIONAL HERE. types/lead.ts documents a migration that
- * was never applied:
- *   UPDATE leads SET status = 'attempting_contact' WHERE status IN ('contacted','working');
- *   UPDATE leads SET status = 'nurture'            WHERE status = 'nurturing';
- *   UPDATE leads SET status = 'disqualified'       WHERE status = 'unqualified';
- * The live database still contains 'contacted' — it is in the leads_stage_check
- * constraint today. Without these aliases every legacy row fell through to
- * `default` and was reported as a plain 'lead', silently understating how far
- * along it was.
+ * THE ALIASES BELOW ARE STILL REQUIRED. Migration 025 widened leads_stage_check to
+ * hold the full lifecycle, but it deliberately did NOT rewrite existing rows: 38
+ * leads still legitimately hold 'contacted', 'proposal' and 'won', which remain
+ * valid stages. So both halves of the vocabulary are live data, not legacy, and a
+ * switch that handles only the newer names still drops every existing row through
+ * to `default` — which is what once reported real leads as a plain 'lead' and
+ * understated how far along they were.
+ *
+ * The 'nurturing' and 'unqualified' arms are different: those were values in the
+ * `status` column, and 025 moved the single 'nurturing' row to stage='nurture'.
+ * They are kept as a safety net for any database not yet migrated, and can be
+ * dropped once 025 is confirmed applied everywhere.
  */
 function mapLifecycleStage(status: string): LifecycleStage {
   switch (status) {

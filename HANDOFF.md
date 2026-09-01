@@ -255,7 +255,7 @@ is step 1 of the four-step checklist in §2, sequenced behind the Settings rebui
 tick it off until `Frontend/src/lib/supabase.ts` does not exist and
 `@supabase/supabase-js` is out of `package.json`.
 
-### OPEN — 79 deleted files are sitting in the working tree as untracked
+### RESOLVED — 79 deleted files were sitting in the working tree as untracked
 
 Discovered after merging main. Every one of the 79 is on the manifest of files this branch
 deleted and main still carries — `components/LeadGeneration/` (11),
@@ -270,11 +270,18 @@ deletions are committed, and nothing was re-added to the index — verified with
 `git ls-files --error-unmatch`, which reports them unknown to git. The build is clean and
 318/318 tests pass, so nothing imports them.
 
-**Why it still matters:** a single `git add -A` re-commits the entire Lead Generation tool
-and the fabricated mock data in one move, silently undoing the 118-file deletion. That is
-the exact resurrection risk this branch was guarding against, now sitting one careless
-command away. They should be removed (`git clean -fd` on those paths, after confirming the
-list), but that is 79 file deletions and is the owner's call to authorise.
+**Why it mattered:** a single `git add -A` would have re-committed the entire Lead
+Generation tool and the fabricated mock data in one move, silently undoing the 118-file
+deletion.
+
+**Removed** with `git clean -fd`, authorised by the owner after confirming the list was
+exactly the 79 untracked paths on the deletion manifest and nothing else — the safety check
+compared the untracked set against the manifest and found zero strays, and `git clean -nd`
+was diffed against that list before running. Re-verified afterwards the corrected way, with
+the merge commit already in place: 0 manifest files on disk, 0 untracked entries per
+`git status`, 0 files under `components/LeadGeneration/` or `components/Deals/` in HEAD.
+Build clean and 383 raw type errors unchanged afterwards, confirming nothing depended on
+them.
 
 **Process note, and it is mine to own:** my post-merge verification reported "zero
 resurrected" and that was wrong. Re-running the identical check now returns 79, so the check
@@ -331,35 +338,50 @@ the swallow trap is not lying in wait for whoever wires them. Reachable paths, f
 `updateLead` (15 call sites), `updateView` (4), `createLead` / `deleteLead` (3 each),
 `createActivity` / `updateActivity` / `createTask` / `updateTask` / `createView` (2 each).
 
-### DECISION OWED BY THE OWNER — reconcile the lead stage vocabulary
+### RESOLVED — lead stage vocabulary expanded (migration 025)
 
-**Two features were fixed; the underlying vocabulary split was deliberately not.**
+**Decision made: expand the API to match the product, not narrow the product to match the
+API.** The richer vocabulary was load-bearing, not aspirational — `utils/leadSla/` keys on
+eight stage values of which seven were rejected, `utils/leadNBA/` and the Leads page pipeline
+on eleven, `utils/conversionReadiness.ts` on five. Narrowing would have deleted working SLA
+and next-best-action behaviour to satisfy a CHECK constraint nobody had revisited.
 
-`Lead.status` on the frontend carries a rich lead lifecycle — `new, assigned, enriching,
-attempting_contact, engaged, qualified, sales_accepted, nurture, disqualified, converted,
-lost`. The database's `leads.stage` CHECK constraint allows six — `new, contacted, qualified,
-proposal, won, lost` — and `leads.status` is a separate flag entirely
-(`active|inactive|nurturing`). The intersection of the frontend list and the DB stage list is
-**three values: new, qualified, lost.**
+`leads_stage_check` now allows fourteen values: the original six (`new, contacted, qualified,
+proposal, won, lost`) plus `assigned, enriching, attempting_contact, engaged, sales_accepted,
+nurture, disqualified, converted`. `VALID_STAGES` in `leadsController.ts` matches, and
+`STATUS_OPTIONS` in `LeadDetailPage.tsx` offers the eleven the frontend has labels for.
 
-**Fixed (safe, no schema change):**
-- `createLeadViaAPI` now maps `status` -> `stage` exactly as `updateLeadViaAPI` always has.
-  That asymmetry was the entire reason **creating a lead from the Add Lead form had never
-  worked** — the page sends `status: 'new'`, unmapped it hit the `status` validator, 400 on
-  every attempt. Verified after the fix: `POST /api/v1/leads 201`, row written with
-  `stage=new, status=active`, then deleted and re-counted back to 38.
-- `LeadDetailPage`'s status dropdown is narrowed to the three that work. It offered eleven;
-  eight returned 400 and changed nothing. An option that cannot work should not be offered —
-  same rule as a dead view toggle. `STATUS_OPTIONS` in that file is the single place to widen.
+**One row changed.** Lead 13 (Mia Thompson) held `stage='contacted'` **and**
+`status='nurturing'` — a lifecycle value leaked into the record-state column, which is why
+`leadAdapters.ts` and `leadSorting.ts` both carried a "legacy alias for nurture" branch. It
+is now `stage='nurture', status='active'`. Note this overwrote a real `stage` value:
+`contacted` became `nurture`, on the grounds that `nurturing` was the more specific signal.
+Distribution went `contacted 3 -> 2`, `nurture 0 -> 1`; 38 rows throughout.
 
-**The decision, which is the owner's:** either the DB stage vocabulary grows to match the
-product's lead lifecycle (a migration plus the `stage` CHECK constraint, and a rethink of
-whether `stage` and `status` should both exist on `leads`), or the product narrows to the six
-stages the schema already allows and the frontend `Lead.status` union is cut to match.
-**Do not just widen the API validator** — `VALID_STAGES` and the CHECK constraint have to
-move together, and `EARLY_STAGES` in `LeadDetailPage.tsx` plus the SLA and NBA engines all
-read the richer vocabulary. This is a data-model decision with a migration attached, not a
-validation tweak.
+**Two things deliberately not done:**
+
+- **The drafted migration in `types/lead.ts` was deleted, not applied.** It read
+  `UPDATE leads SET status = 'nurture' WHERE status = 'nurturing'` and two siblings — all
+  operating on `status`, where the runtime lifecycle lives in `stage`
+  (`mapRowToLead` reads `row.stage` and never reads `row.status`). Applying it would have
+  written lifecycle values into the record-state column and baked the confusion in. The
+  comment is gone so nobody applies it later; the corresponding note in `leadAdapters.ts` was
+  rewritten to justify its alias branches by live data instead.
+- **`leads.status` keeps `nurturing` in its own CHECK.** Dropping a permitted value is a
+  separate narrowing change and nothing writes it any more.
+
+**Follow-up, smaller than it was:** `leads.status` is a column the product does not read at
+all — `mapRowToLead` ignores it, and it now holds only `active` (36) / `inactive` (2). Decide
+whether it becomes a real archive flag with a frontend field, or is dropped. **Correction to
+an earlier note of mine: there is no `Lead.is_active`.** I misattributed a `LeadPipeline`
+field at `types/lead.ts:299`. Nothing reads a lead-level active flag, so there is no
+duplication to resolve — just an unused column.
+
+Verified end to end: 025 in `schema_migrations`; constraint holds all fourteen; lead 13
+moved; create through the real Add Lead form returned `POST 201`; update to a
+previously-rejected stage (`engaged`) through the real dropdown returned `PUT 200` and
+persisted, with the UI and Postgres agreeing. Both test records removed and re-counted —
+38/20/15/25, zero residue.
 
 ### PROCESS HAZARD — a session's working tree was committed to a misleadingly-named branch
 

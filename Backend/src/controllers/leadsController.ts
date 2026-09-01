@@ -24,7 +24,14 @@ const UPDATABLE_FIELDS = [
 // leadsApi.ts maps the frontend's "status" concept onto `stage`.
 // Kept here so a bad value returns 400 with the allowed set, rather than a raw
 // Postgres constraint violation.
-const VALID_STAGES = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost'] as const;
+// Must stay in lockstep with leads_stage_check (migration 025). If this list is
+// ever wider than the constraint, the API accepts a value Postgres then rejects,
+// which surfaces as a 500 carrying a stack trace instead of a clean 400.
+const VALID_STAGES = [
+  'new', 'contacted', 'qualified', 'proposal', 'won', 'lost',
+  'assigned', 'enriching', 'attempting_contact', 'engaged',
+  'sales_accepted', 'nurture', 'disqualified', 'converted',
+] as const;
 const VALID_STATUSES = ['active', 'inactive', 'nurturing'] as const;
 
 export const getLeads = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {

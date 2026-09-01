@@ -126,12 +126,17 @@ const LeadDetailPage: React.FC = () => {
   ];
   const EARLY_STAGES = new Set(['new', 'assigned', 'enriching', 'attempting_contact']);
 
-  // The subset of Lead['status'] the backend will accept today. VALID_STAGES in
-  // leadsController is new/contacted/qualified/proposal/won/lost; 'contacted',
-  // 'proposal' and 'won' have no counterpart in the frontend status vocabulary,
-  // so what survives the intersection is these three. Widen this only when the
-  // stage vocabulary is reconciled — see HANDOFF.
-  const STATUS_OPTIONS = ['new', 'qualified', 'lost'] as const;
+  // The full lead lifecycle, restored. This was temporarily narrowed to
+  // new/qualified/lost because eight of eleven options returned HTTP 400 —
+  // leads_stage_check and VALID_STAGES only allowed the six-value pipeline
+  // vocabulary. Migration 025 widened both, so the menu offers the real lifecycle
+  // again. Kept as a named const rather than an inline array so this list and the
+  // backend's VALID_STAGES can be diffed against each other.
+  const STATUS_OPTIONS = [
+    'new', 'assigned', 'enriching', 'attempting_contact',
+    'engaged', 'qualified', 'sales_accepted',
+    'nurture', 'disqualified', 'converted', 'lost',
+  ] as const;
 
   const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
