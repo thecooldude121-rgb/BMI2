@@ -31,7 +31,7 @@ export const TOKEN_KEY = 'authToken';
 
 export interface User {
   id: string;
-  name: string;
+  name: string; 
   email: string;
   role: 'Admin' | 'Sales' | 'HR' | 'Manager';
   avatar?: string;
