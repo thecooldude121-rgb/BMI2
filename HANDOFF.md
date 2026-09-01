@@ -16,6 +16,45 @@ Audit must answer, for each PR:
 If the audit is skipped, the entire fabricated-data and Supabase removal effort can be
 undone by a merge without anyone noticing.
 
+### AUDIT COMPLETE — findings below. Decision to lift this block is the owner's.
+
+**The headline is reassuring, and the branch names are lying.** Nothing hostile landed. But
+do not rebase on the assumption that main contains a new module, because it does not.
+
+**PR #1 `user/venkat/crmsettingmodule` — despite the name, contains NO settings module.**
+It is *this branch's own error-swallowing sweep*, committed by someone else and merged.
+Four files, and they are exactly the sweep's four: `utils/leadsApi.ts` (385 lines),
+`contexts/LeadContext.tsx` (166), `pages/CRM/AddLeadPage.tsx` (16), `utils/dealsApi.ts` (8).
+Verified by content, not by diffstat coincidence: it contains the `errorMessage()` helper
+(26 references), `guardRead`/`guardWrite` (29 references), and the distinctive comment
+"One place that turns a rejected response into a message worth showing" verbatim. The branch
+tip commits are named "commit commit" and "check the local".
+- Backend API vs Supabase: **neither reintroduced.** It touches only those four files.
+- Fabricated data: **none.** It is the opposite — it removes swallowed errors.
+- Conflict: it is an **earlier snapshot of the same work** now committed here as `d684943`.
+  A rebase will conflict on all four files, and the resolution is "take this branch": the
+  local version is a strict superset, adding the `useLeadActions` and
+  `LeadDetailPage.applyStatusChange` caller fixes that PR #1 does not have.
+
+**PR #3 `user/radhar10/test` — a single trailing space.** The entire diff is one whitespace
+character added after `name: string;` in `contexts/AuthContext.tsx`. Zero functional change,
+nothing to audit.
+
+**`4e2e33b` "Add CRM remediation plan and spec docs"** — 1,201 lines across
+`CRM_REMEDIATION_PLAN.md`, `CRM_REMEDIATION_PROMPTS.md` and
+`docs/CRM_Engine_Engineering_Specification.md`. **Already in this branch's history** (it is
+an ancestor of the merge-base), so it is not incoming work. Zero Supabase mentions in all
+three.
+
+**What main actually is: behind this branch, not ahead of it.** Merge-base is `a00c673`.
+Since then main added only the four sweep files and the one-space AuthContext change. The
+267 files that exist on main but not here are **the files this branch deleted** — the
+118-file Lead Generation removal plus `LoginWireframe.tsx` and the Supabase client surface.
+`main` still has `Frontend/src/lib/supabase.ts`; this branch stripped it. So the risk is the
+reverse of what was feared: a careless merge in the *other* direction (this branch into main,
+or main's state winning a conflict) would resurrect the deleted code. A rebase of this branch
+onto main is safe on that count, because the deletions are recorded as commits here.
+
 ---
 
 Written at the end of a long session, for a session that starts cold. `CLAUDE.md` is the
