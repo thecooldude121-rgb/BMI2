@@ -136,11 +136,29 @@ export async function fetchLeadByIdFromAPI(id: string): Promise<Lead | null> {
   return json.success ? mapRowToLead(json.data) : null;
 }
 
+/**
+ * Mirrors updateLeadViaAPI's status -> stage translation. Without it, creating a
+ * lead from the Add Lead form could never succeed: the page sends `status: 'new'`
+ * (the frontend Lead.status field carries the STAGE vocabulary), the DB column
+ * `leads.status` is the separate lifecycle flag `active|inactive|nurturing`, and
+ * the controller validated the former against the latter — HTTP 400,
+ * "status must be one of: active, inactive, nurturing", on every attempt.
+ *
+ * The asymmetry was the whole bug: updateLeadViaAPI has always done this mapping
+ * and createLeadViaAPI never did, so editing a lead worked and creating one did
+ * not. Invisible until the error-swallowing sweep, because the 400 was caught and
+ * returned as null.
+ */
 export async function createLeadViaAPI(lead: Partial<Lead>): Promise<Lead | null> {
+  const payload: Record<string, any> = { ...lead };
+  if ('status' in payload) {
+    payload.stage = payload.status;
+    delete payload.status;
+  }
   const res = await fetch(`${API_BASE}/leads`, {
     method:  'POST',
     headers: getAuthHeaders(),
-    body:    JSON.stringify(lead),
+    body:    JSON.stringify(payload),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to create lead');

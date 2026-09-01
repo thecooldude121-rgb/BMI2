@@ -431,7 +431,27 @@ session's memory is a rule that will be relearned the expensive way.
 These were learned the hard way in this project. The shared principle: **when you can verify
 something directly, do that instead of reasoning about what should be true.**
 
-1. **Verify the network response before reporting a failure — but a 200 is not evidence the
+1. **A probe you construct tests the endpoint, not the feature. A hand-written payload is
+   not the UI's payload.** Every write endpoint the frontend calls was probed with curl and
+   every one returned 201/200, which produced a confident and wrong conclusion: that lead
+   conversion was the only structurally impossible feature. The probes omitted `status`,
+   because a human writing a payload by hand sends the minimum. The real Add Lead form sends
+   `status: 'new'`, which the API rejects — so creating a lead had never worked, and the
+   probe passed straight over it. Two more never-worked features were sitting behind that
+   gap. **Drive the real form, or copy the exact payload the client sends (read it off the
+   network tab), before concluding an endpoint is healthy.** A green probe suite means the
+   routes exist, nothing more.
+
+2. **Watch the request count before trusting what the UI shows.** Verifying the fix to a
+   lying status badge, the badge correctly read "New" after a rejected write and that was
+   nearly recorded as a pass. It was not: the backend request log showed the count had not
+   moved, so the click had never fired a request at all and the badge was unchanged for the
+   wrong reason. A UI that looks right because nothing happened is indistinguishable from a
+   UI that looks right because the code works. **Confirm the action actually reached the
+   server — request count, backend log, network tab — and only then read the screen.** This
+   is the same failure as a success toast over an unchanged database, one layer earlier.
+
+3. **Verify the network response before reporting a failure — but a 200 is not evidence the
    screen is right.** A page was twice reported as broken ("0 accounts / could not load
    deals") when all three requests were returning 200; the screenshots were simply taken
    before the fetch resolved. So check the network log first, and note precisely what it
@@ -444,7 +464,7 @@ something directly, do that instead of reasoning about what should be true.**
    then `SELECT name, company, score FROM leads WHERE id = 36`, and FinSolve $120K on a deal
    card against `value = 120000.00`. Network log for "did it load"; a SQL query for "is it
    true". The two questions are separate and need separate evidence.
-2. **Verify through the same entry point a real user uses.** Not the file you edited, not a
+4. **Verify through the same entry point a real user uses.** Not the file you edited, not a
    direct URL, not hand-supplied state — a real login, the real nav, a real session. This
    rule has now been earned three times in three different disguises:
    - A dashboard fix was correct and invisible for three commits, because `Sidebar.tsx`
@@ -474,7 +494,7 @@ something directly, do that instead of reasoning about what should be true.**
      `activities` is 0 rows and the feed renders its empty state. Reported as not proven
      rather than counted as passing; fabricating an activity to force the path would have
      broken the no-fabricated-data rule to satisfy a verification rule.
-3. **Type errors in this project have twice concealed live, user-facing bugs — treat the
+5. **Type errors in this project have twice concealed live, user-facing bugs — treat the
    count as a signal, not noise.** `AccountFormPage` read `account.address` (the field is
    `billingAddress`) and wrote a key the payload mapper never read, so the account edit form
    loaded a blank address and saved nothing under a success toast — the compiler had been
@@ -483,17 +503,17 @@ something directly, do that instead of reasoning about what should be true.**
    did `if (success)` and `if (object)` is always truthy — every failed sign-in would have
    looked successful. Triage the backlog by REACHABILITY (is the file routed? does it touch
    a real API?), never by error code.
-4. **Never put a backtick inside SQL written in a JS template literal.** It closes the
+6. **Never put a backtick inside SQL written in a JS template literal.** It closes the
    string and the file stops compiling. This has now happened twice in this project within
    hours — once in `activitiesController` and once in `dealsController`, both while writing
    a comment that quoted a SQL fragment. Quote SQL in comments with plain text, not
    backticks.
-5. **Verify cleanup by re-counting, not by the delete returning without error.** A probe
+7. **Verify cleanup by re-counting, not by the delete returning without error.** A probe
    workspace and company survived a session because the cleanup script died part-way and the
    earlier statements' success was taken as the whole thing having run. They were only found
    by counting rows afterwards. Same shape as everything else here: check the end state, not
    the absence of an error.
-6. **Corollaries seen in practice:** a broken reachability grep once reported every file as
+8. **Corollaries seen in practice:** a broken reachability grep once reported every file as
    unimported and nearly caused a live, routed component to be deleted — resolve each import
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a

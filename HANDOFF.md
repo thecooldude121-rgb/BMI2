@@ -1,59 +1,30 @@
 # Handoff — read before starting work
 
-## BLOCKING — do not rebase remediation/phases-0-2 onto main until this is done
+## RESOLVED — main has been merged in. Audit was completed first; findings below.
 
-main carries merged PRs #1 (user/venkat/crmsettingmodule) and #3 (user/radhar10/test)
-that landed while this branch was removing fabricated data and Supabase code. Both must
-be audited BEFORE rebase, because rebasing silently absorbs whatever they contain.
+The block that stood here is lifted. main is fully merged into this branch as of `db785fb`
+(`git rev-list --count remediation/phases-0-2..main` = 0). What the audit found, kept because
+it explains the shape of the history:
 
-Audit must answer, for each PR:
-- Does it query the backend API, or reintroduce direct-DB / Supabase access?
-  (CLAUDE.md forbids the frontend querying the database directly.)
-- Does it contain fabricated data? Apply the FABRICATED_DATA_AUDIT.md test: component
-  trees rendering business data with zero fetch calls, hardcoded literals, mock arrays.
-- Does it conflict with the 118-file deletion or the LeadContext rewrite?
+- **PR #1 `user/venkat/crmsettingmodule` contained no settings module.** It was this branch's
+  own error-swallowing sweep, committed elsewhere and merged — confirmed by content, not by
+  diffstat resemblance. No Supabase, no fabricated data. See the PROCESS HAZARD section in §4.
+- **PR #3 `user/radhar10/test`** was a single trailing whitespace character in
+  `contexts/AuthContext.tsx`.
+- **Merged, not rebased, and deliberately.** `git rebase main` began replaying 49 commits and
+  conflicted on the first — main's PR #1 already held a *later* snapshot of the sweep, so a
+  rebase replays this branch's incremental history onto content that already contains its end
+  state. That cascades. The merge produced exactly one conflict (`LeadContext.tsx`), resolved
+  in this branch's favour.
+- **Verified after merging:** zero of the 267 files main carries and this branch deleted came
+  back (checked against a manifest captured beforehand); `lib/supabase.ts` is still the
+  12-line stub with zero `.from()` queries, not main's 380-line version; all four sweep files
+  carry the sweep rather than main's earlier snapshot; zero `TS2307`/`TS2304`; build clean;
+  318/318 tests.
 
-If the audit is skipped, the entire fabricated-data and Supabase removal effort can be
-undone by a merge without anyone noticing.
-
-### AUDIT COMPLETE — findings below. Decision to lift this block is the owner's.
-
-**The headline is reassuring, and the branch names are lying.** Nothing hostile landed. But
-do not rebase on the assumption that main contains a new module, because it does not.
-
-**PR #1 `user/venkat/crmsettingmodule` — despite the name, contains NO settings module.**
-It is *this branch's own error-swallowing sweep*, committed by someone else and merged.
-Four files, and they are exactly the sweep's four: `utils/leadsApi.ts` (385 lines),
-`contexts/LeadContext.tsx` (166), `pages/CRM/AddLeadPage.tsx` (16), `utils/dealsApi.ts` (8).
-Verified by content, not by diffstat coincidence: it contains the `errorMessage()` helper
-(26 references), `guardRead`/`guardWrite` (29 references), and the distinctive comment
-"One place that turns a rejected response into a message worth showing" verbatim. The branch
-tip commits are named "commit commit" and "check the local".
-- Backend API vs Supabase: **neither reintroduced.** It touches only those four files.
-- Fabricated data: **none.** It is the opposite — it removes swallowed errors.
-- Conflict: it is an **earlier snapshot of the same work** now committed here as `d684943`.
-  A rebase will conflict on all four files, and the resolution is "take this branch": the
-  local version is a strict superset, adding the `useLeadActions` and
-  `LeadDetailPage.applyStatusChange` caller fixes that PR #1 does not have.
-
-**PR #3 `user/radhar10/test` — a single trailing space.** The entire diff is one whitespace
-character added after `name: string;` in `contexts/AuthContext.tsx`. Zero functional change,
-nothing to audit.
-
-**`4e2e33b` "Add CRM remediation plan and spec docs"** — 1,201 lines across
-`CRM_REMEDIATION_PLAN.md`, `CRM_REMEDIATION_PROMPTS.md` and
-`docs/CRM_Engine_Engineering_Specification.md`. **Already in this branch's history** (it is
-an ancestor of the merge-base), so it is not incoming work. Zero Supabase mentions in all
-three.
-
-**What main actually is: behind this branch, not ahead of it.** Merge-base is `a00c673`.
-Since then main added only the four sweep files and the one-space AuthContext change. The
-267 files that exist on main but not here are **the files this branch deleted** — the
-118-file Lead Generation removal plus `LoginWireframe.tsx` and the Supabase client surface.
-`main` still has `Frontend/src/lib/supabase.ts`; this branch stripped it. So the risk is the
-reverse of what was feared: a careless merge in the *other* direction (this branch into main,
-or main's state winning a conflict) would resurrect the deleted code. A rebase of this branch
-onto main is safe on that count, because the deletions are recorded as commits here.
+**The standing rule this leaves behind:** before absorbing any future branch, audit it by
+content. And note the direction of danger — main is *behind* this branch, so a merge that
+lets main's state win would resurrect the Lead Generation tool and the Supabase client.
 
 ---
 
@@ -317,37 +288,60 @@ the swallow trap is not lying in wait for whoever wires them. Reachable paths, f
 `updateLead` (15 call sites), `updateView` (4), `createLead` / `deleteLead` (3 each),
 `createActivity` / `updateActivity` / `createTask` / `updateTask` / `createView` (2 each).
 
-### CORRECTION — the status/stage vocabulary mismatch breaks TWO more features
+### DECISION OWED BY THE OWNER — reconcile the lead stage vocabulary
 
-Found by the error-swallowing sweep, which is the point of it: these were invisible while
-every failure returned null. **Both are one-line-ish fixes but they are behaviour changes,
-so they are recorded, not fixed.**
+**Two features were fixed; the underlying vocabulary split was deliberately not.**
 
-The root cause is one asymmetry. `updateLeadViaAPI` maps `status` -> `stage` before sending
-(`leadsApi.ts`, and it must, because the frontend's `Lead.status` carries the *stage*
-vocabulary while the DB's `leads.status` is `active|inactive|nurturing`). **`createLeadViaAPI`
-does not do that mapping.** Everything downstream follows from that.
+`Lead.status` on the frontend carries a rich lead lifecycle — `new, assigned, enriching,
+attempting_contact, engaged, qualified, sales_accepted, nurture, disqualified, converted,
+lost`. The database's `leads.stage` CHECK constraint allows six — `new, contacted, qualified,
+proposal, won, lost` — and `leads.status` is a separate flag entirely
+(`active|inactive|nurturing`). The intersection of the frontend list and the DB stage list is
+**three values: new, qualified, lost.**
 
-**1. Creating a lead from the Add Lead form has NEVER worked.**
-`AddLeadPage.tsx:146` sends `status: 'new'`. Unmapped, that hits the controller's `status`
-validator and returns **400 `status must be one of: active, inactive, nurturing`**. Verified
-through the real form: nothing was written, `leads` stayed at 38. Before the sweep the page
-caught the null, reset itself, and showed nothing at all. The fix is to give
-`createLeadViaAPI` the same `status` -> `stage` mapping `updateLeadViaAPI` already has —
-but confirm that is the intended direction before applying it.
+**Fixed (safe, no schema change):**
+- `createLeadViaAPI` now maps `status` -> `stage` exactly as `updateLeadViaAPI` always has.
+  That asymmetry was the entire reason **creating a lead from the Add Lead form had never
+  worked** — the page sends `status: 'new'`, unmapped it hit the `status` validator, 400 on
+  every attempt. Verified after the fix: `POST /api/v1/leads 201`, row written with
+  `stage=new, status=active`, then deleted and re-counted back to 38.
+- `LeadDetailPage`'s status dropdown is narrowed to the three that work. It offered eleven;
+  eight returned 400 and changed nothing. An option that cannot work should not be offered —
+  same rule as a dead view toggle. `STATUS_OPTIONS` in that file is the single place to widen.
 
-**2. Most of the lead status dropdown is rejected.**
-`LeadDetailPage`'s dropdown offers the frontend vocabulary — New, Assigned, Enriching,
-Attempting Contact, Engaged, Qualified, Sales Accepted, Nurture, Disqualified, Converted,
-Lost. `VALID_STAGES` is `new, contacted, qualified, proposal, won, lost`. So **Assigned,
-Enriching, Attempting Contact, Engaged, Sales Accepted, Nurture, Disqualified and Converted
-all 400.** Only New, Qualified and Lost can succeed. Verified live: picking "Assigned"
-returns 400 and leaves `stage = new`.
+**The decision, which is the owner's:** either the DB stage vocabulary grows to match the
+product's lead lifecycle (a migration plus the `stage` CHECK constraint, and a rethink of
+whether `stage` and `status` should both exist on `leads`), or the product narrows to the six
+stages the schema already allows and the frontend `Lead.status` union is cut to match.
+**Do not just widen the API validator** — `VALID_STAGES` and the CHECK constraint have to
+move together, and `EARLY_STAGES` in `LeadDetailPage.tsx` plus the SLA and NBA engines all
+read the richer vocabulary. This is a data-model decision with a migration attached, not a
+validation tweak.
 
-This needs a decision, not a patch: either the DB stage vocabulary grows to match the
-product's lead lifecycle (a migration plus the CHECK constraint), or the dropdown is
-narrowed to what the backend accepts. `EARLY_STAGES` in `LeadDetailPage.tsx:127` already
-hardcodes the richer vocabulary, so the frontend was built for the former.
+### PROCESS HAZARD — a session's working tree was committed to a misleadingly-named branch
+
+Recognise this pattern rather than re-deriving it. During this work:
+
+1. This session's **uncommitted** sweep changes were committed by someone else onto
+   `user/venkat/crmsettingmodule`, with commit messages "commit commit" and
+   "check the local", and merged to main as **PR #1**.
+2. The remaining working tree was stashed as *"temp before branch switch"* and the worktree
+   was moved to `main`.
+3. From the next session's point of view this looks alarming and is not: `RoleSwitcher.tsx`
+   appears reverted (it is just main's copy, which never had the fix), a foreign "CRM
+   settings module" appears to have landed (there is no settings module in that branch at
+   all), and this branch's work appears lost (it was intact — 8 commits on the branch, 4
+   files in the stash).
+
+**The lesson: a branch name is not evidence of its contents.** PR #1 was audited by content
+— it contains this branch's `errorMessage()` helper (26 references), `guardRead`/`guardWrite`
+(29 references) and a distinctive comment verbatim — which is the only reliable way to tell
+whose work it is. Before concluding that foreign code landed, diff the branch and read it.
+
+Also: **main is behind this branch, not ahead.** The 267 files present on main and absent
+here are the ones this branch deleted, and main still carries the 380-line
+`lib/supabase.ts`. The dangerous direction is a merge where main's state wins, which would
+resurrect the Lead Generation tool and the Supabase client surface in one move.
 
 ### Useful negative result — the API surface is sound
 

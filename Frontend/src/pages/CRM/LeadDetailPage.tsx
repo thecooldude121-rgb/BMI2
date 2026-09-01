@@ -126,6 +126,13 @@ const LeadDetailPage: React.FC = () => {
   ];
   const EARLY_STAGES = new Set(['new', 'assigned', 'enriching', 'attempting_contact']);
 
+  // The subset of Lead['status'] the backend will accept today. VALID_STAGES in
+  // leadsController is new/contacted/qualified/proposal/won/lost; 'contacted',
+  // 'proposal' and 'won' have no counterpart in the frontend status vocabulary,
+  // so what survives the intersection is these three. Widen this only when the
+  // stage vocabulary is reconciled — see HANDOFF.
+  const STATUS_OPTIONS = ['new', 'qualified', 'lost'] as const;
+
   const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
     // The write decides what is shown. This used to update local state and fire a
@@ -422,11 +429,20 @@ const LeadDetailPage: React.FC = () => {
               </button>
               {showStatusDropdown && (
                 <div className="absolute top-full left-20 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
-                  {([
-                    'new', 'assigned', 'enriching', 'attempting_contact',
-                    'engaged', 'qualified', 'sales_accepted',
-                    'nurture', 'disqualified', 'converted', 'lost',
-                  ] as const).map(status => (
+                  {/* Restricted to the statuses the API actually accepts. This listed
+                      the full frontend lead vocabulary — assigned, enriching,
+                      attempting_contact, engaged, sales_accepted, nurture,
+                      disqualified, converted — while the backend validates against
+                      VALID_STAGES (new, contacted, qualified, proposal, won, lost).
+                      Eight of eleven options therefore returned HTTP 400 and changed
+                      nothing, which was silent until the error-swallowing sweep.
+
+                      Deliberately NOT fixed by widening the API vocabulary: that is a
+                      schema decision (a migration plus the stage CHECK constraint) and
+                      is recorded in HANDOFF as a decision the owner owes. Narrowing the
+                      menu is the honest interim — an option that cannot work should not
+                      be offered, the same rule as a dead view toggle. */}
+                  {STATUS_OPTIONS.map(status => (
                     <button
                       key={status}
                       onClick={() => handleStatusChange(status)}
