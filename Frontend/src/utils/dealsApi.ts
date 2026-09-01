@@ -279,6 +279,34 @@ export async function fetchDealsForContact(email: string): Promise<RelatedDeal[]
   return (json.data ?? []) as RelatedDeal[];
 }
 
+/**
+ * Deals belonging to an account, by the REAL foreign key (migration 027).
+ *
+ * Contrast fetchDealsForContact above, which matches a free-text email because
+ * deals has no contact_id. This one is an id comparison against
+ * deals_company_id_fkey, so it cannot match the wrong account or miss one
+ * through a spelling difference.
+ *
+ * IT WILL LEGITIMATELY RETURN []. 22 of 25 deals carry no company_id, because
+ * the column is new and the link is a user's to make: 15 deals have no company
+ * name at all and 7 name a company that has no row. An empty result here means
+ * "no deals are linked to this account", which the caller must say plainly —
+ * not "this account has no deals".
+ *
+ * Throws on failure rather than returning [], so a broken request cannot be
+ * displayed as an account with no pipeline.
+ */
+export async function fetchDealsForAccount(companyId: string): Promise<RelatedDeal[]> {
+  if (!companyId) return [];
+  const res = await fetch(
+    `${API_BASE}/deals?company_id=${encodeURIComponent(companyId)}&limit=200`,
+    { headers: getAuthHeaders() },
+  );
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load deals (HTTP ${res.status})`);
+  return (json.data ?? []) as RelatedDeal[];
+}
+
 export async function getDeal(id: string): Promise<{ success: boolean; data: any }> {
   const res = await fetch(`${API_BASE}/deals/${id}`, {
     headers: getAuthHeaders(),

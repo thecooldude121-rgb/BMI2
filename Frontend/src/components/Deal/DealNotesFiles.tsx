@@ -49,6 +49,8 @@ export interface FileData {
 }
 
 interface DealNotesFilesProps {
+  /** True while notes or files are still loading — see DealActivityTimeline. */
+  loading?: boolean;
   notes: Array<{ id: string; date: string; author: string; content: string; tags?: string[] }>;
   files: FileData[];
 }
@@ -185,7 +187,7 @@ const AI_SUMMARY =
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) => {
+export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files, loading }) => {
   const { showToast } = useToast();
 
   // ── Notes state ──────────────────────────────────────────────────────────────
@@ -559,6 +561,17 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
   );
 
   // ── Return ────────────────────────────────────────────────────────────────────
+  // See DealActivityTimeline: an in-flight fetch must not render as "No files
+  // attached yet."
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm space-y-3">
+        <div className="h-5 w-32 bg-gray-100 rounded animate-pulse" />
+        {[0, 1].map(i => <div key={i} className="h-16 bg-gray-50 rounded animate-pulse" />)}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
       <div className="flex items-center space-x-2 mb-6">

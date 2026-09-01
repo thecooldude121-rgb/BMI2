@@ -80,6 +80,26 @@ export const DEFAULT_CONTACT_ROLE = CONTACT_ROLES[0]; // champion
 export const getContactRole = (id: string): ContactRole =>
   CONTACT_ROLES.find(r => r.id === id) ?? DEFAULT_CONTACT_ROLE;
 
+/**
+ * The same lookup WITHOUT the fallback — returns undefined for an unknown or
+ * absent id.
+ *
+ * Use this anywhere the answer "no role has been assigned" is a real and
+ * displayable state, which is everywhere that reads stored data:
+ * deals.stakeholders may hold a stakeholder saved without a role, and
+ * contacts.buying_role (migration 026) is NULL for every contact until a user
+ * sets one.
+ *
+ * getContactRole above falls back to CONTACT_ROLES[0], which is Champion. That
+ * is right for a form control that must show something selected, and wrong for
+ * rendering: it would label every unassigned person the deal's champion. The
+ * account detail page shipped exactly that bug twice — first assigning roles by
+ * array index, then hardcoding 'influencer' for everyone — so the two lookups
+ * are kept separate rather than relying on callers to remember.
+ */
+export const findContactRole = (id?: string | null): ContactRole | undefined =>
+  id ? CONTACT_ROLES.find(r => r.id === id) : undefined;
+
 // ─── Stakeholder type ─────────────────────────────────────────────────────────
 // Shared shape for both primary and additional contacts.
 // isPrimary distinguishes the required lead contact from optional stakeholders.

@@ -12,11 +12,13 @@ import type { DealPayload } from '../../utils/dealsApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Stage {
-  name: string; days: number; startDate: string; endDate: string;
-  status: 'completed' | 'current' | 'pending';
-  benchmark?: number; benchmarkMin?: number; benchmarkMax?: number;
-}
+// `interface Stage` and the `stageHistory?: Stage[]` prop below were removed.
+// The prop was DECLARED and never destructured, so the stage history passed
+// into it — a hardcoded five-row array with per-stage benchmarks — rendered
+// nowhere. That is worth stating plainly: the Phase-1 "stage history audit
+// trail" did not exist as a render at all, and the fabricated input hid the
+// gap by making the prop look supplied. The real trail is now its own
+// component, DealStageHistory, fed from deal_stage_history.
 
 interface DealDetailsPanelProps {
   deal: {
@@ -36,7 +38,6 @@ interface DealDetailsPanelProps {
     exchangeRate?: number | null; nrMargin?: number | null;
     startDate?: string; contractEndDate?: string; country?: string;
   };
-  stageHistory?: Stage[];
   competitors?: string[];
   expandedBattleCard?: string | null;
   isAdmin?: boolean;

@@ -18,12 +18,28 @@ import { foreignIdsInTenant } from '../utils/tenantScope';
 const SOURCES = ['lead-gen', 'hrms', 'converted', 'manual', 'website', 'referral', 'event'] as const;
 const STATUSES = ['active', 'inactive', 'do-not-contact'] as const;
 
+/**
+ * Buying roles, matching contacts_buying_role_check (migration 026) and
+ * config/contactRoles.ts on the frontend.
+ *
+ * NULL is a legitimate and expected value: it means nobody has assigned this
+ * contact a role yet, and it must reach the UI as unknown. Do NOT give this a
+ * default. The account detail page previously invented the value twice — once
+ * by array index, then by hardcoding every contact to 'influencer' — and a
+ * default here would reintroduce exactly that, one layer lower and looking
+ * authoritative.
+ */
+const BUYING_ROLES = [
+  'champion', 'decision-maker', 'economic-buyer', 'influencer',
+  'technical-evaluator', 'user', 'legal-procurement', 'blocker-detractor',
+] as const;
+
 /** Columns a client may write, in the order used by the INSERT below. */
 const WRITABLE = [
   'company_id', 'first_name', 'last_name', 'email', 'phone', 'mobile',
   'position', 'department', 'linkedin_url', 'is_primary',
   'street', 'city', 'state', 'postal_code', 'country', 'timezone',
-  'notes', 'tags', 'source', 'status', 'owner_id',
+  'notes', 'tags', 'source', 'status', 'owner_id', 'buying_role',
 ] as const;
 
 const SELECT_COLUMNS = `
@@ -62,6 +78,13 @@ function validate(body: Record<string, unknown>): string | null {
   if (body.status !== undefined && body.status !== null &&
       !STATUSES.includes(body.status as typeof STATUSES[number])) {
     return `status must be one of: ${STATUSES.join(', ')}`;
+  }
+  // Explicit null is allowed and meaningful: it CLEARS the role back to
+  // unassigned. That is a different operation from omitting the field, which
+  // leaves it alone, and the UI needs both.
+  if (body.buying_role !== undefined && body.buying_role !== null &&
+      !BUYING_ROLES.includes(body.buying_role as typeof BUYING_ROLES[number])) {
+    return `buying_role must be null or one of: ${BUYING_ROLES.join(', ')}`;
   }
   if (body.tags !== undefined && body.tags !== null && !Array.isArray(body.tags)) {
     return 'tags must be an array of strings';

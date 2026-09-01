@@ -454,22 +454,37 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   })() : null;
 
   // ── Velocity strip computations ───────────────────────────────────────────
-  const VELOCITY_STAGE_AVG: Record<string, number> = {
-    prospecting: 14, qualified: 10, proposal: 12, negotiation: 21,
-  };
+  /**
+   * Stage velocity: how long this deal has sat in its current stage.
+   *
+   * WHAT WAS REMOVED, AND WHY
+   * This block used to compare that figure against VELOCITY_STAGE_AVG — a
+   * hardcoded map { prospecting: 14, qualified: 10, proposal: 12,
+   * negotiation: 21 } — and render a verdict from the ratio: "Moving Fast",
+   * "On Track", "Slowing", "Stalled", plus "avg 14d" and "6d to avg". Every
+   * one of those numbers was a literal. The strip therefore told the user a
+   * deal was moving fast relative to a benchmark nobody had measured, in the
+   * confident register of a computed statistic.
+   *
+   * A real average IS computable, from deal_stage_history across the tenant —
+   * that is exactly what migration 014 exists to make possible. It is not
+   * computed yet because the table holds almost no rows: the only writer was
+   * the kanban board, and the detail page bypassed it entirely until this
+   * change. Once there is history to average, the average belongs in the API
+   * response beside days_since_contact, not in a constant in a component.
+   *
+   * `avgStageDuration` is kept as an optional prop for that day. When it is
+   * absent, the comparison is simply not drawn — the days-in-stage figure is
+   * real on its own and stands without a verdict attached.
+   */
   const velocityStageKey = (deal.stage || '').toLowerCase();
-  const velocityDaysInStage = timeInStage ?? 8;
-  const resolvedAvgDays = avgStageDuration ?? VELOCITY_STAGE_AVG[velocityStageKey] ?? 12;
-  const velocityPct = Math.round((velocityDaysInStage / resolvedAvgDays) * 100);
-  const showVelocityStrip = !['closed-won', 'closed-lost'].includes(velocityStageKey) && velocityDaysInStage > 0;
-  const velocityStatus =
-    velocityPct <= 75
-      ? { label: 'Moving Fast', icon: '⚡', textColor: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' }
-      : velocityPct <= 100
-      ? { label: 'On Track',    icon: '✓',  textColor: 'text-blue-700',  bg: 'bg-blue-50',  border: 'border-blue-200' }
-      : velocityPct <= 140
-      ? { label: 'Slowing',     icon: '⚠',  textColor: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' }
-      : { label: 'Stalled',     icon: '●',  textColor: 'text-red-700',   bg: 'bg-red-50',   border: 'border-red-200' };
+  // No `?? 8` fallback: an unknown time in stage renders nothing, rather than
+  // eight days that belong to no deal.
+  const velocityDaysInStage = timeInStage;
+  const resolvedAvgDays = avgStageDuration;
+  const showVelocityStrip =
+    !['closed-won', 'closed-lost'].includes(velocityStageKey) &&
+    velocityDaysInStage != null && velocityDaysInStage > 0;
 
   // ── Weighted forecast card values ─────────────────────────────────────────
   const probability = deal.probability ?? 45;
@@ -960,24 +975,16 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           )}
         </div>
 
-        {/* Stage Velocity strip */}
+        {/* Stage Velocity strip — see the note beside velocityStageKey above. */}
         {showVelocityStrip && (
-          <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border text-xs my-2 ${velocityStatus.bg} ${velocityStatus.border}`}>
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs my-2">
             <span className="font-semibold text-gray-500 flex-shrink-0">Stage Velocity</span>
-            <span className={`font-bold flex-shrink-0 ${velocityStatus.textColor}`}>
-              {velocityStatus.icon} {velocityStatus.label}
+            <span className="text-gray-700">
+              <strong>{velocityDaysInStage}d</strong> in {deal.stageName || deal.stage}
             </span>
-            <span className="text-gray-500">
-              {velocityDaysInStage}d in {deal.stageName || deal.stage}
-              &nbsp;·&nbsp;avg {resolvedAvgDays}d
-            </span>
-            {velocityPct > 100 ? (
-              <span className={`ml-auto font-semibold flex-shrink-0 ${velocityStatus.textColor}`}>
-                +{velocityDaysInStage - resolvedAvgDays}d over avg
-              </span>
-            ) : (
-              <span className="ml-auto text-gray-400 flex-shrink-0">
-                {resolvedAvgDays - velocityDaysInStage}d to avg
+            {resolvedAvgDays != null && (
+              <span className="ml-auto text-gray-500 flex-shrink-0">
+                Tenant average {resolvedAvgDays}d
               </span>
             )}
           </div>

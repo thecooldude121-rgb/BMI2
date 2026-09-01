@@ -7,7 +7,7 @@ import { foreignIdsInTenant } from '../utils/tenantScope';
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { stage, assigned_to, search, contact_email, company_name, limit = 50, offset = 0, include_test } = req.query;
+    const { stage, assigned_to, search, contact_email, company_name, company_id, limit = 50, offset = 0, include_test } = req.query;
     // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
     // produce duplicate rows for the same deal.  Duplicate cards on the board
     // are caused by genuine duplicate rows in the deals table (different ids,
@@ -66,6 +66,15 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     if (contact_email) { query += ` AND lower(d.contact_email) = lower($${i++})`; params.push(contact_email); }
     if (company_name)  { query += ` AND lower(d.company_name)  = lower($${i++})`; params.push(company_name); }
 
+    // company_id is the REAL account link, added in migration 027, and it is
+    // what the account detail page uses for "related deals". Unlike the
+    // company_name filter above it is an id comparison against a foreign key,
+    // so it cannot match the wrong account or miss one because of spelling.
+    // Note it needs no tenant predicate of its own: d.tenant_id is already
+    // pinned in the WHERE, so a caller passing another workspace's company_id
+    // simply matches zero rows rather than reading across the boundary.
+    if (company_id)    { query += ` AND d.company_id = $${i++}`;      params.push(company_id); }
+
     query += ` ORDER BY d.created_at DESC LIMIT $${i++} OFFSET $${i}`;
     params.push(limit, offset);
     const result = await pool.query(query, params);
@@ -80,10 +89,24 @@ export const getDealById = async (req: AuthRequest, res: Response, next: NextFun
       `SELECT d.*,
               l.name AS lead_name,
               l.email AS lead_email,
+              co.name     AS company_name_resolved,
+              co.industry AS company_industry,
+              co.website  AS company_website,
+              co.domain   AS company_domain,
+              co.size     AS company_size,
+              co.city     AS company_city,
+              co.state    AS company_state,
+              co.country  AS company_country,
               GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
        FROM deals d
        -- Scoped for the same reason as getDeals: see the comment there.
        LEFT JOIN leads l ON d.lead_id = l.id AND l.tenant_id = d.tenant_id
+       -- deals_company_id_fkey (migration 027) references companies(id)
+       -- GLOBALLY, so this predicate is what stops a deal carrying another
+       -- workspace's company_id from projecting that company's name and website
+       -- into this response. Same reasoning as the leads join above: a join is
+       -- a read. The write side is validated in createDeal/updateDeal.
+       LEFT JOIN companies co ON d.company_id = co.id AND co.tenant_id = d.tenant_id
        WHERE d.id = $1 AND d.tenant_id = $2`,
       [req.params.id, tenantId]
     );
@@ -101,7 +124,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       stage, probability, expected_close_date,
       close_date_is_past, close_date_override_reason, forecast_category,
       assigned_to, description, next_step, next_step_due_date, next_step_owner,
-      next_step_status, notes, company_name,
+      next_step_status, notes, company_name, company_id,
       contact_name, contact_email, contact_title, stakeholders, competitors,
       source, priority, tags, product, contract_term, payment_terms,
       attachment_metadata, win_prob_override_reason, win_prob_ai,
@@ -122,8 +145,19 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     // leads(id) globally, so without this a caller could attach ANY lead in the
     // database to their own deal — and leads.id is a serial, so the ids are
     // trivially enumerable. getDeals then read that lead's email back out.
+    //
+    // company_id (migration 027) is checked here for exactly the same reason,
+    // and the check is the write half of the pair described in that migration:
+    // the join in getDealById is what stops a bad row being READ across
+    // workspaces, this is what stops one being CREATED. 400 rather than 403,
+    // per the settled contract in src/__tests__/tenantIsolation.test.ts — from
+    // the caller's workspace that id simply is not a valid reference — and the
+    // message names the field without disclosing that the row exists elsewhere.
     const badRef = await foreignIdsInTenant(
-      [{ field: 'lead_id', table: 'leads', value: lead_id }], tenantId);
+      [
+        { field: 'lead_id',    table: 'leads',     value: lead_id },
+        { field: 'company_id', table: 'companies', value: company_id },
+      ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
     // Auto-generate ID in D001 format
@@ -148,7 +182,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           stage, probability, expected_close_date,
           close_date_is_past, close_date_override_reason, forecast_category,
           assigned_to, description, next_step, next_step_due_date, next_step_owner,
-          next_step_status, notes, company_name,
+          next_step_status, notes, company_name, company_id,
           contact_name, contact_email, contact_title, stakeholders, competitors,
           source, priority, tags, product, contract_term, payment_terms,
           attachment_metadata, win_prob_override_reason, win_prob_ai, is_test,
@@ -158,7 +192,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
           tenant_id)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
        RETURNING *`,
       [
         id, dealName, title || dealName, lead_id, value,
@@ -170,7 +204,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         forecast_category ?? null,
         assigned_to, description, next_step ?? null,
         next_step_due_date ?? null, next_step_owner ?? null,
-        next_step_status ?? 'pending', notes, company_name,
+        next_step_status ?? 'pending', notes, company_name, company_id ?? null,
         contact_name, contact_email, contact_title,
         JSON.stringify(stakeholders ?? []),
         JSON.stringify(competitors ?? []),
@@ -199,12 +233,17 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     const tenantId = requireTenantId(req);
 
     // Same check as createDeal: an update must not be able to re-point an
-    // existing deal at another workspace's lead.
+    // existing deal at another workspace's lead — or, since migration 027, at
+    // another workspace's company. Re-pointing is the easier attack of the two:
+    // it needs no create permission, just an id in a PUT body.
     const badRef = await foreignIdsInTenant(
-      [{ field: 'lead_id', table: 'leads', value: req.body.lead_id }], tenantId);
+      [
+        { field: 'lead_id',    table: 'leads',     value: req.body.lead_id },
+        { field: 'company_id', table: 'companies', value: req.body.company_id },
+      ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;

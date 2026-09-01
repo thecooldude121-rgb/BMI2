@@ -45,6 +45,13 @@ interface Activity {
 
 interface DealActivityTimelineProps {
   activities: Activity[];
+  /**
+   * True while the fetch is in flight. Without it an empty `activities` renders
+   * "No activity recorded yet" during loading, which is a claim about the data
+   * made before the data has arrived — the same mistake as reading a screen
+   * before the request resolves (CLAUDE.md, recorded lesson 4).
+   */
+  loading?: boolean;
   daysSinceLastContact: number;
   contacts?: { id: string; name: string }[];
 }
@@ -72,7 +79,7 @@ function heatmapSquareColor(count: number): string {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, daysSinceLastContact, contacts }) => {
+export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, loading, daysSinceLastContact, contacts }) => {
   const [filterType, setFilterType] = useState<string>('all');
   const [heatmapView, setHeatmapView] = useState<'combined' | 'per-contact'>('combined');
   const [showEmailDetail, setShowEmailDetail] = useState(false);
@@ -197,13 +204,25 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
     setShowScheduleFollowup(true);
   };
 
-  const handleMeetingScheduled = (meetingData: any) => {
+  const handleMeetingScheduled = () => {
     showToast('success', 'Follow-up meeting scheduled!');
   };
 
   const handleLoadMore = () => {
     showToast('info', 'Loading more activities...');
   };
+
+  // Loading is distinct from empty. Rendering the "no activity recorded yet"
+  // state while the request is still in flight would assert something about the
+  // data before it has arrived.
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+        <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+        {[0, 1, 2].map(i => <div key={i} className="h-14 bg-gray-50 rounded animate-pulse" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
@@ -325,7 +344,12 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
       <div className="mb-8">
         <div className="flex items-center space-x-2 mb-4">
           <div className="h-px flex-1 bg-gray-300"></div>
-          <span className="text-sm font-bold text-gray-700">TODAY (Dec 7)</span>
+          {/* Was the literal "TODAY (Dec 7)", printed on every deal on every
+              day of the year — a date that belonged to whenever this component
+              was written. */}
+          <span className="text-sm font-bold text-gray-700">
+            TODAY ({new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})
+          </span>
           <div className="h-px flex-1 bg-gray-300"></div>
         </div>
 
