@@ -411,6 +411,40 @@ that did not compile, and left an isolation-probe tenant behind in `bmi_crm` whi
 session was auditing live-data hygiene. Each session also saw `CLAUDE.md` and
 `tsconfig.json` change underneath it mid-task.
 
+### NEVER rebase `remediation/phases-0-2` onto `main`. Merge.
+
+This branch has deleted ~56,000 lines, and that makes rebasing it onto `main` a specific,
+permanent hazard rather than a stylistic choice. It bit twice in one evening.
+
+**Why a rebase is wrong here:** `git rebase main` replays 49 commits, and its *first* step
+checks out main's tree — which writes every file this branch deleted back onto disk. Main
+also already contains a later snapshot of some of this branch's work, so the replay conflicts
+on commit 1 of 49 and cascades. **Merge instead** (`git merge main`), which produced exactly
+one conflict; see commit `db785fb` for the reasoning.
+
+**If a rebase is somehow already running, the recovery is not obvious — read this before
+typing:**
+
+1. **`git rebase --abort` is still the right command to stop it.** It resets HEAD back to the
+   original branch. Do *not* reach for `--quit` here: git's docs are explicit that `--quit`
+   leaves HEAD where the rebase left it, so on a half-replayed rebase it strands the branch
+   at a partial state — a worse problem than the one you are escaping.
+2. **`--abort` is not sufficient, and this is the trap.** It restores the branch ref and
+   tracked files, but it does **not** remove files that are untracked on the branch it
+   returns to. Every deleted file the rebase wrote to disk stays there, untracked. That is
+   where two waves of resurrections came from — 79 files, then 50, including
+   `pages/Auth/LoginWireframe.tsx`, a publicly reachable page asserting a security posture
+   this product does not have. One `git add -A` re-commits all of it.
+3. **So after any `--abort`, always do both:**
+   - If `.git/rebase-merge` still exists, `git rebase --quit` to clear it. *That* is what
+     `--quit` is for here — discarding stale state on a branch that is already correct. A
+     leftover directory made `git status` report "currently editing a commit while
+     rebasing... 48 remaining" for hours on a branch whose reflog was clean and linear.
+   - Re-run the resurrection check: `git status --porcelain | grep '^??'` against a manifest
+     of what this branch deleted. Check **after** the operation completes, against
+     `git status`, not with `test -f` mid-operation — a check run during conflict resolution
+     reported "zero resurrected" when the true answer was 79.
+
 Run **one session at a time in a given worktree**, or give each session its own
 (`git worktree add`). And in any session:
 - **Check `git status` before starting**, and again before committing.

@@ -479,9 +479,16 @@ Worse, the abort left `.git/rebase-merge` in place, so `git status` reported
 that was not mid-rebase at all — the reflog showed a clean linear history. Cleared with
 `git rebase --quit`, which discards the stale state without touching the branch.
 
-**So: after any aborted rebase on this branch, do both** — `git rebase --quit` if
-`.git/rebase-merge` survives, and re-check untracked files against the deletion manifest.
-Do not rebase this branch onto main at all; see the merge rationale in `db785fb`.
+**THE RULE, plainly — now also in `CLAUDE.md` under the worktree section:**
+
+1. **Never rebase this branch onto main. Merge.** (`db785fb` has the rationale.)
+2. If a rebase is already running, **`--abort` is still the correct way to stop it** — it
+   resets HEAD to the original branch. Do NOT substitute `--quit`: git's docs are explicit
+   that `--quit` leaves HEAD where the rebase left it, stranding a half-replayed branch.
+3. **`--abort` is not enough.** Afterwards, always: clear `.git/rebase-merge` with
+   `git rebase --quit` **if it survives** (that is `--quit`'s correct role — discarding stale
+   state on a branch that is already correct), and re-run the resurrection check against
+   `git status --porcelain | grep '^??'`, after the operation, not during it.
 
 **The check, and the corrected way to run it:** keep a manifest of what this branch deleted
 (`comm -13` HEAD's tree against main's), then after any merge/rebase/checkout compare it
