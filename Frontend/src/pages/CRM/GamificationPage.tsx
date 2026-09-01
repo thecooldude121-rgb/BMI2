@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Star, Zap, Target, TrendingUp, Award, Crown, Flame, Users, DollarSign, Phone, Mail, Calendar, CheckSquare, Plus, ChevronRight, Sparkles, Gift, BarChart3, Activity, MessageSquare, Bot, Lightbulb, Heart, Eye, ArrowUp, ArrowDown, RefreshCw, X } from 'lucide-react';
-import { useData } from '../../contexts/DataContext';
 
 // Enhanced TypeScript Interfaces for Gamification
 interface GamificationUser {
@@ -94,7 +93,14 @@ interface TeamComparison {
 
 const GamificationPage: React.FC = () => {
   const navigate = useNavigate();
-  const { leads, deals, tasks, employees } = useData();
+  // Deliberately NOT reading useData(). This page destructured leads, deals, tasks
+  // and employees and then never used any of them — the destructure was dead, which
+  // made a wholly fabricated page look data-driven. Every figure below (Level 12,
+  // 2.8K XP, the 7-day streak, the leaderboard, "92% confident" coach insights,
+  // challenge progress) is a hardcoded literal in local state, independent of the
+  // database. That is finding F14 in FABRICATED_DATA_AUDIT.md and it is still OPEN:
+  // wiring DataContext to real data does not touch it, because it never consumed
+  // the provider. Gamification is also absent from the Phase-1 page list.
   
   // State Management
   const [currentUser, setCurrentUser] = useState<GamificationUser | null>(null);

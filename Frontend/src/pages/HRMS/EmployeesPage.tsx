@@ -1,6 +1,7 @@
 import React from 'react';
 import { Mail, Phone, Calendar, DollarSign } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { NotAvailable } from '../../components/common/NotAvailable';
 
 const EmployeesPage: React.FC = () => {
   const { employees } = useData();
@@ -25,6 +26,18 @@ const EmployeesPage: React.FC = () => {
 
   const departmentStats = getDepartmentStats();
   const activeEmployees = employees.filter(emp => emp.status === 'active').length;
+
+  // employees is always empty by design — DataContext does not read the local
+  // employees table because it has no tenant_id and HRMS is a separate platform.
+  // So this page has nothing it could honestly render. Says so rather than showing
+  // an empty grid that reads as "you have no staff".
+  if (employees.length === 0) {
+    return (
+      <div className="p-8">
+        <NotAvailable feature="Employee records" detail="HRMS is a separate platform that this CRM will reach over the SSO/API boundary. The local employees table has no workspace column, so it cannot be read safely from here — see the open architecture question in CLAUDE.md." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

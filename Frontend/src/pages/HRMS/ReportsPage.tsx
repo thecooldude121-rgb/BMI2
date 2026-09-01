@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, Download, Calendar, Users, TrendingUp, BarChart3, Filter } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { NotAvailable } from '../../components/common/NotAvailable';
 
 const ReportsPage: React.FC = () => {
   const { employees, tasks } = useData();
@@ -35,6 +36,18 @@ const ReportsPage: React.FC = () => {
     // Mock report generation
     console.log(`Generating ${selectedReport} report for last ${dateRange} days`);
   };
+
+  // employees is always empty by design — DataContext does not read the local
+  // employees table because it has no tenant_id and HRMS is a separate platform.
+  // So this page has nothing it could honestly render. Says so rather than showing
+  // an empty grid that reads as "you have no staff".
+  if (employees.length === 0) {
+    return (
+      <div className="p-8">
+        <NotAvailable feature="HRMS reporting" detail="Part of HRMS, which is a separate platform reached over the SSO/API boundary. These figures would have no data behind them." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
