@@ -560,7 +560,22 @@ something directly, do that instead of reasoning about what should be true.**
    earlier statements' success was taken as the whole thing having run. They were only found
    by counting rows afterwards. Same shape as everything else here: check the end state, not
    the absence of an error.
-9. **Corollaries seen in practice:** a broken reachability grep once reported every file as
+9. **A typed prop that is declared and never destructured looks wired and is not — the
+   same trap as an unused destructure, one layer out.** This is a NEW variant of lesson 3,
+   not a repeat of it: there, a provider fix could not reach a consumer that bypassed the
+   provider; here, data cannot reach a consumer that *declares* the prop and never reads it.
+   `DealDetailsPanel` declared `stageHistory?: Stage[]` and never destructured it, so the
+   hardcoded five-row array the deal page passed in rendered nowhere at all. The Phase-1
+   "stage history audit trail" therefore did not exist as a render — **and the fabrication
+   is what concealed that**, because a prop with something being passed into it reads as
+   supplied. Both halves have to be checked, and they fail independently: the page was
+   passing invented data, and the panel was ignoring it. **When verifying a data fix,
+   confirm the consuming component actually destructures the prop AND renders it** — grep
+   the component body for the prop name, do not stop at the call site or the interface.
+   Note TypeScript will NOT flag this: an unread prop in an interface is legal, unlike an
+   unused destructure, which surfaces as `TS6133`/`TS6198`. The compiler catches lesson 3's
+   shape and is silent on this one.
+10. **Corollaries seen in practice:** a broken reachability grep once reported every file as
    unimported and nearly caused a live, routed component to be deleted — resolve each import
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a
