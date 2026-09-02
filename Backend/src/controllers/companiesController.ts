@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import type { PoolClient } from 'pg';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
@@ -155,6 +156,44 @@ interface CompanyImportRow {
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim());
 const orNull = (v: string): string | null => (v === '' ? null : v);
 
+/**
+ * Serialize only the requests racing on ONE (tenant, account name) pair.
+ *
+ * The importer decides whether to create or skip by SELECTing for an existing
+ * name and then inserting — a check-then-write. Two concurrent imports each run
+ * in their own transaction and cannot see the other's uncommitted rows, so both
+ * passed the check and both inserted. Measured before this lock: six
+ * simultaneous imports of one name produced six rows, ten trials out of ten,
+ * every request reporting created=1. Contacts survive the identical code path
+ * only because contacts_tenant_email_key backstops them in the database.
+ *
+ * `companies` deliberately has NO unique constraint on name — two accounts may
+ * legitimately share one, created knowingly and one at a time (see the open
+ * design question in HANDOFF.md). A UNIQUE index would fix this race and also
+ * forbid that, which is a larger product decision nobody has made. So the race
+ * is closed with a lock instead: it changes nothing about what a sequential
+ * caller may do.
+ *
+ * The key is hashed from the tenant id AND the normalised name, using the
+ * two-int4 form of the lock, so requests for DIFFERENT names — or the same name
+ * in different workspaces — take different keys and never wait on each other.
+ * Only genuine same-name contention inside one workspace serializes.
+ *
+ * `_xact` means the lock releases when the surrounding transaction commits or
+ * rolls back, so there is no unlock path to forget. It must therefore be taken
+ * INSIDE a transaction; outside one it would be held for the life of the pooled
+ * connection.
+ *
+ * Normalisation matches the duplicate SELECT exactly (`lower(name)` against a
+ * name already trimmed by str()). If one changes, both must.
+ */
+async function lockAccountName(tx: PoolClient, tenantId: string, name: string): Promise<void> {
+  await tx.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [
+    tenantId,
+    name.toLowerCase(),
+  ]);
+}
+
 /** Mirrors companies_size_check. Duplicated only to produce a better message. */
 const VALID_SIZES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+', 'unknown'];
 
@@ -232,6 +271,12 @@ export const importCompanies = async (req: AuthRequest, res: Response, next: Nex
           }
           revenue = Math.round(Number(cleaned));
         }
+
+        // Hold the (tenant, name) lock across the check AND the insert, so a
+        // concurrent import racing on this same name waits here and then sees
+        // the committed row rather than passing its own check. See
+        // lockAccountName. Different names do not contend.
+        await lockAccountName(tx, tenantId, name);
 
         // Catches both an existing account and a name repeated earlier in this
         // same file — rows inserted earlier in the transaction are visible.

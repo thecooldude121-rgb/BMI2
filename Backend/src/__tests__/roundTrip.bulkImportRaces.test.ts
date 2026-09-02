@@ -268,52 +268,198 @@ describe('Bulk-vs-single and import-vs-import races', () => {
   });
 
   /**
-   * ████ OPEN FINDING — NOT FIXED, AWAITING A DECISION ████
+   * THE FINDING THIS FILE ORIGINALLY OPENED, NOW CLOSED.
    *
-   * Concurrent account imports DUPLICATE. Reproduced 10 trials out of 10 with
-   * six simultaneous imports of one company name: six rows created, every
-   * request reporting created=1.
+   * Concurrent account imports used to duplicate: six simultaneous imports of
+   * one company name produced six rows, ten trials out of ten, every request
+   * reporting created=1. `companies` has no unique constraint on name, so the
+   * importer's dedupe was a check-then-write with no database backstop, and
+   * neither transaction could see the other's uncommitted insert.
    *
-   * Cause: `companies` has NO unique constraint on name (recorded in
-   * CLAUDE.md), so the importer's dedupe is a check-then-write with no
-   * database backstop — resolveCompany/the duplicate SELECT cannot see another
-   * transaction's uncommitted inserts, so every concurrent import passes the
-   * check and inserts. Contacts run the same code path safely because
-   * contacts_tenant_email_key exists; the control in this file's contact tests
-   * is correct every time.
+   * Closed with a per-name advisory lock (companiesController.lockAccountName),
+   * NOT a unique index — two accounts may still legitimately share a name when
+   * created deliberately and one at a time. See the test below this one, which
+   * pins that sequential behaviour, and the throughput tests, which pin that
+   * unrelated names are not serialized.
    *
-   * Severity: this is the double-clicked Import on the documented
-   * Salesforce/HubSpot migration path. Not data loss, and the reports are
-   * honest about what each request did — but the deduplication the importer
-   * advertises, and which the sequential tests in roundTrip.csvImport verify,
-   * provides no protection concurrently. A customer re-submitting an accounts
-   * CSV silently gets duplicate accounts.
-   *
-   * Fix is a decision, not a detail: a UNIQUE index on
-   * companies(tenant_id, lower(name)) would settle it in the database the way
-   * contacts already is, but `companies` deliberately permits same-named
-   * accounts today (see the open design question in HANDOFF.md), so that is a
-   * product call. Advisory locking around the import is the alternative.
-   *
-   * The assertion below is the CORRECT behaviour and is left unloosened.
-   * `it.fails` records that it does not hold, rather than leaving the suite
-   * permanently red or asserting the bug as if it were the spec. When the
-   * duplication is fixed, THIS WRAPPER FAILS — convert it to a plain `it`.
+   * The assertion is the SPECIFIC correct outcome, not merely "fewer rows":
+   * exactly one creation, five skips, and the five skips must carry the same
+   * "already exists" reason a sequential duplicate gets — including the id of
+   * the row that won.
    */
-  it.fails('concurrent account imports of one name should create it exactly once', async () => {
-    const name = `Dedupe Race Co ${Date.now()}`;
+  it('six concurrent imports of one account name create it exactly once, skipping the other five', async () => {
+    const name = `Dedupe Race Co ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const responses = await Promise.all(Array.from({ length: 6 }, () =>
       request(app).post('/api/v1/companies/import').set(auth(ws)).send({ rows: [{ name }] })));
-    for (const r of responses) expect(r.status, JSON.stringify(r.body)).toBe(200);
 
+    for (const r of responses) {
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(r.body?.message ?? '').not.toMatch(/Internal Server Error/);
+    }
+
+    const created = responses.reduce((n, r) => n + r.body.data.created, 0);
+    const skipped = responses.reduce((n, r) => n + r.body.data.skipped, 0);
+    const failed = responses.reduce((n, r) => n + r.body.data.failed, 0);
+    expect(created, 'exactly one request may create the account').toBe(1);
+    expect(skipped, 'the other five must skip, not fail').toBe(5);
+    expect(failed).toBe(0);
+
+    // One row, verified in Postgres — the original finding was six.
     const stored = await pool.query(
-      'SELECT COUNT(*)::int AS n FROM companies WHERE tenant_id = $1 AND name = $2',
+      'SELECT id FROM companies WHERE tenant_id = $1 AND lower(name) = lower($2)',
       [ws.tenantId, name],
     );
+    expect(stored.rows.length, `${stored.rows.length} copies of "${name}"`).toBe(1);
+    const winnerId = stored.rows[0].id;
+
+    // Each skip must give the sequential reason, naming the row that won —
+    // not a bare count, and not a generic "could not be saved".
+    const skips = responses.flatMap((r) => r.body.data.rows)
+      .filter((row: { status: string }) => row.status === 'skipped');
+    expect(skips.length).toBe(5);
+    for (const row of skips) {
+      expect(row.reason).toMatch(/already exists/i);
+      expect(row.reason, 'the skip should name the surviving account').toContain(winnerId);
+      expect(row.reason).not.toMatch(/could not be saved/i);
+    }
+
+    await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
+  });
+
+  /**
+   * The behaviour the lock must NOT change: a sequential duplicate import skips
+   * with the same reason. This is the baseline the concurrent test above is
+   * measured against — "correct" means matching this, not merely avoiding
+   * duplicates.
+   */
+  it('a sequential duplicate import still skips, and that is the outcome the lock preserves', async () => {
+    const name = `Sequential Dupe Co ${Date.now()}`;
+    const first = await request(app).post('/api/v1/companies/import').set(auth(ws)).send({ rows: [{ name }] });
+    const second = await request(app).post('/api/v1/companies/import').set(auth(ws)).send({ rows: [{ name }] });
+
+    expect(first.body.data.created).toBe(1);
+    expect(first.body.data.skipped).toBe(0);
+    expect(second.body.data.created).toBe(0);
+    expect(second.body.data.skipped).toBe(1);
+    expect(second.body.data.rows[0].reason).toMatch(/already exists/i);
+
+    const stored = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM companies WHERE tenant_id = $1 AND lower(name) = lower($2)',
+      [ws.tenantId, name]);
+    expect(stored.rows[0].n).toBe(1);
+
+    await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
+  });
+
+  /**
+   * And the behaviour the lock must not COST: unrelated names must not queue
+   * behind each other. Proven deterministically rather than by timing — the
+   * test holds the advisory key for one name in its own transaction, then shows
+   * that an import of a DIFFERENT name completes anyway while an import of the
+   * SAME name is still waiting. A wall-clock comparison would be a guess; this
+   * is a direct observation of the lock's scope.
+   */
+  it('the lock is scoped to one name: a different name proceeds while that name is held', async () => {
+    const heldName = `Held Co ${Date.now()}`;
+    const otherName = `Other Co ${Date.now()}`;
+    const holder = await pool.connect();
     try {
-      expect(stored.rows[0].n, `${stored.rows[0].n} copies of "${name}" created`).toBe(1);
+      await holder.query('BEGIN');
+      // The same key formula as lockAccountName.
+      await holder.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+        [ws.tenantId, heldName.toLowerCase()]);
+
+      // A different name must not be blocked by that.
+      const other = await request(app).post('/api/v1/companies/import').set(auth(ws))
+        .send({ rows: [{ name: otherName }] });
+      expect(other.status, JSON.stringify(other.body)).toBe(200);
+      expect(other.body.data.created, 'an unrelated name must not wait on a held key').toBe(1);
+
+      // The held name must be blocked — still unresolved after a wait that the
+      // unrelated import cleared in single-digit milliseconds.
+      const blocked = request(app).post('/api/v1/companies/import').set(auth(ws))
+        .send({ rows: [{ name: heldName }] });
+      const outcome = await Promise.race([
+        blocked.then(() => 'completed'),
+        new Promise((resolve) => setTimeout(() => resolve('still-waiting'), 1000)),
+      ]);
+      expect(outcome, 'an import of the held name should be waiting on the lock').toBe('still-waiting');
+
+      // Releasing the key lets it finish.
+      await holder.query('ROLLBACK');
+      const finished = await blocked;
+      expect(finished.status, JSON.stringify(finished.body)).toBe(200);
+      expect(finished.body.data.created).toBe(1);
     } finally {
+      holder.release();
       await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
     }
+  });
+
+  it('eight concurrent imports of eight DISTINCT names all succeed without serializing', async () => {
+    const stamp = Date.now();
+    const responses = await Promise.all(Array.from({ length: 8 }, (_, n) =>
+      request(app).post('/api/v1/companies/import').set(auth(ws))
+        .send({ rows: [{ name: `Parallel Co ${stamp}-${n}` }] })));
+
+    for (const r of responses) {
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      expect(r.body.data.created, 'every distinct name must be created').toBe(1);
+      expect(r.body.data.skipped).toBe(0);
+    }
+    const stored = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM companies WHERE tenant_id = $1 AND name LIKE $2',
+      [ws.tenantId, `Parallel Co ${stamp}-%`]);
+    expect(stored.rows[0].n).toBe(8);
+
+    await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
+  });
+
+  /**
+   * THE COST THE LOCK DOES INTRODUCE, pinned so it stays contained.
+   *
+   * Two imports whose files share names in OPPOSITE order can each hold what
+   * the other wants; Postgres breaks the tie by aborting one statement with
+   * 40P01. Confirmed as 40P01 directly rather than inferred.
+   *
+   * What must remain true: the per-row savepoint contains it, so the rest of
+   * each import still commits, every name ends up with exactly one row, nothing
+   * is duplicated or lost — and the aborted row reports CONTENTION rather than
+   * rowErrorMessage's generic "This row could not be saved", which is what it
+   * said before 40P01 was mapped.
+   */
+  it('imports sharing names in opposite order stay consistent, and a deadlocked row says why', async () => {
+    const stamp = Date.now();
+    const a = `Deadlock A ${stamp}`;
+    const b = `Deadlock B ${stamp}`;
+
+    const [r1, r2] = await Promise.all([
+      request(app).post('/api/v1/companies/import').set(auth(ws)).send({ rows: [{ name: a }, { name: b }] }),
+      request(app).post('/api/v1/companies/import').set(auth(ws)).send({ rows: [{ name: b }, { name: a }] }),
+    ]);
+    expect(r1.status, JSON.stringify(r1.body)).toBe(200);
+    expect(r2.status, JSON.stringify(r2.body)).toBe(200);
+
+    // Both names exist exactly once — no duplication, no loss.
+    const stored = await pool.query(
+      `SELECT name, COUNT(*)::int AS n FROM companies
+        WHERE tenant_id = $1 AND name IN ($2, $3) GROUP BY name`,
+      [ws.tenantId, a, b]);
+    expect(stored.rows.length, `expected both names present: ${JSON.stringify(stored.rows)}`).toBe(2);
+    for (const row of stored.rows) {
+      expect(row.n, `"${row.name}" duplicated`).toBe(1);
+    }
+
+    // Any row that did not create must say why, and never with the generic
+    // fallback — either it was a duplicate or it lost a deadlock.
+    const unmade = [...r1.body.data.rows, ...r2.body.data.rows]
+      .filter((row: { status: string }) => row.status !== 'created');
+    for (const row of unmade) {
+      expect(row.reason, `row ${row.index} gave no reason`).toBeTruthy();
+      expect(row.reason, `generic fallback leaked: "${row.reason}"`).not.toMatch(/could not be saved/i);
+      expect(row.reason).toMatch(/already exists|running at the same time/i);
+    }
+
+    await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
   });
 });

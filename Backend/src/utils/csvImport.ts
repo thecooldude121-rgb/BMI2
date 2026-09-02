@@ -98,6 +98,17 @@ function rowErrorMessage(error: unknown): string {
       return `A value is not one this field allows${e.constraint ? ` (${e.constraint})` : ''}`;
     case '22001': // string_data_right_truncation
       return 'A value in this row is too long for its field';
+    case '40P01': // deadlock_detected
+      // Reachable since companiesController began taking a per-name advisory
+      // lock to close the concurrent-duplicate race: two imports whose files
+      // share names in OPPOSITE order can each hold what the other wants, and
+      // Postgres breaks the tie by aborting one. The savepoint contains it, so
+      // the rest of the import still commits and no row is duplicated or lost
+      // — but the caller needs to be told it was contention rather than their
+      // data, and that retrying will work.
+      return 'This row clashed with another import running at the same time — retry it';
+    case '40001': // serialization_failure, same story from the caller's side
+      return 'This row clashed with another import running at the same time — retry it';
     default:
       return 'This row could not be saved';
   }
