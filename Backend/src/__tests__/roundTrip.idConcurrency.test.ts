@@ -123,6 +123,64 @@ describe('Concurrent creates — id generation cannot collide', () => {
     await pool.query('DELETE FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
   });
 
+  /**
+   * REGRESSION GUARD FOR A BUG THAT ONLY APPEARS PAST THE 1000th ROW.
+   *
+   * Migration 031 generated ids with
+   *     'C' || LPAD(nextval(...)::text, 3, '0')
+   * on the assumption that SQL lpad behaves like JavaScript padStart. It does
+   * not: lpad TRUNCATES when the input is longer than the target width, so
+   *     lpad('999',3,'0') = '999'   but
+   *     lpad('1000',3,'0') = '100'  and lpad('1007',3,'0') = '100' as well.
+   * Every create past the 999th row therefore collided on the primary key —
+   * permanently, not just under concurrency. Migration 033 replaced it with
+   * next_prefixed_id(), which pads without truncating.
+   *
+   * A fresh database starts its sequences at 1, so nothing else in this suite
+   * would ever reach the boundary. These two tests go there deliberately.
+   */
+  it('next_prefixed_id pads to three digits and then stops, never truncating', async () => {
+    // A throwaway sequence, so the real table sequences are untouched.
+    await pool.query('CREATE SEQUENCE IF NOT EXISTS rt_padding_probe_seq');
+    try {
+      await pool.query(`SELECT setval('rt_padding_probe_seq', 997, false)`);
+      const res = await pool.query(
+        `SELECT next_prefixed_id('C', 'rt_padding_probe_seq') AS id FROM generate_series(1, 6)`,
+      );
+      const ids = res.rows.map(r => r.id);
+      expect(ids).toEqual(['C997', 'C998', 'C999', 'C1000', 'C1001', 'C1002']);
+      // The failure mode this guards: 1000+ collapsing back onto 3 characters.
+      expect(new Set(ids).size, `ids repeated: ${JSON.stringify(ids)}`).toBe(6);
+    } finally {
+      await pool.query('DROP SEQUENCE IF EXISTS rt_padding_probe_seq');
+    }
+  });
+
+  it('creates past the 999th row get distinct ids through the real endpoint', async () => {
+    // Push the live contacts sequence over the boundary and create through the
+    // API, so the COLUMN DEFAULT is proven and not just the function. Sequences
+    // only ever move forward, so raising it is harmless and needs no reset.
+    const current = await pool.query(`SELECT last_value FROM contacts_id_seq`);
+    const target = Math.max(Number(current.rows[0].last_value), 999);
+    await pool.query(`SELECT setval('contacts_id_seq', $1, true)`, [target]);
+
+    const made = await Promise.all(
+      [0, 1, 2].map(n => request(app).post('/api/v1/contacts').set(auth(ws))
+        .send({ first_name: `Boundary${n}`, last_name: 'Contact', email: `boundary.${n}.${Date.now()}@example.com` })),
+    );
+    for (const r of made) expect(r.status, JSON.stringify(r.body)).toBe(201);
+
+    const ids = made.map(r => r.body.data.id as string);
+    expect(new Set(ids).size, `collided past 999: ${JSON.stringify(ids)}`).toBe(3);
+    // Every id must be longer than the truncated form would have been.
+    for (const id of ids) expect(id).toMatch(/^CT\d{4,}$/);
+
+    const rows = await pool.query(
+      'SELECT id FROM contacts WHERE id = ANY($1::varchar[]) AND tenant_id = $2', [ids, ws.tenantId]);
+    expect(rows.rows.length).toBe(3);
+    await pool.query('DELETE FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
+  });
+
   it('the generated id keeps its human-readable prefix and zero padding', async () => {
     // Ids are user-visible and referenced by hand (HANDOFF.md names deal D053),
     // so the sequence must not have changed the format.

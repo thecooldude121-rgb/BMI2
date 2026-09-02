@@ -1,0 +1,40 @@
+-- Migration 032: widen documents.uploaded_by so POST /documents works at all.
+--
+-- WHY
+-- `documents.uploaded_by` was VARCHAR(10) (migration 017), and
+-- documentsController.createDocument writes resolveActorName(req) into it —
+-- which is `first_name || ' ' || last_name`, falling back to the user's email.
+-- Almost every real value overflowed ten characters, so Postgres answered
+--   value too long for type character varying(10)
+-- and errorHandler masked it as a bare "500 Internal Server Error". POST
+-- /documents therefore failed for essentially every real user, and no client
+-- could work around it: uploaded_by is derived server-side and can neither be
+-- supplied nor shortened by the caller. The round-trip suite's own actor,
+-- "Round Tripper", is 13 characters, which is how this surfaced.
+--
+-- WHY 255 AND NOT 100
+-- The obvious precedent is activities.created_by, which holds the SAME
+-- resolveActorName value — but it is VARCHAR(100), and 100 is not actually
+-- enough. Measured against the live schema rather than assumed:
+--   users.first_name  VARCHAR(50)
+--   users.last_name   VARCHAR(50)   -> "first last" reaches 101 characters
+--   users.email       VARCHAR(150)  -> the fallback reaches 150 characters
+-- So copying activities.created_by exactly would have reproduced this very bug
+-- at a higher threshold instead of fixing it. 255 covers both paths with room
+-- to spare and matches the width used for other free-text identity columns.
+--
+-- NOTE FOR A FUTURE SESSION — activities has the same latent defect.
+-- activities.created_by and activities.assigned_to are both VARCHAR(100) and
+-- receive the same resolveActorName value (activitiesController, where `actor`
+-- is written to both). A 101-character name or a longer email fallback will
+-- overflow them in exactly the same masked-500 way. It has NOT been widened
+-- here: this migration's mandate is the documents bug the tests caught, and
+-- changing activities is a separate call. Logged so it is not rediscovered the
+-- expensive way.
+--
+-- Widening a varchar is metadata-only in Postgres: no table rewrite, no lock
+-- beyond a brief ACCESS EXCLUSIVE, and no existing value can be invalidated
+-- because every current value already fits in 10 characters.
+
+ALTER TABLE documents
+  ALTER COLUMN uploaded_by TYPE VARCHAR(255);

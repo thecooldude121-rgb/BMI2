@@ -235,6 +235,26 @@ export const deleteDocuments = async (req: AuthRequest, res: Response, next: Nex
           console.error(`[documents] could not delete file ${row.storage_key}:`, err?.message));
       }
     }
+    // The SINGLE-resource form must 404 when it deleted nothing, matching
+    // getDocumentById and every other :id endpoint in this API (contacts,
+    // companies, deals, tasks all do). This route shares its handler with the
+    // bulk form, so it used to inherit bulk partial-success semantics and
+    // answered 200 with deleted: 0 — including for an id belonging to another
+    // workspace. Nothing was ever destroyed (the DELETE carries
+    // `AND tenant_id = $2` and matched no rows) and the body did say
+    // deleted: 0, but a client checking res.ok rather than the body would
+    // report having deleted a document it never touched: a success status with
+    // no write behind it.
+    //
+    // Keyed off req.params.id, NOT off ids.length === 1, so the BULK form's
+    // semantics are untouched — a bulk request for one id that matches nothing
+    // still reports partial success rather than 404, because a caller passing
+    // an array is asking "how many of these went?" and wants the count.
+    if (req.params.id && result.rowCount === 0) {
+      res.status(404).json({ success: false, message: 'Document not found' });
+      return;
+    }
+
     res.json({
       success: true,
       deleted: result.rowCount,

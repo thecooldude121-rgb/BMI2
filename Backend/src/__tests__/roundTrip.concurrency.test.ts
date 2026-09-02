@@ -83,23 +83,47 @@ describe('Concurrent writes to the same row', () => {
 
     const deal = await pool.query('SELECT stage FROM deals WHERE id = $1', [id]);
     const hist = await pool.query(
-      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1 ORDER BY changed_at, id',
+      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1',
       [id],
     );
 
-    // Whichever order the lock granted, the outcome must be COHERENT:
-    // the stored stage is one of the two requested...
+    // Whichever order the lock granted, the outcome must be COHERENT.
+    // The stored stage is one of the two requested — never a blend, never a
+    // stage nobody asked for.
     expect(['negotiation', 'closed-won']).toContain(deal.rows[0].stage);
-    // ...the trail is non-empty and its last entry agrees with the stored stage
-    // (an audit trail disagreeing with the row is worse than no trail)...
     expect(hist.rows.length).toBeGreaterThanOrEqual(1);
-    expect(hist.rows[hist.rows.length - 1].to_stage).toBe(deal.rows[0].stage);
-    // ...and the chain is unbroken: each hop starts where the previous ended.
-    let cursor = 'prospecting';
+
+    // The trail must form an unbroken chain from the starting stage to the
+    // stage the deal actually holds.
+    //
+    // NOTE ON ORDERING, learned the hard way — this test was flaky before it
+    // was written this way. `changed_at` defaults to now(), and in Postgres
+    // now() IS transaction_timestamp(): the transaction's START time, not its
+    // commit time. Two near-simultaneous transitions can therefore commit in
+    // the opposite order to their timestamps, and `id` is a random uuid so it
+    // breaks no tie. Ordering the rows in SQL and walking them assumes an order
+    // the data does not carry. So the chain is RECONSTRUCTED by following
+    // from_stage -> to_stage links instead, which is order-independent and
+    // tests the real invariant.
+    const hops = new Map<string, string>();
     for (const row of hist.rows) {
-      expect(row.from_stage, `history chain broken: ${JSON.stringify(hist.rows)}`).toBe(cursor);
-      cursor = row.to_stage;
+      expect(hops.has(row.from_stage), `two transitions out of ${row.from_stage}`).toBe(false);
+      hops.set(row.from_stage, row.to_stage);
     }
+    let cursor = 'prospecting';
+    const visited = new Set<string>([cursor]);
+    while (hops.has(cursor)) {
+      const next = hops.get(cursor)!;
+      expect(visited.has(next), `history loops at ${next}: ${JSON.stringify(hist.rows)}`).toBe(false);
+      visited.add(next);
+      cursor = next;
+    }
+    // Following every hop from the start must land exactly on the stored stage,
+    // and consume the whole trail — a row left over would be a transition that
+    // is not part of this deal's actual history.
+    expect(cursor, `chain from prospecting ended at ${cursor}, deal is ${deal.rows[0].stage}: ${JSON.stringify(hist.rows)}`)
+      .toBe(deal.rows[0].stage);
+    expect(visited.size - 1, `unreachable history rows: ${JSON.stringify(hist.rows)}`).toBe(hist.rows.length);
   });
 
   it('concurrent edits to the same deal leave one valid row, never a blend or a 500', async () => {
