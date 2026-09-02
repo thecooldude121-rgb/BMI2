@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   matchColumns, mapRows, applyFullNameFallback, buildTemplate,
-  CONTACT_FIELDS, ACCOUNT_FIELDS,
+  findWithinFileDuplicates, CONTACT_FIELDS, ACCOUNT_FIELDS,
 } from './csvImportSpec';
 import { parseCsv } from './csvParse';
 
@@ -115,5 +115,55 @@ describe('buildTemplate', () => {
     const [row] = mapRows(parsed.rows, matchColumns(parsed.headers, CONTACT_FIELDS));
     expect(row.email).toBe('ada@example.com');
     expect(row.tags).toEqual(['vip', 'decision-maker']);
+  });
+});
+
+describe('findWithinFileDuplicates', () => {
+  const rows = (...emails: (string | undefined)[]) =>
+    emails.map(e => (e === undefined ? {} : { email: e }));
+
+  it('flags the later occurrence and points at the first', () => {
+    const d = findWithinFileDuplicates(rows('a@x.com', 'b@x.com', 'a@x.com'), 'email');
+    expect([...d.keys()]).toEqual([2]);
+    expect(d.get(2)).toEqual({ value: 'a@x.com', firstIndex: 0 });
+  });
+
+  it('never flags the first occurrence', () => {
+    expect(findWithinFileDuplicates(rows('a@x.com'), 'email').size).toBe(0);
+  });
+
+  it('flags every repeat after the first, all pointing at the first', () => {
+    const d = findWithinFileDuplicates(rows('a@x.com', 'a@x.com', 'a@x.com'), 'email');
+    expect([...d.keys()]).toEqual([1, 2]);
+    expect(d.get(1)!.firstIndex).toBe(0);
+    expect(d.get(2)!.firstIndex).toBe(0);
+  });
+
+  // Matches the server's lower(email) / lower(name) lookups.
+  it('compares case-insensitively and ignores surrounding space', () => {
+    const d = findWithinFileDuplicates(rows('A@X.com', ' a@x.com '), 'email');
+    expect(d.has(1)).toBe(true);
+  });
+
+  // A missing key is a required-field error, which the server words better.
+  it('does not treat repeated blanks or absent keys as duplicates', () => {
+    expect(findWithinFileDuplicates(rows('', '', undefined, undefined), 'email').size).toBe(0);
+  });
+
+  it('works on an arbitrary key, which is how accounts dedupe on name', () => {
+    const d = findWithinFileDuplicates(
+      [{ name: 'Acme' }, { name: 'Globex' }, { name: 'acme' }], 'name');
+    expect([...d.keys()]).toEqual([2]);
+  });
+
+  // The defect this was written for: the duplicate pair straddles a 500-row
+  // chunk boundary, so a per-chunk check could not see it during a dry run.
+  it('spans a chunk boundary, which is the case that regressed', () => {
+    const big: Record<string, unknown>[] = [];
+    for (let i = 0; i < 620; i++) big.push({ email: `r${i}@x.com` });
+    big[549] = { email: 'r4@x.com' };            // chunk 2 repeats a chunk 1 row
+    const d = findWithinFileDuplicates(big, 'email');
+    expect([...d.keys()]).toEqual([549]);
+    expect(d.get(549)!.firstIndex).toBe(4);
   });
 });

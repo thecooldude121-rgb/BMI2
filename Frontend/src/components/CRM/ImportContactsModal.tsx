@@ -57,6 +57,8 @@ const ImportContactsModal: React.FC<ImportContactsModalProps> = ({ isOpen, onClo
             fields={CONTACT_FIELDS}
             templateFilename="contacts_template.csv"
             transformRows={applyFullNameFallback}
+            dedupeKey="email"
+            dedupeLabel="email"
             onImport={importContactsViaAPI}
             onImported={onImported}
           />

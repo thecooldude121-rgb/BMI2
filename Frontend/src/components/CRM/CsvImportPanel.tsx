@@ -4,10 +4,12 @@ import { Button } from '../ui/Button';
 import { parseCsv, readFileAsText, MAX_ROWS } from '../../utils/csvParse';
 import { toCsv } from '../../utils/csv';
 import {
-  matchColumns, mapRows, buildTemplate, type FieldSpec, type ColumnMatch,
+  matchColumns, mapRows, buildTemplate, findWithinFileDuplicates,
+  type FieldSpec, type ColumnMatch,
 } from '../../utils/csvImportSpec';
 import {
-  MAX_IMPORT_ROWS, mergeSummaries, type ImportSummary, type RowResult,
+  MAX_IMPORT_ROWS, mergeSummaries, spliceResults, localOnlySummary,
+  type ImportSummary, type RowResult,
 } from '../../utils/importApi';
 
 /**
@@ -46,6 +48,14 @@ interface CsvImportPanelProps {
   templateFilename: string;
   /** Contacts fold a single "Name" column into first/last; accounts do not. */
   transformRows?: (rows: Record<string, unknown>[]) => Record<string, unknown>[];
+  /**
+   * The mapped field that identifies a record, used to spot rows that repeat an
+   * earlier row IN THE SAME FILE. Must match the column the server dedupes on:
+   * `email` for contacts (contacts_tenant_email_key), `name` for accounts.
+   */
+  dedupeKey: string;
+  /** How to name that field in a duplicate message: "email", "name". */
+  dedupeLabel: string;
   onImport: (rows: Record<string, unknown>[], dryRun: boolean) => Promise<ImportSummary>;
   /** Called after a commit that created at least one row, so the list can refetch. */
   onImported?: () => void;
@@ -67,20 +77,28 @@ async function runChunked(
 }
 
 export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
-  entityPlural, fields, templateFilename, transformRows, onImport, onImported,
+  entityPlural, fields, templateFilename, transformRows, dedupeKey, dedupeLabel,
+  onImport, onImported,
 }) => {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const [stage, setStage] = useState<Stage>('choose');
   const [fileName, setFileName] = useState('');
   const [matches, setMatches] = useState<ColumnMatch[]>([]);
+  /** Rows actually sent to the server, and their positions in the user's file. */
   const [payload, setPayload] = useState<Record<string, unknown>[]>([]);
+  const [sentIndices, setSentIndices] = useState<number[]>([]);
+  /** Within-file duplicates, resolved client-side and never sent. */
+  const [localResults, setLocalResults] = useState<RowResult[]>([]);
+  /** Rows in the file, including the ones held back. */
+  const [fileRowCount, setFileRowCount] = useState(0);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
   const reset = () => {
     setStage('choose'); setFileName(''); setMatches([]); setPayload([]);
+    setSentIndices([]); setLocalResults([]); setFileRowCount(0);
     setSummary(null); setError(null); setProgress(0);
     if (fileInput.current) fileInput.current.value = '';
   };
@@ -137,11 +155,39 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
       }
 
       const mapped = transformRows ? transformRows(mapRows(parsed.rows, cols)) : mapRows(parsed.rows, cols);
+
+      // Resolve within-file duplicates HERE, over the whole file, before it is
+      // split into requests. Deciding this per-chunk made the answer depend on
+      // where the boundary fell — see findWithinFileDuplicates.
+      const dupes = findWithinFileDuplicates(mapped, dedupeKey);
+      const held: RowResult[] = [];
+      const send: Record<string, unknown>[] = [];
+      const indices: number[] = [];
+      mapped.forEach((row, i) => {
+        const dup = dupes.get(i);
+        if (dup) {
+          held.push({
+            index: i,
+            status: 'skipped',
+            // +2 to name the line the user sees in a spreadsheet.
+            reason: `The ${dedupeLabel} ${dup.value} is already used on row ${dup.firstIndex + 2} of this file — only the first was imported`,
+          });
+        } else {
+          send.push(row);
+          indices.push(i);
+        }
+      });
+
       setMatches(cols);
-      setPayload(mapped);
+      setPayload(send);
+      setSentIndices(indices);
+      setLocalResults(held);
+      setFileRowCount(mapped.length);
       setStage('previewing');
 
-      const result = await runChunked(mapped, true, onImport, setProgress);
+      const result = send.length === 0
+        ? localOnlySummary(true, held)
+        : spliceResults(await runChunked(send, true, onImport, setProgress), indices, held);
       setSummary(result);
       setStage('preview');
     } catch (e) {
@@ -155,7 +201,9 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
     setError(null);
     setProgress(0);
     try {
-      const result = await runChunked(payload, false, onImport, setProgress);
+      const result = payload.length === 0
+        ? localOnlySummary(false, localResults)
+        : spliceResults(await runChunked(payload, false, onImport, setProgress), sentIndices, localResults);
       setSummary(result);
       setStage('done');
       if (result.created > 0) onImported?.();
@@ -250,7 +298,7 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
             <p className="text-xs text-gray-500">
               {progress > 0
                 ? `${progress.toLocaleString()} of ${payload.length.toLocaleString()} rows`
-                : `${payload.length.toLocaleString()} rows`}
+                : `${fileRowCount.toLocaleString()} rows`}
               {stage === 'previewing' && ' · nothing is being saved yet'}
             </p>
           </div>

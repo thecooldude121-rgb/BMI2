@@ -104,3 +104,46 @@ export function mergeSummaries(parts: ImportSummary[], chunkSize: number): Impor
     rows,
   };
 }
+
+/**
+ * Re-attach results the client decided locally to the results the server
+ * returned, restoring the file's own row order.
+ *
+ * Rows the client already knows are within-file duplicates are NOT sent (see
+ * findWithinFileDuplicates for why). That makes the server's indices refer to a
+ * subset, so each one is translated back through `sentIndices` — position in the
+ * payload -> row in the user's file. Getting this wrong would reproduce, one
+ * layer up, the off-by-one that chunk merging already had to fix.
+ */
+export function spliceResults(
+  summary: ImportSummary,
+  sentIndices: number[],
+  localResults: RowResult[],
+): ImportSummary {
+  const rows: RowResult[] = [
+    ...summary.rows.map(r => ({ ...r, index: sentIndices[r.index] ?? r.index })),
+    ...localResults,
+  ].sort((a, b) => a.index - b.index);
+
+  return {
+    dry_run: summary.dry_run,
+    total: rows.length,
+    created: rows.filter(r => r.status === 'created').length,
+    skipped: rows.filter(r => r.status === 'skipped').length,
+    failed: rows.filter(r => r.status === 'failed').length,
+    rows,
+  };
+}
+
+/** The summary for a file where every row was resolved without asking the server. */
+export function localOnlySummary(dryRun: boolean, localResults: RowResult[]): ImportSummary {
+  const rows = [...localResults].sort((a, b) => a.index - b.index);
+  return {
+    dry_run: dryRun,
+    total: rows.length,
+    created: 0,
+    skipped: rows.filter(r => r.status === 'skipped').length,
+    failed: rows.filter(r => r.status === 'failed').length,
+    rows,
+  };
+}

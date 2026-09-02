@@ -47,6 +47,8 @@ const AccountImportExport: React.FC = () => {
           entityPlural="accounts"
           fields={ACCOUNT_FIELDS}
           templateFilename="accounts_template.csv"
+          dedupeKey="name"
+          dedupeLabel="account name"
           onImport={importAccountsViaAPI}
         />
       </div>

@@ -78,10 +78,47 @@ contacts CSV and a 3-row accounts CSV, each carrying deliberate failures.
   deals / 38 leads / 0 activities**, with a residue sweep for
   `source = 'import'` and the test domains both returning 0.
 
-**Not exercised:** the "Download report" button (a blob download, same mechanism
-as the working contacts export) and a file large enough to chunk across more than
-one 500-row request. `mergeSummaries` has the index-shifting logic for it and is
-unproven against a real >500-row file.
+**Chunking and the report were then proven with a real 620-row file** (a second
+pass, after the first report listed them as unexercised):
+
+- The client sent **two** POSTs (500 + 120), not one oversized request.
+- Indices survive the boundary: failures planted at local indices 19 and 49 of
+  chunk 2 were reported as file rows **521** and **551**, not 21 and 51.
+- Postgres: 637 = 20 + 617, ids `CT021`–`CT637`, 617 distinct and contiguous, no
+  collisions across two transactions.
+- Download report: a real 13,116-byte file, `617 created / 2 failed / 1 skipped`,
+  correct reasons, RFC-4180 quoting intact.
+- Cleaned up and re-counted to 20/15/25/38/0 with four residue sweeps at 0.
+
+### FIXED in that pass — a cross-chunk duplicate was invisible in the preview
+
+Worth reading even though it is closed, because the shape recurs anywhere work is
+split across requests.
+
+**Symptom:** the preview said 618 importable; the commit imported 617.
+
+**Cause:** each chunk is its own request and its own transaction. The server's
+duplicate check sees rows inserted earlier in *its* transaction, which is what
+makes "already in your workspace" and "appears twice in your file" one mechanism
+— but only within a chunk. During a DRY RUN each chunk rolls back, so chunk 2
+could not see chunk 1's rows and a duplicate straddling the boundary went
+unreported. At commit, chunk 1 had committed, so the same duplicate WAS caught.
+Nothing was corrupted and no row was silently dropped; the commit was correct and
+reported the skip. But a preview that disagrees with the commit is precisely what
+the dry run exists to rule out.
+
+**Fix:** `findWithinFileDuplicates` in `utils/csvImportSpec.ts` resolves
+within-file duplicates over the whole file **before** it is chunked, so the answer
+cannot depend on where the split falls. Flagged rows are never sent;
+`spliceResults` in `utils/importApi.ts` translates the server's subset-relative
+indices back to file rows and merges the two sets. The server keeps its own check
+as the authority for everything else. Re-verified with the same file: preview 617,
+commit 617, Postgres 617.
+
+**The generalisable bit:** any per-request check becomes wrong the moment the work
+is chunked, and a dry run hides it because rollback removes exactly the state the
+next chunk needed. If you add another batched endpoint, ask what its checks assume
+about seeing earlier rows.
 
 ## DONE — F24 and F25 are built. Read this before picking up the next item.
 
@@ -214,6 +251,54 @@ What a session picking this up has to settle, in order:
 4. Every new FK references a GLOBAL primary key, so both halves of the tenant
    rule apply: validate on write with `utils/tenantScope.ts`, and carry
    `AND parent.tenant_id = child.tenant_id` on every join.
+
+### FINDING — the Contacts list silently caps at 200, and the stat card lies
+
+**Pre-existing, not introduced by the CSV import work — but import is what makes
+it reachable for the first time.** Recording the cause so the next session does
+not have to rediscover it.
+
+With 637 contacts in the database, `/crm/contacts` displayed **"200 Total
+Contacts"** and listed 200 rows. No pagination, no "showing 200 of 637", nothing
+indicating rows are missing. The headline number is simply wrong.
+
+**Cause, traced:** `fetchContacts` in `utils/contactsApi.ts` sends
+`limit=200` (its own default; the API's default is 50). `ContactsPage:76` then
+sets `total: contacts.length`, so the card reports the size of the page, not the
+size of the table.
+
+**And the true total is not currently available to fix it with.** `getContacts`
+returns `count: result.rowCount` — the number of rows *this query returned*,
+which under `LIMIT 200` is 200, not 637. So the response already carries a field
+named `count` that looks like the answer and is not. Anything that fixes this
+needs a real `SELECT count(*)` over the same filters, returned as a distinct
+field.
+
+**Why it was previously unreachable and now is not:** the workspace held 20
+contacts, and every path that created one made a single row at a time — the form,
+the API, lead conversion. Passing 200 by hand was not realistic. A CSV import
+crosses it in one action; 617 rows took one click. So a wrong number that was
+theoretical is now a normal outcome of a supported workflow, which puts it in the
+"lying number" class this project tracks rather than in the "latent" pile.
+
+**The fix is one of two, and NOT built:**
+1. **Real pagination** — the list gains page controls and `offset`, and the stat
+   card reads a real total. Correct, and the larger job: the page filters, sorts
+   and searches client-side over the loaded array today, so paginating means
+   moving those server-side or they silently apply to one page only. That
+   coupling is the actual cost, not the page controls.
+2. **Send the true count separately from the capped rows** — add a
+   `SELECT count(*)` under the same `WHERE` to `getContacts` and return it as its
+   own field (not the existing `count`, which is the page size and should
+   probably be renamed while you are there). `fetchContacts` returns
+   `{ contacts, total }`; the card shows the real number and the list says it is
+   showing the first 200. Still much smaller than option 1, honest, and does not
+   pretend the list is complete — but note it IS a backend change, not a
+   frontend-only one. Does not block option 1 later.
+
+Prefer 2 now and 1 when the list is next worked on. **Note the same shape almost
+certainly applies to Accounts** (`fetchAccounts(limit = 200)`) — check it at the
+same time rather than fixing one and leaving the twin.
 
 ### OPEN DESIGN QUESTION — may two companies in one workspace share a name?
 

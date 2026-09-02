@@ -208,3 +208,55 @@ export function buildTemplate(fields: FieldSpec[]): string {
   const shown = fields.filter(f => !f.templateOmit);
   return toCsv(shown.map(f => f.label), [shown.map(f => f.example ?? '')]);
 }
+
+/**
+ * Find rows whose dedupe key repeats one already seen EARLIER IN THE SAME FILE.
+ *
+ * WHY THIS EXISTS — a real defect found by running a 620-row file through the UI.
+ *
+ * The server's duplicate check is authoritative and catches both "already in
+ * your workspace" and "appears twice in your file", because rows inserted
+ * earlier in its transaction are visible to later lookups. That holds WITHIN one
+ * request. A file larger than MAX_IMPORT_ROWS is sent as several requests, and
+ * during a DRY RUN each one rolls back — so chunk 2 cannot see chunk 1's rows,
+ * and a duplicate straddling the boundary goes unreported in the preview. At
+ * commit, chunk 1 has committed, so the same duplicate IS caught: the preview
+ * said 618 importable and the commit imported 617.
+ *
+ * Nothing was corrupted by that — the commit was correct and reported the skip —
+ * but a preview that disagrees with the commit is exactly what the dry run is
+ * supposed to rule out.
+ *
+ * The fix is to determine within-file duplicates BEFORE chunking, where the
+ * whole file is in hand and the answer cannot depend on how it is split. This is
+ * not second-guessing the database: it answers a question about the file only
+ * the client can see whole, and the server stays the authority on everything
+ * else. Rows flagged here are never sent, so the two can no longer disagree.
+ *
+ * Comparison is trimmed and case-insensitive, matching the server's
+ * `lower(email)` / `lower(name)` lookups. A row with no value for the key is
+ * never a duplicate — it is a missing required field, which the server reports
+ * with a better message than this could.
+ */
+export function findWithinFileDuplicates(
+  rows: Record<string, unknown>[],
+  key: string,
+): Map<number, { value: string; firstIndex: number }> {
+  const seen = new Map<string, number>();
+  const dupes = new Map<number, { value: string; firstIndex: number }>();
+
+  rows.forEach((row, index) => {
+    const raw = row[key];
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (!value) return;
+    const norm = value.toLowerCase();
+    const firstIndex = seen.get(norm);
+    if (firstIndex === undefined) {
+      seen.set(norm, index);
+    } else {
+      dupes.set(index, { value, firstIndex });
+    }
+  });
+
+  return dupes;
+}
