@@ -233,7 +233,7 @@ CREATE TABLE deals (
     primary_contact_id UUID REFERENCES contacts(id),
     owner_id UUID REFERENCES users(id),
     name VARCHAR(255) NOT NULL,
-    value DECIMAL(15,2),
+    value NUMERIC(12,2) NOT NULL,   -- NOT (15,2), and NOT nullable: see drift note below
     currency VARCHAR(3) DEFAULT 'INR',
     stage VARCHAR(100) NOT NULL DEFAULT 'lead',
     close_date DATE,
@@ -315,6 +315,25 @@ reveals a global row count) and the race have **one shared fix**: move to
 - `leads.status` in the database is `active | inactive | nurturing`. The frontend
   `Lead.status` carries a different *stage* vocabulary (qualified / won / lost). These are
   two different fields — do not conflate them when writing SQL.
+- **`deals` drifts from the spec above in four places.** All four verified directly against
+  `bmi_crm` via `information_schema`, 2026-09-03:
+  - **`value` is `NUMERIC(12,2)` and `NOT NULL` with no default** — not `DECIMAL(15,2)`
+    nullable. A missing `value` therefore used to reach Postgres as a raw 23502 and surface
+    as a masked 500 `Internal Server Error`, telling the caller nothing.
+    **The fix was validation-only, deliberately: `createDeal` now rejects a missing or
+    non-numeric or negative value with a clean 400, and the column was left alone.** No
+    migration, no default, no nullability change. The reason it did not need one is that
+    the real Add Deal form always sends a value — `ComprehensiveDealFormPage` sends
+    `parseFloat(d.value) || 0` — so a blank amount arrives as a literal `0`, which is
+    valid and stored as `0.00`. Whether a deal may have *no* value at all is a data-model
+    question and is still open; it should not be settled as a side effect of unmasking an
+    error. `roundTrip.deals.test.ts` pins both the 400s and the `0` boundary.
+  - **`currency` is `NOT NULL DEFAULT 'USD'`**, not `DEFAULT 'INR'`. Worth knowing before
+    writing anything that assumes INR for the India/MEA target market.
+  - **`stage` is nullable with no default**, not `NOT NULL DEFAULT 'lead'`.
+  - **There is no `close_date` column — it is `expected_close_date`.** This is the same
+    shape as the `address` / `billingAddress` bug above, so treat it the same way: a query
+    or form field written against `close_date` fails silently rather than loudly.
 
 ## CRM pages in scope for this phase (build in this order)
 1. **Auth + Workspace shell** — login, workspace creation, invite users, AppShell layout
