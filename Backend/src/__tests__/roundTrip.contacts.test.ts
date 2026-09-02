@@ -168,6 +168,97 @@ describe('Contacts — round trip', () => {
     expect(after.rows[0]).toEqual(before.rows[0]);
   });
 
+  /**
+   * SYMMETRIC masked 500, and the one of the three actually reachable by an
+   * ordinary user: editing a contact's email to one a colleague already holds
+   * returned "Internal Server Error". Both paths now return 409 with a real
+   * message, matching deleteContact's existing 23503 handling — a uniqueness
+   * conflict is a legitimate refusal the caller can act on, not a server fault.
+   *
+   * Handled by catching 23505 rather than pre-checking with a SELECT, so two
+   * concurrent requests claiming the same address cannot both pass a
+   * check-then-write.
+   */
+  it('negative: updating a contact to an email another contact holds is a clean 409, both rows unchanged', async () => {
+    const stamp = Date.now();
+    const takenEmail = `taken.${stamp}@example.com`;
+    const ownEmail = `own.${stamp}@example.com`;
+
+    const holder = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Holder', last_name: 'One', email: takenEmail });
+    expect(holder.status, JSON.stringify(holder.body)).toBe(201);
+    createdIds.push(holder.body.data.id);
+
+    const mover = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Mover', last_name: 'Two', email: ownEmail });
+    expect(mover.status).toBe(201);
+    const moverId = mover.body.data.id;
+    createdIds.push(moverId);
+
+    const res = await request(app).put(`/api/v1/contacts/${moverId}`).set(auth(ws)).send({ email: takenEmail });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toMatch(/already exists in this workspace/);
+    expect(res.body.message, 'the real reason, not a masked 500').not.toMatch(/Internal Server Error/);
+
+    // Neither row moved.
+    const moverRow = await pool.query('SELECT email FROM contacts WHERE id = $1', [moverId]);
+    expect(moverRow.rows[0].email).toBe(ownEmail);
+    const holderRow = await pool.query('SELECT email, first_name FROM contacts WHERE id = $1', [holder.body.data.id]);
+    expect(holderRow.rows[0].email).toBe(takenEmail);
+    expect(holderRow.rows[0].first_name).toBe('Holder');
+  });
+
+  it('a duplicate email on CREATE is the same clean 409, and nothing is created', async () => {
+    const email = `dup409.${Date.now()}@example.com`;
+    const first = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'First', last_name: 'Holder', email });
+    expect(first.status).toBe(201);
+    createdIds.push(first.body.data.id);
+
+    const before = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
+    const res = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Second', last_name: 'Attempt', email });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.message).toMatch(/already exists in this workspace/);
+    const after = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  it('updating to a genuinely unique new email still works', async () => {
+    const stamp = Date.now();
+    const create = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Rename', last_name: 'Me', email: `before.${stamp}@example.com` });
+    expect(create.status).toBe(201);
+    const id = create.body.data.id;
+    createdIds.push(id);
+
+    const fresh = `after.${stamp}@example.com`;
+    const res = await request(app).put(`/api/v1/contacts/${id}`).set(auth(ws)).send({ email: fresh });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const row = await pool.query('SELECT email FROM contacts WHERE id = $1', [id]);
+    expect(row.rows[0].email).toBe(fresh);
+  });
+
+  it('the SAME email is still free in a different workspace — the constraint is (tenant_id, email)', async () => {
+    const email = `shared.${Date.now()}@example.com`;
+    const mine = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Mine', last_name: 'Contact', email });
+    expect(mine.status).toBe(201);
+    createdIds.push(mine.body.data.id);
+
+    const wsB = await setupWorkspace('contacts-dup-b');
+    try {
+      const theirs = await request(app).post('/api/v1/contacts').set(auth(wsB))
+        .send({ first_name: 'Theirs', last_name: 'Contact', email });
+      expect(theirs.status, 'a different workspace may reuse the address').toBe(201);
+      await pool.query('DELETE FROM contacts WHERE tenant_id = $1', [wsB.tenantId]);
+    } finally {
+      await teardownWorkspace(wsB);
+    }
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s contact', async () => {
     const wsB = await setupWorkspace('contacts-b');
     try {

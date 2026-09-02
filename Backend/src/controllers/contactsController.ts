@@ -221,7 +221,32 @@ export const createContact = async (req: AuthRequest, res: Response, next: NextF
       [inserted.rows[0].id, tenantId],
     );
     res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) { next(error); }
+  } catch (error) {
+    // contacts_tenant_email_key is UNIQUE (tenant_id, email). Violating it used
+    // to reach errorHandler as a raw 23505 and come back as a masked 500
+    // "Internal Server Error" — on BOTH create and update, so a user editing a
+    // contact to an address a colleague already holds was told the app had
+    // broken rather than what was actually wrong.
+    //
+    // 409 with a clean message, matching deleteContact's 23503 handling just
+    // below: a uniqueness conflict is a legitimate refusal the user can act on,
+    // not a server fault. Caught here rather than pre-checked with a SELECT so
+    // the race is covered too — two concurrent requests claiming the same
+    // address cannot both pass a check-then-insert.
+    //
+    // The constraint is scoped to (tenant_id, email), so a violation is always
+    // WITHIN the caller's workspace: this discloses nothing about other
+    // workspaces, and the same address remains free in every other one.
+    if ((error as { code?: string; constraint?: string }).code === '23505' &&
+        (error as { constraint?: string }).constraint === 'contacts_tenant_email_key') {
+      res.status(409).json({
+        success: false,
+        message: 'A contact with that email already exists in this workspace',
+      });
+      return;
+    }
+    next(error);
+  }
 };
 
 export const updateContact = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -266,7 +291,32 @@ export const updateContact = async (req: AuthRequest, res: Response, next: NextF
       [updated.rows[0].id, tenantId],
     );
     res.json({ success: true, data: result.rows[0] });
-  } catch (error) { next(error); }
+  } catch (error) {
+    // contacts_tenant_email_key is UNIQUE (tenant_id, email). Violating it used
+    // to reach errorHandler as a raw 23505 and come back as a masked 500
+    // "Internal Server Error" — on BOTH create and update, so a user editing a
+    // contact to an address a colleague already holds was told the app had
+    // broken rather than what was actually wrong.
+    //
+    // 409 with a clean message, matching deleteContact's 23503 handling just
+    // below: a uniqueness conflict is a legitimate refusal the user can act on,
+    // not a server fault. Caught here rather than pre-checked with a SELECT so
+    // the race is covered too — two concurrent requests claiming the same
+    // address cannot both pass a check-then-insert.
+    //
+    // The constraint is scoped to (tenant_id, email), so a violation is always
+    // WITHIN the caller's workspace: this discloses nothing about other
+    // workspaces, and the same address remains free in every other one.
+    if ((error as { code?: string; constraint?: string }).code === '23505' &&
+        (error as { constraint?: string }).constraint === 'contacts_tenant_email_key') {
+      res.status(409).json({
+        success: false,
+        message: 'A contact with that email already exists in this workspace',
+      });
+      return;
+    }
+    next(error);
+  }
 };
 
 export const deleteContact = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {

@@ -34,6 +34,24 @@ const VALID_STAGES = [
 ] as const;
 const VALID_STATUSES = ['active', 'inactive', 'nurturing'] as const;
 
+/**
+ * Mirrors leads_score_check — CHECK (score >= 0 AND score <= 100) — and the
+ * column's INTEGER type. The constraint is the authority; this exists only so
+ * a bad value comes back as a 400 naming the range instead of a masked 500
+ * from the constraint violation, which is what 'abc', -5, 150 and even 55.5
+ * all produced on both create and update.
+ *
+ * omitted / null stay valid: createLead writes `score ?? 0`.
+ */
+function scoreError(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  const n = Number(v);
+  if (v === '' || !Number.isFinite(n)) return 'score must be a whole number between 0 and 100';
+  if (!Number.isInteger(n)) return 'score must be a whole number between 0 and 100';
+  if (n < 0 || n > 100) return 'score must be between 0 and 100';
+  return null;
+}
+
 export const getLeads = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
@@ -95,6 +113,8 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
       res.status(400).json({ success: false, message: 'email is required' });
       return;
     }
+    const badScore = scoreError(score);
+    if (badScore) { res.status(400).json({ success: false, message: badScore }); return; }
     if (stage && !VALID_STAGES.includes(stage)) {
       res.status(400).json({ success: false, message: `stage must be one of: ${VALID_STAGES.join(', ')}` });
       return;
@@ -158,6 +178,9 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
         return;
       }
     }
+
+    const badScore = scoreError(req.body.score);
+    if (badScore) { res.status(400).json({ success: false, message: badScore }); return; }
 
     const updates: string[] = [];
     const params: any[] = [];

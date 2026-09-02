@@ -135,6 +135,72 @@ describe('Tasks — round trip', () => {
     expect(row.rows[0].title).toBe('Keep this title');
   });
 
+  /**
+   * SYMMETRIC masked 500 (not a create-vs-update asymmetry): a non-date
+   * due_date failed identically on both paths. '03/11/2026' was worse than a
+   * 500 — it was ACCEPTED and interpreted per the server's DateStyle, the same
+   * ambiguity class as this column's earlier timezone off-by-one.
+   *
+   * YYYY-MM-DD is the canonical wire format: the API emits it via
+   * to_char(due_date,'YYYY-MM-DD'), and TaskFormModal's <input type="date">
+   * produces exactly that, so strict validation cannot break the real form.
+   */
+  it.each([
+    ['not-a-date',  /due_date must be a calendar date/],
+    ['2026-13-45',  /is not a real calendar date/],
+    ['2026-02-30',  /is not a real calendar date/],
+    ['03/11/2026',  /due_date must be a calendar date/],
+  ])('negative: due_date %j is rejected cleanly on CREATE, nothing created', async (bad, pattern) => {
+    const before = await pool.query('SELECT COUNT(*)::int AS n FROM tasks WHERE tenant_id = $1', [ws.tenantId]);
+    const res = await request(app).post('/api/v1/tasks').set(auth(ws)).send({ title: 'Bad date task', due_date: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(pattern);
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+    const after = await pool.query('SELECT COUNT(*)::int AS n FROM tasks WHERE tenant_id = $1', [ws.tenantId]);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  it.each([['not-a-date'], ['2026-13-45'], ['03/11/2026']])
+  ('negative: due_date %j is rejected cleanly on UPDATE, stored date unchanged', async (bad) => {
+    const create = await request(app).post('/api/v1/tasks').set(auth(ws))
+      .send({ title: 'Keep my date', due_date: '2026-11-03' });
+    expect(create.status).toBe(201);
+    const id = create.body.data.id;
+    taskIds.push(id);
+
+    const res = await request(app).put(`/api/v1/tasks/${id}`).set(auth(ws)).send({ due_date: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+
+    const row = await pool.query(`SELECT to_char(due_date, 'YYYY-MM-DD') AS d FROM tasks WHERE id = $1`, [id]);
+    expect(row.rows[0].d).toBe('2026-11-03');
+  });
+
+  it('a valid date still round-trips, and null/empty still clear the due date', async () => {
+    const create = await request(app).post('/api/v1/tasks').set(auth(ws))
+      .send({ title: 'Clearable date', due_date: '2026-12-01' });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    taskIds.push(id);
+    const set = await pool.query(`SELECT to_char(due_date, 'YYYY-MM-DD') AS d FROM tasks WHERE id = $1`, [id]);
+    expect(set.rows[0].d).toBe('2026-12-01');
+
+    // The form sends null for a cleared date; '' is the raw input's empty value.
+    const cleared = await request(app).put(`/api/v1/tasks/${id}`).set(auth(ws)).send({ due_date: null });
+    expect(cleared.status, JSON.stringify(cleared.body)).toBe(200);
+    const after = await pool.query('SELECT due_date FROM tasks WHERE id = $1', [id]);
+    expect(after.rows[0].due_date).toBeNull();
+
+    // '' is what a cleared <input type="date"> yields. createTask coerces it
+    // with `due_date || null`; updateTask pushed it raw and Postgres answered
+    // "invalid input syntax for type date" — a masked 500. Both paths coerce now.
+    await request(app).put(`/api/v1/tasks/${id}`).set(auth(ws)).send({ due_date: '2026-12-05' });
+    const empty = await request(app).put(`/api/v1/tasks/${id}`).set(auth(ws)).send({ due_date: '' });
+    expect(empty.status, JSON.stringify(empty.body)).toBe(200);
+    const afterEmpty = await pool.query('SELECT due_date FROM tasks WHERE id = $1', [id]);
+    expect(afterEmpty.rows[0].due_date, 'an empty string must clear the date, not 500').toBeNull();
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s task', async () => {
     const wsB = await setupWorkspace('tasks-b');
     try {

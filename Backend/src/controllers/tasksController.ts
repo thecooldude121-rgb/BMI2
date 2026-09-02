@@ -30,6 +30,41 @@ const VALID_PRIORITIES = ['low', 'medium', 'high'] as const;
 const VALID_RELATED_TYPES = ['lead', 'deal', 'contact', 'company', 'employee'] as const;
 
 /**
+ * due_date is a DATE column, and the API emits it as YYYY-MM-DD (see the
+ * to_char in TASK_COLUMNS below), so that is the canonical wire format. It is
+ * also exactly what TaskFormModal's <input type="date"> produces, which is why
+ * validating strictly here cannot break the real form.
+ *
+ * Before this, anything else went straight to Postgres: 'not-a-date' and
+ * '2026-13-45' came back as a masked 500, and — worse — '03/11/2026' was
+ * ACCEPTED and silently interpreted according to the server's DateStyle. That
+ * is the same class of ambiguity as the timezone off-by-one this very column
+ * already suffered, so it is now rejected rather than guessed at.
+ *
+ * omitted / null / '' all mean "no due date" and stay valid: createTask writes
+ * `due_date || null`, and the form sends '' for a cleared date.
+ */
+const DUE_DATE_SHAPE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$/;
+function dueDateError(v: unknown): string | null {
+  if (v === undefined || v === null || v === '') return null;
+  const m = DUE_DATE_SHAPE.exec(String(v));
+  if (!m) return 'due_date must be a calendar date in YYYY-MM-DD format';
+  const [, y, mo, d] = m;
+  // Round-trip the parsed parts: this is what rejects 2026-13-45 and 2026-02-30,
+  // which match the shape above but are not real days.
+  const dt = new Date(`${y}-${mo}-${d}T00:00:00Z`);
+  if (
+    Number.isNaN(dt.getTime()) ||
+    dt.getUTCFullYear() !== Number(y) ||
+    dt.getUTCMonth() + 1 !== Number(mo) ||
+    dt.getUTCDate() !== Number(d)
+  ) {
+    return `due_date "${String(v)}" is not a real calendar date`;
+  }
+  return null;
+}
+
+/**
  * Which table a related_to_type points at, for the workspace check on write.
  *
  * `employee` is deliberately absent and this is a KNOWN GAP, not an oversight:
@@ -178,6 +213,8 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
       res.status(400).json({ success: false, message: 'title is required' });
       return;
     }
+    const badDueDate = dueDateError(due_date);
+    if (badDueDate) { res.status(400).json({ success: false, message: badDueDate }); return; }
     if (type && !VALID_TYPES.includes(type)) {
       res.status(400).json({ success: false, message: `type must be one of: ${VALID_TYPES.join(', ')}` });
       return;
@@ -274,6 +311,8 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
       res.status(400).json({ success: false, message: 'title cannot be blank' });
       return;
     }
+    const badDueDate = dueDateError(req.body.due_date);
+    if (badDueDate) { res.status(400).json({ success: false, message: badDueDate }); return; }
 
     const badRef = await relatedRefError(req.body, tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
@@ -282,7 +321,15 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
     const params: any[] = [];
     let i = 1;
     UPDATABLE.forEach(f => {
-      if (req.body[f] !== undefined) { updates.push(`${f} = $${i++}`); params.push(req.body[f]); }
+      if (req.body[f] === undefined) return;
+      updates.push(`${f} = $${i++}`);
+      // due_date is a nullable DATE, and '' is what a cleared <input type="date">
+      // yields. createTask already coerces it with `due_date || null`; this loop
+      // pushed it raw, so Postgres answered "invalid input syntax for type date"
+      // and errorHandler masked it as a 500. Coerce it the same way the create
+      // path does, so clearing a due date works through either endpoint.
+      if (f === 'due_date' && req.body[f] === '') params.push(null);
+      else params.push(req.body[f]);
     });
 
     // Completing a task stamps completed_at; reopening one clears it, so a

@@ -236,6 +236,58 @@ describe('Leads — round trip', () => {
     expect(after.rows[0]).toEqual(before.rows[0]);
   });
 
+  /**
+   * SYMMETRIC masked 500: score failed identically on create and update.
+   * leads.score is INTEGER with leads_score_check CHECK (score >= 0 AND
+   * score <= 100) — the range is the schema's, read from pg_constraint, not
+   * a number invented here. 55.5 failed too, because the column is an integer.
+   */
+  it.each([
+    ['abc', /whole number between 0 and 100/],
+    [-5,    /between 0 and 100/],
+    [150,   /between 0 and 100/],
+    [101,   /between 0 and 100/],
+    [55.5,  /whole number between 0 and 100/],
+  ])('negative: score %j is rejected cleanly on UPDATE, stored score unchanged', async (bad, pattern) => {
+    const create = await request(app).post('/api/v1/leads').set(auth(ws))
+      .send({ first_name: 'Score', last_name: 'Keep', email: `score.${Date.now()}.${Math.random()}@example.com`, score: 42 });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    leadIds.push(id);
+
+    const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ score: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(pattern);
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+
+    const row = await pool.query('SELECT score FROM leads WHERE id = $1', [id]);
+    expect(row.rows[0].score).toBe(42);
+  });
+
+  it.each([['abc'], [150]])('negative: score %j is rejected cleanly on CREATE, nothing created', async (bad) => {
+    const before = await pool.query('SELECT COUNT(*)::int AS n FROM leads WHERE tenant_id = $1', [ws.tenantId]);
+    const res = await request(app).post('/api/v1/leads').set(auth(ws))
+      .send({ first_name: 'Bad', last_name: 'Score', email: `badscore.${Date.now()}.${Math.random()}@example.com`, score: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+    const after = await pool.query('SELECT COUNT(*)::int AS n FROM leads WHERE tenant_id = $1', [ws.tenantId]);
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+  });
+
+  it('the boundary values 0 and 100 remain valid and persist', async () => {
+    const create = await request(app).post('/api/v1/leads').set(auth(ws))
+      .send({ first_name: 'Bound', last_name: 'Ary', email: `bound.${Date.now()}@example.com` });
+    const id = create.body.data.id;
+    leadIds.push(id);
+
+    for (const v of [0, 100]) {
+      const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ score: v });
+      expect(res.status, `score ${v}: ${JSON.stringify(res.body)}`).toBe(200);
+      const row = await pool.query('SELECT score FROM leads WHERE id = $1', [id]);
+      expect(row.rows[0].score).toBe(v);
+    }
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s lead', async () => {
     const wsB = await setupWorkspace('leads-b');
     try {
