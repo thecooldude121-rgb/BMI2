@@ -148,13 +148,33 @@ function detectSignals(lead: DuplicateSubject, candidate: DuplicateSubject): Dup
       signals.push({
         type:     'name_company',
         strength: combined,
-        reason:   `Similar name (${nameStr}) + company (${coStr ?? 'unknown'})`,
+        // coStr is non-null inside this branch; it never read 'unknown'.
+        reason:   `Similar name (${nameStr}) + company (${coStr})`,
       });
     } else {
+      // TWO DIFFERENT ABSENCES, and they mean opposite things to a human
+      // deciding whether these are one person:
+      //   - companies compared and found dissimilar is evidence AGAINST a
+      //     duplicate;
+      //   - a company missing on either side is no evidence at all.
+      // Both used to render "no company to compare", which reported the first
+      // as the second. Seen on the contact detail page: Alice Johnson
+      // (TechCorp) against Liam Johnson (FoodChain) read "Similar name
+      // (medium), no company to compare" while both companies were present and
+      // had just been compared.
+      //
+      // Only the sentence was wrong, so `strength` is deliberately unchanged —
+      // whether dissimilar companies should also LOWER the score is a separate
+      // question about risk semantics, and answering it here would silently
+      // move every lead's duplicate risk too.
+      const bothHaveCompany = Boolean(co1 && co2);
+      const shown = (v: string | undefined) => (v ?? '').trim();
       signals.push({
         type:     'name_company',
         strength: nameStr === 'exact' ? 'high' : 'medium',
-        reason:   `Similar name (${nameStr}), no company to compare`,
+        reason:   bothHaveCompany
+          ? `Similar name (${nameStr}), but different companies (${shown(lead.company)} vs ${shown(candidate.company)})`
+          : `Similar name (${nameStr}), no company to compare`,
       });
     }
   }
