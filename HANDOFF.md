@@ -219,11 +219,36 @@ Out of scope for item 5 and logged rather than repaired:
   renders the CRM shell with a **completely blank content area** and the nav item
   highlighted as active. It reads as a page that failed to load. Either build it,
   point it at `/crm/activities?type=call`, or remove the nav entry.
-- **`/crm/activities` is not in the sidebar at all.** `ActivitiesPage.tsx` is
-  1,125 lines, routed, and genuinely API-backed (`fetchActivities`) — and there
-  is no way to reach it from the navigation. The Activities group offers only
-  Tasks, Meetings and Calls. Worth adding, and note it is the manual
-  activity-logging surface item 5 nominally covers.
+- **`/crm/activities` was not in the sidebar at all. FIXED** — added as
+  "All Activities", first in the Activities group. `ActivitiesPage.tsx` is 1,125
+  routed, genuinely API-backed lines that no navigation reached, which made the
+  manual activity-logging surface item 5 covers undiscoverable. A page nobody
+  can find is not a built feature. Verified by a real sidebar click.
+
+  **Adding that link surfaced two things worth knowing:**
+
+  1. **The page's "AI INSIGHTS" panel is fabricated, and is now labelled.**
+     "High engagement: 32 activities, up 45%" and "18 overdue" are hardcoded
+     literals sitting directly above stat cards reading **0 Total** and
+     **0 Overdue** — the contradiction is the tell. It now carries
+     `PREVIEW · SAMPLE CONTENT` plus "not calculated from your data", the same
+     treatment the owner settled on for the gamification panel and the
+     CRMDashboard panels. Not built: AI features are Phase 2. This was latent
+     while nothing linked to the page and became live the moment it did — worth
+     remembering when making any unreachable surface reachable.
+  2. **NEW FABRICATED-DATA FINDING — `/crm/activities/all`.**
+     `pages/Activity/ComprehensiveActivityFeed.tsx`, **1,079 lines, ZERO `fetch`
+     calls, zero contexts**, rendering a hardcoded `activities` array with
+     invented people: "John Smith (VP Sales, Acme Corp)", "Sarah Lee",
+     "sarah@techstart.com". Routed at `/crm/activities/all` and reachable by URL.
+     The zero-fetch detection rule in CLAUDE.md found it, again.
+
+     It is deliberately **not** linked from the new nav entry, which points at
+     `/crm/activities` (the real page). Disposition needed: it should almost
+     certainly be deleted — the real page already does this job against the
+     database, and a fake feed one URL away from a now-discoverable real one is
+     the worst version of this defect. Deleting it also removes any ambiguity
+     about what "All Activities" in the sidebar means.
 
 ## DONE — CSV import for Contacts and Accounts is built and real.
 

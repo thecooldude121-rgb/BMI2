@@ -700,11 +700,31 @@ const ActivitiesPage: React.FC = () => {
           ))}
         </div>
 
+        {/*
+          PREVIEW PANEL — every figure below is a hardcoded literal.
+          "32 activities, up 45%" and "18 overdue" sit directly above stat cards
+          reading 0 Total and 0 Overdue, because `activities` has no rows. The
+          contradiction is the tell.
+
+          Labelled rather than removed or built, which is the treatment the owner
+          settled on for the gamification panel and the CRMDashboard panels: AI
+          features are Phase 2 per CLAUDE.md, so making these real is out of
+          scope, and an unlabelled invented metric is the defect this project has
+          spent several sessions removing. It became urgent when this page was
+          added to the sidebar — until then nothing linked here.
+        */}
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-6 mb-6 text-white">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
             <TrendingUp className="w-6 h-6" />
             <h2 className="text-xl font-bold">🤖 AI INSIGHTS</h2>
+            <span className="ml-1 rounded border border-white/40 bg-white/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
+              Preview · Sample content
+            </span>
           </div>
+          <p className="mb-4 text-sm text-white/80">
+            These figures are examples, not calculated from your data. Your real activity
+            counts are in the cards above.
+          </p>
 
           <div className="space-y-3">
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
