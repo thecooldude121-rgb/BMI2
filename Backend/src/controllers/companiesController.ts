@@ -85,6 +85,16 @@ export const createCompany = async (req: AuthRequest, res: Response, next: NextF
 export const updateCompany = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
+    // companies.size has a CHECK constraint, and this path used to write to it
+    // with no validation at all: an invalid size reached Postgres, came back as
+    // a raw 23514, and errorHandler masked it as a 500 "Internal Server Error"
+    // — while createCompany returned a clean, specific 400 for the same input.
+    // Validate here too, with the same message, so the two paths agree.
+    const { size } = req.body;
+    if (size !== undefined && size !== null && !VALID_SIZES.includes(size)) {
+      res.status(400).json({ success: false, message: `size must be one of: ${VALID_SIZES.join(', ')}` });
+      return;
+    }
     const fields = ['name','domain','industry','size','revenue','website','phone','description','street','city','state','country','zip_code'];
     const updates: string[] = [];
     const params: any[] = [];

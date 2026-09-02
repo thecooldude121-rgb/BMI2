@@ -170,6 +170,27 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
+    // deals.value is NUMERIC(12,2) NOT NULL with no default, and this path
+    // validated only the name and the FK references. A missing value therefore
+    // reached Postgres as a raw 23502 not-null violation, which errorHandler
+    // masks as a 500 "Internal Server Error" outside development — so the
+    // caller was told nothing about what was actually wrong. Validate it here,
+    // in the same shape as the name check above.
+    //
+    // The column is left exactly as it is: NOT NULL, no default, no migration.
+    // Whether a deal may have no value at all is a data-model question, and the
+    // real Add Deal form always sends one (parseFloat(d.value) || 0), so it is
+    // not decided here as a side effect of turning a 500 into a 400.
+    if (value === undefined || value === null || value === '') {
+      res.status(400).json({ success: false, message: 'value is required.' });
+      return;
+    }
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+      res.status(400).json({ success: false, message: 'value must be a non-negative number.' });
+      return;
+    }
+
     // lead_id comes straight from the request body into an FK that references
     // leads(id) globally, so without this a caller could attach ANY lead in the
     // database to their own deal — and leads.id is a serial, so the ids are
