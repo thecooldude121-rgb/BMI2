@@ -3,13 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Mail, Phone, Calendar, DollarSign, Edit, MoreVertical, ExternalLink,
   Building2, AlertTriangle, Users, Trash2, Download, Plus, MapPin, Linkedin, Clock,
+  Check, Loader2, AlertCircle,
 } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
 import { NotAvailable, NotAvailableBadge } from '../../components/common/NotAvailable';
 import LogActivityModal from '../../components/CRM/LogActivityModal';
 import { useToast } from '../../contexts/ToastContext';
-import { deleteContactViaAPI, fetchContactById, fetchContacts } from '../../utils/contactsApi';
+import { deleteContactViaAPI, fetchContactById, fetchContacts, updateContactViaAPI } from '../../utils/contactsApi';
 import { fetchAccountById } from '../../utils/accountsApi';
 import { fetchDealsForContact } from '../../utils/dealsApi';
 import type { RelatedDeal } from '../../utils/dealsApi';
@@ -18,6 +19,7 @@ import type { ActivityRecord, ActivityType } from '../../utils/activitiesApi';
 import { findDuplicateMatches, computeRisk } from '../../utils/leadDuplicates';
 import type { DuplicateMatch } from '../../utils/leadDuplicates';
 import { toCsv } from '../../utils/csv';
+import { CONTACT_ROLES, findContactRole, roleChipClasses } from '../../config/contactRoles';
 import type { Contact, ContactSource, ContactStatus } from '../../types/contact';
 import type { EnhancedAccount } from '../../types/accounts';
 
@@ -128,6 +130,9 @@ const ContactDetailView: React.FC = () => {
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [logType, setLogType] = useState<ActivityType | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editingRole, setEditingRole] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   // ── The contact itself ────────────────────────────────────────────────────
 
@@ -197,9 +202,32 @@ const ContactDetailView: React.FC = () => {
     ));
   }, [contact, duplicatePool]);
 
-  const duplicateRisk = useMemo(
-    () => (duplicates.length ? computeRisk(duplicates) : null),
+  /**
+   * A shared corporate email domain, on its own, describes COLLEAGUES — not the
+   * same person entered twice. That is not hypothetical on this data: run the
+   * real 20 contacts through the engine and it returns 14 matches across 9
+   * contacts, of which 12 are a same-domain signal and nothing else. Eight
+   * contact pages had no other kind of match at all, so they listed only
+   * colleagues: Ryan Patel's page offered Alice Johnson and Tom Richards, three
+   * different people at TechCorp. A panel whose entries are mostly wrong
+   * teaches a user to ignore the ones that are right.
+   *
+   * So a domain match must now be CORROBORATED by another signal to be shown
+   * here. The filter lives in this consumer rather than in the engine on
+   * purpose: for LEADS a shared domain is a genuine hint — the same person
+   * arriving twice from one company is the common case there — and
+   * leadDuplicates has tests asserting exactly that behaviour. Narrowing the
+   * engine would change the Leads page silently.
+   */
+  const corroborated = useMemo(
+    () => duplicates.filter(m => m.signals.some(s => s.type !== 'domain')),
     [duplicates],
+  );
+  const domainOnlyCount = duplicates.length - corroborated.length;
+
+  const duplicateRisk = useMemo(
+    () => (corroborated.length ? computeRisk(corroborated) : null),
+    [corroborated],
   );
   const poolById = useMemo(() => new Map(duplicatePool.map(c => [c.id, c])), [duplicatePool]);
 
@@ -221,6 +249,38 @@ const ContactDetailView: React.FC = () => {
       addToast(e instanceof Error ? e.message : 'Could not delete this contact', 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  /**
+   * The buying role — the same `contacts.buying_role` column the account team
+   * editor writes (components/Accounts/AccountContactsSection.tsx), through the
+   * same endpoint and the same vocabulary from config/contactRoles.ts. It is
+   * deliberately not a second implementation: a role set here shows up there
+   * and vice versa, and the server validates the value against
+   * contacts_buying_role_check either way.
+   *
+   * Writes, then RE-READS the row. Optimistic local state would paint the role
+   * as saved before the server accepted it, which is the
+   * success-toast-over-an-unchanged-database pattern this project keeps
+   * hitting. An empty string clears back to unassigned (mapContactToPayload
+   * turns it into an explicit null), which is a different operation from
+   * omitting the field.
+   */
+  const handleSetBuyingRole = async (role: string | null) => {
+    if (!contact) return;
+    setSavingRole(true);
+    setRoleError(null);
+    try {
+      await updateContactViaAPI(contact.id, { buyingRole: role ?? '' });
+      const fresh = await fetchContactById(contact.id);
+      if (fresh) setContact(fresh);
+      setEditingRole(false);
+    } catch (e) {
+      // Surfaced, never swallowed.
+      setRoleError(e instanceof Error ? e.message : 'Could not save the buying role');
+    } finally {
+      setSavingRole(false);
     }
   };
 
@@ -282,6 +342,7 @@ const ContactDetailView: React.FC = () => {
     );
   }
 
+  const roleCfg = findContactRole(contact.buyingRole);
   const address = [contact.street, contact.city, contact.state, contact.postalCode, contact.country]
     .filter(Boolean).join(', ');
   const initials = contact.name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2);
@@ -324,12 +385,88 @@ const ContactDetailView: React.FC = () => {
                 <span className={`px-3 py-1 text-xs rounded-full font-semibold border ${STATUS_STYLES[contact.status]}`}>
                   {STATUS_LABELS[contact.status]}
                 </span>
+
+                {/* Buying role. findContactRole, NOT getContactRole — the
+                    latter falls back to CONTACT_ROLES[0] and would label all
+                    20 unassigned contacts a Champion. */}
+                {savingRole ? (
+                  <span className="px-3 py-1 text-xs rounded-full font-semibold border border-gray-300 text-gray-500 flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />Saving
+                  </span>
+                ) : roleCfg ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingRole(!editingRole)}
+                    title={roleCfg.description}
+                    aria-expanded={editingRole}
+                    className={`px-3 py-1 text-xs rounded-full font-semibold border ${roleChipClasses(roleCfg.chipColor)}`}
+                  >
+                    {roleCfg.label}
+                  </button>
+                ) : (
+                  /* Unassigned reads as an action, not as a role. */
+                  <button
+                    type="button"
+                    onClick={() => setEditingRole(!editingRole)}
+                    aria-expanded={editingRole}
+                    className="px-3 py-1 text-xs rounded-full font-semibold border border-dashed border-gray-300 text-gray-500 hover:text-brand-600 hover:border-brand-300"
+                  >
+                    + Set buying role
+                  </button>
+                )}
+
                 {contact.tags.map(tag => (
                   <span key={tag} className="px-3 py-1 text-xs rounded-full font-semibold border bg-gray-100 text-gray-800 border-gray-300">
                     {tag}
                   </span>
                 ))}
               </div>
+
+              {roleError && (
+                <p className="text-sm text-red-700" role="alert">{roleError}</p>
+              )}
+
+              {editingRole && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {CONTACT_ROLES.map(r => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => handleSetBuyingRole(r.id)}
+                      disabled={savingRole}
+                      title={r.description}
+                      className={`text-xs px-2 py-1 rounded border font-medium disabled:opacity-50 ${
+                        contact.buyingRole === r.id
+                          ? roleChipClasses(r.chipColor)
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {contact.buyingRole === r.id && <Check className="h-3 w-3 inline mr-1" aria-hidden="true" />}
+                      {r.label}
+                    </button>
+                  ))}
+                  {contact.buyingRole && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetBuyingRole(null)}
+                      disabled={savingRole}
+                      className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  {/* Same advisory as the account team: a job title is not a
+                      buying role. contacts.position holds "VP Sales"; the same
+                      person can be the champion on one deal and the blocker on
+                      another, which is why migration 026 shipped with no
+                      backfill and nothing infers this. */}
+                  <p className="w-full text-xs text-gray-500 flex items-start gap-1.5 mt-1">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" aria-hidden="true" />
+                    Roles are not inferred from job titles. This is the same role the account
+                    team on {contact.company || 'this account'} shows.
+                  </p>
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                 <div className="flex items-center space-x-2">
@@ -647,17 +784,26 @@ const ContactDetailView: React.FC = () => {
                 <p className="text-sm text-gray-600">
                   Could not check for duplicates, so this is unknown rather than clear.
                 </p>
-              ) : duplicates.length === 0 ? (
-                <p className="text-sm text-gray-600">
-                  No likely duplicates among {duplicatePool.length} contacts.
-                </p>
+              ) : corroborated.length === 0 ? (
+                <div className="text-sm text-gray-600 space-y-2">
+                  <p>No likely duplicates among {duplicatePool.length} contacts.</p>
+                  {/* Say what was excluded and why, so a user who can see three
+                      colleagues in the list does not read this as a miss. */}
+                  {domainOnlyCount > 0 && (
+                    <p className="text-xs text-gray-500">
+                      {domainOnlyCount} other contact{domainOnlyCount === 1 ? '' : 's'} share this
+                      email domain. That alone means they are colleagues, not the same person, so
+                      it is not counted here on its own.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div>
                   <p className="text-sm font-semibold text-gray-900 mb-2">
-                    {duplicates.length} possible duplicate{duplicates.length === 1 ? '' : 's'} · {duplicateRisk} risk
+                    {corroborated.length} possible duplicate{corroborated.length === 1 ? '' : 's'} · {duplicateRisk} risk
                   </p>
                   <ul className="space-y-2">
-                    {duplicates.slice(0, 5).map(m => {
+                    {corroborated.slice(0, 5).map(m => {
                       const c = poolById.get(m.id);
                       return (
                         <li key={m.id} className="text-xs">
@@ -676,6 +822,12 @@ const ContactDetailView: React.FC = () => {
                       );
                     })}
                   </ul>
+                  {domainOnlyCount > 0 && (
+                    <p className="text-xs text-gray-500 mt-3">
+                      {domainOnlyCount} further contact{domainOnlyCount === 1 ? '' : 's'} share
+                      only this email domain and are treated as colleagues, not duplicates.
+                    </p>
+                  )}
                 </div>
               )}
             </section>
