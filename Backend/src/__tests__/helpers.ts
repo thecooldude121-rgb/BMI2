@@ -72,3 +72,33 @@ export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
 export const auth = (ws: TestWorkspace): Record<string, string> => ({
   Authorization: `Bearer ${ws.token}`,
 });
+
+/**
+ * A second user in an EXISTING workspace, with a chosen role, logged in for
+ * real. RBAC has to be tested inside one workspace: a different workspace
+ * would be blocked by tenant scoping and prove nothing about roles.
+ *
+ * Returns the same shape as setupWorkspace so `auth()` works on it, but the
+ * caller must NOT pass it to teardownWorkspace — it shares the tenant, which
+ * the owning test tears down.
+ */
+export async function addUserWithRole(
+  ws: TestWorkspace,
+  role: 'admin' | 'manager' | 'sales',
+): Promise<TestWorkspace> {
+  const password = 'round-trip-test-password';
+  const hash = await bcrypt.hash(password, 10);
+  const email = `rt-${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@roundtrip.example`;
+
+  const user = await pool.query(
+    `INSERT INTO users (email, password_hash, first_name, last_name, role, tenant_id)
+     VALUES ($1,$2,'Role',$3,$4,$5) RETURNING id`,
+    [email, hash, role, role, ws.tenantId],
+  );
+
+  const login = await request(app).post('/api/v1/auth/login').send({ email, password });
+  if (login.status !== 200) {
+    throw new Error(`addUserWithRole(${role}): real login failed — ${JSON.stringify(login.body)}`);
+  }
+  return { tenantId: ws.tenantId, userId: user.rows[0].id, email, token: login.body.token as string };
+}
