@@ -166,8 +166,32 @@ describe('Deals — round trip', () => {
     const res = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ stakeholders });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
 
+    // Re-read from Postgres. node-pg parses jsonb back into JS, so this also
+    // catches double-encoding: a JSON *string* stored inside the jsonb column
+    // would not deep-equal the array that was sent.
     const row = await pool.query('SELECT stakeholders FROM deals WHERE id = $1', [id]);
     expect(row.rows[0].stakeholders).toEqual(stakeholders);
+
+    // A SECOND edit replaces the committee rather than appending or failing —
+    // the realistic flow when a stakeholder leaves the deal.
+    const revised = [{ name: 'Anita Desai', role: 'economic-buyer', email: 'anita@example.com' }];
+    const replace = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ stakeholders: revised });
+    expect(replace.status, JSON.stringify(replace.body)).toBe(200);
+    const afterReplace = await pool.query('SELECT stakeholders FROM deals WHERE id = $1', [id]);
+    expect(afterReplace.rows[0].stakeholders).toEqual(revised);
+
+    // Explicit null clears to [], matching createDeal's `stakeholders ?? []`.
+    const cleared = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ stakeholders: null });
+    expect(cleared.status, JSON.stringify(cleared.body)).toBe(200);
+    const afterClear = await pool.query('SELECT stakeholders FROM deals WHERE id = $1', [id]);
+    expect(afterClear.rows[0].stakeholders).toEqual([]);
+
+    // Omitting the field leaves the stored value alone.
+    const untouched = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ description: 'unrelated edit' });
+    expect(untouched.status).toBe(200);
+    const afterOmit = await pool.query('SELECT stakeholders, description FROM deals WHERE id = $1', [id]);
+    expect(afterOmit.rows[0].stakeholders).toEqual([]);
+    expect(afterOmit.rows[0].description).toBe('unrelated edit');
   });
 
   /**

@@ -336,7 +336,26 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
       }
     }
 
-    fields.forEach(f => { if (req.body[f] !== undefined) { updates.push(`${f} = $${i++}`); params.push(req.body[f]); } });
+    fields.forEach(f => {
+      if (req.body[f] === undefined) return;
+      updates.push(`${f} = $${i++}`);
+      // stakeholders is JSONB. Passed through raw, node-pg serialises a JS
+      // array as a Postgres ARRAY literal, which jsonb rejects outright with
+      // "invalid input syntax for type json" — surfacing as a masked 500, so
+      // the buying committee simply could not be edited. Stringify it here
+      // exactly as createDeal does (JSON.stringify(stakeholders ?? [])), so
+      // the create and update paths agree. Same shape as the handling in
+      // leadsController.updateLead for its own tags/custom_fields split.
+      //
+      // NOTE: `competitors` and `attachment_metadata` are also JSONB and are
+      // also in this loop, and both fail the same way today (confirmed, not
+      // assumed). They are left alone deliberately, pending the same
+      // create-path-vs-decision judgement this one got — see the audit in the
+      // commit message. `tags` is text[], not jsonb: the raw array is what
+      // that column wants, so it must NOT be stringified.
+      if (f === 'stakeholders') params.push(JSON.stringify(req.body[f] ?? []));
+      else params.push(req.body[f]);
+    });
     if (newValueHistory !== null) {
       updates.push(`value_history = $${i++}`);
       params.push(JSON.stringify(newValueHistory));
