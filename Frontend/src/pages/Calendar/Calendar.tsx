@@ -1,13 +1,54 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
-import { Calendar as CalendarIcon, Clock, Users, Video, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Users, Video, Plus, ChevronLeft, ChevronRight, CheckSquare } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { fetchTasks, type TaskRecord } from '../../utils/activitiesApi';
+import { localDay, dateOnly } from '../../utils/dates';
+
+/**
+ * TASKS ARE FETCHED HERE, NOT TAKEN FROM DataContext.
+ *
+ * Deliberate, and the same choice hooks/useDashboardData.ts documents: a context
+ * is what let sample data spread to eighteen files unnoticed, so a surface with
+ * one consumer fetches for itself. The calendar is the only consumer of tasks
+ * arranged by day.
+ *
+ * WHY THE CALENDAR SHOWS TASKS AT ALL: it rendered `meetings` only, and the
+ * meetings table has 0 rows — so a real, correct month grid was permanently
+ * empty while 15 tasks with real due dates existed and appeared on no calendar
+ * anywhere. Tasks are the only dated records this workspace actually has.
+ */
 
 const Calendar: React.FC = () => {
   const { meetings, leads, employees } = useData();
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [tasksLoading, setTasksLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewType, setViewType] = useState<'month' | 'week' | 'day'>('month');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTasks({ limit: 500 })
+      .then(rows => { if (!cancelled) { setTasks(rows); setTasksError(null); } })
+      .catch(e => { if (!cancelled) setTasksError(e?.message ?? 'Could not load tasks'); })
+      .finally(() => { if (!cancelled) setTasksLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  /** Tasks keyed by their due day, so a cell is one lookup rather than a scan. */
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, TaskRecord[]>();
+    for (const t of tasks) {
+      const day = dateOnly(t.due_date);
+      if (!day) continue; // undated tasks belong to no cell, and inventing one would be a lie
+      const list = map.get(day);
+      if (list) list.push(t); else map.set(day, [t]);
+    }
+    return map;
+  }, [tasks]);
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -87,6 +128,29 @@ const Calendar: React.FC = () => {
 
   const days = getDaysInMonth(currentDate);
   const today = new Date();
+  const todayKey = localDay(today);
+
+  /** Open tasks due in the next 7 days, soonest first. */
+  const upcomingTasks = useMemo(() => {
+    const horizon = localDay(new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000));
+    return tasks
+      .filter(t => {
+        const d = dateOnly(t.due_date);
+        return !!d && d >= todayKey && d <= horizon && t.status !== 'completed';
+      })
+      .sort((a, b) => (dateOnly(a.due_date) ?? '').localeCompare(dateOnly(b.due_date) ?? ''))
+      .slice(0, 5);
+    // `today` is a new Date on every render; todayKey is the stable value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, todayKey]);
+
+  const overdueCount = useMemo(
+    () => tasks.filter(t => {
+      const d = dateOnly(t.due_date);
+      return !!d && d < todayKey && t.status !== 'completed';
+    }).length,
+    [tasks, todayKey],
+  );
 
   // Upcoming meetings (next 7 days)
   const upcomingMeetings = meetings
@@ -175,6 +239,8 @@ const Calendar: React.FC = () => {
               <div className="grid grid-cols-7 gap-1">
                 {days.map((day, index) => {
                   const dayMeetings = getMeetingsForDate(day.date);
+                  const dayKey = localDay(day.date);
+                  const dayTasks = tasksByDay.get(dayKey) ?? [];
                   const isToday = day.date.toDateString() === today.toDateString();
                   const isSelected = selectedDate && day.date.toDateString() === selectedDate.toDateString();
 
@@ -214,6 +280,33 @@ const Calendar: React.FC = () => {
                             +{dayMeetings.length - 3} more
                           </div>
                         )}
+
+                        {/* Tasks due on this day. Overdue is styled distinctly
+                            because a red cell is the whole point of a calendar
+                            for someone catching up on slipped work. */}
+                        {dayTasks.slice(0, 3).map(task => {
+                          const taskOverdue = dayKey < todayKey && task.status !== 'completed';
+                          return (
+                            <div
+                              key={task.id}
+                              title={`${task.title}${task.assigned_to ? ` · ${task.assigned_to}` : ''}`}
+                              className={`truncate rounded p-1 text-xs ${
+                                task.status === 'completed'
+                                  ? 'bg-gray-100 text-gray-500 line-through'
+                                  : taskOverdue
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-indigo-100 text-indigo-800'
+                              }`}
+                            >
+                              {task.title}
+                            </div>
+                          );
+                        })}
+                        {dayTasks.length > 3 && (
+                          <div className="text-xs font-medium text-gray-500">
+                            +{dayTasks.length - 3} more
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -225,6 +318,50 @@ const Calendar: React.FC = () => {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Tasks due soon. Tasks are the only dated records this workspace
+              currently has, so this panel is what makes the calendar useful. */}
+          <div className="rounded-lg border border-gray-200 bg-white p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="flex items-center text-lg font-semibold text-gray-900">
+                <CheckSquare className="mr-2 h-5 w-5" aria-hidden="true" />
+                Tasks due soon
+              </h3>
+              <Link to="/crm/tasks" className="text-sm text-brand-600 hover:underline">All tasks</Link>
+            </div>
+
+            {overdueCount > 0 && (
+              <Link
+                to="/crm/tasks"
+                className="mb-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 hover:bg-red-100"
+              >
+                {overdueCount} overdue {overdueCount === 1 ? 'task' : 'tasks'}
+              </Link>
+            )}
+
+            {tasksLoading && <p className="text-sm text-gray-500">Loading tasks…</p>}
+            {tasksError && <p className="text-sm text-red-700">{tasksError}</p>}
+
+            {!tasksLoading && !tasksError && upcomingTasks.length === 0 && (
+              <p className="text-sm text-gray-500">
+                {overdueCount > 0
+                  ? 'Nothing else due in the next 7 days.'
+                  : 'No tasks due in the next 7 days.'}
+              </p>
+            )}
+
+            <div className="space-y-3">
+              {upcomingTasks.map(task => (
+                <div key={task.id} className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-sm font-medium text-gray-900">{task.title}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {(() => { const d = dateOnly(task.due_date); return d ? new Date(`${d}T00:00:00`).toLocaleDateString() : ''; })()}
+                    {task.assigned_to ? ` · ${task.assigned_to}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Upcoming Meetings */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">

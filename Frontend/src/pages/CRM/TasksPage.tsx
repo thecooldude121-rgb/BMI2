@@ -9,6 +9,7 @@ import {
   type TaskStatus,
 } from '../../utils/activitiesApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { localDay, dateOnly } from '../../utils/dates';
 import TaskFormModal, { type RelatedOption } from '../../components/CRM/TaskFormModal';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { fetchContacts } from '../../utils/contactsApi';
@@ -34,24 +35,9 @@ const FETCH_LIMIT = 500; // the server's own cap on /tasks
 
 type BucketId = 'all' | 'mine' | 'overdue' | 'today' | 'upcoming';
 
-/**
- * Local calendar day as YYYY-MM-DD, for comparing against a DATE column.
- *
- * NOT toISOString().slice(0,10), which converts to UTC first and so reports the
- * wrong day for part of every day outside UTC. The window differs by direction:
- * in IST (UTC+5:30) local 00:00-05:29 is still the PREVIOUS day in UTC, so a
- * task due today would be bucketed as overdue every morning; west of Greenwich
- * the same error lands in the evening instead. CLAUDE.md's target markets are
- * India, the Middle East and Africa — all ahead of UTC — so the morning window
- * is the one that would have been hit daily.
- */
-function localDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** due_date arrives as an ISO timestamp for a DATE column; keep just the day. */
+/** Shared with the calendar so the two cannot disagree about what day it is. */
 function dueDay(t: TaskRecord): string | null {
-  return t.due_date ? String(t.due_date).slice(0, 10) : null;
+  return dateOnly(t.due_date);
 }
 
 const isOpen = (t: TaskRecord) => t.status !== 'completed';

@@ -1,5 +1,230 @@
 # Handoff — read before starting work
 
+## THE THREE OPEN DESIGN DECISIONS — all deferred deliberately, all still open
+
+**Read this before "tidying up" any of them.** Each was raised during real work,
+each has a defensible answer in more than one direction, and each was explicitly
+NOT decided as a rider on the task that surfaced it. They are collected here
+rather than filed next to the code that prompted them, because the failure mode
+is a later session fixing one in passing without knowing the trade-off.
+
+| # | Question | Surfaced by | Blocks |
+|---|---|---|---|
+| 1 | Should deals reference contacts by id, or by name? | deal detail (F24) | a real stakeholder model |
+| 2 | May two companies in one workspace share a name? | CSV import | a UNIQUE constraint on companies |
+| 3 | Should `tasks.assigned_to` become a real `owner_id`? | Tasks (Phase-1 item 5) | a truthful "Mine" filter |
+
+They share a shape worth naming: **each is a schema question disguised as a bug
+report.** In every case the cheap fix (add the FK, add the constraint, migrate
+the column) is one migration, and in every case the reason not to is that the
+existing data does not fit the tidy answer. Decide the semantics first.
+
+### OPEN DESIGN QUESTION — should deals reference contacts by id, or by name?
+
+**Not a bug. Do not "fix" it in a cleanup pass.** The owner's decision on
+2026-09-02 was explicitly *not now*: it deserves its own scoped session with the
+schema implications thought through, not a rider on a triage batch.
+
+Two symptoms, one question:
+
+- `deals` has **no `contact_id`**. The only link to a person is
+  `deals.contact_email`, free text. `dealsController` documents why a backfill
+  would set zero rows today: of 25 deals exactly one carries a contact_email and
+  it matches no contact.
+- `deals.stakeholders` is a jsonb array of `{ name, title, email, role }`
+  objects with **no FK to `contacts`**. It is real, user-entered data and it is
+  what the deal detail page now renders — but the people in it are strings. The
+  same human can exist as a `contacts` row and as a stakeholder name and nothing
+  connects them.
+
+Since migration 026 the deal committee and the account team share one role
+vocabulary (`config/contactRoles.ts`), so they *describe* people the same way
+while still being two unlinked sets. That is the state to resolve.
+
+What a session picking this up has to settle, in order:
+1. Is a stakeholder a **reference to a contact**, or a **deal-local record of a
+   person** who may not be in the CRM? Both are defensible; they give different
+   schemas. A reference means a join table (`deal_stakeholders`) with a role
+   column; a deal-local record means keeping jsonb and accepting the duplication.
+2. If a reference: what happens to the ~10 existing stakeholder entries whose
+   names may not match any contact? They cannot be dropped.
+3. `deals.contact_id` for the primary contact is the smaller, separable half and
+   may be worth doing first — but only alongside a contact picker in the deal
+   form, or the column is dead schema (the same trap `deals.company_id` avoided
+   by shipping with the account link already in the form).
+4. Every new FK references a GLOBAL primary key, so both halves of the tenant
+   rule apply: validate on write with `utils/tenantScope.ts`, and carry
+   `AND parent.tenant_id = child.tenant_id` on every join.
+
+### OPEN DESIGN QUESTION — may two companies in one workspace share a name?
+
+**Not a bug, and deliberately NOT bundled into the CSV import work** where it
+surfaced. The owner ruled on 2026-09-02 that this is a product decision
+deserving its own consideration, not a hygiene fix to ride along on a narrow
+task — the same call made for deals-to-contacts above.
+
+`companies` has **no unique constraint at all**: not on `name`, not on `domain`.
+Only `companies_pkey` on `id` and the `size` CHECK. Contrast `contacts`, which
+has `contacts_tenant_email_key UNIQUE (tenant_id, email)`. So nothing stops a
+workspace holding fifteen rows named "Acme Corp", and a careless accounts import
+is the most likely way to create them.
+
+The question a session picking this up has to settle first, because the answer
+decides whether the constraint is correct at all: **can two legitimately
+different companies share a display name?** Divisions, subsidiaries and regional
+entities ("Acme Corp" in India and in the UAE, both real accounts with different
+owners and deals) are the case that argues no constraint. If they can, the fix
+is not uniqueness but disambiguation — `domain`, or a parent-company reference.
+
+If a constraint IS wanted, `UNIQUE (tenant_id, lower(name))` is the shape, and
+note it needs a data check first: run
+`SELECT lower(name), count(*) FROM companies GROUP BY 1 HAVING count(*) > 1;`
+before writing it, or the migration fails on existing rows. (15 companies today,
+no duplicates, so it would apply cleanly right now — that will not stay true.)
+
+**What CSV import does in the meantime, and why it is sufficient without the
+constraint:** contact rows naming a company are linked by exact,
+case-insensitive name match only. A name matching **two or more** companies is
+ambiguous, so the contact imports **unlinked** with that stated as the row's
+reason, rather than the importer guessing. Under-linking is visible and
+reversible; a contact silently attached to the wrong Acme is neither.
+
+### OPEN DESIGN QUESTION — should `tasks.assigned_to` become a real `owner_id`?
+
+**Not a bug. Deliberately not fixed while building the Tasks page** — the owner
+ruled on 2026-09-02 that the backfill problem makes it its own decision.
+
+`tasks.assigned_to` is `VARCHAR(100)` holding a display name, not a foreign key
+to `users`. Consequences visible today:
+
+- **"Mine" matches on a string.** `TasksPage` compares `assigned_to` to the
+  signed-in user's `user.name`, and `resolveActorName()` in `tasksController`
+  writes `${first_name} ${last_name}` on create. Those two must stay identical
+  or the filter silently matches nothing — the comment in `utils/usersApi.ts`
+  says so, because the failure is invisible.
+- **All 15 seeded tasks are assigned to "John Smith", who is not one of the five
+  workspace users** (Alex Rodriguez, Sarah Chen, Mike Johnson, Emily Davis,
+  David Kumar). So Mine is legitimately empty for everybody until someone creates
+  or reassigns a task. The empty state says exactly that; do not "fix" it.
+- Renaming a user does not follow their tasks, and two people with the same
+  display name are indistinguishable.
+
+**Why it is not just a migration.** `owner_id INTEGER REFERENCES users(id)` is
+easy to add; the backfill is what has no correct answer. "John Smith" resolves to
+nobody, so those 15 rows would have to become NULL (losing the only assignment
+information they carry, thin as it is), or be assigned to an arbitrary real user
+(inventing an owner — fabricated data, and the seeded rows would then look
+deliberately assigned to someone who never touched them).
+
+What a session picking this up has to settle, in order:
+1. Is the historical `assigned_to` string worth keeping? A nullable `owner_id`
+   ALONGSIDE the retained text column loses nothing and lets the UI prefer the
+   id when present — probably the cheapest honest answer.
+2. If the column is replaced outright: what happens to the 15 rows? NULL is the
+   only non-fabricating option, and that must be a decision, not a side effect.
+3. `activities.assigned_to` and `activities.created_by` are the SAME shape
+   (`VARCHAR(100)`) and should move together, or the app ends up with two
+   conventions for "who owns this".
+4. Any new FK references a GLOBAL primary key, so both halves of the tenant rule
+   apply: validate on write with `utils/tenantScope.ts`, and carry
+   `AND parent.tenant_id = child.tenant_id` on every join.
+
+---
+
+## DONE — Tasks and the calendar. This closes the Phase-1 build list.
+
+Phase-1 item 5. The page and `tasksController` were already real; what was
+missing was the four filter buckets (All / Mine / Overdue / Today / Upcoming,
+derived client-side from one 500-row fetch), a real create/edit form, and
+Edit/Delete — both of which existed end to end and were rendered disabled.
+
+**"Add Task" was `window.prompt('Task title')`** with type and priority hardcoded
+and no way to set a due date, so nothing created in the product could reach any
+date bucket. The form and the filters had to ship together or neither meant
+anything. Delete confirms through `ConfirmationModal`, not `window.confirm` —
+the native dialog blocks the event loop, so the delete path could not otherwise
+be exercised in an automated check and would have shipped unverified.
+
+**Migration 030** widened `tasks_related_to_type_check` with `contact` and
+`company`, and both were added to `RELATED_TABLE` so a `related_to_id` is
+workspace-validated. `employee` stays permitted, stays unvalidated (that table
+has no `tenant_id`), and is deliberately not offered in the form.
+
+### The date bug — found live, fixed narrowly, and NOT finished
+
+`due_date` is a DATE: a calendar day, no time, no timezone. The pg driver parses
+it into a JS Date at local midnight and `res.json()` serialises that with
+`toISOString()`. In IST (UTC+5:30) local midnight on the 2nd is 18:30 UTC on the
+1st, so **every task due date rendered a day early** and a task due today was
+filed under Overdue. Postgres held 2026-09-02; the UI showed 9/1/2026.
+
+Fixed for tasks by casting to text in the query (`TASK_COLUMNS` in
+`tasksController`), so a value with no timezone never has one applied.
+
+**STILL OPEN, and this is the part to pick up:** the same defect affects all
+**13 DATE columns** in this database —
+
+```
+deals.contract_end_date, deals.discovery_date, deals.expected_close_date,
+deals.next_step_due_date, deals.start_date, leads.expected_close_date,
+leads.last_contact, invoices.due_date, quotes.valid_until,
+forecast_snapshots.snapshot_date, employees.hire_date,
+custom_field_values.value_date, tasks.due_date (fixed)
+```
+
+The global fix is one line in `config/database.ts`:
+
+```ts
+import { types } from 'pg';
+types.setTypeParser(1082, (v) => v); // DATE — return the string, do not build a Date
+```
+
+It was **not** applied here because it changes how every date in the app
+serialises, and this session had budget to verify only tasks. Shipping it after
+testing one consumer is the "verified one consumer, claimed three" mistake
+already recorded against F1. Do it as its own pass and re-check the deals and
+leads surfaces, which are almost certainly a day out today.
+
+Note the comparison side is a separate fix in the same family:
+`utils/dates.ts` (`localDay`, `dateOnly`) is shared by the tasks list and the
+calendar so the two cannot disagree about what day it is. Computing "today" via
+`toISOString()` misfiles tasks for part of every day outside UTC — for IST the
+window is 00:00–05:29, not the evening, and CLAUDE.md's target markets are all
+ahead of UTC.
+
+### The calendar now shows tasks, because tasks are the only dated records
+
+`/calendar` was a real, correct month grid over `meetings` — a table with **0
+rows** — so it rendered permanently empty while 15 tasks with real due dates
+appeared on no calendar anywhere. It now overlays tasks by `due_date`: red for
+overdue, struck through for completed, plus a "Tasks due soon" panel with an
+overdue count linking to `/crm/tasks`.
+
+Tasks are fetched in the page rather than taken from `DataContext`, following the
+rule in `hooks/useDashboardData.ts` — one consumer, so no provider.
+
+**Verified** through a real login and sidebar nav: a task created in each bucket
+and cross-checked against Postgres, bucket counts matched the same predicates in
+SQL exactly (Overdue 14 / Today 1 / Upcoming 1 / Mine 3 / All 18), Edit persisted
+with no date drift, Delete removed the right row. Every calendar chip matched the
+DB day-for-day. All three test rows removed through the UI and re-counted to
+15 tasks / 20 contacts / 15 companies / 25 deals / 38 leads / 0 activities.
+
+### Two nav findings, confirmed visually, deliberately not fixed here
+
+Out of scope for item 5 and logged rather than repaired:
+
+- **`/crm/calls` is a dead route.** The sidebar's Activities group links to it,
+  `CRMModule.tsx` has no matching `<Route>` and no catch-all, so clicking it
+  renders the CRM shell with a **completely blank content area** and the nav item
+  highlighted as active. It reads as a page that failed to load. Either build it,
+  point it at `/crm/activities?type=call`, or remove the nav entry.
+- **`/crm/activities` is not in the sidebar at all.** `ActivitiesPage.tsx` is
+  1,125 lines, routed, and genuinely API-backed (`fetchActivities`) — and there
+  is no way to reach it from the navigation. The Activities group offers only
+  Tasks, Meetings and Calls. Worth adding, and note it is the manual
+  activity-logging surface item 5 nominally covers.
+
 ## DONE — CSV import for Contacts and Accounts is built and real.
 
 Phase-1 item 5. Both surfaces parse, validate, insert, and report **every**
@@ -215,43 +440,6 @@ All verification writes reverted and re-counted, not assumed: 20 contacts /
 0 with a `buying_role`, 15 companies, 25 deals / 3 linked, 0 activities,
 0 `deal_stage_history`.
 
-### OPEN DESIGN QUESTION — should deals reference contacts by id, or by name?
-
-**Not a bug. Do not "fix" it in a cleanup pass.** The owner's decision on
-2026-09-02 was explicitly *not now*: it deserves its own scoped session with the
-schema implications thought through, not a rider on a triage batch.
-
-Two symptoms, one question:
-
-- `deals` has **no `contact_id`**. The only link to a person is
-  `deals.contact_email`, free text. `dealsController` documents why a backfill
-  would set zero rows today: of 25 deals exactly one carries a contact_email and
-  it matches no contact.
-- `deals.stakeholders` is a jsonb array of `{ name, title, email, role }`
-  objects with **no FK to `contacts`**. It is real, user-entered data and it is
-  what the deal detail page now renders — but the people in it are strings. The
-  same human can exist as a `contacts` row and as a stakeholder name and nothing
-  connects them.
-
-Since migration 026 the deal committee and the account team share one role
-vocabulary (`config/contactRoles.ts`), so they *describe* people the same way
-while still being two unlinked sets. That is the state to resolve.
-
-What a session picking this up has to settle, in order:
-1. Is a stakeholder a **reference to a contact**, or a **deal-local record of a
-   person** who may not be in the CRM? Both are defensible; they give different
-   schemas. A reference means a join table (`deal_stakeholders`) with a role
-   column; a deal-local record means keeping jsonb and accepting the duplication.
-2. If a reference: what happens to the ~10 existing stakeholder entries whose
-   names may not match any contact? They cannot be dropped.
-3. `deals.contact_id` for the primary contact is the smaller, separable half and
-   may be worth doing first — but only alongside a contact picker in the deal
-   form, or the column is dead schema (the same trap `deals.company_id` avoided
-   by shipping with the account link already in the form).
-4. Every new FK references a GLOBAL primary key, so both halves of the tenant
-   rule apply: validate on write with `utils/tenantScope.ts`, and carry
-   `AND parent.tenant_id = child.tenant_id` on every join.
-
 ### FINDING — the Contacts list silently caps at 200, and the stat card lies
 
 **Pre-existing, not introduced by the CSV import work — but import is what makes
@@ -299,39 +487,6 @@ theoretical is now a normal outcome of a supported workflow, which puts it in th
 Prefer 2 now and 1 when the list is next worked on. **Note the same shape almost
 certainly applies to Accounts** (`fetchAccounts(limit = 200)`) — check it at the
 same time rather than fixing one and leaving the twin.
-
-### OPEN DESIGN QUESTION — may two companies in one workspace share a name?
-
-**Not a bug, and deliberately NOT bundled into the CSV import work** where it
-surfaced. The owner ruled on 2026-09-02 that this is a product decision
-deserving its own consideration, not a hygiene fix to ride along on a narrow
-task — the same call made for deals-to-contacts above.
-
-`companies` has **no unique constraint at all**: not on `name`, not on `domain`.
-Only `companies_pkey` on `id` and the `size` CHECK. Contrast `contacts`, which
-has `contacts_tenant_email_key UNIQUE (tenant_id, email)`. So nothing stops a
-workspace holding fifteen rows named "Acme Corp", and a careless accounts import
-is the most likely way to create them.
-
-The question a session picking this up has to settle first, because the answer
-decides whether the constraint is correct at all: **can two legitimately
-different companies share a display name?** Divisions, subsidiaries and regional
-entities ("Acme Corp" in India and in the UAE, both real accounts with different
-owners and deals) are the case that argues no constraint. If they can, the fix
-is not uniqueness but disambiguation — `domain`, or a parent-company reference.
-
-If a constraint IS wanted, `UNIQUE (tenant_id, lower(name))` is the shape, and
-note it needs a data check first: run
-`SELECT lower(name), count(*) FROM companies GROUP BY 1 HAVING count(*) > 1;`
-before writing it, or the migration fails on existing rows. (15 companies today,
-no duplicates, so it would apply cleanly right now — that will not stay true.)
-
-**What CSV import does in the meantime, and why it is sufficient without the
-constraint:** contact rows naming a company are linked by exact,
-case-insensitive name match only. A name matching **two or more** companies is
-ambiguous, so the contact imports **unlinked** with that stated as the row's
-reason, rather than the importer guessing. Under-linking is visible and
-reversible; a contact silently attached to the wrong Acme is neither.
 
 ### Findings raised but deliberately NOT fixed — pick these up or decide against them
 
