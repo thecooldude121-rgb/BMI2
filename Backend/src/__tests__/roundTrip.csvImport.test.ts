@@ -18,7 +18,7 @@ describe('CSV import — round trip', () => {
       const before = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
       const res = await request(app).post('/api/v1/contacts/import').set(auth(ws)).send({
         dry_run: true,
-        rows: [{ first_name: 'Dry', last_name: 'Run', email: `dryrun.${Date.now()}@example.com` }],
+        rows: [{ first_name: 'Dry', last_name: 'Run', email: `dryrun.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` }],
       });
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(res.body.data.created).toBe(1); // reports what WOULD happen
@@ -82,7 +82,7 @@ describe('CSV import — round trip', () => {
      * first chunk's already-committed row.
      */
     it('a duplicate email split across two import requests (chunks) is caught by the second', async () => {
-      const email = `crosschunk.${Date.now()}@example.com`;
+      const email = `crosschunk.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
 
       const chunk1 = await request(app).post('/api/v1/contacts/import').set(auth(ws)).send({
         rows: [{ first_name: 'Chunk', last_name: 'One', email }],
@@ -110,8 +110,8 @@ describe('CSV import — round trip', () => {
 
       const res = await request(app).post('/api/v1/contacts/import').set(auth(ws)).send({
         rows: [
-          { first_name: 'Linked', last_name: 'Contact', email: `linked.${Date.now()}@example.com`, company_name: companyName },
-          { first_name: 'Unlinked', last_name: 'Contact', email: `unlinked.${Date.now()}@example.com`, company_name: 'Nonexistent Co XYZ' },
+          { first_name: 'Linked', last_name: 'Contact', email: `linked.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company_name: companyName },
+          { first_name: 'Unlinked', last_name: 'Contact', email: `unlinked.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company_name: 'Nonexistent Co XYZ' },
         ],
       });
       expect(res.status).toBe(200);

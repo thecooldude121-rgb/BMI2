@@ -170,7 +170,7 @@ describe('Concurrent writes to the same row', () => {
   });
 
   it('a duplicate-email create submitted twice at once yields exactly one row', async () => {
-    const email = `raceemail.${Date.now()}@example.com`;
+    const email = `raceemail.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
     const [a, b] = await Promise.all([
       request(app).post('/api/v1/contacts').set(auth(ws)).send({ first_name: 'Race', last_name: 'A', email }),
       request(app).post('/api/v1/contacts').set(auth(ws)).send({ first_name: 'Race', last_name: 'B', email }),

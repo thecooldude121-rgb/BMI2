@@ -59,6 +59,10 @@ export async function setupWorkspace(label: string): Promise<TestWorkspace> {
 /** Remove everything a workspace could hold, in FK-safe order, then the workspace itself. */
 export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
   await pool.query('DELETE FROM deal_stage_history WHERE tenant_id = $1', [ws.tenantId]);
+  // documents was missing here until the RBAC suite began creating them, and a
+  // leftover document blocks the tenant delete with documents_tenant_id_fkey.
+  // It goes before deals/contacts/companies, which it also references.
+  await pool.query('DELETE FROM documents WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM activities WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM tasks WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM deals WHERE tenant_id = $1', [ws.tenantId]);
@@ -69,6 +73,17 @@ export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
   await pool.query('DELETE FROM tenants WHERE id = $1', [ws.tenantId]);
 }
 
+/**
+ * CONVENTION FOR TEST EMAILS, learned from a flake: build them with BOTH a
+ * timestamp and a random suffix.
+ *
+ * `contacts` and `leads` are UNIQUE on (tenant_id, email), and a duplicate now
+ * correctly returns 409 rather than the masked 500 it used to. An `it.each`
+ * block whose cases share a prefix and rely on Date.now() alone can therefore
+ * generate the same address twice inside one millisecond, and the second create
+ * legitimately fails — an intermittent failure caused entirely by the fixture.
+ * Timestamp plus randomness removes the possibility.
+ */
 export const auth = (ws: TestWorkspace): Record<string, string> => ({
   Authorization: `Bearer ${ws.token}`,
 });

@@ -363,6 +363,10 @@ describe('Bulk-vs-single and import-vs-import races', () => {
     const heldName = `Held Co ${Date.now()}`;
     const otherName = `Other Co ${Date.now()}`;
     const holder = await pool.connect();
+    // Declared outside the try so `finally` can always settle it: an in-flight
+    // request left blocked on the lock would hold a pooled connection for the
+    // rest of the run.
+    let blocked: ReturnType<typeof request> | undefined;
     try {
       await holder.query('BEGIN');
       // The same key formula as lockAccountName.
@@ -377,7 +381,7 @@ describe('Bulk-vs-single and import-vs-import races', () => {
 
       // The held name must be blocked — still unresolved after a wait that the
       // unrelated import cleared in single-digit milliseconds.
-      const blocked = request(app).post('/api/v1/companies/import').set(auth(ws))
+      blocked = request(app).post('/api/v1/companies/import').set(auth(ws))
         .send({ rows: [{ name: heldName }] });
       const outcome = await Promise.race([
         blocked.then(() => 'completed'),
@@ -388,10 +392,22 @@ describe('Bulk-vs-single and import-vs-import races', () => {
       // Releasing the key lets it finish.
       await holder.query('ROLLBACK');
       const finished = await blocked;
+      blocked = undefined;
       expect(finished.status, JSON.stringify(finished.body)).toBe(200);
       expect(finished.body.data.created).toBe(1);
     } finally {
+      // ROLLBACK BEFORE RELEASE, unconditionally. node-pg does not roll back a
+      // client on release, so if any assertion above threw, this connection
+      // would go back into the pool still inside its transaction and still
+      // holding the advisory lock — and the next import of that name would
+      // block until the 30s test timeout, in whichever later file hit it.
+      // That is not hypothetical: it was leaking here before this finally was
+      // written, and showed up as a rare timeout in roundTrip.idConcurrency,
+      // which runs after this file.
+      await holder.query('ROLLBACK').catch(() => undefined);
       holder.release();
+      // Settle the blocked request too, so it cannot outlive the test.
+      if (blocked) await blocked.then(() => undefined, () => undefined);
       await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
     }
   });

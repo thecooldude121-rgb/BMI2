@@ -30,7 +30,7 @@ describe('Activities (manual logging) — round trip', () => {
     ws = await setupWorkspace('activities');
 
     const contact = await request(app).post('/api/v1/contacts').set(auth(ws))
-      .send({ first_name: 'Timeline', last_name: 'Owner', email: `timeline.${Date.now()}@example.com` });
+      .send({ first_name: 'Timeline', last_name: 'Owner', email: `timeline.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
     if (contact.status !== 201) throw new Error(`contact fixture failed: ${JSON.stringify(contact.body)}`);
     contactId = contact.body.data.id;
 
@@ -214,7 +214,7 @@ describe('Activities (manual logging) — round trip', () => {
     const wsB = await setupWorkspace('activities-foreign');
     try {
       const contactB = await request(app).post('/api/v1/contacts').set(auth(wsB))
-        .send({ first_name: 'Foreign', last_name: 'Contact', email: `foreign.${Date.now()}@example.com` });
+        .send({ first_name: 'Foreign', last_name: 'Contact', email: `foreign.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
       expect(contactB.status).toBe(201);
 
       const before = await activityCount();

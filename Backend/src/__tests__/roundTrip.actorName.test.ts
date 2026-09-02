@@ -54,7 +54,7 @@ describe('Maximum-length actor name survives every write path', () => {
 
     // Parents, created by the ordinary admin.
     const contact = await request(app).post('/api/v1/contacts').set(auth(ws))
-      .send({ first_name: 'Actor', last_name: 'Parent', email: `actorparent.${Date.now()}@example.com` });
+      .send({ first_name: 'Actor', last_name: 'Parent', email: `actorparent.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
     if (contact.status !== 201) throw new Error(`contact fixture: ${JSON.stringify(contact.body)}`);
     contactId = contact.body.data.id;
 

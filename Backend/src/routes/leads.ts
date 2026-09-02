@@ -11,7 +11,7 @@ import {
   getViews, createView, updateView, deleteView,
   enrichLead,
 } from '../controllers/leadSubController';
-import { protect } from '../middleware/auth';
+import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 
 const router = Router();
 router.use(protect);
@@ -21,7 +21,7 @@ router.get('/',    getLeads);
 router.post('/',   createLead);
 router.get('/:id', getLeadById);
 router.put('/:id', updateLead);
-router.delete('/:id', deleteLead);
+router.delete('/:id', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteLead);
 
 // ── Sub-resources ─────────────────────────────────────────────────────────────
 router.get( '/:leadId/activities',           getActivities);

@@ -40,7 +40,7 @@ describe('Leads — round trip', () => {
   });
 
   it('create: a real POST creates a lead Postgres actually holds', async () => {
-    const email = `lead.${Date.now()}@example.com`;
+    const email = `lead.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
     const res = await request(app).post('/api/v1/leads').set(auth(ws)).send({
       first_name: 'Neha', last_name: 'Sharma', email, company: 'Contoso', stage: 'new',
     });
@@ -73,7 +73,7 @@ describe('Leads — round trip', () => {
     'sales_accepted', 'nurture', 'disqualified',
   ])('create+edit: previously-rejected stage "%s" is now accepted and persists', async (stage) => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
-      first_name: 'Stage', last_name: 'Test', email: `stage-${stage}-${Date.now()}@example.com`,
+      first_name: 'Stage', last_name: 'Test', email: `stage-${stage}-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
     });
     const id = create.body.data.id;
     leadIds.push(id);
@@ -86,7 +86,7 @@ describe('Leads — round trip', () => {
 
   it('negative: an invalid stage is still rejected, row unchanged', async () => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
-      first_name: 'Invalid', last_name: 'Stage', email: `invalid-stage-${Date.now()}@example.com`, stage: 'new',
+      first_name: 'Invalid', last_name: 'Stage', email: `invalid-stage-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, stage: 'new',
     });
     const id = create.body.data.id;
     leadIds.push(id);
@@ -101,7 +101,7 @@ describe('Leads — round trip', () => {
   describe('conversion — current honest-failure behavior (see file header)', () => {
     it('there is no conversion endpoint yet: POST /leads/:id/convert does not exist', async () => {
       const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
-        first_name: 'Convert', last_name: 'Me', email: `convert-${Date.now()}@example.com`,
+        first_name: 'Convert', last_name: 'Me', email: `convert-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
       });
       const id = create.body.data.id;
       leadIds.push(id);
@@ -113,7 +113,7 @@ describe('Leads — round trip', () => {
 
     it('setting stage to "converted" changes only the lead itself — no contact, account, or deal is fabricated as a side effect', async () => {
       const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
-        first_name: 'ToConvert', last_name: 'Lead', email: `toconvert-${Date.now()}@example.com`, company: 'Contoso',
+        first_name: 'ToConvert', last_name: 'Lead', email: `toconvert-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company: 'Contoso',
       });
       const id = create.body.data.id;
       leadIds.push(id);
@@ -165,7 +165,7 @@ describe('Leads — round trip', () => {
   it('the real wizard payload is rejected with the real reason, and fabricates nothing', async () => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
       first_name: 'Wizard', last_name: 'Payload',
-      email: `wizard-${Date.now()}@example.com`, company: 'Contoso', stage: 'qualified',
+      email: `wizard-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company: 'Contoso', stage: 'qualified',
     });
     expect(create.status, JSON.stringify(create.body)).toBe(201);
     const id = create.body.data.id;
@@ -221,7 +221,7 @@ describe('Leads — round trip', () => {
     ['email', null],      ['email', '   '],
   ])('negative: blanking %s on update is rejected, row unchanged', async (field, bad) => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws))
-      .send({ first_name: 'Keep', last_name: 'Lead', email: `keeplead.${field}.${Date.now()}@example.com` });
+      .send({ first_name: 'Keep', last_name: 'Lead', email: `keeplead.${field}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
     expect(create.status, JSON.stringify(create.body)).toBe(201);
     const id = create.body.data.id;
     leadIds.push(id);
@@ -276,7 +276,7 @@ describe('Leads — round trip', () => {
 
   it('the boundary values 0 and 100 remain valid and persist', async () => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws))
-      .send({ first_name: 'Bound', last_name: 'Ary', email: `bound.${Date.now()}@example.com` });
+      .send({ first_name: 'Bound', last_name: 'Ary', email: `bound.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
     const id = create.body.data.id;
     leadIds.push(id);
 
@@ -292,7 +292,7 @@ describe('Leads — round trip', () => {
     const wsB = await setupWorkspace('leads-b');
     try {
       const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
-        first_name: 'Isolated', last_name: 'Lead', email: `isolead-${Date.now()}@example.com`,
+        first_name: 'Isolated', last_name: 'Lead', email: `isolead-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
       });
       const id = create.body.data.id;
       leadIds.push(id);

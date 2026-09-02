@@ -51,6 +51,42 @@ export const protect = (req: AuthRequest, res: Response, next: NextFunction): vo
   }
 };
 
+/**
+ * Roles permitted to perform destructive or administrative actions.
+ *
+ * WHY THIS LIST, AND WHY IT IS SHORT. Until now `requireRole` was applied to
+ * the three /invites routes and nowhere else, so all 13 other route files
+ * enforced no role policy at all and any authenticated user could delete any
+ * record — against CLAUDE.md's rule that "RBAC checks happen at the API layer,
+ * not just the UI".
+ *
+ * There was no server-side permission matrix to restore, and the frontend's is
+ * not one either: `utils/permissions.ts` uses a different role vocabulary
+ * (sdr | senior_sdr | manager | admin) from the one the backend issues, covers
+ * leads only, and is fed by a hardcoded stub user in CurrentUserContext rather
+ * than the session — so it has never gated a real user. `AuthContext` has a
+ * third, capitalised vocabulary of its own.
+ *
+ * So the policy enforced here is deliberately the narrow, no-lockout one:
+ * DELETE and bulk actions require a manager or admin; create, read and update
+ * stay open to every authenticated role. It matches the one policy the backend
+ * already expressed (invites = admin|manager) and the shape of the frontend
+ * leads matrix, where `leads.delete` and `leads.bulk_actions` are manager+
+ * while `leads.edit_fields` is everyone. It cannot lock anyone out of daily
+ * work: live workspaces hold `sales` and `manager` users, and `sales` keeps
+ * everything except deletion.
+ *
+ * `sales` is the least-privileged role the backend actually issues. Note that
+ * requireRole denies any role not in its list, so an unrecognised role — and
+ * `users.role` has no CHECK constraint, so anything can be stored — is treated
+ * as least-privileged rather than waved through. That is the safe direction.
+ *
+ * Row-level scoping (a `sales` user seeing only records they own) is NOT part
+ * of this and remains an open product decision: it would change read behaviour
+ * on every list endpoint and needs an owner_id backfill answer first.
+ */
+export const DESTRUCTIVE_ACTION_ROLES = ['admin', 'manager'] as const;
+
 export const requireRole = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user || !roles.includes(req.user.role)) {

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, importCompanies } from '../controllers/companiesController';
-import { protect } from '../middleware/auth';
+import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 
 const router = Router();
 
@@ -12,6 +12,6 @@ router.post('/import', importCompanies);
 router.get('/:id', getCompanyById);
 router.post('/', createCompany);
 router.put('/:id', updateCompany);
-router.delete('/:id', deleteCompany);
+router.delete('/:id', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteCompany);
 
 export default router;

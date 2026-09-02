@@ -10,7 +10,7 @@ import {
   uploadDocument,
   downloadDocument,
 } from '../controllers/documentsController';
-import { protect } from '../middleware/auth';
+import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 import { MAX_UPLOAD_BYTES } from '../config/fileStorage';
 
 const router = Router();
@@ -40,8 +40,8 @@ router.get('/:id/content', downloadDocument);
 router.post('/', createDocument);
 router.put('/:id', updateDocument);
 // Bulk delete takes { ids: [...] }; the :id form deletes one.
-router.delete('/', deleteDocuments);
-router.delete('/:id', deleteDocuments);
+router.delete('/', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteDocuments);
+router.delete('/:id', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteDocuments);
 router.post('/:id/favorite', toggleFavorite);
 
 export default router;

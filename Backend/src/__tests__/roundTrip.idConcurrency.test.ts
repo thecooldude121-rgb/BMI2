@@ -166,7 +166,7 @@ describe('Concurrent creates — id generation cannot collide', () => {
 
     const made = await Promise.all(
       [0, 1, 2].map(n => request(app).post('/api/v1/contacts').set(auth(ws))
-        .send({ first_name: `Boundary${n}`, last_name: 'Contact', email: `boundary.${n}.${Date.now()}@example.com` })),
+        .send({ first_name: `Boundary${n}`, last_name: 'Contact', email: `boundary.${n}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` })),
     );
     for (const r of made) expect(r.status, JSON.stringify(r.body)).toBe(201);
 
@@ -185,7 +185,7 @@ describe('Concurrent creates — id generation cannot collide', () => {
     // Ids are user-visible and referenced by hand (HANDOFF.md names deal D053),
     // so the sequence must not have changed the format.
     const shapes: [string, Record<string, unknown>, RegExp][] = [
-      ['contacts',  { first_name: 'Shape', last_name: 'Check', email: `shape.${Date.now()}@example.com` }, /^CT\d{3,}$/],
+      ['contacts',  { first_name: 'Shape', last_name: 'Check', email: `shape.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` }, /^CT\d{3,}$/],
       ['companies', { name: `Shape Co ${Date.now()}` },                                                    /^C\d{3,}$/],
       ['deals',     { name: `Shape Deal ${Date.now()}`, value: 1 },                                        /^D\d{3,}$/],
       ['tasks',     { title: 'Shape Task' },                                                               /^T\d{3,}$/],

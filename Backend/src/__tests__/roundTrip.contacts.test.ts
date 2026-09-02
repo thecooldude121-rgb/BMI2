@@ -34,7 +34,7 @@ describe('Contacts — round trip', () => {
 
   it('create: a real POST creates a row Postgres actually holds, every submitted field intact', async () => {
     const payload = {
-      first_name: 'Priya', last_name: 'Nair', email: `priya.${Date.now()}@example.com`,
+      first_name: 'Priya', last_name: 'Nair', email: `priya.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
       phone: '+91-98765-43210', position: 'VP Sales', source: 'referral',
       tags: ['enterprise', 'renewal'],
     };
@@ -65,7 +65,7 @@ describe('Contacts — round trip', () => {
 
   it('edit: buying_role actually persists, and explicit null actually clears it (F25 lesson)', async () => {
     const create = await request(app).post('/api/v1/contacts').set(auth(ws))
-      .send({ first_name: 'Rahul', last_name: 'Iyer', email: `rahul.${Date.now()}@example.com` });
+      .send({ first_name: 'Rahul', last_name: 'Iyer', email: `rahul.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
     expect(create.status, JSON.stringify(create.body)).toBe(201);
     const id = create.body.data.id;
     createdIds.push(id);
@@ -95,7 +95,7 @@ describe('Contacts — round trip', () => {
 
   it('negative: an invalid buying_role is rejected with the real reason, row unchanged', async () => {
     const create = await request(app).post('/api/v1/contacts').set(auth(ws))
-      .send({ first_name: 'Test', last_name: 'Reject', email: `reject.${Date.now()}@example.com`, buying_role: 'champion' });
+      .send({ first_name: 'Test', last_name: 'Reject', email: `reject.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, buying_role: 'champion' });
     const id = create.body.data.id;
     createdIds.push(id);
 
@@ -113,13 +113,13 @@ describe('Contacts — round trip', () => {
     // This is the exact shape that made leads.tags become invisible for months
     // per migration 012 — pg would otherwise coerce "a;b" into a one-element array.
     const res = await request(app).post('/api/v1/contacts').set(auth(ws))
-      .send({ first_name: 'Bad', last_name: 'Tags', email: `badtags.${Date.now()}@example.com`, tags: 'a;b;c' });
+      .send({ first_name: 'Bad', last_name: 'Tags', email: `badtags.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, tags: 'a;b;c' });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/tags must be an array/);
   });
 
   it('negative: a duplicate email in the same workspace is rejected, not silently overwritten', async () => {
-    const email = `dup.${Date.now()}@example.com`;
+    const email = `dup.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
     const first = await request(app).post('/api/v1/contacts').set(auth(ws))
       .send({ first_name: 'First', last_name: 'One', email });
     expect(first.status, JSON.stringify(first.body)).toBe(201);
@@ -153,7 +153,7 @@ describe('Contacts — round trip', () => {
     ['email', null],      ['email', ''],
   ])('negative: blanking %s on update is rejected, the stored row is unchanged', async (field, bad) => {
     const create = await request(app).post('/api/v1/contacts').set(auth(ws))
-      .send({ first_name: 'Keep', last_name: 'Me', email: `keep.${field}.${Date.now()}@example.com` });
+      .send({ first_name: 'Keep', last_name: 'Me', email: `keep.${field}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
     expect(create.status, JSON.stringify(create.body)).toBe(201);
     const id = create.body.data.id;
     createdIds.push(id);
@@ -210,7 +210,7 @@ describe('Contacts — round trip', () => {
   });
 
   it('a duplicate email on CREATE is the same clean 409, and nothing is created', async () => {
-    const email = `dup409.${Date.now()}@example.com`;
+    const email = `dup409.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
     const first = await request(app).post('/api/v1/contacts').set(auth(ws))
       .send({ first_name: 'First', last_name: 'Holder', email });
     expect(first.status).toBe(201);
@@ -242,7 +242,7 @@ describe('Contacts — round trip', () => {
   });
 
   it('the SAME email is still free in a different workspace — the constraint is (tenant_id, email)', async () => {
-    const email = `shared.${Date.now()}@example.com`;
+    const email = `shared.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
     const mine = await request(app).post('/api/v1/contacts').set(auth(ws))
       .send({ first_name: 'Mine', last_name: 'Contact', email });
     expect(mine.status).toBe(201);
@@ -263,7 +263,7 @@ describe('Contacts — round trip', () => {
     const wsB = await setupWorkspace('contacts-b');
     try {
       const create = await request(app).post('/api/v1/contacts').set(auth(ws))
-        .send({ first_name: 'Isolated', last_name: 'Contact', email: `iso.${Date.now()}@example.com` });
+        .send({ first_name: 'Isolated', last_name: 'Contact', email: `iso.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
       expect(create.status).toBe(201);
       const id = create.body.data.id;
       createdIds.push(id);
