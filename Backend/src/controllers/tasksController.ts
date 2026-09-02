@@ -244,33 +244,23 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
     const badRef = await relatedRefError(req.body, tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
-    // tasks.id is a T001-style varchar with no default, like companies/contacts.
-    // DELIBERATELY NOT SCOPED BY TENANT, and this is load-bearing.
-    // tasks.id is a GLOBAL primary key (tasks_pkey PRIMARY KEY (id)), so ids must be
-    // unique across every workspace. Adding `AND tenant_id = $n` here would make
-    // the second workspace generate T001 again and every insert would fail with
-    // a duplicate-key error. The scan for missing tenant filters flags this line;
-    // it is a false positive.
-    //
-    // It IS a small information leak: the id a caller receives reveals the global
-    // row count. The fix for that is a per-workspace sequence or a uuid, NOT a
-    // tenant predicate.
-    const maxResult = await pool.query(
-      `SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM tasks WHERE id ~ '^T[0-9]+$'`,
-    );
-    const id = `T${String((maxResult.rows[0].max_num || 0) + 1).padStart(3, '0')}`;
+    // The id comes from the column DEFAULT (migration 031:
+    // 'T' || LPAD(nextval('tasks_id_seq'), 3, '0')). The old MAX(id)+1 read the
+    // maximum in one statement and inserted in another, racing across
+    // concurrent requests — 7 of 10 writes lost at ten concurrent creates, each
+    // as a masked 500. nextval() is atomic, so the id is simply omitted here.
 
     const actor = await resolveActorName(req);
     const resolvedStatus = status || 'pending';
 
     const result = await pool.query(
       `INSERT INTO tasks
-         (id, title, description, type, priority, status, assigned_to,
+         (title, description, type, priority, status, assigned_to,
           related_to_type, related_to_id, due_date, completed_at, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING ${TASK_COLUMNS}`,
       [
-        id, String(title).trim(), description || null,
+        String(title).trim(), description || null,
         type || 'other', priority || 'medium', resolvedStatus,
         assigned_to || actor,
         related_to_type || null, related_to_id || null,

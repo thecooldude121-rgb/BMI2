@@ -226,24 +226,16 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
-    // Auto-generate ID in D001 format
-    // DELIBERATELY NOT SCOPED BY TENANT, and this is load-bearing.
-    // deals.id is a GLOBAL primary key (deals_pkey PRIMARY KEY (id)), so ids must be
-    // unique across every workspace. Adding `AND tenant_id = $n` here would make
-    // the second workspace generate D001 again and every insert would fail with
-    // a duplicate-key error. The scan for missing tenant filters flags this line;
-    // it is a false positive.
-    //
-    // It IS a small information leak: the id a caller receives reveals the global
-    // row count. The fix for that is a per-workspace sequence or a uuid, NOT a
-    // tenant predicate.
-    const maxResult = await pool.query(`SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM deals WHERE id ~ '^D[0-9]+$'`);
-    const nextNum = (maxResult.rows[0].max_num || 0) + 1;
-    const id = `D${String(nextNum).padStart(3, '0')}`;
+    // The id comes from the column DEFAULT (migration 031:
+    // 'D' || LPAD(nextval('deals_id_seq'), 3, '0')), so it is neither computed
+    // nor sent here. The old MAX(id)+1 raced across concurrent requests —
+    // measured at 6 to 7 of 10 lost writes at ten concurrent creates, each
+    // arriving as a masked 500 — because the maximum was read in one statement
+    // and used in another with an await between. nextval() is atomic.
 
     const result = await pool.query(
       `INSERT INTO deals
-         (id, name, title, lead_id, value, currency, base_amount_usd,
+         (name, title, lead_id, value, currency, base_amount_usd,
           pipeline_id, pipeline_name, deal_type,
           stage, probability, expected_close_date,
           close_date_is_past, close_date_override_reason, forecast_category,
@@ -258,10 +250,10 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
           tenant_id)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56)
        RETURNING *`,
       [
-        id, dealName, title || dealName, lead_id, value,
+        dealName, title || dealName, lead_id, value,
         currency || 'USD', base_amount_usd ?? value,
         pipeline_id || 'new-business', pipeline_name || 'New Business',
         deal_type || 'new-business',

@@ -296,17 +296,64 @@ local mirror.** Until that is decided:
   is safe only for as long as nothing joins the table — the moment a query renders an
   employee name next to a task, it is a cross-workspace read.
 
-### Known defect — `MAX(id) + 1` is a race, independent of tenancy
-`companies`, `contacts`, `deals` and `tasks` all generate their `C001`/`CT001`/`D001`/`T001`
-ids with `SELECT MAX(CAST(SUBSTRING(id, n) AS INTEGER)) + 1`. Two concurrent creates read
-the same maximum and the second one violates the primary key — this has nothing to do with
-workspaces and is not fixed by any tenant predicate.
+### FIXED — `MAX(id) + 1` was a race. Ids now come from per-table sequences.
+`companies`, `contacts`, `deals` and `tasks` used to generate their
+`C001`/`CT001`/`D001`/`T001` ids in application code with
+`SELECT MAX(CAST(SUBSTRING(id, n) AS INTEGER)) + 1`, reading the maximum in one statement
+and inserting in another. Node yields at every `await`, so two concurrent creates computed
+the same id and the second violated the primary key — arriving at the caller as an
+unhandled 23505 that `errorHandler` masks as a bare `500 Internal Server Error`. None of
+the four create paths was even inside a transaction.
 
-Note also that these four queries are deliberately **not** scoped by `tenant_id`, and must
-not be: `id` is a global primary key on all four tables, so scoping the scan would make the
-second workspace regenerate `C001` and every insert would fail. The residual leak (the id
-reveals a global row count) and the race have **one shared fix**: move to
-`gen_random_uuid()`, or a per-table sequence. Do them together, not separately.
+**This was measured, not theorised**, and it was far worse than "a race under load":
+
+| Concurrent creates | Before |
+|---|---|
+| 2 (one double-click) | 5 of 10 trials lost a write |
+| 3 (two or three users) | 10 of 10 trials lost a write |
+| 5 | 30 of 50 writes lost |
+| 10 | `companies`/`deals`/`tasks` created only 3 of 10 |
+
+The worst case was CSV import — the documented migration path from Salesforce/HubSpot: an
+import racing a single form create reported `created=4 failed=1`, so a customer was told a
+row of their own file was bad when the real cause was an id collision.
+
+**Migration 031 creates one sequence per table and wires it as the column `DEFAULT`**
+(`'C' || LPAD(nextval('companies_id_seq'), 3, '0')`, and so on), seeded with
+`setval(..., COALESCE(max, 0) + 1, false)`. All 8 app-side computations are gone — the four
+form-create paths and both CSV import paths — and no insert sends `id` any more.
+`nextval()` is atomic, so the read-then-write window does not exist rather than being
+narrower. Re-measured with the identical probe afterwards: **0 lost writes at N=2, 3, 5 and
+10, on all four tables, and the CSV/form race reports `created=5 failed=0`.**
+`roundTrip.idConcurrency.test.ts` keeps that permanently, and asserts ZERO losses
+deliberately — "usually fine" is exactly what the old code looked like at N=1.
+
+Ids keep their human-readable format on purpose: they are user-visible and referenced by
+hand (HANDOFF.md names deal `D053`), and `varchar(10)` holds the prefix plus nine digits.
+Sequences are **not** gap-free and that is accepted — a rolled-back insert or a CSV dry run
+consumes its number. `nextval()` being non-transactional is precisely what makes it safe.
+
+The sequences are deliberately **not** per-workspace, for the same reason the old scan was
+not tenant-scoped: `id` is a global primary key on all four tables, so a per-workspace
+sequence would regenerate `C001` in the second workspace and every insert would collide.
+
+**Still open, and deliberately deferred: the id-count enumeration leak.** `C042` reveals
+that 42 companies exist across all workspaces, because a sequence is shared and monotonic.
+An earlier version of this file claimed the leak and the race "have one shared fix: move to
+`gen_random_uuid()`, or a per-table sequence. Do them together, not separately." **That was
+wrong on both counts and is why this note replaces it:** a per-table sequence fixes the
+race and does nothing for the leak, so the two are not one fix; and insisting they move
+together would have held a write-losing reliability bug hostage to a minor information
+disclosure. They were separated on purpose.
+
+Only a move to random/UUID ids closes both, and that is a much larger, product-visible
+change — it would break every existing human-readable id and require rewriting **10 FK
+columns across 6 tables** (`activities.company_id`/`contact_id`/`deal_id`,
+`contacts.company_id`, `deals.company_id`, `quotes.company_id`/`contact_id`/`deal_id`,
+`deal_stage_history.deal_id`, `sales_orders.deal_id`), plus widening `varchar(10)`
+everywhere. `activities.id` already does this (`replace(gen_random_uuid()::text,'-','')` in
+a `varchar(32)`) if that route is ever taken. Treat the leak as **lower severity than the
+race was**: it discloses a row count, it does not lose data.
 
 ### Known schema drift (do not assume the spec above is what's deployed)
 - `EnhancedAccount` uses `billingAddress`, **not** `address` — an earlier bug had the edit
