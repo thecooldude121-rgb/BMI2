@@ -987,8 +987,12 @@ const CRMDashboard: React.FC = () => {
                   </div>
                 ))}
               </div>
+              {/* Was /crm/activities/all, a 1,079-line feed of hardcoded
+                  invented people with zero fetch calls, now deleted. This is the
+                  real activities page — where the "View" button beside each row
+                  already went. */}
               <button
-                onClick={() => navigate('/crm/activities/all')}
+                onClick={() => navigate('/crm/activities')}
                 className="w-full py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 View All Activities

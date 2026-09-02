@@ -18,7 +18,6 @@ import GamificationLeaderboard from './GamificationLeaderboard';
 
 import ComprehensiveDealDetailPage from '../Deal/ComprehensiveDealDetailPage';
 import ComprehensiveDealFormPage from '../Deal/ComprehensiveDealFormPage';
-import { ComprehensiveActivityFeed } from '../Activity';
 import ImportLeadsPage from './ImportLeadsPage';
 import IntegrationsPage from './IntegrationsPage';
 import { IntegrationsHub } from '../Integrations/IntegrationsHub';
@@ -78,7 +77,6 @@ const CRMModule = () => {
           <Route path="/pipeline" element={<Navigate to="/crm/forecast" replace />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/activities" element={<ActivitiesPage />} />
-          <Route path="/activities/all" element={<ComprehensiveActivityFeed />} />
           <Route path="/activities/:id" element={<ActivityDetailPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/custom-report-builder" element={<CustomReportBuilder />} />

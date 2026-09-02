@@ -46,9 +46,8 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
           // The superset view, listed first. It was routed and API-backed but
           // reachable from NO navigation at all, which made the manual
           // activity-logging surface undiscoverable — a page nobody can find is
-          // not a built feature. Points at /crm/activities, NOT
-          // /crm/activities/all: that second route renders a hardcoded feed of
-          // invented activities (see the finding in HANDOFF.md).
+          // not a built feature. A second, fabricated feed used to sit at
+          // /crm/activities/all; it was deleted rather than linked.
           { name: 'All Activities', href: '/crm/activities', icon: Activity },
           { name: 'Tasks',    href: '/crm/tasks',    icon: CheckSquare },
           { name: 'Meetings', href: '/crm/meetings', icon: Video },

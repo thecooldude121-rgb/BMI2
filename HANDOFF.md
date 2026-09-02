@@ -236,19 +236,29 @@ Out of scope for item 5 and logged rather than repaired:
      CRMDashboard panels. Not built: AI features are Phase 2. This was latent
      while nothing linked to the page and became live the moment it did — worth
      remembering when making any unreachable surface reachable.
-  2. **NEW FABRICATED-DATA FINDING — `/crm/activities/all`.**
-     `pages/Activity/ComprehensiveActivityFeed.tsx`, **1,079 lines, ZERO `fetch`
-     calls, zero contexts**, rendering a hardcoded `activities` array with
-     invented people: "John Smith (VP Sales, Acme Corp)", "Sarah Lee",
-     "sarah@techstart.com". Routed at `/crm/activities/all` and reachable by URL.
-     The zero-fetch detection rule in CLAUDE.md found it, again.
+  2. **`/crm/activities/all` — DELETED.** 1,080 lines removed.
+     `pages/Activity/ComprehensiveActivityFeed.tsx` was **1,079 lines with ZERO
+     `fetch` calls and zero contexts**, rendering a hardcoded `activities` array
+     of invented people: "John Smith (VP Sales, Acme Corp)", "Sarah Lee",
+     "sarah@techstart.com". Found by the zero-fetch rule in CLAUDE.md — the
+     fourth whole-feature fabrication that rule has caught, after the six-widget
+     dashboard, the second Deals tree and TechStartDetailView.
 
-     It is deliberately **not** linked from the new nav entry, which points at
-     `/crm/activities` (the real page). Disposition needed: it should almost
-     certainly be deleted — the real page already does this job against the
-     database, and a fake feed one URL away from a now-discoverable real one is
-     the worst version of this defect. Deleting it also removes any ambiguity
-     about what "All Activities" in the sidebar means.
+     Removed on sight rather than logged as a decision: the real page already
+     does this job against the database, and a fake feed one URL from a
+     newly-discoverable real one is the worst version of this defect.
+
+     **It had one live consumer, which a grep alone would have missed the
+     significance of:** `CRMDashboard.tsx` had a "View All Activities" button
+     pointing at `/crm/activities/all`. Deleting only the route would have left a
+     dead button on the dashboard. It now points at `/crm/activities`, which is
+     where the "View" link beside each activity row already went — verified by a
+     real click. `pages/Activity/` (the component plus its one-line barrel) is
+     gone, the route and import are out of `CRMModule.tsx`, and there are zero
+     `TS2307`/`TS2304` afterwards.
+
+     **Note the type-error baseline moved 289 -> 284** as a result: five of the
+     "noise" unused-symbol errors belonged to the deleted file.
 
 ## DONE — CSV import for Contacts and Accounts is built and real.
 
