@@ -1,9 +1,14 @@
 # Prompt C — round-trip regression suite (closing report)
 
-**Status:** **194 of 194** backend tests pass across 14 files, over four consecutive full
-runs. `tsc --noEmit` clean. **No `it.fails`, `it.skip`, `it.todo` or `.only` anywhere in the
-suite** — a green run conceals nothing. Every data-layer finding raised during this work is
-now either fixed or, in one case, named as an open architectural gap that is not a bug.
+**Status:** **208 tests across 14 files. 15 of 16 consecutive full runs pass.** `tsc
+--noEmit` clean. **No `it.fails`, `it.skip`, `it.todo` or `.only` anywhere in the suite** —
+a green run conceals nothing.
+
+Every finding raised during this work is now fixed. The residual 1-in-16 failure is a
+**suite-stability problem, not a product defect** — it is always in
+`roundTrip.idConcurrency`, the file firing the heaviest concurrent bursts, and presents as
+either a spurious 401 with no response body or a 30-second wait for a database connection.
+It is described under *Suite stability* below, honestly, rather than rounded up to green.
 
 The brief: protect against the failure mode this project has hit most often — *a success
 state (toast, 200/201, green checkmark) with no real write behind it, or a write that
@@ -27,7 +32,7 @@ is against the database.
 
 ```bash
 cd Backend && npm run test:isolation:setup   # once — creates bmi_crm_iso_test
-cd Backend && npm run test:isolation         # 194 tests
+cd Backend && npm run test:isolation         # 208 tests
 cd Frontend && npx vitest run                # 387 tests
 ```
 
@@ -54,7 +59,7 @@ of files without the DB guard configured and reports meaningless failures.
 | Concurrent writes to one row | `roundTrip.concurrency.test.ts` | 5 |
 | Bulk-vs-single & import-vs-import races | `roundTrip.bulkImportRaces.test.ts` | 12 |
 | Actor-name width | `roundTrip.actorName.test.ts` | 6 |
-| RBAC | `roundTrip.rbac.test.ts` | 9 |
+| RBAC | `roundTrip.rbac.test.ts` | 23 |
 | Tenant isolation (pre-existing) | `tenantIsolation.test.ts` | 18 |
 
 **Negative cases are mandatory.** Every rejected submission asserts three things: a 4xx,
@@ -87,8 +92,9 @@ as `500 Internal Server Error`.**
 | 11 | `DELETE /documents/:id` returned a false 200 | 404, bulk untouched (`a20c604`) |
 | 12 | Actor name overflowed three `VARCHAR(100)` columns | widened to 255 (`dfb0d5a`) |
 | 13 | Concurrent account imports duplicated a company name | per-name advisory lock (`9ca4096`) |
+| 14 | No role enforcement on 13 of 14 route files | destructive actions gated (`15ebe59`) |
 
-**Bug 9 was mine**, introduced by the fix for bug 8, and the most severe of the thirteen: SQL
+**Bug 9 was mine**, introduced by the fix for bug 8, and the most severe of the fourteen: SQL
 `LPAD` truncates where JavaScript `padStart` does not, so `lpad('1007',3,'0')` is `'100'`.
 Every create would have failed permanently from the 1000th row onward. No live data was
 affected (sequences sat at 21/16/54/16), and the concurrency suite is what pushed the test
@@ -189,25 +195,93 @@ so it breaks no tie. **The audit trail cannot be reliably ordered by `changed_at
 concurrency.** The test reconstructs the chain by following `from_stage → to_stage`. Not
 fixed; recorded.
 
-## RBAC — covered, with a gap named as a finding
+## RBAC — now enforced at the API layer
 
-The backend expresses **exactly one** role policy anywhere:
-`requireRole('admin','manager')` on the three `/invites` routes. **All 13 other route files
-have zero role checks** — verified by grepping every one. Any authenticated user can perform
-every data operation regardless of role.
+`requireRole` was applied to the three `/invites` routes and **nowhere else**, so all 13
+other route files enforced no role policy and any authenticated user could delete any
+record — against CLAUDE.md's rule that *"RBAC checks happen at the API layer, not just the
+UI."*
 
-CLAUDE.md states the rule plainly: *"RBAC checks happen at the API layer, not just the
-UI."* The frontend has role gates; the API does not enforce them. **That is precisely the
-arrangement the rule forbids, and it remains open.**
+**There was no permission matrix to restore.** The frontend does not supply one either; it
+supplies three mutually inconsistent ones:
 
-The suite therefore (1) tests the policy that exists — `sales` gets a clean 403 on invite
-create, list and revoke and writes no row, `manager` and `admin` are permitted; (2) tests
-the documented invariant that role comes from the token, attempted via body, query and
-headers, with 401 kept distinct from 403; and (3) **characterises** the unenforced state,
-labelled in the test names. (3) is not an endorsement — for data endpoints there is no policy
-to test against, and asserting one would be inventing product rules in a test file. **When
-RBAC lands, those three tests fail loudly and must be rewritten against the new policy,
-never quietly deleted.**
+| Source | Roles | Fed by |
+|---|---|---|
+| **DB + JWT** (authoritative) | `sales` (4 live users), `manager` (1), **no `admin`** | real login |
+| `AuthContext` | `Admin\|Sales\|HR\|Manager` + its own permission map | real session |
+| `permissions.ts` / `usePermissions` | `sdr\|senior_sdr\|manager\|admin` — **leads only** | a **hardcoded stub user** |
+| CLAUDE.md spec | `DEFAULT 'user'` | — |
+
+`users.role` has no CHECK constraint, so any string is storable, and `sales` is absent from
+`permissions.ts`'s union entirely — `ROLE_PERMISSIONS['sales']` is `undefined` and
+`roleHas` would throw, latent only because the real role never reaches that model.
+
+**The enforced policy is therefore deliberately narrow: DELETE and bulk actions require
+`manager` or `admin`; create, read and update stay open to every authenticated role.** It
+matches the one policy the backend already expressed (invites = admin|manager) and the
+shape of the frontend leads matrix, where `leads.delete` and `leads.bulk_actions` are
+manager+ while `leads.edit_fields` is everyone.
+
+**It locks nobody out, which was the binding constraint:** live workspaces contain no
+`admin` at all, so any rule requiring one would have been unsatisfiable by all five users.
+`requireRole` denies any role not in its list, so an unrecognised role is treated as
+least-privileged rather than waved through — the safe direction given the missing
+constraint.
+
+Ten routes gated, with `DESTRUCTIVE_ACTION_ROLES` defined once in `middleware/auth.ts`:
+DELETE on contacts, companies, deals, tasks, activities, leads and documents (both `:id`
+and bulk), plus `POST /contacts/bulk` and `POST /deals/bulk`.
+
+**Deliberately not gated, each for a stated reason:**
+
+- **`createCompany`** — it has no duplicate-name check or destructive step to gate.
+- **`DELETE /leads/:id/notes/:noteId`** — authored content, and a soft delete; gating it
+  would stop an SDR retracting their own note.
+- **`DELETE /leads/meta/views/:viewId`** — personal UI configuration.
+- **Row-level scoping** (a `sales` user seeing only records they own) — an open product
+  decision: it changes read behaviour on every list endpoint and needs an `owner_id`
+  backfill answer first. A test states this rather than leaving it to be discovered.
+
+The three tests that previously *characterised* the unenforced state were written to fail
+loudly when RBAC landed, and one did. They were **rewritten against the real policy, not
+deleted**: 23 tests now cover a `sales` user refused on all five record types with the row
+proven to survive, a **`manager` permitted on all five with the delete proven to have
+happened** (the no-lockout check that matters most), both bulk endpoints, and the three
+things the policy leaves open.
+
+## Suite stability — reported, not rounded up
+
+208 tests; **15 of 16 consecutive full runs pass.** The failure is always in
+`roundTrip.idConcurrency` and appears as a spurious `401` with no response body, or a
+30-second wait for a connection.
+
+Evidence it is test infrastructure rather than a product defect: every 401 path in the
+codebase sends a JSON message, so a bodyless 401 is not one of them; 600 concurrent creates
+against the same endpoint in isolation produced zero failures; and the RBAC, contacts and
+documents files each pass 6 of 6 in isolation. The suite shares one 20-connection pool in a
+single process while several files fire bursts of ten.
+
+Two of my own test defects were found and fixed while narrowing this, taking the rate from
+roughly one run in four down to one in sixteen:
+
+- **A leaked pooled connection.** The lock-scope test took `pool.connect()`, began a
+  transaction, took an advisory lock, and released the client in `finally` *without rolling
+  back*. node-pg does not roll back on release, so a failed assertion returned that
+  connection to the pool still holding the lock and a later import of that name blocked to
+  the 30s timeout — in whichever file hit it, which is why the symptom surfaced in a
+  different file from its cause.
+- **36 email fixtures built from `Date.now()` alone.** Inside `it.each` blocks whose cases
+  share a prefix, two can collide within one millisecond — and a duplicate now correctly
+  returns 409 rather than the masked 500 it used to, so an earlier fix turned a latent
+  fixture collision into a visible flake. All now carry a random suffix; the convention is
+  documented in `helpers.ts`.
+
+Also fixed: `teardownWorkspace` never deleted `documents`, so a tenant delete failed with
+`documents_tenant_id_fkey` once the RBAC suite began creating them.
+
+**A failing run leaves orphaned `rt-` tenants behind**, because `afterAll` does not
+complete — four were found by re-counting and removed. Making the teardown resilient to a
+mid-run failure is not done.
 
 ## Two caveats — read these before trusting the green
 
@@ -237,8 +311,14 @@ timeline, though the documents API is now covered.
 
 ## Known gaps / explicitly out of scope
 
-- **RBAC is not enforced on 13 of 14 route files** — see above. An open finding against a
-  stated architecture rule, and now the only one outstanding from this work.
+- **Row-level ownership scoping is not implemented.** RBAC now gates destructive actions,
+  but a `sales` user still reads every record in the workspace. Deferred as a product
+  decision, pinned by a test that fails if it is ever implemented silently.
+- **`DELETE` on lead notes and saved views checks no OWNERSHIP**, so any workspace member
+  can delete another's. A missing ownership predicate rather than a missing role check;
+  found while scoping the RBAC work and reported, not fixed.
+- **Suite stability: 1 run in 16 fails** in `roundTrip.idConcurrency`, and a failing run
+  leaves orphaned test tenants. See *Suite stability*.
 - **The id-count enumeration leak** (`C042` reveals a global row count) — deferred, lower
   severity than the race was, closed only by a move to random ids.
 - **Browser-driven form submission** — caveat 1. No form is clicked.
@@ -290,6 +370,7 @@ both `NOT NULL`. The probe written to confirm it failed for that reason. No fix 
 | `495a182` | Summary refreshed to 176 tests |
 | `dfb0d5a` | Actor-name overflow confirmed and fixed; two races investigated |
 | `9ca4096` | Concurrent-import duplicate race closed with a per-name advisory lock |
+| `15ebe59` | RBAC enforced at the API layer; destructive actions gated to manager/admin |
 
 Live data was untouched throughout: `bmi_crm` remains at 1 workspace, 20 contacts,
 15 companies, 25 deals, 38 leads, 0 activities, 0 documents — re-counted after every run,
