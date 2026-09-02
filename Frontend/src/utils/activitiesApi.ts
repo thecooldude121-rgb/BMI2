@@ -222,7 +222,15 @@ export async function deleteActivity(id: string): Promise<void> {
 export const TASK_TYPES = ['call', 'email', 'meeting', 'follow-up', 'other'] as const;
 export const TASK_STATUSES = ['pending', 'in-progress', 'completed'] as const;
 export const TASK_PRIORITIES = ['low', 'medium', 'high'] as const;
-export const TASK_RELATED_TYPES = ['lead', 'deal', 'employee'] as const;
+/**
+ * Mirrors tasks_related_to_type_check as widened by migration 030.
+ *
+ * 'employee' is permitted by the constraint and is NOT offered in the task form:
+ * the employees table has no tenant_id, so tasksController cannot verify that a
+ * related employee belongs to the caller's workspace. It stays in this list
+ * because 15 existing rows and the server's own validation both know the value.
+ */
+export const TASK_RELATED_TYPES = ['lead', 'deal', 'contact', 'company', 'employee'] as const;
 
 export type TaskStatus = typeof TASK_STATUSES[number];
 

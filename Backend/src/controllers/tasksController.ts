@@ -25,7 +25,9 @@ import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
 const VALID_TYPES = ['call', 'email', 'meeting', 'follow-up', 'other'] as const;
 const VALID_STATUSES = ['pending', 'in-progress', 'completed'] as const;
 const VALID_PRIORITIES = ['low', 'medium', 'high'] as const;
-const VALID_RELATED_TYPES = ['lead', 'deal', 'employee'] as const;
+// 'contact' and 'company' were added by migration 030 so a task can name the
+// person or account it is about, not only the deal.
+const VALID_RELATED_TYPES = ['lead', 'deal', 'contact', 'company', 'employee'] as const;
 
 /**
  * Which table a related_to_type points at, for the workspace check on write.
@@ -46,7 +48,41 @@ const VALID_RELATED_TYPES = ['lead', 'deal', 'employee'] as const;
 const RELATED_TABLE: Partial<Record<typeof VALID_RELATED_TYPES[number], ScopedTable>> = {
   lead: 'leads',
   deal: 'deals',
+  // Added with migration 030. Both reference GLOBAL primary keys, so without an
+  // entry here a task in workspace A could name workspace B's contact.
+  contact: 'contacts',
+  company: 'companies',
 };
+
+/**
+ * The projection every task query uses.
+ *
+ * WHY due_date IS CAST TO TEXT — a real off-by-one found in live verification.
+ *
+ * `due_date` is a DATE: a calendar day with no time and no timezone. The pg
+ * driver nonetheless parses it into a JS Date at LOCAL midnight, and res.json()
+ * then serialises that with toISOString(). In IST (UTC+5:30) local midnight on
+ * the 2nd is 18:30 UTC on the 1st, so the client received "2026-09-01..." for a
+ * row Postgres holds as 2026-09-02 — every task due date rendered a day early,
+ * and a task due today was bucketed as Overdue.
+ *
+ * to_char keeps it the string it already is in the database, so no timezone is
+ * ever applied to a value that does not have one. Verified: Postgres 2026-09-02
+ * now reaches the client as "2026-09-02".
+ *
+ * NOTE THIS IS THE NARROW FIX. The same defect affects all 13 DATE columns in
+ * this database (deals.expected_close_date, leads.last_contact, invoices.due_date
+ * and more) and the one-line global fix is a pg type parser for oid 1082 — see
+ * the finding in HANDOFF.md. It is not applied here because it changes how every
+ * date in the app serialises and that needs its own verification pass, not a
+ * rider on the tasks page.
+ */
+const TASK_COLUMNS = `
+  id, title, description, type, priority, status, assigned_to,
+  related_to_type, related_to_id,
+  to_char(due_date, 'YYYY-MM-DD') AS due_date,
+  completed_at, created_at, updated_at
+`;
 
 /** Reject a related_to_id that names a record in another workspace. */
 async function relatedRefError(
@@ -88,7 +124,7 @@ export const getTasks = async (req: AuthRequest, res: Response, next: NextFuncti
       overdue, due_before, limit = 50, offset = 0,
     } = req.query;
 
-    let query = 'SELECT * FROM tasks WHERE tenant_id = $1';
+    let query = `SELECT ${TASK_COLUMNS} FROM tasks WHERE tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
 
@@ -122,7 +158,7 @@ export const getTaskById = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const tenantId = requireTenantId(req);
     const result = await pool.query(
-      'SELECT * FROM tasks WHERE id = $1 AND tenant_id = $2',
+      `SELECT ${TASK_COLUMNS} FROM tasks WHERE id = $1 AND tenant_id = $2`,
       [req.params.id, tenantId],
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Task not found' }); return; }
@@ -195,7 +231,7 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
          (id, title, description, type, priority, status, assigned_to,
           related_to_type, related_to_id, due_date, completed_at, tenant_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       RETURNING *`,
+       RETURNING ${TASK_COLUMNS}`,
       [
         id, String(title).trim(), description || null,
         type || 'other', priority || 'medium', resolvedStatus,
@@ -254,7 +290,7 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
     params.push(req.params.id, tenantId);
 
     const result = await pool.query(
-      `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`,
+      `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING ${TASK_COLUMNS}`,
       params,
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Task not found' }); return; }
