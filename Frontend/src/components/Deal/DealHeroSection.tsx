@@ -307,9 +307,23 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
   // ── Inline edit helpers ────────────────────────────────────────────────────
 
+  /**
+   * Convert a displayed date back to the YYYY-MM-DD the API stores.
+   *
+   * THIS WAS CORRUPTING DATA, not just displaying it wrong. It used
+   * d.toISOString().split('T')[0]: new Date(display) yields LOCAL midnight,
+   * toISOString() converts that to UTC, and in IST (UTC+5:30) local midnight
+   * lands at 18:30 the PREVIOUS day — so the string written back was one day
+   * earlier than what the user saw. Every save through this path moved the date
+   * back a day, and repeated edits walked it backwards.
+   *
+   * Reading the local components is the fix: the calendar day the user picked is
+   * the calendar day that gets stored, in any timezone.
+   */
   function displayDateToIso(display: string): string {
     const d = new Date(display);
-    return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   function openValueEdit() {

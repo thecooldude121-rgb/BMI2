@@ -161,6 +161,24 @@ filed under Overdue. Postgres held 2026-09-02; the UI showed 9/1/2026.
 Fixed for tasks by casting to text in the query (`TASK_COLUMNS` in
 `tasksController`), so a value with no timezone never has one applied.
 
+**CORRECTION to commit 5fa782e's message, recorded because a false claim about
+blast radius in the permanent record is exactly what has misled sessions here
+before.** That commit says "Every seeded task was affected too: T015 is
+2026-05-26 and displayed 5/25/2026." **That was not true of the shipped code.**
+The original TasksPage rendered `new Date(task.due_date).toLocaleDateString()`,
+which produces the CORRECT local day even from the shifted ISO timestamp. The
+display shift I observed was introduced by my own rewrite, which sliced the ISO
+string; the to_char cast then fixed it properly and is the better fix. The
+serialization defect is real — the API genuinely sent the wrong instant — but it
+was NOT visibly wrong on the tasks page before that session.
+
+**The distinction that follows from this, and it changes the scope of any
+sweep:** `new Date(isoTimestamp)` renders the correct local day. The bug only
+bites code that SLICES the value or calls `toISOString()` on it. So the other
+DATE columns are not uniformly "displaying wrong dates" — this is a latent trap
+that catches specific consumers, not a fleet of broken screens. Audit for
+slicers, not for columns.
+
 **STILL OPEN, and this is the part to pick up:** the same defect affects all
 **13 DATE columns** in this database —
 
@@ -172,18 +190,84 @@ forecast_snapshots.snapshot_date, employees.hire_date,
 custom_field_values.value_date, tasks.due_date (fixed)
 ```
 
-The global fix is one line in `config/database.ts`:
+**RESOLVED for the reachable cases by the surgical fix (option A).** The audit
+narrowed 13 columns to what actually matters:
+
+- **4 are unreachable** — `invoices.due_date`, `quotes.valid_until`,
+  `custom_field_values.value_date`, `employees.hire_date`. No controller touches
+  those tables at all, so they cannot be live bugs.
+- **`forecast_snapshots.snapshot_date`** is projected but the table has 0 rows.
+- **`leads.last_contact` / `leads.expected_close_date`** are projected, but no
+  consumer slices them — they go through `new Date(...)`, which is correct.
+- **The 5 deals columns had the real consumers**, and they are now cast to text
+  in both `dealsController` projections.
+
+Three consumer sites were confirmed wrong and are fixed. **They were not equally
+severe**, and the difference is the useful part:
+
+| Site | Severity |
+|---|---|
+| `DealSlideoutPanel.tsx:188` closeDate | display only |
+| `DealSlideoutPanel.tsx:202` nextStepDueDate | display only |
+| `DealHeroSection.tsx` `displayDateToIso` | **data corruption on save** |
+
+`displayDateToIso` did `new Date(display).toISOString().split('T')[0]`, so the
+string written back was a day earlier than what the user saw. Opening the close
+date editor and pressing Save **without changing anything** moved the date back
+a day, and repeating walked it backwards. Verified after the fix by doing exactly
+that twice on D042: `updated_at` moved both times (so the write really happened)
+and `expected_close_date` stayed 2026-09-03.
+
+### FOR THE OWNER — deal D043 holds a typo'd year, and it is NOT ours to fix
+
+`deals.expected_close_date` for **D043 is `262026-09-30`** — the year is 262026.
+Found while auditing date serialization; it is real stored data, not a
+serialization artefact. The API reports it faithfully as
+`'+262026-09-29T18:30:00.000Z'`, and the extended-year form is what the `+`
+prefix means.
+
+**Deliberately not corrected.** "2026-09-30" is the obvious intended value, but
+silently rewriting a customer's deal data on an inference is a different class of
+action from fixing our own bug — the same principle that stops us inventing data
+anywhere else here. The owner will correct it through the UI.
+
+**It is not cosmetic while it stands.** Any close-date sort puts D043 last by a
+quarter of a million years, and any forecast or pipeline aggregation bucketing by
+close date will place this deal outside every real period. Check it before
+trusting a date-ordered deals report.
+
+```sql
+-- current state
+SELECT id, name, expected_close_date FROM deals WHERE id = 'D043';
+```
+
+### OPEN ARCHITECTURE DECISION — the global DATE type parser (option B)
+
+**Deferred deliberately. This is a design decision, not an unfixed bug** — the
+reachable defects above are closed.
+
+The correct end state is one line in `config/database.ts`:
 
 ```ts
 import { types } from 'pg';
 types.setTypeParser(1082, (v) => v); // DATE — return the string, do not build a Date
 ```
 
-It was **not** applied here because it changes how every date in the app
-serialises, and this session had budget to verify only tasks. Shipping it after
-testing one consumer is the "verified one consumer, claimed three" mistake
-already recorded against F1. Do it as its own pass and re-check the deals and
-leads surfaces, which are almost certainly a day out today.
+A DATE is a calendar day and should arrive as `'YYYY-MM-DD'`, not as an instant.
+
+**Why it was NOT applied, and this is the part that is easy to get wrong:** it
+does not simply fix things. `new Date('2026-09-03')` parses as **UTC midnight**,
+so in a UTC-NEGATIVE offset (the Americas) it renders as **September 2** locally.
+The global parser therefore repairs every slicing consumer while introducing the
+mirror-image bug in every `new Date(x).toLocaleDateString()` consumer for western
+users. Done carelessly it relocates this exact defect onto a different set of
+users rather than fixing it.
+
+Doing it properly means auditing **every** `new Date(dateOnlyValue)` consumer
+app-wide, not just the slicers, and giving them a shared helper that builds from
+local components (`new Date(y, m-1, d)`) or renders the string directly.
+`utils/dates.ts` already holds the client-side half. That is a session's work and
+should be scoped as one.
 
 Note the comparison side is a separate fix in the same family:
 `utils/dates.ts` (`localDay`, `dateOnly`) is shared by the tasks list and the

@@ -23,6 +23,26 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     // unless the caller explicitly passes include_test=true (dev tooling only).
     let query = `
       SELECT d.*,
+             -- DATE columns re-projected as text. A DATE is a calendar day with
+             -- no time and no timezone, but the pg driver builds a JS Date at
+             -- LOCAL midnight and res.json() serialises that with toISOString():
+             -- in IST, 2026-09-03 left here as "2026-09-02T18:30:00.000Z". Any
+             -- consumer that slices or reformats that string got the previous
+             -- day, and DealSlideoutPanel did exactly that into an editable
+             -- field, so a no-op save wrote the date back one day earlier.
+             --
+             -- These come AFTER d.* deliberately: Postgres returns two fields of
+             -- the same name and node-pg keeps the LAST, so these override the
+             -- raw columns. Verified against this database rather than assumed —
+             -- the query returns two expected_close_date fields and the row
+             -- object holds "2026-09-03". Keeping d.* means a column added later
+             -- still reaches the client; an explicit 62-column list would
+             -- silently drop it.
+             to_char(d.expected_close_date, 'YYYY-MM-DD') AS expected_close_date,
+             to_char(d.next_step_due_date,  'YYYY-MM-DD') AS next_step_due_date,
+             to_char(d.discovery_date,      'YYYY-MM-DD') AS discovery_date,
+             to_char(d.start_date,          'YYYY-MM-DD') AS start_date,
+             to_char(d.contract_end_date,   'YYYY-MM-DD') AS contract_end_date,
              l.email AS lead_email,
              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
       FROM deals d
@@ -87,6 +107,15 @@ export const getDealById = async (req: AuthRequest, res: Response, next: NextFun
     const tenantId = requireTenantId(req);
     const result = await pool.query(
       `SELECT d.*,
+              -- See the note on the list query: DATE columns re-projected as
+              -- text so a calendar day never becomes an instant. Must stay in
+              -- sync with that projection — the detail panel binds these to
+              -- <input type="date">, which only accepts YYYY-MM-DD.
+              to_char(d.expected_close_date, 'YYYY-MM-DD') AS expected_close_date,
+              to_char(d.next_step_due_date,  'YYYY-MM-DD') AS next_step_due_date,
+              to_char(d.discovery_date,      'YYYY-MM-DD') AS discovery_date,
+              to_char(d.start_date,          'YYYY-MM-DD') AS start_date,
+              to_char(d.contract_end_date,   'YYYY-MM-DD') AS contract_end_date,
               l.name AS lead_name,
               l.email AS lead_email,
               co.name     AS company_name_resolved,
