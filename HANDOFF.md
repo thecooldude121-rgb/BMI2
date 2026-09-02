@@ -58,10 +58,38 @@ where the network log misleads. A real Move Stage click wrote the first row
 moved both coverage advisories.
 
 **Unproven, and stated as such: the populated path for `activities` and
-`documents` on both pages.** Both tables hold 0 rows, so only the empty states
-were exercised. The moment either gets real rows, open both pages and check the
-timeline and file lists render — that is the one gap in this work. Do not
-fabricate a row to close it.
+`documents`.** Both tables hold 0 rows, so only the empty states were
+exercised. Do not fabricate a row to close it. See the section below — this is
+now ONE shared gap across three pages, not a per-page item.
+
+### The populated activity timeline is ONE unproven path, shared by three pages
+
+Do not budget it three times, and do not try to prove it per page.
+
+`ComprehensiveDealDetailPage` (F24), `/accounts/:accountId` (F25) and
+`pages/CRM/ContactDetailView.tsx` (Phase-1 item 2, built in `cb05815`) all read
+the **same `activities` table** through the same `utils/activitiesApi.ts`, filter
+it by their own parent id (`deal_id` / `company_id` / `contact_id`), and render
+the same sorted-timeline-plus-empty-state pattern. All three empty states are
+verified. None of the three populated renders is, because `activities` has never
+held a row.
+
+**It closes automatically for all three the first time anyone logs a real
+activity through the app in normal use.** One row proves the shape; no separate
+proof is needed per page. When that happens, open whichever page the activity
+hangs off and confirm the timeline renders — then the other two follow from the
+same code path, and the remaining check is only that each page filters by the
+right parent id.
+
+**Why it is deliberately still open:** creating a row to demonstrate that an
+empty state works would be fabricating data in service of a verification rule —
+the owner ruled on exactly this on 2026-09-02 and declined it. The Move Stage
+precedent does not transfer: that write was incidental to exercising a real
+feature, whereas this one would exist only to be looked at. An honest "unproven"
+outlives a row invented to tick it off.
+
+`documents` (0 rows) is the same situation on the deal and account pages, and
+closes the same way.
 
 All verification writes reverted and re-counted, not assumed: 20 contacts /
 0 with a `buying_role`, 15 companies, 25 deals / 3 linked, 0 activities,
