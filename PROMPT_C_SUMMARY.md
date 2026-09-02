@@ -1,8 +1,9 @@
 # Prompt C — round-trip regression suite (closing report)
 
-**Status:** 189 of 190 backend tests pass across 14 files, over four consecutive full runs.
-`tsc --noEmit` clean. **One deliberate `it.fails`**, marking a single open finding recorded
-below — it is the only place a green run conceals anything, and it is named on purpose.
+**Status:** **194 of 194** backend tests pass across 14 files, over four consecutive full
+runs. `tsc --noEmit` clean. **No `it.fails`, `it.skip`, `it.todo` or `.only` anywhere in the
+suite** — a green run conceals nothing. Every data-layer finding raised during this work is
+now either fixed or, in one case, named as an open architectural gap that is not a bug.
 
 The brief: protect against the failure mode this project has hit most often — *a success
 state (toast, 200/201, green checkmark) with no real write behind it, or a write that
@@ -26,7 +27,7 @@ is against the database.
 
 ```bash
 cd Backend && npm run test:isolation:setup   # once — creates bmi_crm_iso_test
-cd Backend && npm run test:isolation         # 190 tests
+cd Backend && npm run test:isolation         # 194 tests
 cd Frontend && npx vitest run                # 387 tests
 ```
 
@@ -51,7 +52,7 @@ of files without the DB guard configured and reports meaningless failures.
 | CSV import | `roundTrip.csvImport.test.ts` | 5 |
 | Id generation under load | `roundTrip.idConcurrency.test.ts` | 20 |
 | Concurrent writes to one row | `roundTrip.concurrency.test.ts` | 5 |
-| Bulk-vs-single & import-vs-import races | `roundTrip.bulkImportRaces.test.ts` | 8 |
+| Bulk-vs-single & import-vs-import races | `roundTrip.bulkImportRaces.test.ts` | 12 |
 | Actor-name width | `roundTrip.actorName.test.ts` | 6 |
 | RBAC | `roundTrip.rbac.test.ts` | 9 |
 | Tenant isolation (pre-existing) | `tenantIsolation.test.ts` | 18 |
@@ -85,8 +86,9 @@ as `500 Internal Server Error`.**
 | 10 | `documents.uploaded_by` was `VARCHAR(10)` | widened to 255 (`a20c604`) |
 | 11 | `DELETE /documents/:id` returned a false 200 | 404, bulk untouched (`a20c604`) |
 | 12 | Actor name overflowed three `VARCHAR(100)` columns | widened to 255 (`dfb0d5a`) |
+| 13 | Concurrent account imports duplicated a company name | per-name advisory lock (`9ca4096`) |
 
-**Bug 9 was mine**, introduced by the fix for bug 8, and the most severe of the twelve: SQL
+**Bug 9 was mine**, introduced by the fix for bug 8, and the most severe of the thirteen: SQL
 `LPAD` truncates where JavaScript `padStart` does not, so `lpad('1007',3,'0')` is `'100'`.
 Every create would have failed permanently from the 1000th row onward. No live data was
 affected (sequences sat at 21/16/54/16), and the concurrency suite is what pushed the test
@@ -135,6 +137,50 @@ imports of the *same* rows create each email exactly once, and the losing rows s
 "already exists" rather than `rowErrorMessage`'s generic fallback, because
 `contacts_tenant_email_key` backstops the pre-insert check. A dry run racing a real import
 commits nothing.
+
+**Import vs import for accounts — was the last open finding, now closed.** Six simultaneous
+imports of one company name used to produce six rows, ten trials out of ten, every request
+reporting `created=1`, because `companies` has no unique constraint and the importer's dedupe
+was a check-then-write. Closed with a **per-name advisory lock** —
+`pg_advisory_xact_lock(hashtext(tenant_id), hashtext(lower(name)))`, taken inside the import
+transaction immediately before the duplicate SELECT so the check and the insert are covered
+together.
+
+**A unique index was deliberately NOT used, and remains the named alternative.** A `UNIQUE`
+index on `companies(tenant_id, lower(name))` would also close this race, but it would forbid
+two accounts ever sharing a name in one workspace — which is currently permitted by design
+when done knowingly and one at a time (HANDOFF.md's open design question). That is a larger
+product decision nobody has made. The lock changes nothing about what a sequential caller may
+do. **If the constraint route is ever chosen, it supersedes this lock and the lock should be
+removed with it.**
+
+Verified against the *specific* intended outcome, not merely "no longer six rows". The
+sequential baseline was measured first — the second of two duplicate imports returns
+`created=0, skipped=1`, reason `An account named "X" already exists (C1110)` — and the
+concurrent case now reproduces exactly that, **10 trials out of 10**: one creation, five
+skips, one row stored, every skip naming the id of the row that won.
+
+**No throughput regression**, proven deterministically rather than by wall clock: with one
+name's key held in a separate transaction, an import of a *different* name completed in 4ms
+while an import of the *same* name was still waiting after 1200ms and finished on release.
+Eight concurrent imports of eight distinct names all created in 13ms.
+
+**The cost it introduces, contained and pinned.** Two imports whose files share names in
+*opposite* order can each hold what the other wants; Postgres aborts one with `40P01`
+(confirmed directly with a two-client probe, not inferred). The per-row savepoint contains
+it — each name still ends with exactly one row, nothing duplicated or lost — but the aborted
+row reported `rowErrorMessage`'s generic "This row could not be saved". That generic fallback
+was a regression from this change, so `40P01`/`40001` now map to *"This row clashed with
+another import running at the same time — retry it"*. Eliminating the deadlock outright would
+mean locking every name in a file up front in sorted order, which reorders row processing and
+the indices the report is keyed to — not worth it while the outcome is already correct.
+
+**`createCompany` was deliberately left without a lock.** It has no duplicate-name check to
+wrap: it validates name presence and size and inserts. There is no check-then-write race
+there, and adding a lock would either serialize same-name creates for no benefit or require
+inventing a duplicate check — forbidding exactly the deliberate same-name creation this fix
+preserves. Verified it is the only such path: `resolveCompany` in the contacts importer reads
+and never creates.
 
 **Worth knowing:** `deal_stage_history.changed_at` defaults to `now()`, which in Postgres
 **is** `transaction_timestamp()` — the transaction's *start* time. Two near-simultaneous
@@ -191,21 +237,8 @@ timeline, though the documents API is now covered.
 
 ## Known gaps / explicitly out of scope
 
-- **OPEN FINDING — concurrent account imports duplicate.** Six simultaneous imports of one
-  company name produced six rows in **10 trials out of 10**, each reporting `created=1`.
-  `companies` has no unique constraint on name, so the importer's dedupe is a
-  check-then-write with no database backstop and cannot see another transaction's
-  uncommitted inserts; contacts survive the identical code path only because
-  `contacts_tenant_email_key` exists. Not data loss, and each report is honest about its own
-  request — but the deduplication the importer advertises, and which the sequential tests
-  verify, gives **no protection concurrently**, on the documented Salesforce/HubSpot
-  migration path. **Fix is a decision, not a detail:** a `UNIQUE` index on
-  `companies(tenant_id, lower(name))` settles it the way contacts already are, but same-named
-  accounts are currently permitted by design (HANDOFF.md's open design question); advisory
-  locking is the alternative. Marked `it.fails` in `roundTrip.bulkImportRaces.test.ts`
-  asserting the correct behaviour, unloosened.
 - **RBAC is not enforced on 13 of 14 route files** — see above. An open finding against a
-  stated architecture rule.
+  stated architecture rule, and now the only one outstanding from this work.
 - **The id-count enumeration leak** (`C042` reveals a global row count) — deferred, lower
   severity than the race was, closed only by a move to random ids.
 - **Browser-driven form submission** — caveat 1. No form is clicked.
@@ -256,6 +289,7 @@ both `NOT NULL`. The probe written to confirm it failed for that reason. No fix 
 | `a20c604` | Both document bugs fixed, plus the id-padding truncation bug |
 | `495a182` | Summary refreshed to 176 tests |
 | `dfb0d5a` | Actor-name overflow confirmed and fixed; two races investigated |
+| `9ca4096` | Concurrent-import duplicate race closed with a per-name advisory lock |
 
 Live data was untouched throughout: `bmi_crm` remains at 1 workspace, 20 contacts,
 15 companies, 25 deals, 38 leads, 0 activities, 0 documents — re-counted after every run,
