@@ -4,6 +4,22 @@ import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
 
+/**
+ * The JSONB columns a client may write through updateDeal's generic field loop.
+ *
+ * node-pg serialises a raw JS array as a Postgres ARRAY literal, which jsonb
+ * rejects outright with "invalid input syntax for type json" — a masked 500,
+ * and nothing saved. Each of these must therefore be JSON.stringify'd, exactly
+ * as createDeal does (`?? []` at :259/:260/:262 — all three default to
+ * '[]'::jsonb in the schema, none to '{}').
+ *
+ * `tags` is deliberately NOT here: it is text[], not jsonb, so the raw array is
+ * precisely what that column wants and stringifying it would break it.
+ * `value_history` is also absent because it never passes through this loop —
+ * it is written separately, already stringified.
+ */
+const JSONB_ARRAY_COLUMNS = new Set(['stakeholders', 'competitors', 'attachment_metadata']);
+
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
@@ -339,21 +355,11 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     fields.forEach(f => {
       if (req.body[f] === undefined) return;
       updates.push(`${f} = $${i++}`);
-      // stakeholders is JSONB. Passed through raw, node-pg serialises a JS
-      // array as a Postgres ARRAY literal, which jsonb rejects outright with
-      // "invalid input syntax for type json" — surfacing as a masked 500, so
-      // the buying committee simply could not be edited. Stringify it here
-      // exactly as createDeal does (JSON.stringify(stakeholders ?? [])), so
-      // the create and update paths agree. Same shape as the handling in
-      // leadsController.updateLead for its own tags/custom_fields split.
-      //
-      // NOTE: `competitors` and `attachment_metadata` are also JSONB and are
-      // also in this loop, and both fail the same way today (confirmed, not
-      // assumed). They are left alone deliberately, pending the same
-      // create-path-vs-decision judgement this one got — see the audit in the
-      // commit message. `tags` is text[], not jsonb: the raw array is what
-      // that column wants, so it must NOT be stringified.
-      if (f === 'stakeholders') params.push(JSON.stringify(req.body[f] ?? []));
+      // JSONB columns must be stringified to match the create path; everything
+      // else — including text[] `tags` — passes through untouched. See
+      // JSONB_ARRAY_COLUMNS above for why the distinction matters. Same shape
+      // as leadsController.updateLead's own tags/custom_fields split.
+      if (JSONB_ARRAY_COLUMNS.has(f)) params.push(JSON.stringify(req.body[f] ?? []));
       else params.push(req.body[f]);
     });
     if (newValueHistory !== null) {

@@ -195,6 +195,89 @@ describe('Deals — round trip', () => {
   });
 
   /**
+   * The other two JSONB columns on updateDeal's generic field loop. Both were
+   * stringified on create (createDeal:260 and :262) and passed through RAW on
+   * update, so both returned a masked 500 and saved nothing — the same defect
+   * as stakeholders, confirmed against the live endpoint before being fixed.
+   *
+   * Same four-part shape as the stakeholders test above, which is the
+   * distinction this codebase has settled on for a jsonb edit: the value
+   * round-trips, a second edit REPLACES it, an explicit null clears it to []
+   * (matching create's `?? []`), and omitting the field preserves it.
+   *
+   * All three columns default to '[]'::jsonb in the schema — checked, not
+   * assumed — so [] is the right empty value for each, not {}.
+   */
+  it.each([
+    [
+      'competitors',
+      [{ name: 'Rival Systems', strength: 'high', notes: 'incumbent' }],
+      [{ name: 'Other Vendor', strength: 'low', notes: 'price play' }],
+    ],
+    [
+      'attachment_metadata',
+      [{ filename: 'proposal-v1.pdf', size: 20480, uploaded_by: 'Round Tripper' }],
+      [{ filename: 'proposal-v2.pdf', size: 30720, uploaded_by: 'Round Tripper' }],
+    ],
+  ])('edit: %s (jsonb) survives a create, an edit, a clear and an unrelated save', async (field, initial, revised) => {
+    // Created WITH the value, so the create path is exercised too, not just the edit.
+    const create = await request(app).post('/api/v1/deals').set(auth(ws)).send({
+      name: `Jsonb ${field} Deal ${Date.now()}`, value: 18000, company_id: companyId,
+      [field]: initial,
+    });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    dealIds.push(id);
+
+    // node-pg parses jsonb back into JS, so a deep-equal here also rules out
+    // double-encoding — a JSON string inside the column would not match.
+    const afterCreate = await pool.query(`SELECT ${field} AS v FROM deals WHERE id = $1 AND tenant_id = $2`, [id, ws.tenantId]);
+    expect(afterCreate.rows[0].v).toEqual(initial);
+
+    // The edit that used to 500.
+    const edit = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ [field]: revised });
+    expect(edit.status, JSON.stringify(edit.body)).toBe(200);
+    expect(edit.body.message ?? '').not.toMatch(/Internal Server Error/);
+    const afterEdit = await pool.query(`SELECT ${field} AS v FROM deals WHERE id = $1`, [id]);
+    expect(afterEdit.rows[0].v).toEqual(revised);
+
+    // Explicit null clears to [], matching createDeal's `?? []`.
+    const cleared = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ [field]: null });
+    expect(cleared.status, JSON.stringify(cleared.body)).toBe(200);
+    const afterClear = await pool.query(`SELECT ${field} AS v FROM deals WHERE id = $1`, [id]);
+    expect(afterClear.rows[0].v).toEqual([]);
+
+    // Omitting the field leaves the stored value alone.
+    const unrelated = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ description: `unrelated ${field} edit` });
+    expect(unrelated.status).toBe(200);
+    const afterOmitJson = await pool.query(`SELECT ${field} AS v, description FROM deals WHERE id = $1`, [id]);
+    expect(afterOmitJson.rows[0].v).toEqual([]);
+    expect(afterOmitJson.rows[0].description).toBe(`unrelated ${field} edit`);
+  });
+
+  /**
+   * The counterpart that must NOT change: `tags` shares the same loop but is
+   * text[], not jsonb, so the raw array is exactly what the column wants.
+   * Stringifying it would have been a new bug introduced by fixing the old one.
+   */
+  it('tags (text[]) still round-trips as a real array, not a JSON string', async () => {
+    const create = await request(app).post('/api/v1/deals').set(auth(ws)).send({
+      name: `Tags Deal ${Date.now()}`, value: 9000, company_id: companyId,
+    });
+    expect(create.status).toBe(201);
+    const id = create.body.data.id;
+    dealIds.push(id);
+
+    const res = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ tags: ['enterprise', 'renewal'] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const row = await pool.query('SELECT tags FROM deals WHERE id = $1', [id]);
+    expect(row.rows[0].tags).toEqual(['enterprise', 'renewal']);
+    // Two elements, not one string that merely looks like a list.
+    expect(row.rows[0].tags).toHaveLength(2);
+  });
+
+  /**
    * Move Stage modal regression: previously performed ZERO writes while
    * showing a success toast. Confirm a stage change writes a real
    * deal_stage_history row with correct prior/new stage and changed_by —
