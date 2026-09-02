@@ -1,5 +1,88 @@
 # Handoff — read before starting work
 
+## DONE — CSV import for Contacts and Accounts is built and real.
+
+Phase-1 item 5. Both surfaces parse, validate, insert, and report **every**
+rejected row with its own reason. Neither was a working feature before:
+
+- **Contacts** — the modal was honestly labelled `<NotAvailable>` (an earlier
+  session had already stripped out a version that accepted a file, showed a
+  green tick, and never read the bytes). It now imports.
+- **Accounts** — the Import button navigated to `AccountImportExport.tsx`, twelve
+  lines reading "This component will handle CSV/XLS import and export
+  functionality." See the audit-tooling gap below: because it never used
+  `<NotAvailable>`, it was in no inventory of unfinished work.
+
+**One parser, one panel, one report format.** `utils/csvParse.ts` (moved out of
+the Leads wizard, two silent bugs fixed — a quoted newline tore a row in two, and
+a blank header shifted every later column, so the app's own export could not be
+read back in). `components/CRM/CsvImportPanel.tsx` is shared by both surfaces so
+they cannot drift. `Backend/src/utils/csvImport.ts` holds the per-row SAVEPOINT
+machinery.
+
+**Design decisions, with the reasoning in the files:** server-side insert rather
+than N POSTs from the browser (duplicate detection has to see the whole
+workspace; `fetchContacts` caps at 200). Per-row savepoint, not one transaction
+per file, so 397 good rows are not held hostage by 3 bad ones. Dry run = the real
+inserts, rolled back, so the preview cannot disagree with the commit. Company
+linking is **exact case-insensitive name match only**; no match or an ambiguous
+match imports unlinked and says so. Alias-based column recognition with a visible
+recognised/ignored list — a full drag-to-map UI was explicitly deferred.
+
+### Migration 029 — and a CORRECTION to its own comment
+
+`contacts.source` gained `'import'`. Pure widening; all 20 contacts had
+`source IS NULL`, so nothing could be invalidated. `'import'` is provenance the
+importer writes and is deliberately **absent from `SELECTABLE_SOURCES`** in the
+Add Contact form — a hand-keyed contact must not be able to claim it arrived in a
+bulk migration. `SOURCE_LABELS` still carries a label for it so imported contacts
+render correctly, and the form preserves an unselectable value it was given
+rather than blanking it on save.
+
+**The migration's header comment says the vocabulary lives in four places plus
+one compiler-enforced. That is wrong — it is six, and it cannot be corrected in
+the file** because 029 is applied and editing it changes the checksum, which
+makes the runner refuse to start (this is exactly what 028 exists to document).
+The full list:
+
+1. `contacts_source_check` — the authority
+2. `SOURCES` in `Backend/src/controllers/contactsController.ts`
+3. `ContactSource` in `Frontend/src/types/contact.ts`
+4. `SOURCES` in `Frontend/src/utils/contactsApi.ts`
+5. `SOURCE_LABELS` in `AddEditContactPage.tsx` — `Record<ContactSource, …>`
+6. `SOURCE_BADGES` in `ContactsPage.tsx` — `Record<ContactSource, …>`
+7. `SOURCE_LABELS` in `ContactDetailView.tsx` — `Record<ContactSource, …>`
+
+**Sites 6 and 7 were found by the compiler, not by my grep** — which is the
+argument for keeping these as `Record<Union, …>` rather than a partial map with a
+fallback. A grep table is a claim; a `Record` is enforcement. Adding a source
+value is a build failure until every render site has a label, and that is the
+design working.
+
+### Verified, and what was NOT
+
+Real sign-out, real login through the dev-login autofill, real sidebar
+navigation, real file upload through the actual `<input type="file">`. A 4-row
+contacts CSV and a 3-row accounts CSV, each carrying deliberate failures.
+
+- Dry run wrote nothing: contacts stayed at 20 across the preview.
+- `POST /contacts/import` → 200 in the network log, followed by the list refetch.
+- Every inserted field cross-checked against its Postgres row, not against the
+  200: `company_id = C001` from the exact name match, `owner_id = 2` from the
+  owner email, tags split on `;`, `source = 'import'`, `tenant_id` scoped.
+  `revenue 25000000` parsed from a quoted `"25,000,000"`.
+- The rejected rows wrote nothing (0 rows for the bad-email contact and the
+  bad-size account) and the duplicate did **not** overwrite its existing row —
+  CT001 kept its own job title rather than taking the CSV's.
+- Cleanup re-counted, not assumed: back to **20 contacts / 15 companies / 25
+  deals / 38 leads / 0 activities**, with a residue sweep for
+  `source = 'import'` and the test domains both returning 0.
+
+**Not exercised:** the "Download report" button (a blob download, same mechanism
+as the working contacts export) and a file large enough to chunk across more than
+one 500-row request. `mergeSummaries` has the index-shifting logic for it and is
+unproven against a real >500-row file.
+
 ## DONE — F24 and F25 are built. Read this before picking up the next item.
 
 Both are committed: `bf3f197` (F24, deal detail) and `007dad7` (F25, account
@@ -131,6 +214,39 @@ What a session picking this up has to settle, in order:
 4. Every new FK references a GLOBAL primary key, so both halves of the tenant
    rule apply: validate on write with `utils/tenantScope.ts`, and carry
    `AND parent.tenant_id = child.tenant_id` on every join.
+
+### OPEN DESIGN QUESTION — may two companies in one workspace share a name?
+
+**Not a bug, and deliberately NOT bundled into the CSV import work** where it
+surfaced. The owner ruled on 2026-09-02 that this is a product decision
+deserving its own consideration, not a hygiene fix to ride along on a narrow
+task — the same call made for deals-to-contacts above.
+
+`companies` has **no unique constraint at all**: not on `name`, not on `domain`.
+Only `companies_pkey` on `id` and the `size` CHECK. Contrast `contacts`, which
+has `contacts_tenant_email_key UNIQUE (tenant_id, email)`. So nothing stops a
+workspace holding fifteen rows named "Acme Corp", and a careless accounts import
+is the most likely way to create them.
+
+The question a session picking this up has to settle first, because the answer
+decides whether the constraint is correct at all: **can two legitimately
+different companies share a display name?** Divisions, subsidiaries and regional
+entities ("Acme Corp" in India and in the UAE, both real accounts with different
+owners and deals) are the case that argues no constraint. If they can, the fix
+is not uniqueness but disambiguation — `domain`, or a parent-company reference.
+
+If a constraint IS wanted, `UNIQUE (tenant_id, lower(name))` is the shape, and
+note it needs a data check first: run
+`SELECT lower(name), count(*) FROM companies GROUP BY 1 HAVING count(*) > 1;`
+before writing it, or the migration fails on existing rows. (15 companies today,
+no duplicates, so it would apply cleanly right now — that will not stay true.)
+
+**What CSV import does in the meantime, and why it is sufficient without the
+constraint:** contact rows naming a company are linked by exact,
+case-insensitive name match only. A name matching **two or more** companies is
+ambiguous, so the contact imports **unlinked** with that stated as the row's
+reason, rather than the importer guessing. Under-linking is visible and
+reversible; a contact silently attached to the wrong Acme is neither.
 
 ### Findings raised but deliberately NOT fixed — pick these up or decide against them
 
@@ -803,6 +919,57 @@ calls is suspected fabricated code, to be reported rather than assumed to be a w
 progress. Grep the tree for `fetch(`, the API clients and the data contexts; a count of zero
 across every file means the feature is backed by nothing regardless of how finished the UI
 looks. That check is cheap and has now paid for itself three times.
+
+### AUDIT-TOOLING GAP — `grep -rl NotAvailable src/` misses future-tense promises
+
+Found during the CSV import audit (2026-09-02) and worth fixing in how the sweep
+is run, not just noting once.
+
+`NotAvailable.tsx` says its own count is the inventory of unfinished work:
+"`grep -rl NotAvailable src/` is a live inventory of what is unfinished", and wiring a
+feature up means deleting one, so the count only goes down. That is true for every surface
+that adopted the convention — and it silently excludes the ones that never did.
+
+`pages/Accounts/AccountImportExport.tsx` was the counter-example. Twelve lines, routed and
+reachable at `/crm/accounts/import-export` from the Accounts page's **Import** button, and
+its entire body was:
+
+```
+<h1>Import & Export</h1>
+<p>This component will handle CSV/XLS import and export functionality.</p>
+```
+
+No `NotAvailable`, so it appeared in no inventory. It is not fabricated data — it invents
+nothing — but it fails in the adjacent way: a **future-tense promise** presented as a
+destination. The button works, the navigation succeeds, and the user lands on a page that
+says the feature will exist. That reads as "not built yet" to a developer and as "broken"
+to a customer, and unlike a dead button it leaves no trace in a grep.
+
+**So add a second pattern to the fabrication sweep.** Alongside the zero-`fetch` check,
+grep for the future tense and for placeholder prose:
+
+```
+grep -rniE --include="*.tsx" "will (handle|be implemented|support)|coming soon|to be implemented" src/
+```
+
+Any hit that is a *rendered string* rather than a comment is a surface making a promise to
+a user without the project's own label on it. The fix is the same each time: render
+`<NotAvailable>` so it joins the inventory, or build the thing. Comments using the same
+words are fine — it is the JSX that lies.
+
+**Calibrated against the tree on 2026-09-02, because an uncalibrated grep is how a
+future session wastes a day on 36 non-findings.** It returned 38 hits, and the split
+matters more than the total:
+
+| Pattern | Hits | Verdict |
+|---|---|---|
+| `coming soon` | 36 | **Almost all fine.** Toasts and badges in `BulkActionBar`, `MeetingsPage`, `LeadsPage`, `ComprehensiveDealDetailPage`, `AvailableIntegrationCard`. These are *honest* — they tell the user the thing is not built. They are the opposite of the fake-success-toast defect. High volume, low signal. |
+| `will handle` / `to be implemented` | 2 | **This is the signal.** One was a comment; one was `AccountImportExport.tsx`, the finding above. |
+
+So weight the `will (handle|be implemented|support)` family, not `coming soon`. And note
+the distinction the counts encode: a control that *says* it does nothing is honest, however
+many there are; a page that says the feature is coming while a button routes users to it is
+not. Volume is not severity here.
 
 **Password reset is not built.** Blocked on nothing now except a sender domain. Needs, in
 order: a `password_resets` table of single-use expiring tokens stored **hashed**; rate

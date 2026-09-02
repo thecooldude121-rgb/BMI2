@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getContacts, getContactById, createContact, updateContact, deleteContact, bulkUpdateContacts } from '../controllers/contactsController';
+import { getContacts, getContactById, createContact, updateContact, deleteContact, bulkUpdateContacts, importContacts } from '../controllers/contactsController';
 import { protect } from '../middleware/auth';
 
 const router = Router();
@@ -10,6 +10,8 @@ router.get('/', getContacts);
 // is no POST '/:id' — but keeping the literal path first means adding one later
 // cannot quietly swallow '/bulk'. Mirrors the deals router.
 router.post('/bulk', bulkUpdateContacts);
+// Literal path, declared before '/:id' for the same reason as '/bulk'.
+router.post('/import', importContacts);
 router.get('/:id', getContactById);
 router.post('/', createContact);
 router.put('/:id', updateContact);

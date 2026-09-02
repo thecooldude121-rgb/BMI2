@@ -87,6 +87,11 @@ const DEPARTMENTS = ['Sales', 'Marketing', 'Engineering', 'HR', 'Finance', 'Oper
  * Labels for the values in contacts_source_check. The values are the
  * constraint's; only the labels are ours. 'converted' and 'event' are included
  * because the constraint allows them.
+ *
+ * This map must stay COMPLETE — it is what renders a contact's source wherever
+ * one is displayed, so a missing entry shows a stored value with no label. It
+ * being a Record over the union is deliberate: widening ContactSource fails the
+ * build here until a label exists.
  */
 const SOURCE_LABELS: Record<ContactSource, string> = {
   'lead-gen':  'Lead generation tool',
@@ -96,7 +101,27 @@ const SOURCE_LABELS: Record<ContactSource, string> = {
   'website':   'Website form',
   'referral':  'Referral',
   'event':     'Event / conference',
+  'import':    'Imported from a file',
 };
+
+/**
+ * What the Source dropdown offers, which is NOT every value the constraint
+ * allows — the two lists answer different questions.
+ *
+ * 'import' is provenance the CSV importer writes (migration 029). Offering it
+ * here would let someone hand-key a contact and assert it arrived in a bulk
+ * migration, which is the same falsehood that made us reject defaulting
+ * imported rows to 'manual'. A source records how a contact actually got here;
+ * it is not a free-text claim.
+ *
+ * It still needs a label above, because an imported contact opened in this form
+ * must show its real source rather than a blank select. The value is preserved
+ * on save: formData.source is seeded from the contact and only changes if the
+ * user picks something else.
+ */
+const SELECTABLE_SOURCES: ContactSource[] = [
+  'lead-gen', 'hrms', 'converted', 'manual', 'website', 'referral', 'event',
+];
 
 const STATUS_LABELS: Record<ContactStatus, string> = {
   'active':         'Active',
@@ -713,7 +738,19 @@ const AddEditContactPage: React.FC = () => {
                   <select id="source" value={formData.source}
                     onChange={e => setField('source', e.target.value as ContactSource)} className={inputClass('source')}>
                     <option value="">—</option>
-                    {(Object.keys(SOURCE_LABELS) as ContactSource[]).map(s => (
+                    {/*
+                      The contact's own source is included even when it is not
+                      selectable, so editing an imported contact does not
+                      silently rewrite its provenance: a <select> whose value
+                      matches no <option> renders blank, and saving that form
+                      would write the blank back. Offering it keeps the value
+                      visible and intact while still not letting anyone choose
+                      it for a contact that did not come from an import.
+                    */}
+                    {(formData.source && !SELECTABLE_SOURCES.includes(formData.source)
+                      ? [formData.source, ...SELECTABLE_SOURCES]
+                      : SELECTABLE_SOURCES
+                    ).map(s => (
                       <option key={s} value={s}>{SOURCE_LABELS[s]}</option>
                     ))}
                   </select>

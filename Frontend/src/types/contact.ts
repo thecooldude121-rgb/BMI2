@@ -8,7 +8,11 @@
  * every real row.
  */
 export type ContactSource =
-  | 'lead-gen' | 'hrms' | 'converted' | 'manual' | 'website' | 'referral' | 'event';
+  | 'lead-gen' | 'hrms' | 'converted' | 'manual' | 'website' | 'referral' | 'event'
+  // Written by the CSV importer only (migration 029). Deliberately absent from
+  // SELECTABLE_SOURCES in AddEditContactPage: it is provenance the system
+  // records, not a claim a user can make about a contact they typed in.
+  | 'import';
 
 /**
  * 'do-not-contact' is a suppression flag, NOT a synonym for 'inactive'.

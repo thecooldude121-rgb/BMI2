@@ -2,6 +2,9 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import {
+  MAX_IMPORT_ROWS, runImport, created, skipped, failed, tooLong, firstProblem,
+} from '../utils/csvImport';
 
 export const getCompanies = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -103,4 +106,151 @@ export const deleteCompany = async (req: AuthRequest, res: Response, next: NextF
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Company not found' }); return; }
     res.json({ success: true, message: 'Company deleted' });
   } catch (error) { next(error); }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV import
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Mapped field names, not raw CSV headers — the alias table lives client-side. */
+interface CompanyImportRow {
+  name?: string;
+  domain?: string;
+  industry?: string;
+  size?: string;
+  revenue?: string | number;
+  website?: string;
+  phone?: string;
+  description?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zip_code?: string;
+}
+
+const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim());
+const orNull = (v: string): string | null => (v === '' ? null : v);
+
+/** Mirrors companies_size_check. Duplicated only to produce a better message. */
+const VALID_SIZES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+', 'unknown'];
+
+/**
+ * POST /companies/import
+ *
+ * Body: { rows: CompanyImportRow[], dry_run?: boolean }
+ *
+ * NOTE ON DUPLICATES, because this differs from contacts in a way that matters:
+ * `companies` has NO unique constraint — not on name, not on domain. The
+ * database will not stop a workspace accumulating fifteen rows named "Acme
+ * Corp", so the name check below is the ONLY thing standing between a
+ * re-run import and a duplicated account list. That makes the dry run more
+ * valuable here than on contacts, where the constraint is a backstop.
+ *
+ * Whether that constraint should exist is a product question, not a hygiene
+ * fix — divisions and regional entities can legitimately share a display name.
+ * It is logged as an open design question in HANDOFF.md and deliberately not
+ * decided here.
+ */
+export const importCompanies = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const tenantId = requireTenantId(req);
+    const { rows, dry_run } = req.body as { rows?: unknown; dry_run?: unknown };
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      res.status(400).json({ success: false, message: 'rows must be a non-empty array' });
+      return;
+    }
+    if (rows.length > MAX_IMPORT_ROWS) {
+      res.status(400).json({
+        success: false,
+        message: `An import is limited to ${MAX_IMPORT_ROWS} rows at a time; this request had ${rows.length}`,
+      });
+      return;
+    }
+
+    const summary = await runImport<CompanyImportRow>(
+      client,
+      rows as CompanyImportRow[],
+      dry_run === true,
+      async (row, _index, tx) => {
+        const name = str(row.name);
+        if (!name) return failed('Missing required field: name');
+
+        const lengthProblem = firstProblem(
+          tooLong(name, 100, 'Name'),
+          tooLong(str(row.domain), 100, 'Domain'),
+          tooLong(str(row.industry), 50, 'Industry'),
+          tooLong(str(row.website), 200, 'Website'),
+          tooLong(str(row.phone), 20, 'Phone'),
+          tooLong(str(row.street), 150, 'Street'),
+          tooLong(str(row.city), 50, 'City'),
+          tooLong(str(row.state), 50, 'State'),
+          tooLong(str(row.country), 50, 'Country'),
+          tooLong(str(row.zip_code), 20, 'Zip code'),
+        );
+        if (lengthProblem) return failed(lengthProblem);
+
+        const size = str(row.size);
+        if (size && !VALID_SIZES.includes(size)) {
+          return failed(`"${size}" is not a valid company size. Use one of: ${VALID_SIZES.join(', ')}`);
+        }
+
+        // revenue is a bigint. A non-numeric value would be a 22P02 the user
+        // cannot read, and silently dropping it would lose data they supplied.
+        let revenue: number | null = null;
+        const revenueRaw = str(row.revenue);
+        if (revenueRaw) {
+          // Tolerate the separators and currency marks a spreadsheet produces.
+          const cleaned = revenueRaw.replace(/[,\s₹$€£]/g, '');
+          if (!/^-?\d+(\.\d+)?$/.test(cleaned)) {
+            return failed(`"${revenueRaw}" is not a number, so it cannot be saved as revenue`);
+          }
+          revenue = Math.round(Number(cleaned));
+        }
+
+        // Catches both an existing account and a name repeated earlier in this
+        // same file — rows inserted earlier in the transaction are visible.
+        const dup = await tx.query(
+          'SELECT id FROM companies WHERE tenant_id = $1 AND lower(name) = lower($2) LIMIT 1',
+          [tenantId, name],
+        );
+        if (dup.rowCount) {
+          return skipped(`An account named "${name}" already exists (${dup.rows[0].id})`);
+        }
+
+        // Same MAX(id)+1 scheme, same deliberate absence of a tenant predicate
+        // (companies.id is a GLOBAL primary key), same known cross-request race
+        // as createCompany. See CLAUDE.md — the race and the id-leak share one
+        // fix and are not addressed here.
+        const maxResult = await tx.query(
+          `SELECT MAX(CAST(SUBSTRING(id, 2) AS INTEGER)) AS max_num FROM companies WHERE id ~ '^C[0-9]+$'`,
+        );
+        const id = `C${String((maxResult.rows[0].max_num || 0) + 1).padStart(3, '0')}`;
+
+        const inserted = await tx.query(
+          `INSERT INTO companies (
+             id, tenant_id, name, domain, industry, size, revenue, website, phone,
+             description, street, city, state, country, zip_code
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           RETURNING id`,
+          [
+            id, tenantId, name, orNull(str(row.domain)), orNull(str(row.industry)),
+            orNull(size), revenue, orNull(str(row.website)), orNull(str(row.phone)),
+            orNull(str(row.description)), orNull(str(row.street)), orNull(str(row.city)),
+            orNull(str(row.state)), orNull(str(row.country)), orNull(str(row.zip_code)),
+          ],
+        );
+
+        return created(inserted.rows[0].id);
+      },
+    );
+
+    res.status(200).json({ success: true, data: summary });
+  } catch (error) {
+    next(error);
+  } finally {
+    client.release();
+  }
 };

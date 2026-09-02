@@ -62,13 +62,14 @@ export interface ContactRow {
 }
 
 /**
- * These two mirror the CHECK constraints in migration 020. A row whose value is
+ * These two mirror the CHECK constraints in migration 020, as widened by 029
+ * ('import', written by the CSV importer). A row whose value is
  * outside the constraint can only mean the constraint was widened without this
  * file being updated, so fall back to the neutral member rather than casting —
  * a bad cast puts a value the UI has no branch for into a union.
  */
 const SOURCES: ContactSource[] =
-  ['lead-gen', 'hrms', 'converted', 'manual', 'website', 'referral', 'event'];
+  ['lead-gen', 'hrms', 'converted', 'manual', 'website', 'referral', 'event', 'import'];
 const STATUSES: ContactStatus[] = ['active', 'inactive', 'do-not-contact'];
 
 /** Absent stays absent — see the note on Contact.source. */

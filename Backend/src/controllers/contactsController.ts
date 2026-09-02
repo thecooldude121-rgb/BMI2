@@ -1,8 +1,13 @@
 import { Response, NextFunction } from 'express';
+import { PoolClient } from 'pg';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
+import {
+  MAX_IMPORT_ROWS, runImport, created, skipped, failed,
+  invalidEmail, tooLong, firstProblem,
+} from '../utils/csvImport';
 
 /**
  * Vocabularies. These MIRROR the CHECK constraints contacts_source_check and
@@ -15,7 +20,11 @@ import { foreignIdsInTenant } from '../utils/tenantScope';
  *   SELECT pg_get_constraintdef(oid) FROM pg_constraint
  *    WHERE conrelid = 'contacts'::regclass AND contype = 'c';
  */
-const SOURCES = ['lead-gen', 'hrms', 'converted', 'manual', 'website', 'referral', 'event'] as const;
+// 'import' (migration 029) is written by the CSV importer and is not offered in
+// the Add Contact form's dropdown — a hand-keyed contact must not be able to
+// claim it arrived in a bulk migration. It is accepted here because the
+// importer posts it.
+const SOURCES = ['lead-gen', 'hrms', 'converted', 'manual', 'website', 'referral', 'event', 'import'] as const;
 const STATUSES = ['active', 'inactive', 'do-not-contact'] as const;
 
 /**
@@ -416,6 +425,260 @@ export const bulkUpdateContacts = async (req: AuthRequest, res: Response, next: 
       });
       return;
     }
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV import
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The shape the client posts per row. These are MAPPED field names, not raw CSV
+ * headers: the alias table that turns "Email Address" into `email` lives in the
+ * frontend next to the column-recognition UI that has to explain itself to the
+ * user. The server's job is validation and insertion, and it validates what it
+ * is given rather than trusting it.
+ *
+ * `company_name` and `owner_email` are import-only: they are resolved to
+ * `company_id` / `owner_id` here and never written as-is.
+ */
+interface ContactImportRow {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  position?: string;
+  department?: string;
+  linkedin_url?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+  timezone?: string;
+  notes?: string;
+  tags?: string[];
+  source?: string;
+  status?: string;
+  company_name?: string;
+  owner_email?: string;
+}
+
+const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+/** '' means "the CSV had no value here" — write NULL, not an empty string. */
+const orNull = (v: string): string | null => (v === '' ? null : v);
+
+/**
+ * Resolve a company by EXACT, case-insensitive name within the workspace.
+ *
+ * Exact-match-only is a deliberate choice over fuzzy matching, and the reasoning
+ * is the inverse of the usual one: fuzzy matching would link more rows and would
+ * sometimes link them to the WRONG company. An unlinked contact is visible and
+ * one click to fix; a contact silently attached to the wrong Acme is neither
+ * visible nor obviously wrong later. This is the same false-positive class that
+ * was just corrected in utils/leadDuplicates.ts.
+ *
+ * A name matching two or more companies is ambiguous and resolves to nothing —
+ * `companies` has no unique constraint on name (see the open design question in
+ * HANDOFF.md), so duplicates are possible and guessing between them is exactly
+ * the mis-link this function exists to avoid.
+ */
+async function resolveCompany(
+  client: PoolClient,
+  name: string,
+  tenantId: string,
+): Promise<{ id: string | null; warning?: string }> {
+  const found = await client.query(
+    'SELECT id FROM companies WHERE tenant_id = $1 AND lower(name) = lower($2) LIMIT 2',
+    [tenantId, name],
+  );
+  if (found.rowCount === 0) {
+    return { id: null, warning: `No account named "${name}" — imported without an account link` };
+  }
+  if ((found.rowCount ?? 0) > 1) {
+    return { id: null, warning: `More than one account is named "${name}" — imported without an account link, link it by hand` };
+  }
+  return { id: found.rows[0].id };
+}
+
+/** Resolve an owner by email within the workspace. Absent is a warning, not an error. */
+async function resolveOwner(
+  client: PoolClient,
+  email: string,
+  tenantId: string,
+): Promise<{ id: number | null; warning?: string }> {
+  const found = await client.query(
+    'SELECT id FROM users WHERE tenant_id = $1 AND lower(email) = lower($2) LIMIT 1',
+    [tenantId, email],
+  );
+  if (found.rowCount === 0) {
+    return { id: null, warning: `No user with the email ${email} — imported unassigned` };
+  }
+  return { id: found.rows[0].id };
+}
+
+/**
+ * POST /contacts/import
+ *
+ * Body: { rows: ContactImportRow[], dry_run?: boolean }
+ * Returns a per-row verdict — see utils/csvImport.ts for why every row gets one.
+ */
+export const importContacts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const tenantId = requireTenantId(req);
+    const { rows, dry_run } = req.body as { rows?: unknown; dry_run?: unknown };
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      res.status(400).json({ success: false, message: 'rows must be a non-empty array' });
+      return;
+    }
+    if (rows.length > MAX_IMPORT_ROWS) {
+      res.status(400).json({
+        success: false,
+        message: `An import is limited to ${MAX_IMPORT_ROWS} rows at a time; this request had ${rows.length}`,
+      });
+      return;
+    }
+
+    const summary = await runImport<ContactImportRow>(
+      client,
+      rows as ContactImportRow[],
+      dry_run === true,
+      async (row, _index, tx) => {
+        const warnings: string[] = [];
+
+        const first_name = str(row.first_name);
+        const last_name  = str(row.last_name);
+        const email      = str(row.email);
+
+        // ── Required fields. contacts has all three NOT NULL. ──────────────
+        const missing = [
+          !first_name && 'first name',
+          !last_name && 'last name',
+          !email && 'email',
+        ].filter(Boolean);
+        if (missing.length) {
+          return failed(`Missing required ${missing.length > 1 ? 'fields' : 'field'}: ${missing.join(', ')}`);
+        }
+
+        if (invalidEmail(email)) {
+          return failed(`"${email}" is not a valid email address`);
+        }
+
+        // ── Column widths, checked before the insert so the reason names the
+        //    field instead of arriving as a 22001 the user cannot read. ──────
+        const lengthProblem = firstProblem(
+          tooLong(first_name, 50, 'First name'),
+          tooLong(last_name, 50, 'Last name'),
+          tooLong(email, 150, 'Email'),
+          tooLong(str(row.phone), 20, 'Phone'),
+          tooLong(str(row.mobile), 20, 'Mobile'),
+          tooLong(str(row.position), 100, 'Job title'),
+          tooLong(str(row.department), 100, 'Department'),
+          tooLong(str(row.linkedin_url), 200, 'LinkedIn URL'),
+          tooLong(str(row.street), 200, 'Street'),
+          tooLong(str(row.city), 100, 'City'),
+          tooLong(str(row.state), 100, 'State'),
+          tooLong(str(row.postal_code), 20, 'Postal code'),
+          tooLong(str(row.country), 100, 'Country'),
+          tooLong(str(row.timezone), 60, 'Timezone'),
+        );
+        if (lengthProblem) return failed(lengthProblem);
+
+        // ── Constrained vocabularies. An invalid value is a row error rather
+        //    than a silent coercion: rewriting a source the user supplied would
+        //    record a provenance they did not state. ─────────────────────────
+        const source = str(row.source);
+        if (source && !SOURCES.includes(source as typeof SOURCES[number])) {
+          return failed(`"${source}" is not a valid source. Use one of: ${SOURCES.join(', ')}`);
+        }
+        const status = str(row.status);
+        if (status && !STATUSES.includes(status as typeof STATUSES[number])) {
+          return failed(`"${status}" is not a valid status. Use one of: ${STATUSES.join(', ')}`);
+        }
+
+        if (row.tags !== undefined && !Array.isArray(row.tags)) {
+          return failed('tags must be a list');
+        }
+        const tags = (row.tags ?? []).map(t => String(t).trim()).filter(Boolean);
+
+        // ── Duplicates. This single lookup catches BOTH a contact already in
+        //    the workspace AND an email repeated earlier in this same file,
+        //    because rows inserted earlier in the transaction are visible here.
+        //    Two mechanisms could disagree; one cannot. ───────────────────────
+        const dup = await tx.query(
+          'SELECT id FROM contacts WHERE tenant_id = $1 AND lower(email) = lower($2) LIMIT 1',
+          [tenantId, email],
+        );
+        if (dup.rowCount) {
+          return skipped(`A contact with the email ${email} already exists (${dup.rows[0].id})`);
+        }
+
+        // ── Optional references. Neither failing to resolve is fatal: the
+        //    contact is real data and belongs in the CRM either way. ──────────
+        let company_id: string | null = null;
+        const companyName = str(row.company_name);
+        if (companyName) {
+          const resolved = await resolveCompany(tx, companyName, tenantId);
+          company_id = resolved.id;
+          if (resolved.warning) warnings.push(resolved.warning);
+        }
+
+        let owner_id: number | null = null;
+        const ownerEmail = str(row.owner_email);
+        if (ownerEmail) {
+          const resolved = await resolveOwner(tx, ownerEmail, tenantId);
+          owner_id = resolved.id;
+          if (resolved.warning) warnings.push(resolved.warning);
+        }
+
+        // ── Id. Same MAX(id)+1 scheme as createContact, and the same known
+        //    race across concurrent requests (CLAUDE.md: it shares one fix with
+        //    the id-leak and they move together, so it is NOT addressed here).
+        //    Inside this transaction it is at least self-consistent: rows this
+        //    import already inserted are counted.
+        //    Deliberately not scoped by tenant — contacts.id is a GLOBAL primary
+        //    key, so scoping the scan would regenerate CT001 in a second
+        //    workspace and every insert would collide.
+        const maxResult = await tx.query(
+          `SELECT MAX(CAST(SUBSTRING(id, 3) AS INTEGER)) AS max_num FROM contacts WHERE id ~ '^CT[0-9]+$'`,
+        );
+        const id = `CT${String((maxResult.rows[0].max_num || 0) + 1).padStart(3, '0')}`;
+
+        const inserted = await tx.query(
+          `INSERT INTO contacts (
+             id, tenant_id, first_name, last_name, email, phone, mobile, position,
+             department, linkedin_url, street, city, state, postal_code, country,
+             timezone, notes, tags, source, status, company_id, owner_id
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+           RETURNING id`,
+          [
+            id, tenantId, first_name, last_name, email,
+            orNull(str(row.phone)), orNull(str(row.mobile)), orNull(str(row.position)),
+            orNull(str(row.department)), orNull(str(row.linkedin_url)),
+            orNull(str(row.street)), orNull(str(row.city)), orNull(str(row.state)),
+            orNull(str(row.postal_code)), orNull(str(row.country)), orNull(str(row.timezone)),
+            orNull(str(row.notes)), tags,
+            // 'import' (migration 029) is the default and the point of that
+            // migration: it records how the contact actually arrived. A source
+            // the CSV states explicitly wins, having been validated above.
+            source || 'import',
+            status || 'active',
+            company_id, owner_id,
+          ],
+        );
+
+        return created(inserted.rows[0].id, warnings);
+      },
+    );
+
+    res.status(200).json({ success: true, data: summary });
+  } catch (error) {
     next(error);
   } finally {
     client.release();

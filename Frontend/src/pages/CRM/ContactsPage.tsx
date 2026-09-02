@@ -32,6 +32,9 @@ const ContactsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  /** Bumped to refetch — a CSV import can create hundreds of rows at once. */
+  const [reloadKey, setReloadKey] = useState(0);
+
   // PHASE 2: contacts now come from /api/v1/contacts, which has had full CRUD
   // all along. Errors are surfaced rather than swallowed into an empty list.
   useEffect(() => {
@@ -42,7 +45,7 @@ const ContactsPage: React.FC = () => {
       .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load contacts'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadKey]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [expandedContact, setExpandedContact] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -171,6 +174,7 @@ const ContactsPage: React.FC = () => {
     'event':     { label: '📅 Event',     className: 'bg-pink-50 border-pink-200 text-pink-700',       Icon: Calendar },
     'converted': { label: '↗️ Converted', className: 'bg-indigo-50 border-indigo-200 text-indigo-700', Icon: Target },
     'manual':    { label: '✍️ Manual',    className: 'bg-gray-100 border-gray-300 text-gray-700',      Icon: Edit },
+    'import':    { label: '📥 Imported',  className: 'bg-teal-50 border-teal-200 text-teal-700',       Icon: Upload },
   };
 
   const getSourceBadge = (source?: ContactSource) => {
@@ -916,6 +920,7 @@ const ContactsPage: React.FC = () => {
       <ImportContactsModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        onImported={() => setReloadKey(k => k + 1)}
       />
 
       <ReengagementModal

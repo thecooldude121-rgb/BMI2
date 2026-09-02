@@ -75,6 +75,7 @@ const SOURCE_LABELS: Record<ContactSource, string> = {
   'lead-gen': 'Lead generation tool', 'hrms': 'HRMS (recruitment)',
   'converted': 'Converted from a lead', 'manual': 'Manual entry',
   'website': 'Website form', 'referral': 'Referral', 'event': 'Event / conference',
+  'import': 'Imported from a file',
 };
 
 const ACTIVITY_ICONS: Partial<Record<ActivityType, string>> = {
