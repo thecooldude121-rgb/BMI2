@@ -124,6 +124,28 @@ describe('Accounts (companies) — round trip', () => {
     expect(row.rows[0].size).toBe('11-50'); // unchanged
   });
 
+  /**
+   * CREATE-VS-UPDATE ASYMMETRY, the same shape as the `size` fix above:
+   * createCompany rejects a blank name, updateCompany wrote it. An explicit
+   * null hit companies.name NOT NULL as a masked 500; an empty or
+   * whitespace-only string stored an account with no name at all.
+   */
+  it.each([[null], [''], ['   ']])('negative: blanking name on update (%j) is rejected, row unchanged', async (bad) => {
+    const create = await request(app).post('/api/v1/companies').set(auth(ws)).send({ name: `Keep Co ${Date.now()}` });
+    expect(create.status).toBe(201);
+    const id = create.body.data.id;
+    createdIds.push(id);
+    const before = await pool.query('SELECT name FROM companies WHERE id = $1', [id]);
+
+    const res = await request(app).put(`/api/v1/companies/${id}`).set(auth(ws)).send({ name: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(/name cannot be blank/);
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+
+    const after = await pool.query('SELECT name FROM companies WHERE id = $1', [id]);
+    expect(after.rows[0].name).toBe(before.rows[0].name);
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s account', async () => {
     const wsB = await setupWorkspace('companies-b');
     try {

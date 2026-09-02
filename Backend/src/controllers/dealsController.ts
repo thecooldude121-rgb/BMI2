@@ -309,6 +309,32 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
       ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
+    // createDeal requires a non-blank name and a present, non-negative,
+    // finite value. This path enforced neither, so the same inputs createDeal
+    // rejects with a clean 400 were writable here: an explicit null on either
+    // NOT NULL column surfaced as a masked 500, an empty name stored a deal
+    // with no name, and a NEGATIVE value was accepted outright — a real
+    // pipeline-total corruption, not just an unhelpful error.
+    //
+    // Only an explicitly supplied bad value is rejected; omitting a field
+    // still leaves it untouched, so partial updates are unaffected. Messages
+    // match createDeal's for the value cases so the two paths read alike.
+    if (req.body.name !== undefined && !String(req.body.name ?? '').trim()) {
+      res.status(400).json({ success: false, message: 'Deal name cannot be blank.' });
+      return;
+    }
+    if (req.body.value !== undefined) {
+      if (req.body.value === null || req.body.value === '') {
+        res.status(400).json({ success: false, message: 'value is required.' });
+        return;
+      }
+      const v = Number(req.body.value);
+      if (!Number.isFinite(v) || v < 0) {
+        res.status(400).json({ success: false, message: 'value must be a non-negative number.' });
+        return;
+      }
+    }
+
     const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];

@@ -140,6 +140,34 @@ describe('Contacts — round trip', () => {
     expect(row.rows[0].first_name).toBe('First');
   });
 
+  /**
+   * CREATE-VS-UPDATE ASYMMETRY. createContact rejects a blank first_name,
+   * last_name or email; updateContact enforced nothing, so an explicit null
+   * reached the NOT NULL column as a masked 500 and an empty string stored a
+   * genuinely blank name. Same bug shape as companies.size and the deals jsonb
+   * columns: validated on create, waved through on update.
+   */
+  it.each([
+    ['first_name', null], ['first_name', ''], ['first_name', '   '],
+    ['last_name', null],  ['last_name', ''],
+    ['email', null],      ['email', ''],
+  ])('negative: blanking %s on update is rejected, the stored row is unchanged', async (field, bad) => {
+    const create = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Keep', last_name: 'Me', email: `keep.${field}.${Date.now()}@example.com` });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    createdIds.push(id);
+    const before = await pool.query('SELECT first_name, last_name, email FROM contacts WHERE id = $1', [id]);
+
+    const res = await request(app).put(`/api/v1/contacts/${id}`).set(auth(ws)).send({ [field]: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(new RegExp(`${field} cannot be blank`));
+    expect(res.body.message, 'the real reason, not a masked 500').not.toMatch(/Internal Server Error/);
+
+    const after = await pool.query('SELECT first_name, last_name, email FROM contacts WHERE id = $1', [id]);
+    expect(after.rows[0]).toEqual(before.rows[0]);
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s contact', async () => {
     const wsB = await setupWorkspace('contacts-b');
     try {

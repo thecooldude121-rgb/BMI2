@@ -267,6 +267,14 @@ export const updateTask = async (req: AuthRequest, res: Response, next: NextFunc
       }
     }
 
+    // createTask rejects a blank title; this path wrote it — an explicit null
+    // hit tasks.title NOT NULL as a masked 500, and an empty string produced a
+    // task with no title in the list.
+    if (req.body.title !== undefined && !String(req.body.title ?? '').trim()) {
+      res.status(400).json({ success: false, message: 'title cannot be blank' });
+      return;
+    }
+
     const badRef = await relatedRefError(req.body, tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 

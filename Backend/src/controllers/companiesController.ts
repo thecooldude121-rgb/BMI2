@@ -95,6 +95,13 @@ export const updateCompany = async (req: AuthRequest, res: Response, next: NextF
       res.status(400).json({ success: false, message: `size must be one of: ${VALID_SIZES.join(', ')}` });
       return;
     }
+    // createCompany rejects a blank name; this path wrote it. An explicit null
+    // hit companies.name NOT NULL as a masked 500, and an empty or
+    // whitespace-only string was stored as an account with no name at all.
+    if (req.body.name !== undefined && !String(req.body.name ?? '').trim()) {
+      res.status(400).json({ success: false, message: 'name cannot be blank' });
+      return;
+    }
     const fields = ['name','domain','industry','size','revenue','website','phone','description','street','city','state','country','zip_code'];
     const updates: string[] = [];
     const params: any[] = [];

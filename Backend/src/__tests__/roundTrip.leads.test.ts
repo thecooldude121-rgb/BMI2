@@ -211,6 +211,31 @@ describe('Leads — round trip', () => {
     expect(stubDeal.rows[0].n).toBe(0);
   });
 
+  /**
+   * CREATE-VS-UPDATE ASYMMETRY: createLead rejects a blank first_name or email
+   * (leads.email is NOT NULL), updateLead enforced neither, so an explicit
+   * null reached the column as a masked 500.
+   */
+  it.each([
+    ['first_name', null], ['first_name', ''],
+    ['email', null],      ['email', '   '],
+  ])('negative: blanking %s on update is rejected, row unchanged', async (field, bad) => {
+    const create = await request(app).post('/api/v1/leads').set(auth(ws))
+      .send({ first_name: 'Keep', last_name: 'Lead', email: `keeplead.${field}.${Date.now()}@example.com` });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    leadIds.push(id);
+    const before = await pool.query('SELECT first_name, email FROM leads WHERE id = $1', [id]);
+
+    const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ [field]: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(new RegExp(`${field} cannot be blank`));
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+
+    const after = await pool.query('SELECT first_name, email FROM leads WHERE id = $1', [id]);
+    expect(after.rows[0]).toEqual(before.rows[0]);
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s lead', async () => {
     const wsB = await setupWorkspace('leads-b');
     try {

@@ -230,6 +230,19 @@ export const updateContact = async (req: AuthRequest, res: Response, next: NextF
     const invalid = validate(req.body);
     if (invalid) { res.status(400).json({ success: false, message: invalid }); return; }
 
+    // A required column stays required on UPDATE. createContact rejects a
+    // blank first_name/last_name/email, but this path wrote whatever arrived:
+    // an explicit null hit the NOT NULL column and surfaced as a masked 500,
+    // and an empty string was stored as a genuinely blank name. Omitting a
+    // field still leaves it untouched — only an explicitly supplied blank is
+    // rejected, so partial updates are unaffected.
+    for (const f of ['first_name', 'last_name', 'email'] as const) {
+      if (req.body[f] !== undefined && !String(req.body[f] ?? '').trim()) {
+        res.status(400).json({ success: false, message: `${f} cannot be blank` });
+        return;
+      }
+    }
+
     const badRef = await foreignRefError(req.body, tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 

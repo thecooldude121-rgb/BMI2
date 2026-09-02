@@ -278,6 +278,53 @@ describe('Deals — round trip', () => {
   });
 
   /**
+   * CREATE-VS-UPDATE ASYMMETRY on the two fields createDeal guards. updateDeal
+   * enforced neither, so the exact inputs createDeal rejects with a clean 400
+   * were writable here. The negative `value` case is the worst of them: it
+   * returned 200 and STORED -500, silently corrupting any pipeline total that
+   * sums the column — not merely an unhelpful error message.
+   */
+  it.each([
+    ['name',  null,           /Deal name cannot be blank/],
+    ['name',  '',             /Deal name cannot be blank/],
+    ['name',  '   ',          /Deal name cannot be blank/],
+    ['value', null,           /value is required/],
+    ['value', '',             /value is required/],
+    ['value', 'abc',          /value must be a non-negative number/],
+    ['value', -500,           /value must be a non-negative number/],
+  ])('negative: %s = %j on update is rejected, the stored row is unchanged', async (field, bad, pattern) => {
+    const create = await request(app).post('/api/v1/deals').set(auth(ws)).send({
+      name: `Keep Deal ${Date.now()}`, value: 4200, company_id: companyId,
+    });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    dealIds.push(id);
+
+    const res = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ [field]: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(pattern);
+    expect(res.body.message, 'the real reason, not a masked 500').not.toMatch(/Internal Server Error/);
+
+    // The rejected write must not have half-applied.
+    const row = await pool.query('SELECT name, value FROM deals WHERE id = $1', [id]);
+    expect(row.rows[0].name).toMatch(/^Keep Deal/);
+    expect(row.rows[0].value).toBe('4200.00');
+  });
+
+  it('a value of 0 is still accepted on UPDATE too, not just on create', async () => {
+    const create = await request(app).post('/api/v1/deals').set(auth(ws))
+      .send({ name: `Zero Update Deal ${Date.now()}`, value: 5000, company_id: companyId });
+    expect(create.status).toBe(201);
+    const id = create.body.data.id;
+    dealIds.push(id);
+
+    const res = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws)).send({ value: 0 });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    const row = await pool.query('SELECT value FROM deals WHERE id = $1', [id]);
+    expect(row.rows[0].value).toBe('0.00');
+  });
+
+  /**
    * Move Stage modal regression: previously performed ZERO writes while
    * showing a success toast. Confirm a stage change writes a real
    * deal_stage_history row with correct prior/new stage and changed_by —

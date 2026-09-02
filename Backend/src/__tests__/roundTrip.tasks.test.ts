@@ -115,6 +115,26 @@ describe('Tasks — round trip', () => {
     expect(ids).not.toContain(future.body.data.id);
   });
 
+  /**
+   * CREATE-VS-UPDATE ASYMMETRY: createTask rejects a blank title, updateTask
+   * wrote it — an explicit null hit tasks.title NOT NULL as a masked 500, an
+   * empty string produced a task with no title in the list.
+   */
+  it.each([[null], [''], ['   ']])('negative: blanking title on update (%j) is rejected, row unchanged', async (bad) => {
+    const create = await request(app).post('/api/v1/tasks').set(auth(ws)).send({ title: 'Keep this title' });
+    expect(create.status).toBe(201);
+    const id = create.body.data.id;
+    taskIds.push(id);
+
+    const res = await request(app).put(`/api/v1/tasks/${id}`).set(auth(ws)).send({ title: bad });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(/title cannot be blank/);
+    expect(res.body.message).not.toMatch(/Internal Server Error/);
+
+    const row = await pool.query('SELECT title FROM tasks WHERE id = $1', [id]);
+    expect(row.rows[0].title).toBe('Keep this title');
+  });
+
   it('tenant isolation: workspace B cannot read or edit workspace A\'s task', async () => {
     const wsB = await setupWorkspace('tasks-b');
     try {

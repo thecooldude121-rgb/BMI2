@@ -149,6 +149,16 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
+    // createLead rejects a blank first_name or email (leads.email is NOT NULL);
+    // this path wrote whatever arrived, so an explicit null reached the column
+    // as a masked 500. Omitting a field still leaves it untouched.
+    for (const f of ['first_name', 'email'] as const) {
+      if (req.body[f] !== undefined && !String(req.body[f] ?? '').trim()) {
+        res.status(400).json({ success: false, message: `${f} cannot be blank` });
+        return;
+      }
+    }
+
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
