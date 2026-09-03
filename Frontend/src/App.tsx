@@ -118,9 +118,11 @@ const RequireAuth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 const App = () => {
   return (
-    <CurrentUserProvider>
-      <ToastProvider>
-        <AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        {/* Inside AuthProvider: CurrentUserContext derives the signed-in user
+            from it, so it cannot be mounted above the provider it reads. */}
+        <CurrentUserProvider>
           <DataProvider>
             <LeadProvider>
               <SettingsProvider>
@@ -149,10 +151,13 @@ const App = () => {
               </SettingsProvider>
             </LeadProvider>
           </DataProvider>
-        </AuthProvider>
-      </ToastProvider>
-      {import.meta.env.DEV && <RoleSwitcher />}
-    </CurrentUserProvider>
+          {/* Dev-only role switcher. Inside CurrentUserProvider because it
+              drives that context, and behind import.meta.env.DEV so the
+              bundler drops it from a production build entirely. */}
+          {import.meta.env.DEV && <RoleSwitcher />}
+        </CurrentUserProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 };
 

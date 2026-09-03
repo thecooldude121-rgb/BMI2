@@ -3,8 +3,18 @@ import { useState } from 'react';
 import { useCurrentUser } from '../../contexts/CurrentUserContext';
 import type { Role } from '../../utils/permissions';
 
+/**
+ * `sales` is listed FIRST because it is the role most real users actually hold —
+ * the backend issues admin, manager and sales, and live workspaces are mostly
+ * sales. Without it here a developer could not simulate the common case at all.
+ *
+ * `sdr` and `senior_sdr` remain because the permission model still defines those
+ * tiers; they have no backend equivalent today, so they simulate a shape the
+ * product may grow into rather than a user who exists.
+ */
 const ROLES: Array<{ role: Role; label: string; activeCls: string }> = [
-  { role: 'sdr',        label: 'SDR',     activeCls: 'bg-gray-600 text-white'   },
+  { role: 'sales',      label: 'Sales',   activeCls: 'bg-slate-600 text-white'   },
+  { role: 'sdr',        label: 'SDR',     activeCls: 'bg-gray-600 text-white'    },
   { role: 'senior_sdr', label: 'Sr. SDR', activeCls: 'bg-brand-600 text-white'   },
   { role: 'manager',    label: 'Manager', activeCls: 'bg-purple-600 text-white'  },
   { role: 'admin',      label: 'Admin',   activeCls: 'bg-green-600 text-white'   },

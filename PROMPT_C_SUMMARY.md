@@ -311,14 +311,34 @@ timeline, though the documents API is now covered.
 
 ## Known gaps / explicitly out of scope
 
+- **A demoted admin keeps admin-level API access until their token expires.**
+  `requireRole` reads the role from the **JWT claim**, not from `users.role`, so
+  changing someone's role in the database does not take effect until their token
+  expires — up to `JWT_EXPIRES_IN`, currently **7 days**. The same applies to
+  deactivation: `protect` does not check `is_active`, so a deactivated user's
+  existing token keeps working. Found while building item 2's last-admin guard,
+  where it is the very thing that makes that guard reachable — a caller whose
+  token still says admin while their stored role does not. Closing it needs a
+  decision: an `is_active`/role check in `protect` on every request (a query per
+  call), a short-lived token with refresh, or a token version column bumped on
+  role change. **Tracked, not fixed.**
 - **Row-level ownership scoping is not implemented.** RBAC now gates destructive actions,
   but a `sales` user still reads every record in the workspace. Deferred as a product
   decision, pinned by a test that fails if it is ever implemented silently.
 - **`DELETE` on lead notes and saved views checks no OWNERSHIP**, so any workspace member
   can delete another's. A missing ownership predicate rather than a missing role check;
   found while scoping the RBAC work and reported, not fixed.
-- **Suite stability: 1 run in 16 fails** in `roundTrip.idConcurrency`, and a failing run
-  leaves orphaned test tenants. See *Suite stability*.
+- **Suite stability: a bodyless-401 flake, NOT confined to one file.** Previously recorded as
+  always occurring in `roundTrip.idConcurrency`; it has since appeared in
+  `roundTrip.rbac.test.ts` as well, so that characterisation was wrong. It presents as a
+  `401` whose body is `{}` — which matches no 401 in the codebase, since every one of them
+  sends a JSON message — or as a 30-second wait for a connection. Two candidate causes are
+  now **ruled out**: `JWT_EXPIRES_IN` is `7d`, and both login limiters set
+  `skipSuccessfulRequests`, so neither token expiry nor throttling explains it. Confirmed
+  pre-existing and not caused by the Settings work; each affected file passes repeatedly in
+  isolation. A failing run also leaves orphaned `rt-` tenants behind, because `afterAll`
+  does not complete. **Deserves a dedicated debugging pass once Settings is finished**,
+  rather than being chased mid-feature.
 - **The id-count enumeration leak** (`C042` reveals a global row count) — deferred, lower
   severity than the race was, closed only by a move to random ids.
 - **Browser-driven form submission** — caveat 1. No form is clicked.

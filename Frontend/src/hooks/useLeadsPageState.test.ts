@@ -15,6 +15,26 @@ vi.mock('../contexts/LeadContext', () => ({
   useLeads: vi.fn(),
 }));
 
+/**
+ * CurrentUserContext, explicitly.
+ *
+ * These tests used to supply no user at all, and passed because the context
+ * defaulted to a hardcoded admin — so every lead was visible without anyone
+ * asking for it. That default is gone: the context now derives from the real
+ * session, and with no provider mounted the value is ANONYMOUS, which correctly
+ * sees nothing. The subject here is filtering, sorting and pagination, not
+ * permission gating, so the user is stated rather than inherited. `manager`
+ * holds leads.view_all, and the id matches BASE_LEAD.owner_id so the
+ * owner-based path is exercised too.
+ */
+vi.mock('../contexts/CurrentUserContext', () => ({
+  useCurrentUser: () => ({
+    currentUser: { id: 'owner-1', name: 'Test Manager', role: 'manager' },
+    setRole: () => {},
+    isRoleOverridden: false,
+  }),
+}));
+
 import { useLeads } from '../contexts/LeadContext';
 const mockUseLeads = vi.mocked(useLeads);
 
