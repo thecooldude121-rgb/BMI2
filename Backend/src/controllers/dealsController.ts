@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
+import { workspaceDefaultCurrency } from './workspaceController';
 
 /**
  * The JSONB columns a client may write through updateDeal's generic field loop.
@@ -233,6 +234,13 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     // arriving as a masked 500 — because the maximum was read in one statement
     // and used in another with an await between. nextval() is atomic.
 
+    // The workspace's default currency actually DRIVES new deals rather than
+    // only being displayed in Settings — a preference that changes nothing is a
+    // decorative one. Looked up only when the caller did not name a currency, so
+    // the common path costs no extra round trip, and it falls back to the
+    // column's own 'USD' default when the workspace has not chosen one.
+    const resolvedCurrency = currency || (await workspaceDefaultCurrency(tenantId)) || 'USD';
+
     const result = await pool.query(
       `INSERT INTO deals
          (name, title, lead_id, value, currency, base_amount_usd,
@@ -254,7 +262,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
        RETURNING *`,
       [
         dealName, title || dealName, lead_id, value,
-        currency || 'USD', base_amount_usd ?? value,
+        resolvedCurrency, base_amount_usd ?? value,
         pipeline_id || 'new-business', pipeline_name || 'New Business',
         deal_type || 'new-business',
         stage || 'prospecting', probability || 0, expected_close_date,

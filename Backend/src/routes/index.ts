@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth';
+import workspaceRoutes from './workspace';
 import leadsRoutes from './leads';
 import dealsRoutes from './deals';
 import companiesRoutes from './companies';
@@ -16,6 +17,7 @@ import forecastRoutes from './forecast';
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/workspace', workspaceRoutes);
 router.use('/leads', leadsRoutes);
 router.use('/deals', dealsRoutes);
 router.use('/companies', companiesRoutes);

@@ -1,0 +1,36 @@
+-- Migration 035: give a workspace somewhere to keep its settings.
+--
+-- WHY
+-- CLAUDE.md's data model promises `workspaces(… plan, modules, settings JSONB,
+-- updated_at)`. The deployed table is `tenants` and has FOUR columns: id, name,
+-- created_at, slug. So Workspace Settings — timezone and default currency —
+-- had nowhere to live, and the alternative was inventing a column per setting.
+--
+-- WHAT, and deliberately no more than this:
+--   settings   JSONB NOT NULL DEFAULT '{}'  — timezone, default_currency, and
+--                                             whatever the module needs later
+--   updated_at TIMESTAMPTZ DEFAULT NOW()    — every other table here has one
+--
+-- `plan` and `modules` from the spec are NOT added. Nothing reads them, and a
+-- column added "because the spec says so" is a column nobody maintains. They can
+-- come with the feature that needs them.
+--
+-- WHY JSONB RATHER THAN A COLUMN EACH. These are workspace preferences read as a
+-- unit when the shell loads, never filtered or joined on, and the set will grow
+-- (date format, week start, fiscal year). A column per preference means a
+-- migration per preference. The trade is that Postgres cannot type-check the
+-- contents, so the API validates them instead — see workspaceController: an
+-- unknown timezone or a malformed currency is a 400 naming the field, never a
+-- value written blind into the document.
+--
+-- NOT ADDED: a unique index on slug. Migration 022 already created
+-- `tenants_slug_key`, which is a unique INDEX rather than a CONSTRAINT — so it
+-- does not appear in pg_constraint and is easy to miss when checking. Slug
+-- uniqueness is therefore already enforced; the API turns its 23505 into a
+-- clean 409 rather than a masked 500.
+--
+-- Both additions are nullable-safe: `settings` defaults to an empty document, so
+-- every existing row is valid the moment this runs, and no backfill is needed.
+
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
