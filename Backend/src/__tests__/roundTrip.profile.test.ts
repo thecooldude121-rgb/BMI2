@@ -27,6 +27,37 @@ describe('My profile — round trip', () => {
     return r.rows[0];
   };
 
+  // ── GET /auth/me ──────────────────────────────────────────────────────────
+
+  it('returns created_at and last_login_at — the profile page renders both', async () => {
+    // Added when the Settings profile page was wired up. Both are real columns
+    // on `users` and the page had been showing invented values for them
+    // ("Member since Oct 1, 2024", "Last login Dec 13, 2024 at 9:45 AM"). If
+    // this SELECT loses them again the page silently renders blanks, so the
+    // dependency is pinned here rather than discovered in the UI.
+    const res = await request(app).get('/api/v1/auth/me').set(auth(ws));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.user).toHaveProperty('created_at');
+    expect(res.body.user).toHaveProperty('last_login_at');
+    expect(new Date(res.body.user.created_at).toString()).not.toBe('Invalid Date');
+
+    // Against the row itself, not just the response's own shape.
+    const db = await pool.query('SELECT created_at, last_login_at FROM users WHERE id = $1', [ws.userId]);
+    expect(new Date(res.body.user.created_at).getTime())
+      .toBe(new Date(db.rows[0].created_at).getTime());
+
+    // And still no hash, now that the SELECT has grown.
+    expect(JSON.stringify(res.body)).not.toContain('password_hash');
+  });
+
+  it('PATCH /auth/me returns the same columns, so the client need not re-GET', async () => {
+    const res = await request(app).patch('/api/v1/auth/me').set(auth(ws)).send({ first_name: 'Ravi' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.data).toHaveProperty('created_at');
+    expect(res.body.data).toHaveProperty('last_login_at');
+    expect(res.body.data.first_name).toBe('Ravi');
+  });
+
   // ── PATCH /auth/me ────────────────────────────────────────────────────────
 
   it('updates name and email, and Postgres holds exactly what was submitted', async () => {

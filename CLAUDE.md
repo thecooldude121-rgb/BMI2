@@ -445,16 +445,31 @@ dead third option.
     persists nothing at all.
   Do not extend, repair or migrate either one. When the Settings module is built, it talks
   to the Node API like every other page, and these two trees are deleted then.
-- **CHECKLIST — when the new Settings module ships, do all four of these together.** This
+- **CHECKLIST — when the new Settings module ships, do all of these together.** This
   is the last of the Supabase removal, deliberately sequenced behind the rebuild because
   the importing files are the trees due for deletion. Do not let it become permanent debt:
   1. Delete `Frontend/src/lib/supabase.ts` (down to 12 lines — client construction only).
   2. `npm uninstall @supabase/supabase-js` in `Frontend/`.
-  3. Delete `pages/Settings/` and `pages/CRM/CRMSettings/`, and
-     `contexts/SettingsContext.tsx` with its 46 stripped-but-still-present queries.
-  4. Rebuild `ProfileSettings` against real endpoints — and note that **the
-     update-profile and change-password endpoints do not exist yet**; `authController`
-     exposes only register / login / me. The form is disabled and labelled until they do.
+  3. Delete `pages/Settings/` and `contexts/SettingsContext.tsx` with its 46
+     stripped-but-still-present queries.
+     **CORRECTION — `pages/CRM/CRMSettings/` is NOT being deleted, and this line used
+     to say it was.** The Settings module was not rebuilt as a new tree next to the two
+     dead ones; it was rebuilt FILE BY FILE INSIDE `pages/CRM/CRMSettings/`, which is
+     the tree routed at `/crm/settings`. `GeneralPreferences` (checkpoint 1),
+     `TeamManagement` (checkpoint 2) and `ProfileSettings` / `PasswordSettings`
+     (checkpoint 3) are now real API consumers living there. The rest of that directory
+     is still unwired UI. So the deletion target is `pages/Settings/` only, and
+     `pages/CRM/CRMSettings/` is shrinking one wired file at a time instead.
+  4. **DONE (checkpoint 3).** `ProfileSettings` reads GET /auth/me and writes
+     PATCH /auth/me; `PasswordSettings` posts to /auth/change-password and stores the
+     reissued token. The claim that "the update-profile and change-password endpoints
+     do not exist yet" was true when written and stopped being true at commit c0afb00.
+  5. **Still open: the sidebar's "Settings" link points at `/settings`** — the dead
+     Supabase tree — not at `/crm/settings`, where the wired screens are. So the three
+     real Settings screens are not reachable from the main nav, and the page a user
+     lands on is the one with no backend. Repointing it is a one-line change gated on
+     deciding what `/settings` should be; until then this is the lesson-5 trap in
+     living form, and it is why `pages/Settings/` is labelled rather than left alone.
 
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions

@@ -294,9 +294,13 @@ export const getMe = async (req: Request & { user?: any }, res: Response, next: 
     // Scoped to the workspace in the token as well as the user id. The id alone
     // is sufficient today, but scoping every read the same way means no query in
     // this codebase reads a user row without a workspace filter.
+    // created_at and last_login_at are here for the profile page, which shows
+    // "Member since" and "Last login". Both are REAL columns on users, not
+    // derived — the page previously rendered invented values for both.
     const result = await pool.query(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.department, u.avatar_url,
-              u.is_active, u.tenant_id, u.tenant_id AS workspace_id
+              u.is_active, u.created_at, u.last_login_at,
+              u.tenant_id, u.tenant_id AS workspace_id
          FROM users u
         WHERE u.id = $1 AND u.tenant_id = $2`,
       [req.user?.id, req.user?.workspace_id],
@@ -382,7 +386,8 @@ export const updateMe = async (req: Request & { user?: any }, res: Response, nex
     const result = await pool.query(
       `UPDATE users SET ${updates.join(', ')}
         WHERE id = $${i++} AND tenant_id = $${i}
-        RETURNING id, email, first_name, last_name, role, department, avatar_url, is_active, tenant_id`,
+        RETURNING id, email, first_name, last_name, role, department, avatar_url, is_active,
+                  created_at, last_login_at, tenant_id`,
       params,
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'User not found' }); return; }
@@ -413,14 +418,16 @@ export const updateMe = async (req: Request & { user?: any }, res: Response, nex
  * Verifies the current password before setting a new one, so a stolen token
  * alone cannot change the credential it was minted from.
  *
- * DOES NOT SIGN OTHER SESSIONS OUT, and this is worth being plain about because
- * it is the opposite of what most people expect from "change my password".
- * Tokens are stateless JWTs and `protect` verifies only the signature and
- * expiry — it never re-reads the account — so every other token issued to this
- * user stays valid until it expires on its own, up to JWT_EXPIRES_IN (7 days).
- * That is the SAME underlying gap already recorded for demoted roles and
- * deactivated accounts, not a new one, but this is where a user would most
- * reasonably assume a protection that is not there.
+ * SIGNS EVERY OTHER SESSION OUT. This comment used to say the opposite, and
+ * said so at length: JWTs are stateless, `protect` only checked signature and
+ * expiry, so a stolen token stayed live for up to JWT_EXPIRES_IN (7 days) after
+ * its owner changed the password. Migration 036 closed that — `token_version` is
+ * bumped in the UPDATE below and `protect` compares it against the account, so
+ * every token minted before this call is refused on its next request.
+ *
+ * CLIENT CONTRACT: the caller's own token is invalidated too, so the fresh one
+ * in the response MUST replace the stored session token. A client that ignores
+ * it 401s on its very next request.
  */
 export const changePassword = async (req: Request & { user?: any }, res: Response, next: NextFunction): Promise<void> => {
   try {

@@ -49,7 +49,7 @@ const ROLE_MAP: Record<string, User['role']> = {
   admin: 'Admin', sales: 'Sales', hr: 'HR', manager: 'Manager',
 };
 
-interface ApiUser {
+export interface ApiUser {
   id: number | string;
   email: string;
   first_name?: string | null;
@@ -88,6 +88,24 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<LoginResult>;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
+  /**
+   * Adopt a user row the server just returned — after PATCH /auth/me, so the
+   * name in the top bar matches the name that was saved. Takes the API shape
+   * and maps it exactly the way login and the boot rehydrate do, so there is
+   * one mapping and not three.
+   */
+  adoptUser: (apiUser: ApiUser) => void;
+  /**
+   * Replace the stored session token.
+   *
+   * REQUIRED after POST /auth/change-password. That endpoint bumps
+   * `users.token_version`, which kills every token issued before it including
+   * the one the request was made with, and hands back a fresh one. Not storing
+   * it means the next request 401s, the boot rehydrate discards the token, and
+   * the user is bounced to the login screen immediately after changing their
+   * password. This is a client contract, not an optimisation.
+   */
+  applyReissuedToken: (token: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -152,6 +170,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
+  const adoptUser = useCallback((apiUser: ApiUser) => {
+    setUser(toUser(apiUser));
+  }, []);
+
+  const applyReissuedToken = useCallback((token: string) => {
+    localStorage.setItem(TOKEN_KEY, token);
+  }, []);
+
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem(TOKEN_KEY);
@@ -174,7 +200,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission, adoptUser, applyReissuedToken }}>
       {children}
     </AuthContext.Provider>
   );

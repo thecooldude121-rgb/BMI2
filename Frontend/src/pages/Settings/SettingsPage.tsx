@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Settings, Shield, Users, Lock, Activity, Key, Globe, Database, Bell, FileText, Workflow, UserCheck, Zap, Search, ChevronRight, AlertTriangle, CheckCircle, Info, ArrowLeft, X, Webhook, MessageSquare, TrendingUp, Smartphone } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
+import { NotAvailable } from '../../components/common/NotAvailable';
 import RolesManagement from './RolesManagement';
 import PermissionMatrix from './PermissionMatrix';
 import PermissionSets from './PermissionSets';
@@ -35,7 +36,6 @@ const SettingsPage: React.FC = () => {
   const {
     loading,
     error,
-    getSecurityMetrics,
     roles,
     permissions,
     fetchRoles,
@@ -46,7 +46,6 @@ const SettingsPage: React.FC = () => {
   } = useSettings();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [securityMetrics, setSecurityMetrics] = useState<any>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showCreateRoleModal, setShowCreateRoleModal] = useState(false);
   const [newRole, setNewRole] = useState({
@@ -56,10 +55,27 @@ const SettingsPage: React.FC = () => {
     parent_role_id: ''
   });
 
+  /*
+   * THE SECURITY METRICS ARE GONE, NOT LABELLED.
+   *
+   * This page rendered four headline stat cards — Total Users 150, Active
+   * Sessions 42, API Calls Today 1,523, Failed Logins (24h) 5 — straight from
+   * `getSecurityMetrics()`, which is a function in SettingsContext that returns
+   * those six numbers as literals. No query, no endpoint, no table. They were
+   * not stale figures or a rounding artefact: they were invented, and they were
+   * live on a routed page at /settings, in the largest type on the screen,
+   * where a real workspace of four users read "150 users".
+   *
+   * A fabricated NUMBER gets deleted rather than labelled — the numbers are the
+   * whole content of a stat card, so there is nothing left to keep. The rest of
+   * this page's sections keep their layout under a NotAvailable banner because
+   * they are structure without data; these were data without structure.
+   *
+   * getSecurityMetrics stays in SettingsContext with no caller, and goes with
+   * the rest of that file when the Supabase removal lands (CLAUDE.md checklist).
+   */
   useEffect(() => {
     const loadData = async () => {
-      const metrics = await getSecurityMetrics();
-      setSecurityMetrics(metrics);
       await fetchRoles();
       await fetchPermissions();
       await fetchAuditLogs();
@@ -496,46 +512,25 @@ const SettingsPage: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {securityMetrics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Users</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{securityMetrics.total_users}</p>
-                </div>
-                <div className="p-3 bg-blue-100 rounded-lg"><Users className="h-6 w-6 text-blue-600" /></div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active Sessions</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{securityMetrics.active_sessions}</p>
-                </div>
-                <div className="p-3 bg-green-100 rounded-lg"><Activity className="h-6 w-6 text-green-600" /></div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">API Calls Today</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{securityMetrics.api_calls_today}</p>
-                </div>
-                <div className="p-3 bg-purple-100 rounded-lg"><Database className="h-6 w-6 text-purple-600" /></div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Failed Logins (24h)</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{securityMetrics.failed_login_attempts_24h}</p>
-                </div>
-                <div className="p-3 bg-red-100 rounded-lg"><Lock className="h-6 w-6 text-red-600" /></div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/*
+          * Every section below is UI over a backend that does not exist. The
+          * banner is at the top of the hub rather than repeated on each card so
+          * a reader sees it before clicking into one, and so wiring a section up
+          * later means deleting one <NotAvailable>, not fifteen.
+          */}
+        <NotAvailable
+          feature="Roles, permissions and the security settings on this page"
+          detail="None of the sections below are connected. They read and write through
+                  SettingsContext, which talks to Supabase — a service this product does not
+                  use and has never had (see CLAUDE.md), so every request fails and every list
+                  is empty for that reason rather than because your workspace has none. Four
+                  headline security figures that used to appear here were hardcoded literals,
+                  not measurements, and have been removed. The permissions this product
+                  actually enforces are the four roles — admin, manager, sales, hr — checked
+                  server-side; an admin changes a colleague's role under CRM Settings → Team
+                  Management, which is wired to the real API."
+          className="mb-8"
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredSections.map((section) => {

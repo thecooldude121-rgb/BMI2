@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { AlertTriangle, CheckCircle, CheckSquare, ChevronDown, ChevronRight, Copy, Download, Edit, Eye, Grid, HelpCircle, Info, Layers, MinusSquare, Plus, RotateCcw, Save, Search, Shield, Square, Trash2, Upload, X, Zap } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
+import { NotAvailable, stubControl } from '../../components/common/NotAvailable';
 
 type PermissionType = 'read' | 'write' | 'delete' | 'export' | 'import' | 'hide';
 
@@ -339,7 +340,34 @@ const PermissionMatrix: React.FC = () => {
     setSelectedModules(newSelected);
   };
 
+  /*
+   * THIS WAS A FAKE SUCCESS, and the most concrete defect on the three roles
+   * pages.
+   *
+   * `savePermissions` looped over every changed cell calling
+   * `setFieldPermission` / `setModulePermission`. Both of those catch their own
+   * error and RETURN FALSE — they do not throw — and this loop ignored the
+   * return value entirely. So every call failed, the catch below never fired,
+   * the alert never showed, and the function fell through to
+   * `setHasUnsavedChanges(false)`: the "Unsaved changes" badge disappeared and
+   * the Save button vanished with it. To the user that is indistinguishable
+   * from a save that worked. Nothing was written; the destination is Supabase
+   * and there are no `system_module_permissions` / `system_field_permissions`
+   * tables in this product's Postgres at all.
+   *
+   * It refuses now. The refusal is in the function rather than only on the
+   * button because the button is one of several ways in — bulk mode and the
+   * permission-set controls reach the same state.
+   */
+  const REFUSAL = 'Saving permissions is not available: this product has no per-module or per-field permission storage.';
+  const [refusal, setRefusal] = useState<string | null>(null);
+
   const savePermissions = async () => {
+    // Note what is NOT done here: hasUnsavedChanges is left TRUE. Clearing it
+    // is exactly what made the old failure look like a success.
+    setRefusal(REFUSAL);
+    return;
+    // eslint-disable-next-line no-unreachable
     try {
       for (const [key, cell] of permissions.entries()) {
         if (cell.fieldId) {
@@ -709,6 +737,29 @@ const PermissionMatrix: React.FC = () => {
     <div className="flex h-full bg-gray-50">
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/*
+          * The matrix itself is kept — it is the clearest picture of what
+          * field-level permissions would look like, which is why both dead
+          * Settings trees survive as UI reference. But its modules and fields
+          * are a hardcoded fixture in this file, not a schema read, and its
+          * rows come from a `roles` list that is always empty. So it is a
+          * drawing of a feature, and now says so.
+          */}
+        <div className="px-6 pt-6 bg-white">
+          <NotAvailable
+            feature="Per-module and per-field permissions"
+            detail="Nothing on this grid is stored. The toggles read and write through
+                    SettingsContext to Supabase, which this product does not use, and there are
+                    no per-module or per-field permission tables in its database either — so
+                    there is no endpoint to move this to. The modules and fields listed are a
+                    fixture written into this file, not your schema. Until this exists, access
+                    is decided by the four fixed roles on users.role, enforced by requireRole
+                    on the API."
+          />
+          {refusal && (
+            <p role="alert" className="mt-3 pb-2 text-sm text-red-700">{refusal}</p>
+          )}
+        </div>
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between mb-4">
@@ -788,7 +839,8 @@ const PermissionMatrix: React.FC = () => {
                   </button>
                   <button
                     onClick={savePermissions}
-                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                    {...stubControl('Saving permissions')}
+                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg cursor-not-allowed opacity-50"
                   >
                     <Save className="h-4 w-4 mr-2" />
                     Save Changes
