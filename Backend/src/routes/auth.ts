@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { register, login, getMe } from '../controllers/authController';
+import { register, login, getMe, updateMe, changePassword } from '../controllers/authController';
 import { protect } from '../middleware/auth';
-import { loginIpLimiter, loginEmailLimiter, registerIpLimiter } from '../middleware/rateLimit';
+import { loginIpLimiter, loginEmailLimiter, registerIpLimiter, changePasswordLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -15,5 +15,14 @@ router.post('/login', loginIpLimiter, loginEmailLimiter, login);
 router.post('/register', registerIpLimiter, register);
 
 router.get('/me', protect, getMe);
+
+// Editing your own profile. No role check and no :id — the row is the one the
+// token names, so this can only ever act on yourself.
+router.patch('/me', protect, updateMe);
+
+// Verifying a password makes this a credential endpoint, so it gets the same
+// brute-force treatment as login: 5 failed attempts per account per 15 minutes,
+// keyed off the AUTHENTICATED identity rather than anything the caller supplies.
+router.post('/change-password', protect, changePasswordLimiter, changePassword);
 
 export default router;

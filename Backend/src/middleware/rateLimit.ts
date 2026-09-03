@@ -85,6 +85,30 @@ export const loginEmailLimiter = rateLimit({
 });
 
 /**
+ * 5 attempts / 15 min per ACCOUNT, for changing a password.
+ *
+ * Uses the same per-email seam as the login limiter, but keyed off the
+ * AUTHENTICATED identity rather than `req.body.email` — this endpoint takes no
+ * email, and keying on something the caller supplies would let one attacker
+ * spread their attempts across arbitrary keys and never hit the limit.
+ *
+ * The secret being guarded here is `current_password`, which is exactly the
+ * secret the login limiter guards, so the budget matches at 5 and the same
+ * reasoning applies: only FAILED attempts are evidence of guessing, so a
+ * successful change does not consume it. Without this, an endpoint that
+ * verifies a password would be the one credential path in the API with no
+ * brute-force limit at all.
+ */
+export const changePasswordLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  keyGenerator: (req: Request & { user?: { id?: string; email?: string } }): string =>
+    String(req.user?.email ?? req.user?.id ?? 'anonymous').toLowerCase(),
+  skipSuccessfulRequests: true,
+});
+
+/**
  * Registration is invite-only, so this is not guarding a guessable secret — it
  * stops an invite token being brute-forced and stops the endpoint being used to
  * probe which emails already exist.
@@ -108,6 +132,7 @@ export const inviteLimiter = rateLimit({
 export const LIMITS = {
   loginPerIp: 30,
   loginPerEmail: 5,
+  changePasswordPerAccount: 5,
   registerPerIp: 10,
   invitesPerUser: 30,
   windowMinutes: 15,

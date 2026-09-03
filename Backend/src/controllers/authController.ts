@@ -302,3 +302,170 @@ export const getMe = async (req: Request & { user?: any }, res: Response, next: 
     next(error);
   }
 };
+
+/**
+ * PATCH /api/v1/auth/me — the signed-in user edits their own name and email.
+ *
+ * SELF ONLY. There is no `:id`: the row updated is the one the token names, so
+ * this cannot be used to edit a colleague, and no role check is needed because
+ * everyone may edit themselves.
+ *
+ * NO EMAIL CONFIRMATION STEP, deliberately. A verification link cannot be
+ * delivered — EMAIL_TRANSPORT is `log`, which renders to the console and sends
+ * nothing — so the honest choice is to change the address directly rather than
+ * show a "check your inbox" screen for a message that will never arrive. That
+ * is the same stance invites already take. It is a real simplification and is
+ * recorded as such; when a transport is configured, this should become
+ * request-then-confirm.
+ */
+export const updateMe = async (req: Request & { user?: any }, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const tenantId = req.user?.workspace_id ?? req.user?.tenant_id;
+    if (!userId || !tenantId) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { first_name, last_name, email } = req.body ?? {};
+
+    // Same validation shape on every field that is present. An omitted field is
+    // left alone; a field explicitly blanked is refused, because users.first_name
+    // and last_name are NOT NULL and a blank email would orphan the account.
+    for (const [field, value] of [['first_name', first_name], ['last_name', last_name]] as const) {
+      if (value !== undefined && !String(value ?? '').trim()) {
+        res.status(400).json({ success: false, message: `${field} cannot be blank` });
+        return;
+      }
+      if (value !== undefined && String(value).trim().length > 50) {
+        // users.first_name / last_name are VARCHAR(50); a longer value would be
+        // a raw 22001 masked as a 500.
+        res.status(400).json({ success: false, message: `${field} must be 50 characters or fewer` });
+        return;
+      }
+    }
+    if (email !== undefined) {
+      const trimmed = String(email ?? '').trim();
+      if (!trimmed) { res.status(400).json({ success: false, message: 'email cannot be blank' }); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        res.status(400).json({ success: false, message: 'That is not a valid email address' });
+        return;
+      }
+      if (trimmed.length > 150) {
+        res.status(400).json({ success: false, message: 'email must be 150 characters or fewer' });
+        return;
+      }
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+    let i = 1;
+    if (first_name !== undefined) { updates.push(`first_name = $${i++}`); params.push(String(first_name).trim()); }
+    if (last_name !== undefined)  { updates.push(`last_name = $${i++}`);  params.push(String(last_name).trim()); }
+    if (email !== undefined)      { updates.push(`email = $${i++}`);      params.push(String(email).trim()); }
+
+    if (!updates.length) {
+      res.status(400).json({ success: false, message: 'No fields to update' });
+      return;
+    }
+    updates.push('updated_at = NOW()');
+    params.push(userId, tenantId);
+
+    const result = await pool.query(
+      `UPDATE users SET ${updates.join(', ')}
+        WHERE id = $${i++} AND tenant_id = $${i}
+        RETURNING id, email, first_name, last_name, role, department, avatar_url, is_active, tenant_id`,
+      params,
+    );
+    if (!result.rows[0]) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+
+    res.json({ success: true, data: safeUser(result.rows[0]) });
+  } catch (error) {
+    // users_workspace_email_key is UNIQUE (tenant_id, email) — a unique INDEX
+    // from migration 022, so it does not appear in pg_constraint. Taking a
+    // colleague's address is a legitimate refusal the caller can act on, not a
+    // server fault; same 409 shape as the duplicate-contact-email handling.
+    // The constraint is workspace-scoped, so this discloses nothing about any
+    // other workspace, and the same address stays free in all of them.
+    const e = error as { code?: string; constraint?: string };
+    if (e.code === '23505' && e.constraint === 'users_workspace_email_key') {
+      res.status(409).json({
+        success: false,
+        message: 'Someone in this workspace already uses that email address',
+      });
+      return;
+    }
+    next(error);
+  }
+};
+
+/**
+ * POST /api/v1/auth/change-password
+ *
+ * Verifies the current password before setting a new one, so a stolen token
+ * alone cannot change the credential it was minted from.
+ *
+ * DOES NOT SIGN OTHER SESSIONS OUT, and this is worth being plain about because
+ * it is the opposite of what most people expect from "change my password".
+ * Tokens are stateless JWTs and `protect` verifies only the signature and
+ * expiry — it never re-reads the account — so every other token issued to this
+ * user stays valid until it expires on its own, up to JWT_EXPIRES_IN (7 days).
+ * That is the SAME underlying gap already recorded for demoted roles and
+ * deactivated accounts, not a new one, but this is where a user would most
+ * reasonably assume a protection that is not there.
+ */
+export const changePassword = async (req: Request & { user?: any }, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const tenantId = req.user?.workspace_id ?? req.user?.tenant_id;
+    if (!userId || !tenantId) {
+      res.status(401).json({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    const { current_password, new_password } = req.body ?? {};
+    if (!current_password || !new_password) {
+      res.status(400).json({ success: false, message: 'current_password and new_password are required' });
+      return;
+    }
+    // Matches the minimum register already enforces, so the two paths cannot
+    // disagree about what a valid password is.
+    if (String(new_password).length < 8) {
+      res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+      return;
+    }
+    if (String(new_password) === String(current_password)) {
+      res.status(400).json({ success: false, message: 'The new password must be different from the current one' });
+      return;
+    }
+
+    const found = await pool.query(
+      'SELECT id, password_hash FROM users WHERE id = $1 AND tenant_id = $2',
+      [userId, tenantId],
+    );
+    if (!found.rows[0]) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+
+    const matches = await bcrypt.compare(String(current_password), found.rows[0].password_hash);
+    if (!matches) {
+      // Naming the real reason is right here, unlike login: the caller is
+      // already authenticated as this account, so "your current password is
+      // wrong" discloses nothing they do not know. The rate limiter is what
+      // stops this being an oracle for guessing it.
+      res.status(400).json({ success: false, message: 'Current password is incorrect' });
+      return;
+    }
+
+    const hash = await bcrypt.hash(String(new_password), 10);
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3',
+      [hash, userId, tenantId],
+    );
+
+    res.json({
+      success: true,
+      message: 'Password updated',
+      // Said out loud rather than left to be assumed. See the note above.
+      other_sessions_signed_out: false,
+    });
+  } catch (error) { next(error); }
+};

@@ -311,6 +311,20 @@ timeline, though the documents API is now covered.
 
 ## Known gaps / explicitly out of scope
 
+- **Changing a password does NOT sign other sessions out**, and a user could
+  reasonably assume it does. Tokens are stateless JWTs and `protect` verifies only
+  signature and expiry, so every other token already issued to that user stays valid
+  until it expires on its own — up to 7 days. `POST /auth/change-password` says so in
+  its response (`other_sessions_signed_out: false`) rather than letting the absence of
+  a statement read as a protection, and a test demonstrates it by using a
+  pre-change token afterwards. **This is the same underlying gap as the two items
+  below, not a new one** — named here because this is the point at which it is most
+  likely to be assumed away.
+- **Email changes have no confirmation step.** `PATCH /auth/me` updates the address
+  directly. A verification link cannot be delivered while `EMAIL_TRANSPORT` is `log`,
+  so showing "check your inbox" for a message that will never arrive would be the
+  dishonest option — the same stance invites already take. A real simplification, to
+  become request-then-confirm once a transport is configured.
 - **A demoted admin keeps admin-level API access until their token expires.**
   `requireRole` reads the role from the **JWT claim**, not from `users.role`, so
   changing someone's role in the database does not take effect until their token
