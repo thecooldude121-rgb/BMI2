@@ -39,12 +39,44 @@ const PRIVILEGED_ROLES = ['admin', 'manager'];
  * workspace. A user in another workspace must be indistinguishable from one
  * that does not exist, so this returns null and the caller answers 404.
  */
-async function findMember(tenantId: string, id: string) {
-  const result = await pool.query(
+async function findMember(tenantId: string, id: string, db: Queryable = pool) {
+  const result = await db.query(
     'SELECT id, first_name, last_name, email, role, is_active FROM users WHERE id = $1 AND tenant_id = $2',
     [id, tenantId],
   );
   return result.rows[0] ?? null;
+}
+
+/** Anything that can run a query — the pool, or a client inside a transaction. */
+type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }> };
+
+/**
+ * Serialize privileged-membership changes within ONE workspace.
+ *
+ * THE RACE THIS CLOSES, measured before the fix: two admins deactivating each
+ * other simultaneously each read "one other privileged member remains" — A sees
+ * B, B sees A — and both proceed. Seven of eight trials left the workspace with
+ * ZERO active admins or managers: unable to invite, unable to change its
+ * settings, unable to promote anyone, and with nothing in the product able to
+ * undo it from the inside. Guard 2 was a check-then-write, and the count it
+ * checked was stale by the time the write landed.
+ *
+ * Same pattern as the concurrent company-import duplicate fix: hold the lock
+ * across the CHECK and the WRITE so the second request reads committed state.
+ * Keyed on the workspace rather than the target, because the invariant is
+ * workspace-wide — "at least one active admin or manager" — so two deactivations
+ * of DIFFERENT users in the same workspace must still serialize against each
+ * other. That is the whole race.
+ *
+ * The two-int4 form with a literal namespace as the first key keeps this lock
+ * space distinct from companiesController's, which uses hashtext(tenant) first.
+ *
+ * `_xact` releases on commit or rollback, so there is no unlock to forget — but
+ * it must be taken inside a transaction, and every exit path below must end the
+ * transaction or the client returns to the pool still holding it.
+ */
+async function lockWorkspaceMembership(db: Queryable, tenantId: string): Promise<void> {
+  await db.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', ['users_privileged', tenantId]);
 }
 
 /**
@@ -68,26 +100,42 @@ async function findMember(tenantId: string, id: string) {
  * while its holder is no longer counted.
  */
 export const deactivateUser = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
   try {
     const tenantId = requireTenantId(req);
-    const target = await findMember(tenantId, req.params.id);
-    if (!target) { res.status(404).json({ success: false, message: 'User not found' }); return; }
+
+    // BEGIN before the lock, and one COMMIT/ROLLBACK on every path below: a
+    // client released mid-transaction goes back into the pool still holding
+    // this lock, and the next deactivation in that workspace would block until
+    // the connection was recycled.
+    await client.query('BEGIN');
+    await lockWorkspaceMembership(client, tenantId);
+
+    const target = await findMember(tenantId, req.params.id, client);
+    if (!target) {
+      await client.query('COMMIT');
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
 
     // Guard 1 — self. Checked first because it is about who is asking, not
     // about the state of the workspace.
     if (String(target.id) === String(req.user?.id)) {
+      await client.query('COMMIT');
       res.status(409).json({ success: false, message: 'You cannot deactivate your own account' });
       return;
     }
 
-    // Guard 2 — the last one standing. Evaluated on its own terms: how many
-    // ACTIVE privileged members would remain if this one went?
-    const remaining = await pool.query(
+    // Guard 2 — the last one standing. Read INSIDE the lock, so a concurrent
+    // deactivation in this workspace has either already committed (and is
+    // counted) or is waiting behind us (and will re-read after we commit).
+    const remaining = await client.query(
       `SELECT COUNT(*)::int AS n FROM users
         WHERE tenant_id = $1 AND is_active = true AND role = ANY($2::varchar[]) AND id <> $3`,
       [tenantId, PRIVILEGED_ROLES, target.id],
     );
     if (PRIVILEGED_ROLES.includes(target.role) && remaining.rows[0].n === 0) {
+      await client.query('COMMIT');
       res.status(409).json({
         success: false,
         message: 'Cannot deactivate the last admin or manager in this workspace',
@@ -96,32 +144,30 @@ export const deactivateUser = async (req: AuthRequest, res: Response, next: Next
     }
 
     if (!target.is_active) {
+      await client.query('COMMIT');
       res.json({ success: true, data: target, message: 'That account was already deactivated' });
       return;
     }
 
     // Bump the TARGET's token_version so their existing sessions stop working
-    // immediately, rather than when their token happens to expire — up to 7
-    // days later. Without this, deactivation is a control that does not control
-    // anything for a week.
-    //
-    // SCOPED TO id AND tenant_id, and this is the whole point: a bare
-    // `UPDATE users SET token_version = token_version + 1`, or one scoped by
-    // tenant, would sign out the entire workspace including the admin doing the
-    // deactivating — and it would look like an outage, not a bug. A test reads
-    // both rows and asserts the acting admin's version is untouched.
-    //
-    // `token_version + 1` is computed inside the UPDATE so concurrent bumps
-    // cannot lose one.
-    const updated = await pool.query(
+    // immediately rather than when their token happens to expire — up to 7 days
+    // later. Scoped to id AND tenant_id: a bare bump, or one scoped by tenant,
+    // would sign out the whole workspace including the acting admin.
+    const updated = await client.query(
       `UPDATE users
           SET is_active = false, token_version = token_version + 1, updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2
         RETURNING id, first_name, last_name, email, role, is_active`,
       [target.id, tenantId],
     );
+    await client.query('COMMIT');
     res.json({ success: true, data: updated.rows[0] });
-  } catch (error) { next(error); }
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    next(error);
+  } finally {
+    client.release();
+  }
 };
 
 /** POST /api/v1/users/:id/reactivate — the way back, so deactivation is not a trap. */
@@ -131,6 +177,10 @@ export const reactivateUser = async (req: AuthRequest, res: Response, next: Next
     const target = await findMember(tenantId, req.params.id);
     if (!target) { res.status(404).json({ success: false, message: 'User not found' }); return; }
 
+    // NO LOCK HERE, deliberately: reactivation only ADDS an active privileged
+    // member, so it cannot break the "at least one" invariant no matter how it
+    // interleaves with a concurrent deactivation.
+    //
     // DELIBERATELY NO token_version BUMP. There is no live session to revoke —
     // the account was deactivated, so every token it held is already refused by
     // `protect`. Bumping would sign out nobody and would only invalidate the
