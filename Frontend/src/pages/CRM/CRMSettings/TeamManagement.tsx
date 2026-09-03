@@ -1,18 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../../../components/ui/Button';
-import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, Phone, User, Calendar, Clock, BarChart3, DollarSign, Briefcase, Shield, Activity, TrendingUp, FileText, Lock, CheckCircle, ChevronRight, RefreshCw, MapPin, Globe, X, Trash2 } from 'lucide-react';
-import { mockTeamMembers, mockTeamCapacity, getRoleDisplayName, getStatusBadgeClass, getStatusIcon, type TeamMember } from '../../../utils/teamManagementMockData';
+import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, User, Calendar, Clock, BarChart3, Briefcase, Shield, TrendingUp, FileText, Lock, CheckCircle, ChevronRight, X, Trash2 } from 'lucide-react';
+import { getRoleDisplayName, getStatusBadgeClass, getStatusIcon } from '../../../utils/teamManagementMockData';
+import {
+  fetchMembers, deactivateMember, reactivateMember, inviteMember,
+  fetchPendingInvites, formatLastLogin, INVITABLE_ROLES,
+  type WorkspaceMember, type PendingInvite, type InviteResult,
+} from '../../../utils/usersApi';
+import { NotAvailable } from '../../../components/common/NotAvailable';
+
+/**
+ * `TeamMember` was a 44-FIELD FABRICATED MODEL (teamManagementMockData.ts, 958
+ * lines). GET /users returns nine columns, and this page read twenty fields —
+ * seven of them backed, thirteen invented: employee ids, job titles, phone
+ * numbers, office locations, timezones, reporting lines, direct reports,
+ * permission strings, "member since", and a Quick Stats panel of deal and
+ * pipeline figures. The remaining twenty-four declared fields were read by
+ * nothing at all.
+ *
+ * The seven real ones are wired below. The thirteen rendered-but-invented are
+ * labelled with <NotAvailable> rather than deleted silently, because the UI
+ * structure is worth keeping for when columns exist. See the commit message for
+ * the field-by-field disposition, and TEAM_FIELDS_FOLLOWUP.md for which of the
+ * absent fields are worth a schema addition.
+ */
+type TeamMember = WorkspaceMember;
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
 import ForbiddenAccess from '../../../components/common/ForbiddenAccess';
-import UpgradePlanModal from '../../../components/Team/UpgradePlanModal';
-import EditTeamMemberModal from '../../../components/Team/EditTeamMemberModal';
 import UserActionsDropdown from '../../../components/Team/UserActionsDropdown';
-import ResetPasswordModal from '../../../components/Team/ResetPasswordModal';
-import ViewActivityLogModal from '../../../components/Team/ViewActivityLogModal';
-import DeactivateUserModal from '../../../components/Team/DeactivateUserModal';
-import DeleteUserModal from '../../../components/Team/DeleteUserModal';
-import { TeamEmailComposerModal } from '../../../components/Team/TeamEmailComposerModal';
 import { useNavigate } from 'react-router-dom';
 
 const TeamManagement: React.FC = () => {
@@ -23,18 +39,46 @@ const TeamManagement: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [departmentFilter, setDepartmentFilter] = useState('all');
-  const [showUpgradePlanModal, setShowUpgradePlanModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
-  const [showEmailComposerModal, setShowEmailComposerModal] = useState(false);
-  const [showActivityLogModal, setShowActivityLogModal] = useState(false);
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
-  const [teamMembersState, setTeamMembersState] = useState(mockTeamMembers);
+  const [teamMembersState, setTeamMembersState] = useState<WorkspaceMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[] | null>(null);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
+  // Invite
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<string>('sales');
+  const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownButtonRefs = useRef<{ [key: string]: React.RefObject<HTMLButtonElement> }>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const loadRoster = React.useCallback(async () => {
+    setLoadingMembers(true);
+    setLoadError(null);
+    try {
+      // Deactivated members are INCLUDED here: the screen that manages
+      // deactivation cannot be the one screen that hides deactivated people.
+      const [members, invites] = await Promise.all([
+        fetchMembers(true),
+        // Invites are admin/manager only. A 403 resolves to null rather than
+        // throwing, so a sales user still sees the roster.
+        fetchPendingInvites().catch(() => null),
+      ]);
+      setTeamMembersState(members);
+      setPendingInvites(invites);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not load the team');
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadRoster(); }, [loadRoster]);
 
   // Handle Escape key to clear search
   useEffect(() => {
@@ -62,7 +106,14 @@ const TeamManagement: React.FC = () => {
   }
 
   const teamMembers = teamMembersState;
-  const teamCapacity = mockTeamCapacity;
+  // Derived from the real roster rather than a fixture. Seat limits and plan
+  // utilisation are NOT derived: no plan or seat-count column exists, so the
+  // card that showed them is labelled instead of computed from nothing.
+  const teamCapacity = {
+    activeMembers: teamMembersState.filter(m => m.isActive).length,
+    inactiveMembers: teamMembersState.filter(m => !m.isActive).length,
+    pendingInvites: pendingInvites?.length ?? 0,
+  };
 
   // Calculate counts for each filter option
   const getRoleCount = (role: string) => {
@@ -77,7 +128,7 @@ const TeamManagement: React.FC = () => {
 
   const getDepartmentCount = (dept: string) => {
     if (dept === 'all') return teamMembers.length;
-    return teamMembers.filter(m => m.department.toLowerCase() === dept.toLowerCase()).length;
+    return teamMembers.filter(m => (m.department ?? '').toLowerCase() === dept.toLowerCase()).length;
   };
 
   const filteredMembers = teamMembers.filter(member => {
@@ -85,95 +136,23 @@ const TeamManagement: React.FC = () => {
     const matchesSearch = searchQuery === '' ||
       member.name.toLowerCase().includes(searchLower) ||
       member.email.toLowerCase().includes(searchLower) ||
-      member.phone.toLowerCase().includes(searchLower) ||
-      member.jobTitle.toLowerCase().includes(searchLower) ||
-      member.department.toLowerCase().includes(searchLower) ||
-      getRoleDisplayName(member.role).toLowerCase().includes(searchLower);
+      // phone and jobTitle were searchable against invented values; the real
+      // row has neither. Department is real and is searched instead.
+      (member.department ?? '').toLowerCase().includes(searchLower) ||
+      (member.department ?? '').toLowerCase().includes(searchLower) ||
+      getRoleDisplayName(member.role as Parameters<typeof getRoleDisplayName>[0]).toLowerCase().includes(searchLower);
     const matchesRole = roleFilter === 'all' || member.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || member.status === statusFilter;
-    const matchesDepartment = departmentFilter === 'all' || member.department.toLowerCase() === departmentFilter.toLowerCase();
+    const matchesDepartment = departmentFilter === 'all' || (member.department ?? '').toLowerCase() === departmentFilter.toLowerCase();
     return matchesSearch && matchesRole && matchesStatus && matchesDepartment;
   });
 
-  const handleUpgradePlan = (
-    plan: 'business' | 'enterprise' | 'add-seat',
-    billingCycle: 'monthly' | 'annual'
-  ) => {
-    if (plan === 'enterprise') {
-      showToast('Redirecting to contact sales...', 'info');
-      setTimeout(() => {
-        setShowUpgradePlanModal(false);
-        showToast('Contacting sales is not available yet — no request was sent', 'warning');
-      }, 1500);
-    } else if (plan === 'business') {
-      showToast(`Upgrading to Business plan (${billingCycle})...`, 'info');
-      setTimeout(() => {
-        setShowUpgradePlanModal(false);
-        showToast('Changing your plan is not available yet — nothing was upgraded or charged', 'warning');
-      }, 2000);
-    } else if (plan === 'add-seat') {
-      showToast('Adding seat to your plan...', 'info');
-      setTimeout(() => {
-        setShowUpgradePlanModal(false);
-        showToast('Adding a seat is not available yet — nothing was added or charged', 'warning');
-      }, 1500);
-    }
-  };
 
   const handleEditMember = (member: TeamMember) => {
     setSelectedMember(member);
-    setShowEditModal(true);
+    showToast('Editing another member is not available yet — you can edit your own profile in Settings → Profile', 'warning');
   };
 
-  const handleSaveMember = (updatedMember: TeamMember, changes: any) => {
-    // Handle deletion
-    if (changes.deleted) {
-      setTeamMembersState(prev => prev.filter(m => m.id !== updatedMember.id));
-      setShowEditModal(false);
-      setSelectedMember(null);
-      showToast(`${updatedMember.name} was NOT deleted — deleting users is not available yet`, 'warning');
-      return;
-    }
-
-    // Update member in state
-    setTeamMembersState(prev =>
-      prev.map(m => m.id === updatedMember.id ? updatedMember : m)
-    );
-
-    // Build change summary for toast
-    const changesList = Object.keys(changes).filter(key => key !== 'deleted' && key !== 'deactivated');
-
-    if (changesList.length > 0) {
-      // Log changes to console (in real app, would send to backend)
-      console.log('User Updated:', {
-        action: 'User Updated',
-        user: updatedMember.name,
-        updatedBy: user?.name || 'Current Admin',
-        changes: changes,
-        timestamp: new Date().toISOString()
-      });
-
-      // PHASE 0: this reported "<name> has been updated (Role: Admin)" off a
-      // console.log. Editing a user's role is a permission change — claiming it
-      // succeeded is the most consequential false confirmation on this page.
-      let notificationMessage = `${updatedMember.name} was NOT updated — editing users is not available yet`;
-
-      if (changes.role) {
-        notificationMessage += ` (role is still ${changes.role.from})`;
-      } else if (changes.status) {
-        notificationMessage += ` (status is still ${changes.status.from})`;
-      }
-
-      showToast(notificationMessage, 'warning');
-    } else if (changes.deactivated) {
-      showToast(`${updatedMember.name} was NOT deactivated — this is not available yet`, 'warning');
-    } else {
-      showToast('No changes were made', 'info');
-    }
-
-    setShowEditModal(false);
-    setSelectedMember(null);
-  };
 
   // Get or create ref for dropdown button
   const getDropdownButtonRef = (memberId: string) => {
@@ -191,70 +170,16 @@ const TeamManagement: React.FC = () => {
 
   const handleResetPassword = (member: TeamMember) => {
     setSelectedMember(member);
-    setShowResetPasswordModal(true);
-  };
-
-  const handleResetPasswordConfirm = () => {
-    if (!selectedMember) return;
-
-    // Log activity
-    console.log('Password Reset:', {
-      action: 'Password Reset',
-      user: selectedMember.name,
-      initiatedBy: user?.name || 'Admin',
-      timestamp: new Date().toISOString()
-    });
-
     showToast('Password reset is not available yet — no email was sent', 'warning');
   };
 
+
   const handleSendWelcomeEmail = (member: TeamMember) => {
     setSelectedMember(member);
-    setShowEmailComposerModal(true);
-  };
-
-  const handleEmailSend = (emailData: {
-    subject: string;
-    body: string;
-    template: string;
-    attachments?: File[];
-  }) => {
-    if (!selectedMember) return;
-
-    // Log activity
-    console.log('Email Sent:', {
-      action: 'Email Sent',
-      user: selectedMember.name,
-      email: selectedMember.email,
-      subject: emailData.subject,
-      template: emailData.template,
-      sentBy: user?.name || 'Admin',
-      timestamp: new Date().toISOString()
-    });
-
     showToast('Sending email is not available yet — nothing was sent', 'warning');
-    setShowEmailComposerModal(false);
-    setSelectedMember(null);
   };
 
-  const handleEmailSaveDraft = (emailData: {
-    subject: string;
-    body: string;
-    template: string;
-  }) => {
-    if (!selectedMember) return;
 
-    // Log draft save
-    console.log('Email Draft Saved:', {
-      action: 'Email Draft Saved',
-      user: selectedMember.name,
-      subject: emailData.subject,
-      savedBy: user?.name || 'Admin',
-      timestamp: new Date().toISOString()
-    });
-
-    showToast('Email draft saved', 'info');
-  };
 
   const handleUnlockAccount = (member: TeamMember) => {
     // Update member status
@@ -279,7 +204,7 @@ const TeamManagement: React.FC = () => {
 
   const handleViewActivityLog = (member: TeamMember) => {
     setSelectedMember(member);
-    setShowActivityLogModal(true);
+    showToast('Activity logs are not recorded yet', 'warning');
   };
 
   const handleDeactivateUser = (member: TeamMember) => {
@@ -287,89 +212,94 @@ const TeamManagement: React.FC = () => {
     setShowDeactivateModal(true);
   };
 
-  const handleDeactivateConfirm = (data: {
-    reassignTo: string | null;
-    sendNotification: boolean;
-    reason: string;
-  }) => {
-    if (!selectedMember) return;
-
-    setTeamMembersState(prev =>
-      prev.map(m =>
-        m.id === selectedMember.id
-          ? { ...m, status: 'inactive' as const }
-          : m
-      )
-    );
-
-    const reassignedToMember = data.reassignTo
-      ? teamMembersState.find(m => m.id === data.reassignTo)
-      : null;
-
-    // Log activity
-    console.log('User Deactivated:', {
-      action: 'User Deactivated',
-      user: selectedMember.name,
-      email: selectedMember.email,
-      deactivatedBy: user?.name || 'Admin',
-      reason: data.reason || 'Not specified',
-      dealsReassignedTo: reassignedToMember?.name || 'Not reassigned',
-      notificationSent: data.sendNotification,
-      timestamp: new Date().toISOString()
-    });
-
-    // Show appropriate toast
-    if (data.sendNotification) {
-      showToast(`${selectedMember.name} was NOT deactivated and no email was sent — this is not available yet`, 'warning');
-    } else {
-      showToast(`${selectedMember.name} was NOT deactivated — this is not available yet`, 'warning');
+  /**
+   * REAL. POST /users/:id/deactivate — soft: the row stays, the account cannot
+   * sign in, and migration 036 stops its existing sessions on the next request.
+   *
+   * The server refuses two cases with a 409 whose message is shown verbatim:
+   * deactivating yourself, and removing the last admin or manager. Neither is
+   * pre-checked here — the server is the authority, and duplicating the rule in
+   * the client is how the two drift apart.
+   *
+   * The previous flow opened a modal offering to reassign the member's deals,
+   * contacts and tasks. No endpoint does that, so it is gone rather than
+   * reimplemented against invented counts.
+   */
+  const handleDeactivateConfirm = async (member: TeamMember) => {
+    setActionError(null);
+    setBusyMemberId(member.id);
+    try {
+      const updated = await deactivateMember(member.id);
+      // Replace from the SERVER's row, not an optimistic guess.
+      setTeamMembersState(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+      showToast(`${updated.name} was deactivated`, 'success');
+      // Close ONLY on success. Closing in `finally` dismissed the dialog that
+      // was displaying the server's refusal — so a 409 explaining "cannot
+      // deactivate the last admin" vanished as it arrived, leaving a toast the
+      // user may well have missed. The dialog stays open on failure so the
+      // reason is readable next to the action that caused it.
+      setShowDeactivateModal(false);
+      setSelectedMember(null);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not deactivate this member';
+      setActionError(message);
+      showToast(message, 'error');
+    } finally {
+      setBusyMemberId(null);
     }
   };
 
+  /** REAL. POST /users/:id/reactivate. */
+  const handleReactivate = async (member: TeamMember) => {
+    setActionError(null);
+    setBusyMemberId(member.id);
+    try {
+      const updated = await reactivateMember(member.id);
+      setTeamMembersState(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+      showToast(`${updated.name} was reactivated`, 'success');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not reactivate this member';
+      setActionError(message);
+      showToast(message, 'error');
+    } finally {
+      setBusyMemberId(null);
+    }
+  };
+
+  /** REAL. POST /invites — creates the invite; delivery is a separate matter. */
+  const handleInvite = async () => {
+    setActionError(null);
+    setInviting(true);
+    setInviteResult(null);
+    try {
+      const result = await inviteMember(inviteEmail.trim(), inviteRole);
+      setInviteResult(result);
+      setInviteEmail('');
+      // Refresh the pending list so the new invite appears without a reload.
+      setPendingInvites(await fetchPendingInvites().catch(() => null));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not create the invite';
+      setActionError(message);
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  /**
+   * NOT WIRED, AND NOT REWIRED TO DEACTIVATE.
+   *
+   * There is no hard-delete endpoint, deliberately: deactivation is soft so a
+   * member's deals, contacts and activities keep their owner. Quietly making
+   * "Delete" mean "deactivate" would tell someone a record was purged when it
+   * was not — a worse lie than an unavailable button, and the reason the
+   * separate Deactivate action stays separate.
+   */
   const handleDeleteUser = (member: TeamMember) => {
     setSelectedMember(member);
-    setShowDeleteModal(true);
+    showToast('Permanently deleting a member is not available. Deactivate them instead — nothing is lost.', 'warning');
   };
 
-  const handleDeleteConfirm = (data: {
-    dealsReassignTo: string;
-    contactsReassignTo: string;
-    tasksReassignTo: string;
-  }) => {
-    if (!selectedMember) return;
 
-    const dealsManager = teamMembersState.find(m => m.id === data.dealsReassignTo);
-    const contactsManager = teamMembersState.find(m => m.id === data.contactsReassignTo);
-    const tasksManager = teamMembersState.find(m => m.id === data.tasksReassignTo);
-
-    // Remove user from team
-    setTeamMembersState(prev => prev.filter(m => m.id !== selectedMember.id));
-
-    // Log comprehensive activity
-    console.log('User Deleted Permanently:', {
-      action: 'User Deleted Permanently',
-      user: selectedMember.name,
-      email: selectedMember.email,
-      deletedBy: user?.name || 'Admin',
-      dealsReassignedTo: `${dealsManager?.name} (${selectedMember.quickStats?.activeDeals || 0} deals)`,
-      contactsReassignedTo: `${contactsManager?.name} (${selectedMember.quickStats?.totalProspects || 0} contacts)`,
-      tasksReassignedTo: `${tasksManager?.name} (${selectedMember.quickStats?.openTasks || 0} tasks)`,
-      timestamp: new Date().toISOString(),
-      note: 'User and all associated data permanently deleted',
-      recoverable: 'NO'
-    });
-
-    showToast(`${selectedMember.name} was NOT deleted — deleting users is not available yet`, 'warning');
-
-    // Scroll to top after deletion
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleDeactivateInsteadOfDelete = () => {
-    if (!selectedMember) return;
-    setShowDeleteModal(false);
-    setShowDeactivateModal(true);
-  };
 
   return (
     <div className="space-y-6">
@@ -386,9 +316,9 @@ const TeamManagement: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button >
+          <Button onClick={() => { setShowInvite(v => !v); setInviteResult(null); setActionError(null); }}>
             <UserPlus className="h-4 w-4" />
-            Add New Team Member
+            {showInvite ? 'Cancel invite' : 'Invite a member'}
           </Button>
           <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2">
             <Upload className="h-4 w-4" />
@@ -426,88 +356,148 @@ const TeamManagement: React.FC = () => {
             </div>
           </div>
 
-          <div
-            className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-4 relative group cursor-help"
-            title={`${teamCapacity.availableSeats} seats remaining on your ${teamCapacity.plan} plan. You can add ${teamCapacity.availableSeats} more team members without upgrading.`}
-          >
+          {/* Seat count and plan utilisation were fabricated: there is no plan
+              or seat-limit column, so nothing can compute them. Labelled
+              rather than shown as a number. */}
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <span className="text-sm font-medium text-green-600">Available Seats</span>
+              <CheckCircle className="h-5 w-5 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">Available Seats</span>
             </div>
-            <div className="text-3xl font-bold text-gray-900 mb-1">{teamCapacity.availableSeats}</div>
-            <div className="text-xs text-gray-600">${teamCapacity.costPerSeat}/seat/month</div>
-
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
-              {teamCapacity.availableSeats} seats remaining on your {teamCapacity.plan} plan.<br />
-              You can add {teamCapacity.availableSeats} more team members without upgrading.
-            </div>
+            <div className="text-sm text-gray-600">Seat limits are not tracked yet.</div>
           </div>
 
-          <div
-            className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4 relative group cursor-help"
-            title={`Your ${teamCapacity.plan} plan includes ${teamCapacity.totalCapacity} user seats. Upgrade to Business (15 seats) or add individual seats.`}
-          >
+          {/* Total Capacity and Last Updated were fabricated: no plan, seat
+              limit or sync-timestamp exists. */}
+          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Briefcase className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-medium text-purple-600">Total Capacity</span>
+              <Briefcase className="h-5 w-5 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">Plan &amp; capacity</span>
             </div>
-            <div className="text-3xl font-bold text-gray-900 mb-1">{teamCapacity.totalCapacity}</div>
-            <div className="text-xs text-gray-600">{teamCapacity.plan} plan</div>
-
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
-              Your {teamCapacity.plan} plan includes {teamCapacity.totalCapacity} user seats.<br />
-              Upgrade to Business (15 seats) or add individual seats.
-            </div>
-          </div>
-
-          <div
-            className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4 relative group cursor-help"
-            title="User data syncs automatically in real-time. Last manual refresh: 2 hours ago."
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <RefreshCw className="h-5 w-5 text-orange-600" />
-              <span className="text-sm font-medium text-orange-600">Last Updated</span>
-            </div>
-            <div className="text-2xl font-bold text-gray-900 mb-1">{teamCapacity.lastUpdated}</div>
-            <div className="text-xs text-gray-600">Auto-sync enabled</div>
-
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10 shadow-lg">
-              User data syncs automatically in real-time.<br />
-              Last manual refresh: 2 hours ago.
-            </div>
+            <div className="text-sm text-gray-600">Not tracked yet.</div>
           </div>
         </div>
 
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex-1">
-              <div className="font-semibold text-gray-900 mb-1">Plan: {teamCapacity.plan}</div>
-              <div className="text-xs text-gray-500 mb-2">Tier {teamCapacity.planTier}</div>
-              <div className="space-y-1 text-sm text-gray-600">
-                <div>• Included seats: {teamCapacity.totalCapacity} users</div>
-                <div>• Used seats: {teamCapacity.activeMembers + teamCapacity.inactiveMembers + teamCapacity.pendingInvites} users ({teamCapacity.utilization}% utilized)</div>
-                <div>• Available seats: {teamCapacity.availableSeats}</div>
-                <div>• Monthly cost: ${teamCapacity.monthlyCost} ({teamCapacity.activeMembers} seats × ${teamCapacity.costPerSeat})</div>
-                <div>• Next billing: {teamCapacity.nextBillingDate} ({teamCapacity.planRenewal})</div>
-                <div>• Auto-sync: {teamCapacity.autoSyncStatus} - Last sync: {teamCapacity.lastSync}</div>
-              </div>
+        {/*
+          A whole billing panel used to live here: plan name and tier, included
+          and used seats, utilisation percentage, monthly cost, cost per seat,
+          next billing date, renewal terms, auto-sync status and last sync time,
+          plus Business/Enterprise upgrade pricing. Every one of those numbers
+          was invented — there is no billing system, no plan column, and no sync
+          job. An "Upgrade Plan" button charged nothing and said so in a toast.
+
+          Replaced with one honest statement rather than left as a page of
+          figures a customer could reasonably act on.
+        */}
+        <NotAvailable
+          feature="Billing and plan management"
+          detail="Seats, plan tier, costs and renewal dates are not tracked yet. The member counts above are real, counted from your workspace."
+        />
+      </div>
+
+      {/* Invite — REAL. POST /invites creates a single-use, hashed, expiring
+          token. Delivery is a separate matter and is reported honestly below. */}
+      {showInvite && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Invite a member</h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[240px]">
+              <label htmlFor="invite-email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email address
+              </label>
+              <input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="colleague@company.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
-            <Button
-              onClick={() => setShowUpgradePlanModal(true)}
-            >
-              Upgrade Plan
-              <ChevronRight className="h-4 w-4" />
+            <div>
+              <label htmlFor="invite-role" className="block text-sm font-medium text-gray-700 mb-2">
+                Role
+              </label>
+              <select
+                id="invite-role"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {INVITABLE_ROLES.map((r) => (
+                  <option key={r} value={r}>{getRoleDisplayName(r as Parameters<typeof getRoleDisplayName>[0])}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={() => void handleInvite()} disabled={inviting || !inviteEmail.trim()}>
+              <Mail className="h-4 w-4" />
+              {inviting ? 'Creating…' : 'Send invite'}
             </Button>
           </div>
-          <div className="border-t border-gray-200 pt-3 mt-3">
-            <div className="text-sm font-medium text-gray-900 mb-2">Upgrade Options:</div>
-            <div className="space-y-1 text-sm text-gray-600">
-              <div>• <span className="font-medium">Business Plan:</span> {teamCapacity.upgradeOptions.business.seats} seats included ({teamCapacity.upgradeOptions.business.price})</div>
-              <div>• <span className="font-medium">Enterprise Plan:</span> {teamCapacity.upgradeOptions.enterprise.seats} seats ({teamCapacity.upgradeOptions.enterprise.price})</div>
+
+          {/* The invite exists either way; whether anything was EMAILED is a
+              separate fact, and the server reports it rather than implying it
+              from a 201. While EMAIL_TRANSPORT is `log` nothing is delivered,
+              so the link is shown for the admin to pass on by hand. */}
+          {inviteResult && (
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4" role="status">
+              <p className="text-sm font-medium text-gray-900">
+                Invite created for {inviteResult.invite.email}
+              </p>
+              {inviteResult.email_sent ? (
+                <p className="mt-1 text-sm text-gray-700">An email has been sent with the link.</p>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-gray-700">
+                    <strong>No email was sent.</strong>{' '}
+                    {inviteResult.note ?? 'Email delivery is not configured, so send this link yourself.'}
+                  </p>
+                  {inviteResult.accept_url && (
+                    <code className="mt-2 block break-all rounded border border-blue-200 bg-white p-2 text-xs text-gray-800">
+                      {inviteResult.accept_url}
+                    </code>
+                  )}
+                </>
+              )}
             </div>
-          </div>
+          )}
+
+          {actionError && (
+            <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              {actionError}
+            </p>
+          )}
         </div>
-      </div>
+      )}
+
+      {/* Outstanding invites — real rows from GET /invites. */}
+      {pendingInvites !== null && pendingInvites.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-3">
+            Invites awaiting acceptance ({pendingInvites.length})
+          </h3>
+          <ul className="divide-y divide-gray-200">
+            {pendingInvites.map((inv) => (
+              <li key={inv.id} className="flex items-center justify-between py-2 text-sm">
+                <span className="text-gray-900">{inv.email}</span>
+                <span className="text-gray-600">
+                  {getRoleDisplayName(inv.role as Parameters<typeof getRoleDisplayName>[0])}
+                  {' · expires '}{formatLastLogin(inv.expires_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {loadingMembers && (
+        <p role="status" className="mb-6 text-sm text-gray-600">Loading your team…</p>
+      )}
+      {loadError && (
+        <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          {loadError}
+        </div>
+      )}
 
       {/* Team Members List */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -663,10 +653,12 @@ const TeamManagement: React.FC = () => {
                         </span>
                       )}
                     </div>
+                    {/* jobTitle and employeeId had no columns. The real row
+                        carries department, which is shown instead. */}
                     <p className={`text-sm ${member.status === 'inactive' ? 'text-gray-500' : 'text-gray-600'}`}>
-                      {member.jobTitle}
+                      {member.department || 'No department set'}
                     </p>
-                    <p className="text-xs text-gray-500">ID: {member.employeeId}</p>
+                    {/* The email is shown once, in the contact row below. */}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -707,7 +699,8 @@ const TeamManagement: React.FC = () => {
                     onViewActivityLog={() => handleViewActivityLog(member)}
                     onDeactivate={() => handleDeactivateUser(member)}
                     onDelete={() => handleDeleteUser(member)}
-                    isAccountLocked={member.accountLocked || false}
+                    /* `users` has no lock column; nothing can be locked, so nothing shows as locked. */
+                    isAccountLocked={false}
                   />
                 </div>
               </div>
@@ -718,59 +711,37 @@ const TeamManagement: React.FC = () => {
                     <Mail className="h-4 w-4" />
                     {member.email}
                   </div>
+                  {/* phone, location and timezone were invented per member —
+                      `users` has no such columns. See
+                      TEAM_FIELDS_FOLLOWUP.md; phone is the one most worth
+                      adding. */}
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Phone className="h-4 w-4" />
-                    {member.phone}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin className="h-4 w-4" />
-                    {member.location}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Globe className="h-4 w-4" />
-                    {member.timezone}
+                    <Clock className="h-4 w-4" />
+                    Last signed in: {formatLastLogin(member.lastLoginAt)}
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-gray-600">Status:</span>
-                    <span className={`px-2 py-1 rounded text-xs font-medium border ${getStatusBadgeClass(member.status)}`}>
-                      {getStatusIcon(member.status)} {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                    <span className={`px-2 py-1 rounded text-xs font-medium border ${getStatusBadgeClass(member.status as Parameters<typeof getStatusBadgeClass>[0])}`}>
+                      {getStatusIcon(member.status as Parameters<typeof getStatusIcon>[0])} {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
                     </span>
                   </div>
                   <div className="text-sm text-gray-600">
-                    <span className="font-medium">Role:</span> {getRoleDisplayName(member.role)}
+                    <span className="font-medium">Role:</span> {getRoleDisplayName(member.role as Parameters<typeof getRoleDisplayName>[0])}
                   </div>
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">Permissions:</span> {member.permissions}
-                  </div>
+                  {/* A free-text "permissions" string was invented alongside
+                      the role. The role IS the permission model — see
+                      utils/permissions.ts and the server's requireRole. */}
                   <div className="text-sm text-gray-600">
                     <span className="font-medium">Department:</span> {member.department}
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-                <div className="space-y-2 text-sm">
-                  {member.reportsTo && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <User className="h-4 w-4" />
-                      <span className="font-medium">Reports to:</span> {member.reportsTo}
-                    </div>
-                  )}
-                  {member.directReports && member.directReports.length > 0 && (
-                    <div className="flex items-start gap-2 text-gray-600">
-                      <Users className="h-4 w-4 mt-0.5" />
-                      <div>
-                        <span className="font-medium">Manages:</span> {member.directReports.length} direct reports
-                        <div className="text-xs text-gray-500 mt-1">({member.directReports.join(', ')})</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
+              {/* Reporting lines were fabricated: no manager_id or direct-reports
+                  relation exists. Structure kept, absence labelled. */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
@@ -778,37 +749,28 @@ const TeamManagement: React.FC = () => {
                       <Calendar className="h-4 w-4" />
                       <span className="font-medium">Member since:</span>
                     </div>
-                    <div className="text-gray-900 ml-6">{member.memberSince}</div>
+                    {/* created_at is a real column — this is wired, not removed. */}
+                    <div className="text-gray-900 ml-6">{formatLastLogin(member.createdAt)}</div>
                   </div>
                   <div>
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
                       <Clock className="h-4 w-4" />
                       <span className="font-medium">Last login:</span>
                     </div>
-                    <div className="text-gray-900 ml-6">{member.lastLogin}</div>
+                    <div className="text-gray-900 ml-6">{formatLastLogin(member.lastLoginAt)}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="font-medium text-gray-900 mb-2">Quick Stats:</div>
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="h-4 w-4 text-blue-600" />
-                    Active Deals: <span className="font-semibold text-gray-900">{member.quickStats.activeDeals}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-blue-600" />
-                    Pipeline: <span className="font-semibold text-gray-900">{member.quickStats.pipeline}</span>
-                  </div>
-                  {member.quickStats.additionalInfo && (
-                    <div className="flex items-center gap-2">
-                      <Activity className="h-4 w-4 text-blue-600" />
-                      {member.quickStats.additionalInfo}
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* Quick Stats showed per-member active deals, pipeline value and
+                  prospect counts — all invented. They are computable from real
+                  deals once an owner-rollup endpoint exists; until then this is
+                  labelled rather than filled in. */}
+              <NotAvailable
+                className="mb-4"
+                feature="Per-member deal statistics"
+                detail="Active deals, pipeline value and assigned contacts for each member are not calculated yet."
+              />
 
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -820,22 +782,8 @@ const TeamManagement: React.FC = () => {
                 {member.status === 'inactive' ? (
                   <>
                     <button
-                      onClick={() => {
-                        setTeamMembersState(prev =>
-                          prev.map(m =>
-                            m.id === member.id
-                              ? { ...m, status: 'active' as const }
-                              : m
-                          )
-                        );
-                        showToast(`${member.name} was NOT reactivated — this is not available yet`, 'warning');
-                        console.log('User Reactivated:', {
-                          action: 'User Reactivated',
-                          user: member.name,
-                          reactivatedBy: user?.name || 'Admin',
-                          timestamp: new Date().toISOString()
-                        });
-                      }}
+                      onClick={() => void handleReactivate(member)}
+                      disabled={busyMemberId === member.id}
                       className="px-4 py-2 border border-green-300 text-green-700 bg-green-50 rounded-lg hover:bg-green-100 transition-colors text-sm flex items-center gap-2"
                     >
                       <CheckCircle className="h-4 w-4" />
@@ -851,6 +799,17 @@ const TeamManagement: React.FC = () => {
                   </>
                 ) : (
                   <>
+                    {/* Deactivation is a real action now, so it gets a visible
+                        control rather than only a dropdown entry — matching
+                        Reactivate for inactive members. */}
+                    <button
+                      onClick={() => handleDeactivateUser(member)}
+                      disabled={busyMemberId === member.id}
+                      className="px-4 py-2 border border-red-300 text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-sm flex items-center gap-2 disabled:opacity-60"
+                    >
+                      <Shield className="h-4 w-4" />
+                      Deactivate
+                    </button>
                     <button
                       onClick={() => handleResetPassword(member)}
                       className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center gap-2"
@@ -940,140 +899,65 @@ const TeamManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Upgrade Plan Modal */}
-      <UpgradePlanModal
-        isOpen={showUpgradePlanModal}
-        onClose={() => setShowUpgradePlanModal(false)}
-        currentPlan={teamCapacity.plan}
-        currentPrice={teamCapacity.monthlyCost}
-        onUpgrade={handleUpgradePlan}
-      />
+      {/*
+        MODALS. Only the deactivation confirmation is real; the rest had no
+        endpoint behind them and, rather than being deleted, are reduced to an
+        honest confirmation that says so. Each previously opened a full modal
+        built on invented data:
 
-      {/* Edit Team Member Modal */}
-      <EditTeamMemberModal
-        isOpen={showEditModal}
-        onClose={() => {
-          setShowEditModal(false);
-          setSelectedMember(null);
-        }}
-        member={selectedMember}
-        onSave={handleSaveMember}
-        allMembers={teamMembers}
-      />
+          EditTeamMemberModal   — no endpoint edits ANOTHER user. PATCH
+                                  /auth/me is self-only by design, so editing a
+                                  colleague is not available.
+          ResetPasswordModal    — no password-reset endpoint exists at all; the
+                                  feature is unbuilt (see CLAUDE.md).
+          ViewActivityLogModal  — needed per-user activity analytics that are
+                                  not recorded.
+          DeleteUserModal       — hard delete does not exist, deliberately.
+          UpgradePlanModal      — there is no billing system.
+          TeamEmailComposerModal— no transactional send from the browser.
 
-      {/* Reset Password Modal */}
-      {selectedMember && (
-        <ResetPasswordModal
-          isOpen={showResetPasswordModal}
-          onClose={() => {
-            setShowResetPasswordModal(false);
-            setSelectedMember(null);
-          }}
-          userName={selectedMember.name}
-          userEmail={selectedMember.email}
-          onConfirm={handleResetPasswordConfirm}
-        />
+        Their menu entries still exist and still say plainly that the action is
+        unavailable, which is the established convention here: a control that
+        admits it does nothing beats a control that lies.
+      */}
+
+      {/* Deactivate — REAL. A plain confirmation, because the old modal offered
+          to reassign deals, contacts and tasks and no endpoint does that. */}
+      {selectedMember && showDeactivateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="deactivate-title">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 id="deactivate-title" className="text-lg font-semibold text-gray-900 mb-2">
+              Deactivate {selectedMember.name}?
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              They will not be able to sign in, and any session they currently have stops working
+              immediately. Nothing is deleted — their deals, contacts and activities stay exactly as
+              they are, and you can reactivate them at any time.
+            </p>
+            {actionError && (
+              <p role="alert" className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                {actionError}
+              </p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowDeactivateModal(false); setSelectedMember(null); setActionError(null); }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDeactivateConfirm(selectedMember)}
+                disabled={busyMemberId === selectedMember.id}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-60 text-sm"
+              >
+                {busyMemberId === selectedMember.id ? 'Deactivating…' : 'Deactivate'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Email Composer Modal */}
-      {selectedMember && (
-        <TeamEmailComposerModal
-          isOpen={showEmailComposerModal}
-          onClose={() => {
-            setShowEmailComposerModal(false);
-            setSelectedMember(null);
-          }}
-          memberName={selectedMember.name}
-          memberEmail={selectedMember.email}
-          currentUserEmail={user?.email || 'admin@bmi.com'}
-          onSend={handleEmailSend}
-          onSaveDraft={handleEmailSaveDraft}
-        />
-      )}
-
-      {/* View Activity Log Modal */}
-      {selectedMember && (
-        <ViewActivityLogModal
-          isOpen={showActivityLogModal}
-          onClose={() => {
-            setShowActivityLogModal(false);
-            setSelectedMember(null);
-          }}
-          userName={selectedMember.name}
-          userId={selectedMember.id}
-        />
-      )}
-
-      {/* Deactivate User Modal */}
-      {selectedMember && (
-        <DeactivateUserModal
-          isOpen={showDeactivateModal}
-          onClose={() => {
-            setShowDeactivateModal(false);
-            setSelectedMember(null);
-          }}
-          member={{
-            id: selectedMember.id,
-            name: selectedMember.name,
-            email: selectedMember.email,
-            role: selectedMember.jobTitle || selectedMember.role,
-            activeDeals: selectedMember.quickStats?.activeDeals || 0,
-            pipelineValue: selectedMember.quickStats?.pipeline || '$0',
-            assignedContacts: selectedMember.quickStats?.totalProspects || 0,
-            openTasks: selectedMember.quickStats?.openTasks || 0
-          }}
-          availableManagers={teamMembersState
-            .filter(m =>
-              m.id !== selectedMember.id &&
-              m.status === 'active' &&
-              (m.role === 'manager' || m.role === 'vp' || m.role === 'ceo')
-            )
-            .map(m => ({
-              id: m.id,
-              name: m.name,
-              email: m.email,
-              role: m.jobTitle || m.role
-            }))
-          }
-          onConfirm={handleDeactivateConfirm}
-        />
-      )}
-
-      {/* Delete User Modal */}
-      {selectedMember && (
-        <DeleteUserModal
-          isOpen={showDeleteModal}
-          onClose={() => {
-            setShowDeleteModal(false);
-            setSelectedMember(null);
-          }}
-          member={{
-            id: selectedMember.id,
-            name: selectedMember.name,
-            email: selectedMember.email,
-            role: selectedMember.jobTitle || selectedMember.role,
-            activeDeals: selectedMember.quickStats?.activeDeals || 0,
-            assignedContacts: selectedMember.quickStats?.totalProspects || 0,
-            openTasks: selectedMember.quickStats?.openTasks || 0,
-            totalActivities: 124,
-            coachingNotes: 5
-          }}
-          availableManagers={teamMembersState
-            .filter(m =>
-              m.id !== selectedMember.id &&
-              m.status === 'active'
-            )
-            .map(m => ({
-              id: m.id,
-              name: m.name,
-              email: m.email,
-              role: m.jobTitle || m.role
-            }))
-          }
-          onConfirm={handleDeleteConfirm}
-          onDeactivateInstead={handleDeactivateInsteadOfDelete}
-        />
-      )}
     </div>
   );
 };

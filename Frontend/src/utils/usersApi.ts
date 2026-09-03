@@ -1,13 +1,23 @@
 /**
- * Workspace users, for assignee pickers.
+ * Workspace members API client — the real one.
  *
- * GET /users is workspace-scoped server-side and returns only active users, so
- * there is no client-side filtering to get wrong.
+ * Backs Settings → Team Management against `Backend/src/routes/users.ts` and
+ * `routes/invites.ts`. Every request is workspace-scoped by the server from the
+ * token; nothing here sends a workspace id.
  *
- * NOTE ON THE SHAPE TASKS NEED: `tasks.assigned_to` is a VARCHAR(100) holding a
- * DISPLAY NAME, not a user id — see the open decision in HANDOFF about migrating
- * it to a real owner_id. So a task assignee picker stores `displayName` here,
- * not `id`, and that is deliberate rather than an oversight.
+ * WHAT THE SERVER ACTUALLY RETURNS, and why this file is short:
+ * `GET /users` selects NINE columns — id, first_name, last_name, email, role,
+ * department, is_active, last_login_at, created_at. The page this replaces was
+ * driven by a 44-field fabricated model (`teamManagementMockData.ts`, 958
+ * lines) whose other 35 fields had no column anywhere: employee ids, job
+ * titles, phone numbers, office locations, reporting lines, permission sets,
+ * login-frequency analytics. Those are not mapped here and are not invented —
+ * the UI labels their absence instead.
+ *
+ * `initials` and `avatarColor` ARE derived here, and that is a different thing
+ * from fabricating: both are computed from real values (the name and the id),
+ * so they carry no information that is not already true. A stock photo or an
+ * invented job title would carry information; a first letter does not.
  */
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -20,6 +30,24 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
+async function unwrap<T>(res: Response): Promise<T> {
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || `Request failed (${res.status})`);
+  return (json.data ?? json) as T;
+}
+
+/**
+ * ── PRE-EXISTING EXPORTS, kept ────────────────────────────────────────────────
+ *
+ * `WorkspaceUser` / `fetchUsers` back the task assignee picker and predate the
+ * Settings work. They stay because that picker wants ACTIVE users only and a
+ * display name, not the fuller member shape the Settings roster needs.
+ *
+ * NOTE ON THE SHAPE TASKS NEED: `tasks.assigned_to` is a VARCHAR(100) holding a
+ * DISPLAY NAME, not a user id — see the open decision in HANDOFF about
+ * migrating it to a real owner_id. So a task assignee picker stores
+ * `displayName`, not `id`, and that is deliberate rather than an oversight.
+ */
 export interface WorkspaceUser {
   id: number;
   first_name: string;
@@ -43,4 +71,173 @@ export async function fetchUsers(): Promise<WorkspaceUser[]> {
     // nothing — the failure is invisible, so keep them identical.
     displayName: `${u.first_name} ${u.last_name}`.trim(),
   }));
+}
+
+/** Exactly the nine columns GET /users returns. */
+export interface UserRow {
+  id: number | string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: string;
+  department: string | null;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+/** What the UI renders: the nine real fields, plus two derived for display. */
+export interface WorkspaceMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string | null;
+  /** Derived from is_active. The API has no third state. */
+  status: 'active' | 'inactive';
+  isActive: boolean;
+  /** null when this member has never signed in — not backfilled with a date. */
+  lastLoginAt: string | null;
+  createdAt: string;
+  /** Derived from the name. */
+  initials: string;
+  /** Derived from the id, so a member's colour is stable across reloads. */
+  avatarColor: string;
+}
+
+/** Tailwind gradients, picked by id hash — stable, and carries no data. */
+const AVATAR_COLORS = [
+  'from-blue-500 to-blue-600', 'from-purple-500 to-purple-600',
+  'from-emerald-500 to-emerald-600', 'from-amber-500 to-amber-600',
+  'from-rose-500 to-rose-600', 'from-cyan-500 to-cyan-600',
+];
+
+function initialsOf(first: string, last: string, email: string): string {
+  const a = (first || '').trim();
+  const b = (last || '').trim();
+  if (a || b) return `${a.charAt(0)}${b.charAt(0)}`.toUpperCase() || '?';
+  // No name at all: fall back to the email's first character rather than a
+  // placeholder that looks like a name.
+  return (email.charAt(0) || '?').toUpperCase();
+}
+
+export function toMember(row: UserRow): WorkspaceMember {
+  const name = [row.first_name, row.last_name].filter(Boolean).join(' ').trim();
+  const idStr = String(row.id);
+  let hash = 0;
+  for (let i = 0; i < idStr.length; i++) hash = (hash * 31 + idStr.charCodeAt(i)) >>> 0;
+
+  return {
+    id: idStr,
+    // An account with no name shows its email, not "Unknown User".
+    name: name || row.email,
+    email: row.email,
+    role: row.role,
+    department: row.department,
+    status: row.is_active ? 'active' : 'inactive',
+    isActive: row.is_active,
+    lastLoginAt: row.last_login_at,
+    createdAt: row.created_at,
+    initials: initialsOf(row.first_name, row.last_name, row.email),
+    avatarColor: AVATAR_COLORS[hash % AVATAR_COLORS.length],
+  };
+}
+
+/**
+ * The workspace's members.
+ *
+ * `includeInactive` defaults TRUE here, unlike the API, whose default is active
+ * -only for the assignment pickers that use it. A screen for managing
+ * deactivation cannot be the screen that hides deactivated people.
+ */
+export async function fetchMembers(includeInactive = true): Promise<WorkspaceMember[]> {
+  const qs = includeInactive ? '?include_inactive=true' : '';
+  const res = await fetch(`${API_BASE}/users${qs}`, { headers: getAuthHeaders() });
+  const rows = await unwrap<UserRow[]>(res);
+  return rows.map(toMember);
+}
+
+/**
+ * Deactivate — SOFT. The row and everything it owns stay; the account simply
+ * cannot sign in, and its existing sessions stop working immediately
+ * (migration 036). The server refuses two cases with a 409 whose message is
+ * shown verbatim: deactivating yourself, and removing the last admin or
+ * manager.
+ */
+export async function deactivateMember(id: string): Promise<WorkspaceMember> {
+  const res = await fetch(`${API_BASE}/users/${id}/deactivate`, {
+    method: 'POST', headers: getAuthHeaders(),
+  });
+  const row = await unwrap<UserRow>(res);
+  return toMember(row);
+}
+
+export async function reactivateMember(id: string): Promise<WorkspaceMember> {
+  const res = await fetch(`${API_BASE}/users/${id}/reactivate`, {
+    method: 'POST', headers: getAuthHeaders(),
+  });
+  const row = await unwrap<UserRow>(res);
+  return toMember(row);
+}
+
+/** Roles an invite may assign. Mirrors ASSIGNABLE_ROLES in invitesController. */
+export const INVITABLE_ROLES = ['sales', 'manager', 'admin'] as const;
+
+export interface InviteResult {
+  invite: { id: string; email: string; role: string; expires_at: string };
+  /**
+   * FALSE while EMAIL_TRANSPORT is `log`, which renders the message to the
+   * server console and delivers nothing. Reported honestly by the server rather
+   * than inferred from a 201, so the UI can tell the truth about it.
+   */
+  email_sent: boolean;
+  /** Present only when nothing was emailed, so an admin can pass the link on. */
+  accept_url?: string;
+  note?: string;
+}
+
+export async function inviteMember(email: string, role: string): Promise<InviteResult> {
+  const res = await fetch(`${API_BASE}/invites`, {
+    method: 'POST', headers: getAuthHeaders(), body: JSON.stringify({ email, role }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || `Request failed (${res.status})`);
+  // Not unwrap(): this endpoint's useful payload is the envelope itself —
+  // email_sent and accept_url sit alongside `invite`, not inside `data`.
+  return json as InviteResult;
+}
+
+export interface PendingInvite {
+  id: string;
+  email: string;
+  role: string;
+  expires_at: string;
+  created_at: string;
+}
+
+/**
+ * Outstanding invites. Admin/manager only — a sales user gets 403, which is not
+ * an error worth surfacing on this screen, so the caller treats it as "cannot
+ * see invites" rather than "loading failed". Returns null in that case so the
+ * UI can distinguish "none outstanding" from "not permitted to know".
+ */
+export async function fetchPendingInvites(): Promise<PendingInvite[] | null> {
+  const res = await fetch(`${API_BASE}/invites`, { headers: getAuthHeaders() });
+  if (res.status === 403) return null;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.message || `Request failed (${res.status})`);
+  const rows = (json.data ?? json.invites ?? []) as PendingInvite[];
+  // Only invites still awaiting acceptance are "pending".
+  return rows.filter((r) => !(r as unknown as { accepted_at?: string }).accepted_at
+    && !(r as unknown as { revoked_at?: string }).revoked_at);
+}
+
+/** "3 Sep 2026, 14:05", or the honest absence of a login. */
+export function formatLastLogin(iso: string | null): string {
+  if (!iso) return 'Never signed in';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Never signed in';
+  return d.toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 }
