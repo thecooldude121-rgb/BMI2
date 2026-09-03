@@ -1,0 +1,449 @@
+# Item 5 — Configurable pipeline stages (design proposal, NOT implemented)
+
+Same standing as `TOKEN_ACCESS`/`a1750b2`: this is a design to argue with before any code
+is written. Nothing here is built. Every fact about the current state was read out of
+`bmi_crm` or the source on 2026-09-04 and is cited so it can be re-checked rather than
+believed.
+
+---
+
+## 1. The finding that changes the shape of this work
+
+**The table already exists, is per-tenant, and is populated.** `pipeline_stages` and
+`pipelines` are both live in `bmi_crm`, both carry `tenant_id NOT NULL` with FKs to
+`tenants`, and `pipeline_stages` already has `name`, `position`, `probability`, `color`,
+`is_won` and `is_lost`. That is very close to the table this item was scoped to create.
+
+So the work is **not "add a table"**. It is **"reconcile three disagreeing stage models
+onto one"** — which is a different job, with a different risk profile, and one that has to
+be got right in a migration rather than designed on a blank page.
+
+One caveat on the existing notes, stated precisely rather than as a gotcha:
+`PROMPT_C_SUMMARY.md:378` lists `pipelines` among "unbuilt tables". Read as *the pipeline
+feature is unbuilt*, that is fair — nothing writes to either table. Read as *the tables are
+empty scaffolding*, it is not: both exist with `tenant_id`, and `pipeline_stages` holds six
+seeded rows with curated probabilities and colors that this design deliberately adopts
+rather than discards (§3, step 2). Worth pinning down before anyone plans on a blank
+page.
+
+### The three models, as they actually are today
+
+| # | Where | Contents | Who reads it |
+|---|---|---|---|
+| 1 | `Frontend/src/config/pipelines.ts` | 3 pipelines (`new-business`, `renewals`, `partnerships`), slug ids, 16 stages total | 5 frontend files. **This is what the app runs on.** |
+| 2 | Six hardcoded `['prospecting','qualified',…]` literals | the 6 new-business stages only | `DealsListView` (×3), `DealsGridView`, `CRMDashboard`, `dealVelocity`, `dealDataQuality` |
+| 3 | DB `pipelines` + `pipeline_stages` | **1** pipeline ("Standard Sales Pipeline", UUID id), 6 stages, display-cased names | `pipelinesController` only |
+
+They disagree in every way that matters:
+
+- **Ids don't match.** `deals.pipeline_id` is `varchar(50)` holding slugs
+  (`new-business`), while `pipelines.id` is a UUID. `deals.pipeline_id` is **not a foreign
+  key to anything** — it is free text with a default of `'new-business'`.
+- **Names don't match.** `deals.stage` holds `closed-won`; `pipeline_stages.name` holds
+  `Closed Won`. The one place that joins them does it through
+  `lower(replace(name,' ','-'))` (`dealsController.ts:490`) — a normalising match that
+  works by luck of the current values.
+- **Two pipelines exist only in TypeScript.** `renewals` and `partnerships` are in
+  `config/pipelines.ts` and are referenced by live deals, but have no row in `pipelines`.
+- **Two live deals sit in stages with no DB row at all** (`renewal-quoted`,
+  `partner-evaluation`). For those, the probability lookup above silently finds nothing and
+  falls through to the existing value. That is not a crash; it is a stage default that
+  quietly does not apply.
+- **Model 2 is wrong for those deals by construction.** A six-element `stageOrder` array
+  cannot sort a `renewal-quoted` deal. It sorts to the end, or to `-1`, depending on the
+  file.
+
+### Nothing consumes the DB model
+`dealsApi.getPipelines()` exists and now throws properly on failure — but **no component
+calls it.** `LeadContext.fetchPipelines` is `async () => { setPipelines([]); }`, a stub.
+So `pipelinesController` serves a correct answer that reaches no screen. This is the
+lesson-3 shape again: an endpoint can be right and still reach nothing.
+
+### Current data (2026-09-04)
+
+```
+tenants: 1
+deals:   25, across 3 pipeline_id slugs and 8 distinct stage values
+  new-business (23):  qualified 9, proposal 8, negotiation 3, closed-won 1,
+                      closed-lost 1, prospecting 1
+  renewals (1):       renewal-quoted
+  partnerships (1):   partner-evaluation
+pipelines:            1 row  (no deal references its UUID)
+pipeline_stages:      6 rows (Prospecting…Closed Lost, probabilities 20/40/60/80/100/0)
+deal_stage_history:   0 rows
+forecast_entries:     0 rows      forecast_quotas: 0 rows      blueprints: 0 rows
+```
+
+The empty tables matter: **the migration's blast radius today is 25 deals in one tenant.**
+This is the cheapest moment this change will ever have. It still has to be written to be
+correct for N tenants, because it will be run against a populated database later.
+
+---
+
+## 2. Schema
+
+### 2.1 `pipeline_stages` — three columns added, two replaced
+
+```sql
+ALTER TABLE pipeline_stages
+  ADD COLUMN slug        VARCHAR(50),          -- stable machine key, set once
+  ADD COLUMN stage_type  VARCHAR(10),          -- 'open' | 'won' | 'lost'
+  ADD COLUMN archived_at TIMESTAMPTZ;          -- retirement; NULL = active
+```
+
+**`slug` — why a stage needs a stable key that is not its name.**
+Renaming is the single most common configuration change, and a rename must not break
+anything. Three things depend on a stage's identity surviving a rename: the API filter
+(`GET /deals?stage=qualified`), saved views (`utils/savedViewPresets.ts` stores stage
+predicates), and any bookmarked URL. If the only key is the display name, renaming
+"Qualified" to "Sales Qualified" silently empties every saved view that referenced it —
+and does so with no error anywhere, which is exactly the class of failure this codebase
+keeps finding late.
+
+So: **`slug` is assigned at creation from the name, and is immutable thereafter.** Rename
+changes `name` only. Unique per pipeline:
+
+```sql
+ALTER TABLE pipeline_stages
+  ADD CONSTRAINT pipeline_stages_slug_key UNIQUE (tenant_id, pipeline_id, slug);
+```
+
+Scoped by `tenant_id` as well as `pipeline_id` — belt and braces, and it makes the
+constraint self-evidently tenant-safe when read on its own.
+
+**`stage_type` replaces `is_won` + `is_lost`.** Two independent booleans can encode
+`is_won = true AND is_lost = true`, which is meaningless, and the current table has no
+CHECK preventing it. A single column cannot:
+
+```sql
+ALTER TABLE pipeline_stages
+  ADD CONSTRAINT pipeline_stages_type_check CHECK (stage_type IN ('open','won','lost'));
+```
+
+The booleans are **kept and derived** for one migration cycle rather than dropped, because
+`pipelinesController` selects them by name and the frontend `PipelineStage` interface reads
+`isWon`/`isLost`. Dropping them in the same migration that adds `stage_type` would break
+both at once. They are dropped in Phase C (§6).
+
+**`archived_at` is the retirement mechanism** and is discussed in §4.
+
+### 2.2 `pipelines` — a slug too
+
+```sql
+ALTER TABLE pipelines
+  ADD COLUMN slug VARCHAR(50),
+  ADD CONSTRAINT pipelines_slug_key UNIQUE (tenant_id, slug);
+```
+
+Needed because `deals.pipeline_id` holds `'new-business'`, and the backfill has to be able
+to find or create the pipeline a deal already claims to be in.
+
+### 2.3 `deals.stage` → `deals.stage_id`
+
+```sql
+ALTER TABLE deals ADD COLUMN stage_id UUID REFERENCES pipeline_stages(id);
+CREATE INDEX idx_deals_stage_id ON deals (tenant_id, stage_id);
+```
+
+**A FK, not a text column with a CHECK.** A CHECK constraint cannot express "must be one of
+this tenant's stages", and validating in application code only is precisely the second data
+path CLAUDE.md rules out.
+
+**This FK needs the project's standard tenant treatment.** `pipeline_stages(id)` is a
+global primary key with no tenant component, so Postgres will happily accept a deal in
+workspace A pointing at a stage in workspace B — referential integrity satisfied, tenant
+isolation not. Per CLAUDE.md this needs **both halves**:
+
+1. The write proves ownership via `utils/tenantScope.ts` before insert/update, rejecting
+   with **400** and a message naming the field
+   (`"stage_id does not name a stage in this workspace"`) — the settled contract in
+   `src/__tests__/tenantIsolation.test.ts`, not re-litigated here.
+2. Every join carries `AND pipeline_stages.tenant_id = deals.tenant_id`, so a bad row that
+   somehow exists cannot be read back through a join either.
+
+**`deals.stage` (the text column) is kept, not dropped, until Phase C** — and the reason is
+the `close_date` / `expected_close_date` lesson. A query written against a column that has
+been renamed out from under it fails silently rather than loudly. 26 frontend files and
+several backend queries reference `stage`; they get moved deliberately, not by yanking the
+column.
+
+**Note the width trap.** `deals.stage` is `varchar(20)`; the longest value in use is 18
+chars (`partner-evaluation`). A customer stage called "Contract Under Legal Review" slugs to
+27 characters and would be **silently truncated** on write — the actor-name overflow bug
+this project already paid for once. `pipeline_stages.slug` is therefore `varchar(50)`, and
+during dual-write (Phase A) the app writes the slug to `deals.stage` **only if it fits**,
+logging when it does not, rather than truncating. That asymmetry is temporary and is the
+main reason Phase C exists rather than being optional.
+
+### 2.4 `deal_stage_history` — deliberately stays text
+
+`from_stage` / `to_stage` stay `varchar(64)` **snapshots**, with no FK added.
+
+An audit row records what was true at the time. If history held an FK, deleting a stage
+would either cascade (destroying the audit trail) or block forever (making stages
+undeletable once any deal has ever passed through — which is almost immediately). Both are
+worse than a text snapshot that says "this deal moved to 'Qualified' on the 4th", which
+remains true and readable after the stage is gone.
+
+An optional `to_stage_id UUID` may be added later purely as a join convenience for
+analytics, nullable and with `ON DELETE SET NULL`. It is **not** part of this design and is
+not needed for anything currently built.
+
+---
+
+## 3. The migration and its backfill
+
+One numbered file in `Backend/migrations/` per §6 of `CRM_REMEDIATION_PLAN.md`. It must be
+idempotent (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`) because this project runs migrations
+on boot.
+
+### The governing rule
+**The backfill is driven by what deals actually reference — never by what the `pipelines`
+table happens to contain.** The existing `pipelines` row is referenced by zero deals; a
+backfill that trusted it would produce stages nothing points at, and miss the eight stages
+deals really use. The instruction "no deal ends up pointing at a stage that doesn't exist"
+is satisfiable in exactly one way: enumerate the deals first.
+
+### Steps
+
+**Step 1 — pipelines, from `DISTINCT (tenant_id, pipeline_id, pipeline_name)` on `deals`.**
+Insert a `pipelines` row for each, `slug = deals.pipeline_id`, `name = deals.pipeline_name`.
+For this database that creates `renewals` and `partnerships`, which have never existed as
+rows.
+
+**Step 2 — adopt the pre-existing pipeline rather than duplicating it, but only on proof.**
+The existing "Standard Sales Pipeline" has six stages whose normalised names
+(`lower(replace(name,' ','-'))`) are exactly `{prospecting, qualified, proposal,
+negotiation, closed-won, closed-lost}` — precisely the new-business stage set, with curated
+probabilities (20/40/60/80/100/0) and colors that would be thrown away by ignoring it.
+
+So the migration **adopts** it as the `new-business` pipeline — sets its slug — **if and
+only if** that normalised set is a superset of the new-business stages the tenant's deals
+actually use. If the assertion fails, it does not adopt; it creates a fresh pipeline and
+leaves the old one untouched and flagged. Adoption is an inference from matching names, so
+it is written as a checked inference, not an assumption.
+
+**Step 3 — stages, from the union of two sources.**
+
+```
+DISTINCT (tenant_id, pipeline_id, stage)          FROM deals
+UNION
+DISTINCT (tenant_id, from_stage), (tenant_id, to_stage)  FROM deal_stage_history
+```
+
+The history half is empty today (0 rows) and is included anyway: a deal may have *passed
+through* a stage that no deal currently sits in, and dropping it would leave history
+referring to a stage the config does not list. Cheap now, impossible to reconstruct later.
+
+For each stage not already present as a row:
+- `slug` = the value as found (already slug-shaped).
+- `name` = the seed catalogue's display name if the slug is one this codebase shipped
+  (`config/pipelines.ts`'s 16), else title-cased from the slug.
+- `probability` = the catalogue's value if known, else **NULL**, not a guess.
+- `position` = appended after existing stages, in catalogue order where known.
+- `stage_type` — see below.
+
+**Step 4 — `stage_type`, and the one place I refuse to infer.**
+
+Derived, in this order:
+1. From existing `is_won` / `is_lost` where a row already exists.
+2. From an **explicit allow-list** of the terminal slugs this codebase has actually shipped:
+   `closed-won`, `renewal-won`, `partner-won` → `won`; `closed-lost`, `renewal-lost`,
+   `partner-lost` → `lost`.
+3. Everything else → `open`.
+
+**No suffix heuristic.** Matching `%-won` would be tempting and would be wrong: a workspace
+with a stage called "Won Back" or "Lost Deal Review" — a perfectly ordinary re-engagement
+stage — would be classified as terminal, and `stage_type` drives forecasting, the win-rate
+on the dashboard, and the Kanban's terminal columns. A stage silently marked `won` inflates
+a revenue number, which is the fabricated-data failure mode wearing a different hat.
+
+The migration therefore **prints every stage it classified as `open` by fallback rather
+than by the allow-list**, so an admin can correct them. It does not guess and it does not
+stay quiet. `stage_type` is left NOT NULL with default `'open'` — the safe direction, since
+mis-classifying a won stage as open understates the forecast rather than inflating it.
+
+**Step 5 — populate `deals.stage_id`**, joining on `(tenant_id, pipeline slug, stage slug)`.
+
+**Step 6 — assert, and fail the migration if the assertion fails.**
+
+```sql
+-- Must be zero. If it is not, stop: some deal points at no stage.
+SELECT count(*) FROM deals WHERE stage_id IS NULL AND stage IS NOT NULL;
+-- Must be zero. Cross-tenant reference.
+SELECT count(*) FROM deals d JOIN pipeline_stages s ON s.id = d.stage_id
+ WHERE s.tenant_id <> d.tenant_id;
+```
+
+Per the project's own lesson: verify by re-counting the end state, not by the statements
+returning without error.
+
+**A note on `deals.stage IS NULL`.** The column is nullable with no default and 25/25 rows
+are currently populated, but the schema permits NULL. Those deals get `stage_id = NULL` and
+are **not** assigned a stage by the migration. Inventing a starting stage for a deal that
+never had one is a data-model decision, not a migration's call — the same reasoning that
+left `deals.value` alone when its missing-value 500 was fixed. Whether stage becomes NOT
+NULL is listed as an open question in §7.
+
+---
+
+## 4. Deleting or retiring a stage that still has deals
+
+This is the decision the item explicitly asks for. **Two distinct operations, because they
+answer two different questions.**
+
+### Retire (`PATCH …/stages/:id  { "archived_at": "now" }`) — the expected path
+- Sets `archived_at`. **Nothing is orphaned and no reference is nulled.**
+- Deals already in the stage **stay there** and still render, with the column marked
+  retired on the board.
+- The stage disappears from stage *pickers*, so no deal can move **into** it.
+- Reversible: clear `archived_at`.
+
+This is what "we stopped using Discovery" actually means, and it is the right default. A
+CRM's stage list is history as much as configuration.
+
+### Delete (`DELETE …/stages/:id`) — for genuine mistakes, and it blocks
+- If **any live deal** references the stage → **409 Conflict**, body names the count:
+  `"3 deals are still in this stage. Move them to another stage first, or retire the stage
+  instead."`
+- With `?reassign_to=<stage id>` → in **one transaction**: validate the target is in the
+  same pipeline and same tenant and is not archived, `UPDATE deals SET stage_id = target`,
+  write a `deal_stage_history` row per moved deal recording the reassignment, then delete.
+- `deal_stage_history` never blocks a delete, because it holds text snapshots (§2.4).
+
+**Why 409 here and not the settled 400.** CLAUDE.md fixes **400** for *"this FK does not
+name a row in your workspace"* and says not to re-litigate it. This is a different
+situation and does not touch that rule: the id **is** valid and visible to the caller, and
+the request is well-formed. What fails is a conflict with current state — the textbook 409.
+The 400 case still applies here for `reassign_to` naming a stage in another workspace, and
+uses the settled message shape.
+
+### Invariants enforced on both paths
+A pipeline must retain **at least one `open`, at least one `won`, and at least one `lost`
+stage.** Forecasting, win-rate and the Kanban's terminal columns all assume a won and a
+lost stage exist; a pipeline without one produces a dashboard that is wrong rather than
+empty. Retiring or deleting the last stage of any type → 409 naming which.
+
+**Concurrency: the lock is on the pipeline, not the stage row.** This is the
+mutual-deactivation race from commit `2205494`, exactly: two admins each retiring a
+*different* won-stage at the same moment both read "there is another won stage", both
+proceed, and the pipeline ends with none. Locking the target row does not help, because the
+two transactions touch different rows.
+
+```sql
+SELECT pg_advisory_xact_lock(hashtextextended('pipeline_stage_config', 0), hashtext(pipeline_id::text));
+```
+
+taken **before** the count, in the same transaction, so the check and the write cannot
+interleave. Same shape and same reasoning as the admin guard; the test should mirror
+`roundTrip.deactivationRace.test.ts` and assert zero bad end-states across concurrent
+attempts, not "usually fine".
+
+---
+
+## 5. API surface
+
+All under `/api/v1/pipelines`. **Writes are `requireRole('admin')`; reads are any
+authenticated user** — everyone needs the stage list to render a board, and gating reads
+would break the Kanban for sales users. Admin-only for writes as instructed; widening to
+manager is a one-line change and is noted, not taken.
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| `GET` | `/pipelines` | any | exists; gains `slug`, `stage_type`, `archived_at`. `?include_archived=true` to see retired stages. |
+| `GET` | `/pipelines/:id/stages` | any | exists; same additions. |
+| `POST` | `/pipelines/:id/stages` | admin | `{name, stage_type, probability?, color?, position?}`. Derives `slug`; 409 on slug collision within the pipeline. Appends if `position` omitted. |
+| `PATCH` | `/pipelines/:id/stages/:sid` | admin | `name`, `probability`, `color`, `stage_type`, `archived_at`. **Never `slug`** (§2.1). Changing the last won/lost stage's type hits the §4 invariant. |
+| `PUT` | `/pipelines/:id/stages/order` | admin | `{stage_ids: [...]}` — the **complete** ordered list. |
+| `DELETE` | `/pipelines/:id/stages/:sid` | admin | 409 unless empty; `?reassign_to=` moves first. |
+
+### Reorder takes the whole array, and why
+Per-stage `position` patches cannot express a reorder atomically: two concurrent patches
+interleave into an order neither admin asked for, and a dropped request leaves a gap. The
+endpoint therefore takes the full permutation and **validates it is exactly the set of that
+pipeline's stage ids** — no additions, no omissions. A partial array is a 400, because
+accepting one would silently drop the stages it omitted.
+
+Positions are rewritten 1..N inside one transaction under the same pipeline advisory lock.
+The unique constraint must be deferrable, or the intermediate states collide:
+
+```sql
+ALTER TABLE pipeline_stages
+  ADD CONSTRAINT pipeline_stages_position_key
+  UNIQUE (pipeline_id, position) DEFERRABLE INITIALLY DEFERRED;
+```
+
+Without `DEFERRABLE` this constraint makes every reorder fail on the first swap — a detail
+worth writing down because it looks like a bug in the endpoint when it appears.
+
+### Pipeline CRUD is *not* in this item
+Deals reference three pipelines; only one exists as a row. The backfill (§3) fixes that
+data, but creating/renaming/deleting **pipelines** is a larger surface with its own
+questions (what happens to deals when a pipeline is deleted; can a deal move between
+pipelines and what does that mean for its stage). Out of scope, listed in §7.
+
+---
+
+## 6. Rollout — three phases, because the frontend is the expensive half
+
+**Phase A — additive. No behaviour change, nothing can break.**
+Migration adds columns, backfills, populates `deals.stage_id`, asserts. `deals.stage` stays
+authoritative; the app dual-writes both. Round-trip tests for the backfill against a
+seeded multi-tenant fixture, including a tenant whose deals use stages the catalogue has
+never heard of.
+
+**Phase B — flip the source of truth. This is where the work is.**
+Stage-config API + admin UI under Settings (which now has a real, reachable home at
+`/crm/settings` — see the route map in CLAUDE.md). Writes validate `stage_id` via
+`tenantScope`. Frontend fetches stages from `GET /pipelines` and the **26 files carrying
+hardcoded stage knowledge are cut over** — 6 with six-element `stageOrder` arrays,
+`config/pipelines.ts` becomes a fallback-free API read, `config/stageColors.ts` becomes a
+lookup keyed on the stage's stored `color`.
+
+That count is the honest cost of this item, and it is why it is a design doc first. It is
+also why Phase B should be **one vertical slice at a time** per CLAUDE.md's working style —
+Kanban first, since it is the screen the feature exists for — rather than 26 files in one
+pass.
+
+**Phase C — cleanup.** `deals.stage_id` becomes `NOT NULL` (pending §7's answer), the
+`deals.stage` text column is dropped, and `is_won`/`is_lost` are dropped now that
+`stage_type` is the only reader.
+
+---
+
+## 7. Open questions — I want answers before Phase A, not during
+
+1. **Should `deals.stage_id` be `NOT NULL`?** Every deal has a stage today, but the column
+   permits NULL and the Add Deal form defaults to `'prospecting'` in application code. If
+   NOT NULL, the default belongs in the schema (first `open` stage by position) rather than
+   in a controller. Recommend NOT NULL with the app supplying it explicitly, but this is the
+   same "may a deal have no value" shape as the `deals.value` question and should be
+   decided, not defaulted.
+2. **Do stages belong to a pipeline, or to a workspace?** This design keeps them per
+   pipeline (matching the existing FK). It means renaming "Qualified" in New Business does
+   not rename it in Renewals — correct, but it does mean three edits for a workspace that
+   thinks of them as one list.
+3. **`partner-evaluation` and `renewal-quoted` have no `probability`.** Backfilled as NULL.
+   Should the UI show "not set", or should forecasting treat NULL as 0? Recommend "not set"
+   and exclude from weighted forecast, since 0 is a claim.
+4. **Colors.** `pipeline_stages.color` holds hex (`#3B82F6`); `config/stageColors.ts` holds
+   a curated Tailwind palette with an accessibility rule ("no active stage uses green or
+   red — those are reserved for terminal outcomes"). If admins pick arbitrary colors that
+   rule is unenforceable. Recommend a fixed palette to choose from rather than a free
+   color picker, so the rule survives.
+5. **Widening writes to `manager`.** Instructed admin-only; flagging that a sales manager
+   owning their team's pipeline is a plausible ask.
+
+---
+
+## 8. What this design deliberately does not do
+
+- **Does not touch `blueprint_stages`.** Different table, different feature (`blueprints` is
+  0 rows and unbuilt). Not folded in.
+- **Does not add `to_stage_id` to `deal_stage_history`.** §2.4.
+- **Does not build pipeline CRUD.** §5.
+- **Does not re-open the 400-vs-409 FK-rejection rule.** §4 explains why the new 409 is a
+  different case, not an exception to it.
+- **Does not delete `config/pipelines.ts` in Phase A.** It stays as the seed catalogue the
+  backfill reads its display names and probabilities from, and is removed in Phase B when
+  the API becomes the source.

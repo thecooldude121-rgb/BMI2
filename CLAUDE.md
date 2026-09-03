@@ -421,6 +421,23 @@ navigation on the Kanban board and all forms.
 its buttons is a bug. If a view isn't built, disable the button and label it — don't leave a
 dead third option.
 
+## Backlog — scoped, not built
+
+Recorded here because it was scoped in a planning conversation OUTSIDE the repo and
+therefore could not be found on disk. If a work item is agreed somewhere else, add a line
+here in the same session, or the next person re-derives it or guesses wrong.
+
+- **Item 5 — configurable deal pipeline stages.** Stages are fixed today: a hardcoded
+  array in `Frontend/src/config/pipelines.ts`, duplicated as six-element literals in six
+  more frontend files, while `deals.stage` is free `varchar(20)` text that nothing
+  validates. Make stages per-tenant configuration a workspace can add, rename, reorder and
+  retire. Design first (see `PIPELINE_STAGES_DESIGN.md`), then implement — the
+  `token_version` precedent.
+- **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
+  detailed under "Known gaps in the auth shell" below and is blocked on a different
+  decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
+  share nothing but the word "configuration"; do not fold one into the other.
+
 ## Known gaps in the auth shell
 - **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in
   dependency order: transactional email delivery (provider, sender domain, SPF/DKIM) — this
