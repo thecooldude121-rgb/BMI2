@@ -69,15 +69,22 @@ const PARENT_TABLE: Record<typeof PARENTS[number], ScopedTable> = {
 // token so this cannot leak today, but "every query filters by workspace" only
 // holds as an invariant if it has no exceptions — an unscoped lookup is the one
 // a later refactor copies.
-const resolveActorName = async (req: AuthRequest): Promise<string> => {
-  if (req.user?.id) {
-    const row = await pool.query(
-      'SELECT first_name, last_name FROM users WHERE id = $1 AND tenant_id = $2',
-      [req.user.id, req.user.workspace_id],
-    );
-    if (row.rows[0]) return `${row.rows[0].first_name} ${row.rows[0].last_name}`.trim();
-  }
-  return req.user?.email || 'Unknown';
+/**
+ * The caller's display name, for attribution on a record they create.
+ *
+ * NO QUERY. `protect` already read this account to check is_active and
+ * token_version, and attaches first_name/last_name to req.user — so this reads
+ * what is already in hand. Before that read existed, each of the four
+ * controllers needing a name issued its own `SELECT ... FROM users`, which is
+ * why protect's new lookup is net zero here rather than an extra round trip.
+ *
+ * One of those four copies (dealsController) was missing its `tenant_id`
+ * predicate and matched on id alone — a cross-workspace read waiting for two
+ * workspaces to share an id. Consolidating removes that as well as the queries.
+ */
+const resolveActorName = (req: AuthRequest): string => {
+  const name = [req.user?.first_name, req.user?.last_name].filter(Boolean).join(' ').trim();
+  return name || req.user?.email || 'Unknown';
 };
 
 /**
@@ -219,7 +226,7 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
     );
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
-    const actor = await resolveActorName(req);
+    const actor = resolveActorName(req);
     const resolvedStatus = status || 'planned';
 
     const result = await pool.query(

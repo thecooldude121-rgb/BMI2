@@ -100,8 +100,22 @@ export const deactivateUser = async (req: AuthRequest, res: Response, next: Next
       return;
     }
 
+    // Bump the TARGET's token_version so their existing sessions stop working
+    // immediately, rather than when their token happens to expire — up to 7
+    // days later. Without this, deactivation is a control that does not control
+    // anything for a week.
+    //
+    // SCOPED TO id AND tenant_id, and this is the whole point: a bare
+    // `UPDATE users SET token_version = token_version + 1`, or one scoped by
+    // tenant, would sign out the entire workspace including the admin doing the
+    // deactivating — and it would look like an outage, not a bug. A test reads
+    // both rows and asserts the acting admin's version is untouched.
+    //
+    // `token_version + 1` is computed inside the UPDATE so concurrent bumps
+    // cannot lose one.
     const updated = await pool.query(
-      `UPDATE users SET is_active = false, updated_at = NOW()
+      `UPDATE users
+          SET is_active = false, token_version = token_version + 1, updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2
         RETURNING id, first_name, last_name, email, role, is_active`,
       [target.id, tenantId],
@@ -117,6 +131,10 @@ export const reactivateUser = async (req: AuthRequest, res: Response, next: Next
     const target = await findMember(tenantId, req.params.id);
     if (!target) { res.status(404).json({ success: false, message: 'User not found' }); return; }
 
+    // DELIBERATELY NO token_version BUMP. There is no live session to revoke —
+    // the account was deactivated, so every token it held is already refused by
+    // `protect`. Bumping would sign out nobody and would only invalidate the
+    // tokens the user is about to be issued.
     const updated = await pool.query(
       `UPDATE users SET is_active = true, updated_at = NOW()
         WHERE id = $1 AND tenant_id = $2

@@ -34,6 +34,8 @@ interface UserRow {
   department: string | null;
   avatar_url: string | null;
   tenant_id: string;
+  /** Optional so a row selected before migration 036 still satisfies the type. */
+  token_version?: number;
   workspace_name?: string;
   workspace_slug?: string;
 }
@@ -58,6 +60,12 @@ function signToken(user: UserRow): string {
       email: user.email,
       role: user.role,
       workspace_id: user.tenant_id,
+      // The version this token was minted at. `protect` compares it against the
+      // row on every request, so anything that increments the row ends this
+      // session. Absent on tokens issued before migration 036 — read as 0
+      // there, which is why the column defaults to 0. See
+      // TOKEN_VERSION_DESIGN.md.
+      token_version: user.token_version ?? 0,
     },
     getJwtSecret(),
     { expiresIn: JWT_EXPIRES_IN },
@@ -178,7 +186,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     const result = await client.query(
       `INSERT INTO users (email, password_hash, first_name, last_name, role, department, tenant_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, email, password_hash, first_name, last_name, role, department, avatar_url, tenant_id`,
+       RETURNING id, email, password_hash, first_name, last_name, role, department, avatar_url, tenant_id, token_version`,
       [email, password_hash, first_name, last_name, invite.role, department, invite.workspace_id],
     );
 
@@ -456,16 +464,34 @@ export const changePassword = async (req: Request & { user?: any }, res: Respons
     }
 
     const hash = await bcrypt.hash(String(new_password), 10);
-    await pool.query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3',
+
+    // Bump the version IN THE UPDATE, so every other token for this account is
+    // refused on its next request. `token_version + 1` is computed inside the
+    // statement rather than read and written back: two concurrent bumps cannot
+    // then read the same value and lose one — the read-then-write mistake this
+    // project already paid for once with MAX(id) + 1.
+    const updated = await pool.query(
+      `UPDATE users
+          SET password_hash = $1, token_version = token_version + 1, updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3
+        RETURNING id, email, password_hash, first_name, last_name, role, department,
+                  avatar_url, tenant_id, token_version`,
       [hash, userId, tenantId],
     );
 
+    // THE CALLER STAYS SIGNED IN. They have just proved knowledge of the current
+    // password, so signing them out buys nothing and costs a re-login at the
+    // moment they were being careful. Their own token is now stale like every
+    // other, so a fresh one is issued here.
+    //
+    // CLIENT CONTRACT: the client MUST replace its stored token with this one.
+    // Ignoring it means the next request 401s.
     res.json({
       success: true,
       message: 'Password updated',
-      // Said out loud rather than left to be assumed. See the note above.
-      other_sessions_signed_out: false,
+      token: signToken(updated.rows[0]),
+      // Now true, and actually true — this used to be a disclaimer.
+      other_sessions_signed_out: true,
     });
   } catch (error) { next(error); }
 };

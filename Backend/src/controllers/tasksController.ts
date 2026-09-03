@@ -135,15 +135,22 @@ async function relatedRefError(
 }
 
 // Scoped by tenant as well as id -- see the note in activitiesController.
-const resolveActorName = async (req: AuthRequest): Promise<string> => {
-  if (req.user?.id) {
-    const row = await pool.query(
-      'SELECT first_name, last_name FROM users WHERE id = $1 AND tenant_id = $2',
-      [req.user.id, req.user.workspace_id],
-    );
-    if (row.rows[0]) return `${row.rows[0].first_name} ${row.rows[0].last_name}`.trim();
-  }
-  return req.user?.email || 'Unknown';
+/**
+ * The caller's display name, for attribution on a record they create.
+ *
+ * NO QUERY. `protect` already read this account to check is_active and
+ * token_version, and attaches first_name/last_name to req.user — so this reads
+ * what is already in hand. Before that read existed, each of the four
+ * controllers needing a name issued its own `SELECT ... FROM users`, which is
+ * why protect's new lookup is net zero here rather than an extra round trip.
+ *
+ * One of those four copies (dealsController) was missing its `tenant_id`
+ * predicate and matched on id alone — a cross-workspace read waiting for two
+ * workspaces to share an id. Consolidating removes that as well as the queries.
+ */
+const resolveActorName = (req: AuthRequest): string => {
+  const name = [req.user?.first_name, req.user?.last_name].filter(Boolean).join(' ').trim();
+  return name || req.user?.email || 'Unknown';
 };
 
 /**
@@ -250,7 +257,7 @@ export const createTask = async (req: AuthRequest, res: Response, next: NextFunc
     // concurrent requests — 7 of 10 writes lost at ten concurrent creates, each
     // as a masked 500. nextval() is atomic, so the id is simply omitted here.
 
-    const actor = await resolveActorName(req);
+    const actor = resolveActorName(req);
     const resolvedStatus = status || 'pending';
 
     const result = await pool.query(

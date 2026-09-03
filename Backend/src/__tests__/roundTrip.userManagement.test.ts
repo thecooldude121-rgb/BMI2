@@ -146,33 +146,71 @@ describe('User management — round trip', () => {
     expect((await pool.query('SELECT is_active FROM users WHERE id = $1', [manager.userId])).rows[0].is_active).toBe(true);
   });
 
-  // ── GUARD 2, on its own ───────────────────────────────────────────────────
+  // ── GUARD 2, and what migration 036 did to it ─────────────────────────────
 
   /**
-   * The last-admin guard fires when the target is SOMEBODY ELSE, proving it is
-   * not merely the self-check wearing a different message.
+   * INVERTED by migration 036, and this one needs explaining rather than just
+   * rewriting.
    *
-   * Constructing this needs care. Normally an admin calling the endpoint is
-   * themselves an active privileged member, so removing anyone else always
-   * leaves at least one — the two guards would only ever overlap. The reachable
-   * case is a caller whose token still says admin while their stored role no
-   * longer does: `protect` reads the role from the JWT, so a role changed
-   * mid-session still passes requireRole while its holder is correctly no
-   * longer counted as an active admin. That is exactly the situation where the
-   * workspace could be emptied of admins by someone who is not one, so it is
-   * the right scenario to pin.
+   * The previous version of this test made Guard 2 fire on a non-self target by
+   * demoting the CALLER in the database while their token still said admin —
+   * `protect` read the role from the claim, so a role changed mid-session still
+   * passed requireRole while its holder was correctly no longer counted as an
+   * active admin. That was the only way to reach Guard 2 without also
+   * triggering Guard 1.
+   *
+   * `protect` now reads the role from the row, so that path is closed: the
+   * demoted caller is refused with 403 before the guard is ever consulted.
+   * The test therefore asserts the NEW behaviour, which is strictly better —
+   * a demoted admin loses admin access immediately rather than in up to seven
+   * days.
+   *
+   * WHICH MEANS GUARD 2 IS NOW UNREACHABLE THROUGH THE API for a target that is
+   * not yourself: any caller who passes requireRole is, by definition, an
+   * active privileged member, so deactivating somebody else always leaves at
+   * least them. It is retained as defence in depth — it costs one query and it
+   * is the last thing standing between a future role-change endpoint and a
+   * locked-out workspace — but it is no longer a behaviour the API can
+   * demonstrate, and it should not be reported as if it were. Its logic is
+   * still covered directly below and at the database level.
    */
-  it('GUARD 2: cannot deactivate the last admin/manager, even when it is NOT yourself', async () => {
+  it('a demoted admin is refused IMMEDIATELY — the stale-token path Guard 2 relied on is closed', async () => {
     const isolated = await setupWorkspace('lastadmin');
     try {
       const lastManager = await addUserWithRole(isolated, 'manager');
-      // The workspace admin's token stays privileged; their stored role does not.
-      await pool.query(`UPDATE users SET role = 'sales' WHERE id = $1`, [isolated.userId]);
-      // Everyone else must be inactive so `lastManager` really is the last one.
-      await pool.query(
-        `UPDATE users SET is_active = false WHERE tenant_id = $1 AND id <> $2 AND id <> $3`,
-        [isolated.tenantId, lastManager.userId, isolated.userId]);
 
+      // The caller's token still says admin; their stored role no longer does.
+      await pool.query(`UPDATE users SET role = 'sales' WHERE id = $1`, [isolated.userId]);
+
+      const res = await request(app)
+        .post(`/api/v1/users/${lastManager.userId}/deactivate`).set(auth(isolated));
+
+      // Before 036 this was a 409 from Guard 2, because the stale claim got the
+      // caller past requireRole. Now the live role denies them outright.
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+      expect(res.body.message).toMatch(/Insufficient permissions/);
+
+      // And the target is untouched either way.
+      const row = await pool.query('SELECT is_active FROM users WHERE id = $1', [lastManager.userId]);
+      expect(row.rows[0].is_active).toBe(true);
+    } finally {
+      await teardownWorkspace(isolated);
+    }
+  });
+
+  /**
+   * Guard 2's LOGIC, tested where it is now reachable: the caller is the last
+   * privileged member and the target is themselves. Guard 1 answers first, so
+   * this asserts the outcome that matters — the workspace cannot be emptied —
+   * rather than which message wins a race between two guards.
+   */
+  it('the last admin cannot remove themselves, so a workspace cannot be emptied', async () => {
+    const isolated = await setupWorkspace('lastone');
+    try {
+      // Nobody else privileged and active.
+      await pool.query(
+        `UPDATE users SET is_active = false WHERE tenant_id = $1 AND id <> $2`,
+        [isolated.tenantId, isolated.userId]);
       const privileged = await pool.query(
         `SELECT COUNT(*)::int AS n FROM users
           WHERE tenant_id = $1 AND is_active = true AND role IN ('admin','manager')`,
@@ -180,15 +218,13 @@ describe('User management — round trip', () => {
       expect(privileged.rows[0].n, 'precondition: exactly one privileged member').toBe(1);
 
       const res = await request(app)
-        .post(`/api/v1/users/${lastManager.userId}/deactivate`).set(auth(isolated));
-
-      // Not self — the caller is a different user.
-      expect(String(lastManager.userId)).not.toBe(String(isolated.userId));
+        .post(`/api/v1/users/${isolated.userId}/deactivate`).set(auth(isolated));
       expect(res.status, JSON.stringify(res.body)).toBe(409);
-      expect(res.body.message).toBe('Cannot deactivate the last admin or manager in this workspace');
 
-      const row = await pool.query('SELECT is_active FROM users WHERE id = $1', [lastManager.userId]);
-      expect(row.rows[0].is_active, 'the last manager must survive').toBe(true);
+      const row = await pool.query('SELECT is_active FROM users WHERE id = $1', [isolated.userId]);
+      expect(row.rows[0].is_active, 'the last privileged member must survive').toBe(true);
+      // Still administrable.
+      expect((await request(app).get('/api/v1/users').set(auth(isolated))).status).toBe(200);
     } finally {
       await teardownWorkspace(isolated);
     }

@@ -158,21 +158,40 @@ describe('My profile — round trip', () => {
       expect(oldPw.status).toBe(401);
     });
 
-    it('reports plainly that other sessions are NOT signed out', async () => {
+    /**
+     * INVERTED by migration 036. This test previously asserted the OPPOSITE —
+     * other_sessions_signed_out: false, and a pre-change token still working
+     * afterwards — and documented that as a known gap. token_version closed it,
+     * so the test now proves revocation instead of demonstrating its absence.
+     * Rewritten rather than deleted: the assertion that used to record the gap
+     * is the one that now guards the fix.
+     */
+    it('other sessions ARE signed out, and the caller gets a fresh token', async () => {
       const user = await freshUser();
+      const oldToken = { Authorization: `Bearer ${user.token}` };
+
+      // The pre-change token works right up to the change.
+      expect((await request(app).get('/api/v1/auth/me').set(oldToken)).status).toBe(200);
+
       const res = await request(app).post('/api/v1/auth/change-password').set(auth(user))
         .send({ current_password: 'round-trip-test-password', new_password: 'another-new-password' });
-      expect(res.status).toBe(200);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.other_sessions_signed_out).toBe(true);
 
-      // Stated in the response rather than left to be assumed. Tokens are
-      // stateless and `protect` never re-reads the account, so every other token
-      // for this user stays valid until it expires on its own.
-      expect(res.body.other_sessions_signed_out).toBe(false);
+      // The old token is refused IMMEDIATELY — not when it expires.
+      const revoked = await request(app).get('/api/v1/auth/me').set(oldToken);
+      expect(revoked.status, 'the pre-change token must be refused').toBe(401);
+      expect(revoked.body.message).toMatch(/no longer valid/i);
 
-      // Demonstrated, not just claimed: the token minted BEFORE the change still
-      // works afterwards. This is the already-recorded stale-token gap.
-      const stillWorks = await request(app).get('/api/v1/auth/me').set(auth(user));
-      expect(stillWorks.status, 'the pre-change token remains valid — known gap').toBe(200);
+      // And the caller stays signed in via the token the response returned.
+      expect(res.body.token, 'a fresh token must be issued').toBeTruthy();
+      const continued = await request(app).get('/api/v1/auth/me')
+        .set({ Authorization: `Bearer ${res.body.token}` });
+      expect(continued.status, 'the reissued token must work').toBe(200);
+
+      // The row's version moved by exactly one.
+      const after = await pool.query('SELECT token_version FROM users WHERE id = $1', [user.userId]);
+      expect(after.rows[0].token_version).toBe(1);
     });
 
     it('negative: a wrong current password is refused and the hash does not move', async () => {

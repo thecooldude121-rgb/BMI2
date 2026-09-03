@@ -311,31 +311,33 @@ timeline, though the documents API is now covered.
 
 ## Known gaps / explicitly out of scope
 
-- **Changing a password does NOT sign other sessions out**, and a user could
-  reasonably assume it does. Tokens are stateless JWTs and `protect` verifies only
-  signature and expiry, so every other token already issued to that user stays valid
-  until it expires on its own — up to 7 days. `POST /auth/change-password` says so in
-  its response (`other_sessions_signed_out: false`) rather than letting the absence of
-  a statement read as a protection, and a test demonstrates it by using a
-  pre-change token afterwards. **This is the same underlying gap as the two items
-  below, not a new one** — named here because this is the point at which it is most
-  likely to be assumed away.
+- ~~Changing a password does not sign other sessions out~~ — **CLOSED by migration
+  036.** `POST /auth/change-password` now bumps `token_version`, so every other token
+  for that account is refused on its next request, and returns a fresh token so the
+  caller stays signed in (`other_sessions_signed_out: true`, and now actually true).
+  **Client contract:** the client must replace its stored token from that response.
+  The test that used to demonstrate the gap was inverted, not deleted.
 - **Email changes have no confirmation step.** `PATCH /auth/me` updates the address
   directly. A verification link cannot be delivered while `EMAIL_TRANSPORT` is `log`,
   so showing "check your inbox" for a message that will never arrive would be the
   dishonest option — the same stance invites already take. A real simplification, to
   become request-then-confirm once a transport is configured.
-- **A demoted admin keeps admin-level API access until their token expires.**
-  `requireRole` reads the role from the **JWT claim**, not from `users.role`, so
-  changing someone's role in the database does not take effect until their token
-  expires — up to `JWT_EXPIRES_IN`, currently **7 days**. The same applies to
-  deactivation: `protect` does not check `is_active`, so a deactivated user's
-  existing token keeps working. Found while building item 2's last-admin guard,
-  where it is the very thing that makes that guard reachable — a caller whose
-  token still says admin while their stored role does not. Closing it needs a
-  decision: an `is_active`/role check in `protect` on every request (a query per
-  call), a short-lived token with refresh, or a token version column bumped on
-  role change. **Tracked, not fixed.**
+- ~~A demoted admin keeps admin-level API access until their token expires~~ and
+  ~~a deactivated user's token keeps working~~ — **both CLOSED by migration 036.**
+  `protect` now reads the account on every request and takes `role`, `is_active` and
+  `token_version` from the row rather than the claim, so a demotion or a deactivation
+  takes effect on the **next request** instead of in up to 7 days. See
+  `TOKEN_VERSION_DESIGN.md` for the design and the measured cost (one indexed lookup,
+  p95 **0.379 ms**, about 0.02% of the "<2s for 95%" budget). The claim that this
+  needed no per-request query was wrong and is corrected there.
+  - **Two consequences worth knowing.** The auth path now hard-depends on Postgres:
+    if the database is unreachable the API rejects everything rather than serving
+    stale-but-signed tokens — a deliberate change in failure mode. And the rollout
+    fallback (an absent `token_version` claim reads as 0) is **dead code once 7 days
+    have passed since deploy and should be removed then**; a permanent "absent means
+    0" is a permanent hole if the column default ever changes.
+  - **Still open:** `JWT_EXPIRES_IN` remains 7 days. Migration 036 makes that
+    survivable, not correct.
 - **Row-level ownership scoping is not implemented.** RBAC now gates destructive actions,
   but a `sales` user still reads every record in the workspace. Deferred as a product
   decision, pinned by a test that fails if it is ever implemented silently.
