@@ -13,7 +13,7 @@ interface ForbiddenAccessProps {
 const ForbiddenAccess: React.FC<ForbiddenAccessProps> = ({
   message = "Team Management settings are only accessible to Admin users. Contact your system administrator for access.",
   title = "403 - Access Forbidden",
-  returnPath = "/settings",
+  returnPath = "/crm/settings",
   returnLabel = "Return to Settings"
 }) => {
   const navigate = useNavigate();

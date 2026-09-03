@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SettingsPage from './SettingsPage';
 import RolesManagement from './RolesManagement';
-import PermissionMatrix from './PermissionMatrix';
+import PermissionMatrix, { writePermissionCells, describeSaveFailure } from './PermissionMatrix';
 
 /**
  * The three roles pages are LABELLED, not wired — and this pins that.
@@ -146,48 +146,107 @@ describe('PermissionMatrix — the fake success is closed', () => {
     expect(settingsStub.setFieldPermission).not.toHaveBeenCalled();
   });
 
-  it('WITH roles: toggling and saving refuses out loud and KEEPS "Unsaved changes"', async () => {
-    // The regression that matters, exercised on the path where it was
-    // reachable. The old code looped over the changed cells, got `false` back
-    // from every write, ignored the return value, and fell through to
-    // setHasUnsavedChanges(false) — the badge vanished and the user read that
-    // as a save. A role is supplied here purely as test input so the grid has
-    // rows to toggle.
-    const user = userEvent.setup();
-    const withRole = {
-      ...settingsStub,
-      roles: [{
-        id: 'role-1', name: 'Sales Rep', description: '', hierarchy_level: 1,
-        parent_role_id: null, is_system: false, is_active: true,
-        permissions: {}, restrictions: {},
-      }],
-    };
-    Object.assign(settingsStub, withRole);
+  it('with no roles there is nothing to toggle, so no write is attempted at all', async () => {
+    const { container } = render(<PermissionMatrix />);
+    await waitFor(() => expect(container.querySelector('[data-not-available]')).not.toBeNull());
 
-    try {
-      render(<PermissionMatrix />);
-      await waitFor(() => expect(settingsStub.getModulePermissions).toHaveBeenCalled());
+    expect(screen.queryByText(/Unsaved changes/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+    expect(settingsStub.setModulePermission).not.toHaveBeenCalled();
+    expect(settingsStub.setFieldPermission).not.toHaveBeenCalled();
+  });
+});
 
-      const boxes = await waitFor(() => {
-        const found = screen.queryAllByRole('checkbox');
-        expect(found.length).toBeGreaterThan(0);
-        return found;
-      });
+/**
+ * The save rule itself.
+ *
+ * These drive `writePermissionCells` directly rather than through the UI, and
+ * that is the point rather than a shortcut. The Save button is disabled — the
+ * page has no backend — so `userEvent.click` on it never invokes the handler.
+ * The first version of this test did exactly that and PASSED: "Unsaved changes"
+ * was still on screen because nothing had run, not because the logic keeps it
+ * there. That is CLAUDE.md lesson 2 in miniature, and it is why the rule was
+ * extracted into a unit that can actually be exercised.
+ */
+describe('writePermissionCells — the return-value rule', () => {
+  const modules = [
+    { id: 'leads', name: 'leads', fields: [{ id: 'email', name: 'email' }] },
+  ];
+  const cell = (over = {}) => ({
+    roleId: 'role-1', moduleId: 'leads',
+    permissions: { read: true, write: false, delete: false, export: false, import: false, hide: false },
+    ...over,
+  });
 
-      await user.click(boxes[0]);
-      const badge = await screen.findByText(/Unsaved changes/i);
-      expect(badge).toBeInTheDocument();
+  it('counts a FALSE return as a failure — it is not an exception, and that was the bug', async () => {
+    const setModulePermission = vi.fn(async () => false);
+    const out = await writePermissionCells([cell(), cell()], modules, {
+      setModulePermission,
+      setFieldPermission: vi.fn(async () => false),
+    });
 
-      const save = screen.getByRole('button', { name: /save changes/i });
-      expect(save).toBeDisabled();
+    // Two attempts, two failures, and NOT a thrown error. The old loop saw the
+    // absence of a throw as success.
+    expect(out).toEqual({ attempted: 2, failed: 2 });
+    expect(setModulePermission).toHaveBeenCalledTimes(2);
+  });
 
-      // Even reaching the handler directly must not clear the badge or write.
-      await user.click(save);
-      expect(screen.getByText(/Unsaved changes/i)).toBeInTheDocument();
-      expect(settingsStub.setModulePermission).not.toHaveBeenCalled();
-      expect(settingsStub.setFieldPermission).not.toHaveBeenCalled();
-    } finally {
-      Object.assign(settingsStub, { roles: [] });
+  it('reports zero failures when every write returns true', async () => {
+    const out = await writePermissionCells([cell(), cell()], modules, {
+      setModulePermission: vi.fn(async () => true),
+      setFieldPermission: vi.fn(async () => true),
+    });
+    // The caller may clear its dirty flag only on this outcome.
+    expect(out).toEqual({ attempted: 2, failed: 0 });
+  });
+
+  it('counts a PARTIAL failure precisely, rather than rounding to all-or-nothing', async () => {
+    let n = 0;
+    const out = await writePermissionCells([cell(), cell(), cell()], modules, {
+      setModulePermission: vi.fn(async () => { n++; return n !== 2; }),
+      setFieldPermission: vi.fn(async () => true),
+    });
+    expect(out).toEqual({ attempted: 3, failed: 1 });
+  });
+
+  it('routes a field-level cell to setFieldPermission, and counts its false too', async () => {
+    const setFieldPermission = vi.fn(async () => false);
+    const setModulePermission = vi.fn(async () => true);
+    const out = await writePermissionCells([cell({ fieldId: 'email' })], modules, {
+      setModulePermission, setFieldPermission,
+    });
+
+    expect(setFieldPermission).toHaveBeenCalledTimes(1);
+    expect(setModulePermission).not.toHaveBeenCalled();
+    expect(out).toEqual({ attempted: 1, failed: 1 });
+    expect(setFieldPermission.mock.calls[0][0]).toMatchObject({ module_name: 'leads', field_name: 'email' });
+  });
+
+  it('skips a cell whose module is unknown without counting it as attempted', async () => {
+    const setModulePermission = vi.fn(async () => true);
+    const out = await writePermissionCells([cell({ moduleId: 'nonexistent' })], modules, {
+      setModulePermission, setFieldPermission: vi.fn(async () => true),
+    });
+    expect(out).toEqual({ attempted: 0, failed: 0 });
+    expect(setModulePermission).not.toHaveBeenCalled();
+  });
+});
+
+describe('describeSaveFailure — says which, and never overclaims', () => {
+  it('total failure says none were saved', () => {
+    expect(describeSaveFailure({ attempted: 3, failed: 3 }))
+      .toMatch(/None of the 3 permission changes could be saved/);
+  });
+
+  it('partial failure names the count, because some writes DID land', () => {
+    // "Nothing was saved" would be a lie in the other direction.
+    expect(describeSaveFailure({ attempted: 5, failed: 2 }))
+      .toMatch(/2 of 5 permission changes could not be saved/);
+  });
+
+  it('and every message says the changes are still unsaved', () => {
+    for (const o of [{ attempted: 1, failed: 1 }, { attempted: 4, failed: 2 }]) {
+      expect(describeSaveFailure(o)).toMatch(/still unsaved/);
     }
   });
 });

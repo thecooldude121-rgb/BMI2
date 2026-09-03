@@ -32,7 +32,11 @@ const AccountsModule = lazy(() => import('./pages/Accounts'));
 const HRMSModule = lazy(() => import('./pages/HRMS/HRMSModule'));
 const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
 const Calendar = lazy(() => import('./pages/Calendar/Calendar'));
-const SettingsPage = lazy(() => import('./pages/Settings/SettingsPage'));
+// NO SettingsPage IMPORT. /settings redirects to /crm/settings (see the route
+// below), so the dead tree's hub is no longer routed. The file still exists as
+// UI reference and still compiles — `pages/Settings/rolesPagesLabelling.test.tsx`
+// imports it, which is deliberate: it keeps the kept-for-reference pages from
+// rotting into something that no longer builds while they wait for a decision.
 const SequencesAutomationPage = lazy(() => import('./pages/Sequences'));
 const IntegrationsPage = lazy(() => import('./pages/Settings/IntegrationsPage'));
 const WorkflowAutomationPage = lazy(() => import('./pages/Settings/WorkflowAutomationPage'));
@@ -142,7 +146,41 @@ const App = () => {
                   <Route path="/integrations" element={<RequireAuth><Layout><IntegrationsHub /></Layout></RequireAuth>} />
                   <Route path="/team" element={<RequireAuth><Layout><TeamPerformancePage /></Layout></RequireAuth>} />
                   <Route path="/team/:id" element={<RequireAuth><Layout><TeamMemberDetailPage /></Layout></RequireAuth>} />
-                  <Route path="/settings" element={<RequireAuth><Layout><SettingsPage /></Layout></RequireAuth>} />
+                  {/*
+                    * /settings REDIRECTS to the real Settings module.
+                    *
+                    * It used to render SettingsPage — the hub of the dead Supabase
+                    * tree. Nothing on it works: SettingsContext's reads go to a
+                    * service this product does not use, so `roles` is permanently
+                    * empty, and the roles / permission-matrix / permission-sets /
+                    * SSO / API-token features it models have no tables in this
+                    * product's Postgres to build against. Its four headline
+                    * security figures were hardcoded literals and were deleted in
+                    * ef74b34.
+                    *
+                    * Leaving it reachable by direct URL or an old bookmark would
+                    * leave a second, mostly-inert Settings page that looks like the
+                    * real one — so the route resolves to the real one instead.
+                    * `replace` keeps it out of history, so Back does not bounce the
+                    * user through the redirect again.
+                    *
+                    * THE PAGE FILES ARE DELIBERATELY NOT DELETED. SettingsPage,
+                    * RolesManagement and PermissionMatrix stay as UI reference for
+                    * whenever a real roles backend is designed, consistent with
+                    * keeping the Settings scaffolding rather than deleting it. They
+                    * are simply no longer routed. Their deletion is tracked in
+                    * CLAUDE.md's Supabase-removal checklist alongside
+                    * SettingsContext, which is what still imports them.
+                    */}
+                  <Route path="/settings" element={<Navigate to="/crm/settings" replace />} />
+                  {/*
+                    * These three are NOT redirected, deliberately. They are not part
+                    * of the roles hub above and nothing links to them — grep finds
+                    * no <Link>, <NavLink> or navigate() for any of the three, so they
+                    * are direct-URL-only today. Left alone rather than swept up in a
+                    * change that was scoped to the bare /settings route; they need
+                    * their own decision about whether they belong under /crm.
+                    */}
                   <Route path="/settings/integrations" element={<RequireAuth><Layout><IntegrationsPage /></Layout></RequireAuth>} />
                   <Route path="/settings/workflows" element={<RequireAuth><Layout><WorkflowAutomationPage /></Layout></RequireAuth>} />
                   <Route path="/settings/notifications" element={<RequireAuth><Layout><NotificationsManagementPage /></Layout></RequireAuth>} />

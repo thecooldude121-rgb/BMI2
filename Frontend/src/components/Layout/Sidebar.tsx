@@ -227,10 +227,20 @@ const Sidebar: React.FC = () => {
         ))}
       </nav>
 
-      {/* Settings pinned at bottom */}
+      {/*
+        * Settings pinned at bottom.
+        *
+        * POINTS AT /crm/settings, NOT /settings. This link used to go to the
+        * latter — the dead Supabase tree — so the three Settings screens that
+        * are actually wired (workspace preferences, the team roster, your
+        * profile and password) were unreachable from the main nav, and the page
+        * a user landed on was the one with no backend. That is CLAUDE.md's
+        * lesson 5 in its original form: the fix was verified at one route while
+        * the nav pointed at another.
+        */}
       <div className="border-t border-gray-700 py-2">
         <NavLink
-          to="/settings"
+          to="/crm/settings"
           title={collapsed ? 'Settings' : undefined}
           className={({ isActive }) =>
             `flex items-center py-2.5 text-sm transition-colors ${

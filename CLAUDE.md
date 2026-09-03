@@ -464,12 +464,35 @@ dead third option.
      PATCH /auth/me; `PasswordSettings` posts to /auth/change-password and stores the
      reissued token. The claim that "the update-profile and change-password endpoints
      do not exist yet" was true when written and stopped being true at commit c0afb00.
-  5. **Still open: the sidebar's "Settings" link points at `/settings`** — the dead
-     Supabase tree — not at `/crm/settings`, where the wired screens are. So the three
-     real Settings screens are not reachable from the main nav, and the page a user
-     lands on is the one with no backend. Repointing it is a one-line change gated on
-     deciding what `/settings` should be; until then this is the lesson-5 trap in
-     living form, and it is why `pages/Settings/` is labelled rather than left alone.
+  5. **CLOSED.** The navigation gap is fixed — see the route map below.
+
+### Settings route structure (settled — do not reintroduce a second Settings page)
+**`/crm/settings` is the Settings module.** It renders `pages/CRM/CRMSettings.tsx`, whose
+Account, Preferences and Team sections are wired to the Node API. Every entry point in the
+chrome goes there: the sidebar's pinned Settings link, the profile menu's "Profile
+Settings" item, and `ForbiddenAccess`'s default return path.
+
+**`/settings` redirects there** (`<Navigate replace />` in `App.tsx`). It used to render
+`pages/Settings/SettingsPage` — the dead Supabase tree's hub — and leaving it reachable
+would have meant a second, mostly-inert Settings page one bookmark away from the real one.
+
+**The dead tree's files are kept, not deleted.** `SettingsPage`, `RolesManagement` and
+`PermissionMatrix` remain as UI reference for whenever a real roles backend is designed.
+Nothing in the app imports them any more; `pages/Settings/rolesPagesLabelling.test.tsx`
+does, deliberately, so they keep compiling instead of rotting while they wait. Their
+deletion stays on the Supabase checklist above.
+
+**Three exceptions, deliberately left alone:** `/settings/integrations`,
+`/settings/workflows` and `/settings/notifications` still render their own pages. They are
+not part of the roles hub, nothing links to them (no `Link`, `NavLink` or `navigate()`
+anywhere), and whether they belong under `/crm` is a separate decision. The redirect is
+declared on the bare path, not as a wildcard, so it cannot swallow them by accident — and
+a test asserts exactly that.
+
+**Why this is written down at all:** three checkpoints of wired Settings work were
+invisible from the product because the nav pointed at the other tree. That is lesson 5,
+and a route constant produces no type error and no failing test when it regresses — so
+`components/Layout/settingsNavigation.test.tsx` pins it.
 
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions

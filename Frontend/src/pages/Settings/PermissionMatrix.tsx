@@ -51,6 +51,101 @@ interface ConflictWarning {
   message: string;
 }
 
+/**
+ * THE FAKE SUCCESS LIVED HERE, and this is why it is a separate exported unit.
+ *
+ * The old loop called `setFieldPermission` / `setModulePermission` for each
+ * changed cell and IGNORED WHAT THEY RETURNED. Both catch their own error and
+ * return FALSE rather than throwing, so when every write failed the surrounding
+ * catch never fired and execution fell through to `setHasUnsavedChanges(false)`:
+ * the "Unsaved changes" badge disappeared and the Save button vanished with it,
+ * which is indistinguishable from a save that worked. Nothing had been written.
+ *
+ * The bug was never a missing try/catch. It was treating a boolean-returning
+ * call as though it signalled failure by throwing. So the rule is: COUNT the
+ * writes that came back false, and let the caller clear its dirty flag only if
+ * none did.
+ *
+ * WHY IT IS EXTRACTED AND EXPORTED. The Save button is disabled — this page has
+ * no backend and carries a NotAvailable banner — so a component test cannot
+ * click it, and a test that tries gets a green result because the handler never
+ * ran, not because the logic is right. That is the exact trap CLAUDE.md records
+ * as lesson 2, and it caught this change: the first version of the test passed
+ * for that reason. Pulling the rule out gives it a seam that can be exercised
+ * for real while the UI stays honestly disabled.
+ *
+ * UNREACHABLE TODAY, FIXED ANYWAY. `roles` is permanently empty (its source is
+ * Supabase, which this product does not use) and cells are built per role, so
+ * there is nothing to toggle. This is a landmine, not a live defect: the moment
+ * anyone puts real roles behind this grid, the old code would have silently
+ * discarded their first save.
+ *
+ * Note it still walks EVERY cell rather than only the dirty ones. Pre-existing,
+ * left alone — a wasted-writes problem, not a correctness one.
+ */
+export interface PermissionSaveOutcome {
+  /** Cells a write was actually attempted for. */
+  attempted: number;
+  /** Of those, how many came back false. */
+  failed: number;
+}
+
+type PermissionWriters = {
+  setModulePermission: (p: Record<string, unknown>) => Promise<boolean>;
+  setFieldPermission: (p: Record<string, unknown>) => Promise<boolean>;
+};
+
+export async function writePermissionCells(
+  cells: Array<{ roleId: string; moduleId: string; fieldId?: string; permissions: Record<string, boolean> }>,
+  modules: Array<{ id: string; name: string; fields: Array<{ id: string; name: string }> }>,
+  writers: PermissionWriters,
+): Promise<PermissionSaveOutcome> {
+  let attempted = 0;
+  let failed = 0;
+
+  for (const cell of cells) {
+    const module = modules.find(m => m.id === cell.moduleId);
+    if (!module) continue;
+
+    attempted++;
+    // `ok` is the whole point of this function.
+    const ok = cell.fieldId
+      ? await writers.setFieldPermission({
+          role_id: cell.roleId,
+          module_name: module.name,
+          field_name: module.fields.find(f => f.id === cell.fieldId)?.name || '',
+          can_read: cell.permissions.read,
+          can_write: cell.permissions.write,
+          can_delete: cell.permissions.delete,
+        })
+      : await writers.setModulePermission({
+          role_id: cell.roleId,
+          module_name: module.name,
+          can_read: cell.permissions.read,
+          can_create: cell.permissions.write,
+          can_update: cell.permissions.write,
+          can_delete: cell.permissions.delete,
+          can_export: cell.permissions.export,
+          can_import: cell.permissions.import,
+        });
+
+    if (!ok) failed++;
+  }
+
+  return { attempted, failed };
+}
+
+/**
+ * A partial failure is reported as one. Some writes may have landed, so
+ * "nothing was saved" would be its own lie.
+ */
+export function describeSaveFailure({ attempted, failed }: PermissionSaveOutcome): string {
+  const noun = failed === 1 ? 'change' : 'changes';
+  return failed === attempted
+    ? `None of the ${failed} permission ${noun} could be saved. Your changes are still unsaved.`
+    : `${failed} of ${attempted} permission changes could not be saved. Your changes are still unsaved.`;
+}
+
 const PermissionMatrix: React.FC = () => {
   const {
     roles,
@@ -340,68 +435,31 @@ const PermissionMatrix: React.FC = () => {
     setSelectedModules(newSelected);
   };
 
-  /*
-   * THIS WAS A FAKE SUCCESS, and the most concrete defect on the three roles
-   * pages.
-   *
-   * `savePermissions` looped over every changed cell calling
-   * `setFieldPermission` / `setModulePermission`. Both of those catch their own
-   * error and RETURN FALSE — they do not throw — and this loop ignored the
-   * return value entirely. So every call failed, the catch below never fired,
-   * the alert never showed, and the function fell through to
-   * `setHasUnsavedChanges(false)`: the "Unsaved changes" badge disappeared and
-   * the Save button vanished with it. To the user that is indistinguishable
-   * from a save that worked. Nothing was written; the destination is Supabase
-   * and there are no `system_module_permissions` / `system_field_permissions`
-   * tables in this product's Postgres at all.
-   *
-   * It refuses now. The refusal is in the function rather than only on the
-   * button because the button is one of several ways in — bulk mode and the
-   * permission-set controls reach the same state.
-   */
-  const REFUSAL = 'Saving permissions is not available: this product has no per-module or per-field permission storage.';
-  const [refusal, setRefusal] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const savePermissions = async () => {
-    // Note what is NOT done here: hasUnsavedChanges is left TRUE. Clearing it
-    // is exactly what made the old failure look like a success.
-    setRefusal(REFUSAL);
-    return;
-    // eslint-disable-next-line no-unreachable
+    setSaveError(null);
     try {
-      for (const [key, cell] of permissions.entries()) {
-        if (cell.fieldId) {
-          const module = modules.find(m => m.id === cell.moduleId);
-          if (module) {
-            await setFieldPermission({
-              role_id: cell.roleId,
-              module_name: module.name,
-              field_name: module.fields.find(f => f.id === cell.fieldId)?.name || '',
-              can_read: cell.permissions.read,
-              can_write: cell.permissions.write,
-              can_delete: cell.permissions.delete
-            });
-          }
-        } else {
-          const module = modules.find(m => m.id === cell.moduleId);
-          if (module) {
-            await setModulePermission({
-              role_id: cell.roleId,
-              module_name: module.name,
-              can_read: cell.permissions.read,
-              can_create: cell.permissions.write,
-              can_update: cell.permissions.write,
-              can_delete: cell.permissions.delete,
-              can_export: cell.permissions.export,
-              can_import: cell.permissions.import
-            });
-          }
-        }
+      const outcome = await writePermissionCells(
+        Array.from(permissions.values()),
+        modules,
+        { setModulePermission, setFieldPermission },
+      );
+
+      if (outcome.failed > 0) {
+        // THE DIRTY FLAG SURVIVES. Leaving "Unsaved changes" on screen is the
+        // honest state: the edits are still only in this component, and the user
+        // must be able to see that and retry rather than navigate away believing
+        // they are stored.
+        setSaveError(describeSaveFailure(outcome));
+        return;
       }
       setHasUnsavedChanges(false);
     } catch (error) {
+      // Kept for a genuine throw — a fault reaching past the context's own
+      // catch. The dirty flag survives here too.
       console.error('Error saving permissions:', error);
-      alert('Failed to save permissions. Please try again.');
+      setSaveError('Saving permissions failed. Your changes are still unsaved.');
     }
   };
 
@@ -756,8 +814,8 @@ const PermissionMatrix: React.FC = () => {
                     is decided by the four fixed roles on users.role, enforced by requireRole
                     on the API."
           />
-          {refusal && (
-            <p role="alert" className="mt-3 pb-2 text-sm text-red-700">{refusal}</p>
+          {saveError && (
+            <p role="alert" className="mt-3 pb-2 text-sm text-red-700">{saveError}</p>
           )}
         </div>
         {/* Header */}

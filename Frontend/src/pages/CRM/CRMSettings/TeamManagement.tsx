@@ -99,7 +99,7 @@ const TeamManagement: React.FC = () => {
       <ForbiddenAccess
         title="403 - Access Forbidden"
         message="Team Management settings are only accessible to Admin users. Contact your system administrator for access."
-        returnPath="/settings"
+        returnPath="/crm/settings"
         returnLabel="Return to Settings"
       />
     );

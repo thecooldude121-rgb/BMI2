@@ -355,6 +355,16 @@ timeline, though the documents API is now covered.
   isolation. A failing run also leaves orphaned `rt-` tenants behind, because `afterAll`
   does not complete. **Deserves a dedicated debugging pass once Settings is finished**,
   rather than being chased mid-feature.
+  - **Third data point, 2026-09-04 (Settings UI 3/3).** `roundTrip.deals.test.ts` >
+    "edit: a REAL change to expected_close_date persists exactly as sent" failed once in a
+    full-suite run and did not reproduce in three further full runs, nor on a clean stash
+    of the branch. So the affected set is now `idConcurrency`, `rbac` and `deals` — three
+    unrelated files, which further weakens any single-file explanation and fits the
+    connection-pool-pressure hypothesis: all three failures are full-suite-only and pass in
+    isolation. Not chased; recorded so the eventual debugging pass starts with three
+    samples instead of one. The deals case is a plain date assertion with no timing,
+    concurrency or auth component of its own, which is itself evidence the cause is
+    environmental rather than in the test.
 - **The id-count enumeration leak** (`C042` reveals a global row count) — deferred, lower
   severity than the race was, closed only by a move to random ids.
 - **Browser-driven form submission** — caveat 1. No form is clicked.
