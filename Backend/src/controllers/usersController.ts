@@ -2,6 +2,9 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import {
+  ASSIGNABLE_ROLES, PRIVILEGED_ROLES, canAssign, canActOn, rolesAssignableBy,
+} from '../utils/roles';
 
 /**
  * GET /api/v1/users
@@ -31,8 +34,15 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
   } catch (error) { next(error); }
 };
 
-/** Roles that keep a workspace administrable. Mirrors DESTRUCTIVE_ACTION_ROLES. */
-const PRIVILEGED_ROLES = ['admin', 'manager'];
+/**
+ * Roles that keep a workspace administrable. Mirrors DESTRUCTIVE_ACTION_ROLES.
+ *
+ * Now imported from utils/roles rather than declared here, because the
+ * role-change endpoint below has to count exactly the same set as deactivation
+ * does — the invariant is "at least one active admin or manager", and two
+ * definitions of "privileged" would let one path protect a set the other did
+ * not.
+ */
 
 /**
  * Shared by deactivate and reactivate: find the target INSIDE the caller's
@@ -193,4 +203,167 @@ export const reactivateUser = async (req: AuthRequest, res: Response, next: Next
     );
     res.json({ success: true, data: updated.rows[0] });
   } catch (error) { next(error); }
+};
+
+/**
+ * PATCH /api/v1/users/:id/role   body: { role }
+ *
+ * The gap CLAUDE.md tracked: a role was set ONCE, by an invite or by
+ * `db:seed:users`, and could never be changed. A workspace whose only
+ * privileged user was a manager could not promote them, so `requireRole('admin')`
+ * screens — the stage-configuration screen among them — were unreachable by
+ * anyone in it, and the only route to an admin was a new account created by an
+ * invite that `EMAIL_TRANSPORT=log` delivers nowhere.
+ *
+ * FOUR GUARDS, WRITTEN SEPARATELY ON PURPOSE. They fail independently and a
+ * single combined condition would catch only the cases where they overlap —
+ * the same reasoning as the two guards on deactivateUser above.
+ *
+ *   1. The NEW role must be at or below the caller's own (`canAssign`). This is
+ *      the invites rule, and it is literally the same function: a manager who
+ *      cannot invite an admin but can promote one has not been stopped from
+ *      escalating, only inconvenienced. 403.
+ *
+ *   2. The TARGET's CURRENT role must not be above the caller's (`canActOn`).
+ *      Guard 1 alone bounds only what is handed out, which leaves the same
+ *      escalation reachable from the other end: a manager cannot promote an
+ *      admin, but could DEMOTE one to sales and remove the ceiling above
+ *      themselves. 403.
+ *
+ *   3. The last active admin or manager cannot be demoted out of that set —
+ *      by anyone, including themselves. Same invariant, same advisory lock and
+ *      the same "count the OTHERS" query as deactivation, because these two
+ *      endpoints can now break the invariant TOGETHER: one admin demoting
+ *      while another deactivates, each reading a workspace that still has the
+ *      other. Serializing them on the same key is what makes that impossible
+ *      rather than unlikely. 409.
+ *
+ *   4. A no-op (already that role) returns 200 and writes nothing, so a
+ *      double-submitted form does not bump a token_version twice and sign
+ *      somebody out for no reason.
+ *
+ * SELF-DEMOTION IS ALLOWED WHEN SOMEBODY ELSE IS STILL PRIVILEGED, and this
+ * deliberately differs from deactivateUser, which refuses self ALWAYS. The
+ * difference is recoverability: deactivating yourself ends your session with no
+ * way back in, while demoting yourself leaves you signed in and leaves another
+ * admin able to reverse it — through this very endpoint, which did not exist
+ * before. Guard 3 is what stops the version of it that is NOT recoverable.
+ *
+ * ON token_version: the bump here is for the CLIENT, not the control. The
+ * server already reads the role from the row on every request
+ * (`middleware/auth.ts` — "THE ROLE COMES FROM THE ROW, NOT THE CLAIM"), so a
+ * role change takes effect on the very next request with a zero-length stale
+ * window and needs no revocation to be enforced. What IS stale is the browser:
+ * it caches the user object from login, so after a demotion it keeps offering
+ * admin controls that now 403, and after a promotion it keeps hiding controls
+ * the person may now use. Bumping forces a fresh sign-in, which is the cheap
+ * way to make the two agree. That answers the open question CLAUDE.md recorded
+ * against this endpoint — "whether a demotion should bump token_version so the
+ * old role stops being honoured immediately" — and the answer is that the old
+ * role is ALREADY not honoured; the bump buys client correctness, not security.
+ */
+export const changeUserRole = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const tenantId = requireTenantId(req);
+    const callerRole = String(req.user?.role ?? '');
+    const { role } = req.body as { role?: string };
+
+    if (!role || !(ASSIGNABLE_ROLES as readonly string[]).includes(role)) {
+      res.status(400).json({
+        success: false,
+        message: `role must be one of: ${ASSIGNABLE_ROLES.join(', ')}`,
+      });
+      return;
+    }
+
+    // Guard 1 — never above your own. Checked before the target is even looked
+    // up: whether the caller may hand out this role does not depend on who
+    // they are handing it to, and answering first means an unauthorised caller
+    // learns nothing about who exists.
+    if (!canAssign(callerRole, role)) {
+      res.status(403).json({
+        success: false,
+        message: `A ${callerRole || 'user'} cannot assign the ${role} role. You can only assign roles at or below your own.`,
+        assignable_roles: rolesAssignableBy(callerRole),
+      });
+      return;
+    }
+
+    // BEGIN before the lock, one COMMIT/ROLLBACK on every path: a client
+    // released mid-transaction returns to the pool still holding the lock.
+    await client.query('BEGIN');
+    await lockWorkspaceMembership(client, tenantId);
+
+    const target = await findMember(tenantId, req.params.id, client);
+    if (!target) {
+      await client.query('COMMIT');
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    // Guard 2 — you cannot reach above yourself, in either direction.
+    if (!canActOn(callerRole, target.role)) {
+      await client.query('COMMIT');
+      res.status(403).json({
+        success: false,
+        message: `A ${callerRole || 'user'} cannot change the role of a ${target.role}.`,
+      });
+      return;
+    }
+
+    // Guard 4 — no-op. After the guards, so an unauthorised caller does not get
+    // a 200 that confirms what role somebody holds.
+    if (target.role === role) {
+      await client.query('COMMIT');
+      res.json({ success: true, data: target, message: `That account is already a ${role}` });
+      return;
+    }
+
+    // Guard 3 — the last one standing. Counted INSIDE the lock and counting
+    // OTHERS, exactly as deactivateUser does, and only when the change actually
+    // removes the target from the privileged set: promoting a sales user, or
+    // moving an admin to manager, cannot break the invariant and must not be
+    // refused by it.
+    const losesPrivilege = PRIVILEGED_ROLES.includes(target.role) && !PRIVILEGED_ROLES.includes(role);
+    if (losesPrivilege) {
+      const remaining = await client.query(
+        `SELECT COUNT(*)::int AS n FROM users
+          WHERE tenant_id = $1 AND is_active = true AND role = ANY($2::varchar[]) AND id <> $3`,
+        [tenantId, PRIVILEGED_ROLES, target.id],
+      );
+      if (remaining.rows[0].n === 0) {
+        await client.query('COMMIT');
+        res.status(409).json({
+          success: false,
+          message: String(target.id) === String(req.user?.id)
+            ? 'You are the last admin or manager in this workspace — promote someone else before changing your own role'
+            : 'Cannot demote the last admin or manager in this workspace',
+        });
+        return;
+      }
+    }
+
+    // Scoped to id AND tenant_id. A bump scoped only by tenant would sign out
+    // the whole workspace including the acting admin — the same footgun called
+    // out on deactivateUser.
+    const updated = await client.query(
+      `UPDATE users
+          SET role = $3, token_version = token_version + 1, updated_at = NOW()
+        WHERE id = $1 AND tenant_id = $2
+        RETURNING id, first_name, last_name, email, role, is_active`,
+      [target.id, tenantId, role],
+    );
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      data: updated.rows[0],
+      message: `Role changed from ${target.role} to ${role}. They will need to sign in again.`,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    next(error);
+  } finally {
+    client.release();
+  }
 };

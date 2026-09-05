@@ -3,6 +3,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { ASSIGNABLE_ROLES, canAssign } from '../utils/roles';
 import { getEmailService } from '../services/email';
 
 /**
@@ -25,9 +26,6 @@ import { getEmailService } from '../services/email';
  * than an admin having to re-send. `email_sent` tells the caller which happened.
  */
 
-/** Every role the app understands. Not every role every inviter may grant. */
-const ASSIGNABLE_ROLES = ['sales', 'manager', 'hr', 'admin'] as const;
-type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 /**
  * NOBODY MAY INVITE SOMEONE ABOVE THEIR OWN ROLE.
@@ -43,14 +41,14 @@ type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
  * above — and it is enforced HERE rather than in the UI, because the UI hiding
  * the option is a courtesy and this is the control.
  *
+ * MOVED TO `utils/roles.ts`, because `PATCH /users/:id/role` has to enforce
+ * exactly this rule and a second copy of it would eventually disagree with this
+ * one. `rolesAssignableBy` is what `INVITABLE_BY` used to be.
+ *
  * Found while building the stage-configuration screen (Q5, admin-only) and
  * noticing that a manager could simply mint themselves an admin. Unrelated to
  * pipeline stages; fixed on its own.
  */
-const INVITABLE_BY: Record<string, readonly AssignableRole[]> = {
-  admin:   ['sales', 'hr', 'manager', 'admin'],
-  manager: ['sales', 'hr', 'manager'],
-};
 
 /** Long enough that guessing is hopeless; url-safe so it survives an email client. */
 const TOKEN_BYTES = 32;
@@ -75,7 +73,7 @@ export const createInvite = async (req: AuthRequest, res: Response, next: NextFu
       res.status(400).json({ success: false, message: 'A valid email is required' });
       return;
     }
-    if (!ASSIGNABLE_ROLES.includes(role as AssignableRole)) {
+    if (!(ASSIGNABLE_ROLES as readonly string[]).includes(role)) {
       res.status(400).json({ success: false, message: `role must be one of: ${ASSIGNABLE_ROLES.join(', ')}` });
       return;
     }
@@ -90,8 +88,7 @@ export const createInvite = async (req: AuthRequest, res: Response, next: NextFu
     // not exist, because the caller can see the role list on the same screen and
     // a vague refusal would just look broken.
     const inviterRole = String(req.user?.role ?? '');
-    const permitted = INVITABLE_BY[inviterRole] ?? [];
-    if (!permitted.includes(role as AssignableRole)) {
+    if (!canAssign(inviterRole, role)) {
       res.status(403).json({
         success: false,
         message: `A ${inviterRole || 'user'} cannot invite someone as ${role}. You can only invite roles at or below your own.`,

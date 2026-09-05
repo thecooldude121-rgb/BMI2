@@ -450,24 +450,64 @@ answers **403**; `invitableRolesFor()` keeps the UI picker in step so a manager 
 offered an option the server will refuse. The server is the control; the picker is a
 courtesy.
 
-### TRACKED GAP — there is no way to change an existing user's role
-`routes/users.ts` has list / deactivate / reactivate and nothing else. A role is set **once**,
-by an invite or by `db:seed:users`, and can never be changed afterwards. Consequences worth
-knowing before anyone plans around it:
+### CLOSED — `PATCH /users/:id/role` changes an existing user's role
+This was a tracked gap: a role was set **once**, by an invite or by `db:seed:users`, and
+could never be changed, so a workspace whose only privileged user was a manager could not
+promote them and everything gated on `requireRole('admin')` was unreachable from inside it.
 
-- A workspace whose only privileged user is a manager cannot promote them. An admin can
-  only ever be a **new account**, created by an invite — and with `EMAIL_TRANSPORT=log`
-  that invite is delivered nowhere, so the token appears only in the server log.
-- The live workspace is exactly in this state: four `sales` and one `manager`, no admin.
-  Anything gated on `requireRole('admin')` — the stage-configuration screen, for one — is
-  therefore unreachable by anyone in it today.
+The endpoint is gated on the same `DESTRUCTIVE_ACTION_ROLES` as deactivation, and applies
+four guards that fail independently:
 
-**Not built deliberately, and not a one-liner.** A role-change endpoint needs the same
-"never above your own role" rule as invites, plus decisions this codebase has not made: who
-may demote an admin, whether the last admin can be demoted (the mutual-deactivation guard
-in `usersController` is the shape that question takes), and whether a demotion should bump
-`token_version` so the old role stops being honoured immediately. Design it before writing
-it.
+1. **Never assign a role above your own** — literally the invites rule, now shared:
+   `INVITABLE_BY` moved to `utils/roles.ts` as `rolesAssignableBy`, because a manager who
+   cannot *invite* an admin but can *promote* one has not been stopped. 403.
+2. **Never act on someone who already holds a role above your own** (`canActOn`). Guard 1
+   bounds only what is handed out, which leaves the same escalation reachable from the
+   other end: a manager could demote the admin above them to `sales`, a role they ARE
+   allowed to assign. 403.
+3. **The last active admin or manager cannot be demoted out of that set**, by anyone
+   including themselves — the same invariant, the same workspace-keyed
+   `pg_advisory_xact_lock` and the same count-the-others query as deactivation. They share
+   the lock because they can now break the invariant *together*: one admin demoting while
+   another deactivates. 409.
+4. **A no-op writes nothing**, so a double-submitted form does not bump `token_version`
+   twice and sign somebody out for a change that did not happen.
+
+Self-demotion IS allowed when someone else is still privileged, and deliberately differs
+from `deactivateUser`, which refuses self always: deactivating yourself ends your session
+with no way back, while demoting yourself leaves another admin able to reverse it.
+
+**`token_version` is bumped, and the reason is the client, not the control.** `protect`
+reads the role from the row on every request, so a role change is enforced on the very next
+request with a zero-length stale window and needs no revocation — that answers the question
+this note used to leave open. What is stale is the browser, which caches the user object
+from login and would keep offering admin controls after a demotion. Bumping forces a fresh
+sign-in so the two agree.
+
+Coverage is `roundTrip.userRoles.test.ts` (14 tests). Every guard was mutation-tested —
+each one disabled in turn, confirming a test fails — including the advisory lock, whose
+removal fails the demote-races-deactivate test.
+
+**Not wired into the UI yet.** `TeamManagement` lists the roster and can deactivate and
+reactivate; there is no role picker on it. `rolesAssignableBy` is what should populate one,
+so a manager is never offered `admin`.
+
+### The live workspace has an admin again
+It had four `sales` and one `manager` and **zero admins**, so the stage-configuration screen
+was unreachable by anyone in it. `david@bmicrm.com` (David Kumar, user id 5) was promoted
+`manager` -> `admin` on 2026-09-06 with a direct, scoped UPDATE — before the endpoint above
+existed, and recorded here so the change is auditable rather than mysterious:
+
+```sql
+UPDATE users SET role = 'admin', token_version = token_version + 1, updated_at = NOW()
+ WHERE email = 'david@bmicrm.com'
+   AND tenant_id = '2f5b4330-6101-4aee-bd4f-8917a83cce6b'
+   AND role = 'manager';
+```
+
+The `AND role = 'manager'` makes it a no-op if run twice against an already-promoted row,
+and the `token_version` bump ends his existing sessions so the browser stops rendering the
+manager view. **Any future promotion goes through the endpoint, not through SQL.**
 
 ## Pipeline stages
 

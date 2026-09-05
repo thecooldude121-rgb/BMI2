@@ -536,7 +536,7 @@ active stage uses green or red" — an admin choosing green does not see a rule 
 they see a colour they liked. The UI does not offer them there either; the check exists in
 both places because only one of them is enforcement.
 
-### FINDING — this workspace has no admin, so the screen it ships is unreachable
+### FINDING (both halves now RESOLVED) — this workspace had no admin, so the screen it ships was unreachable
 
 `users` holds four `sales` and one `manager`. Nothing else. Q5 settled admin-only without
 anyone checking whether an admin exists, so as shipped **no one in this workspace can
@@ -554,6 +554,17 @@ both are decisions rather than bugs to fix here:
 2. **A manager can invite an admin, which is a privilege-escalation path.** Standard RBAC
    says you cannot grant a role above your own. Whether that is intended is an auth
    decision, not a stage-configuration one, so it is recorded here rather than changed.
+
+**Both were fixed, each on its own commit and neither folded into stage work:**
+
+- (2) first, as the more urgent of the two: `INVITABLE_BY` bounds `POST /invites` and
+  answers 403, so a manager can no longer mint an admin.
+- (1) after C2: `PATCH /users/:id/role` exists, with the same never-above-your-own rule
+  (now shared from `utils/roles.ts`), a guard against acting on someone above you, and the
+  last-admin guard reused from the deactivation work. See CLAUDE.md.
+- And the live workspace has an admin again — `david@bmicrm.com` promoted manager -> admin,
+  the SQL recorded in CLAUDE.md — so this screen is reachable and usable today rather than
+  merely reachable in principle.
 
 ### Phase C — reframed into three steps, because it is not one
 
