@@ -81,6 +81,15 @@ interface PanelDeal {
   contactTitle: string;
   source: string;
   probability: number;
+  /**
+   * The stored probability with NULL preserved.
+   *
+   * Both `probability` and `aiScore` above collapse NULL to 0, which is right
+   * for display — a gauge must render something — and wrong for arithmetic,
+   * where "nobody has assessed this" and "this will not close" are different
+   * claims. See DealCard.probabilityRaw and design question 3.
+   */
+  probabilityRaw?: number | null;
   nextStep: string;
   nextStepDueDate: string;
   nextStepOwner: string;
@@ -209,8 +218,18 @@ function mapApiToPanelDeal(data: any): PanelDeal {
     tags,
     updatedAt:     data.updated_at || '',
     createdAt:     data.created_at || '',
-    // aiScore is stored as probability in the backend (0-100 win probability)
+    // aiScore is stored as probability in the backend (0-100 win probability).
+    // It DELIBERATELY still collapses NULL to 0: it is a display score, and a
+    // gauge has to render something. What must not collapse is the value any
+    // arithmetic uses — see probabilityRaw below and DealCard.probabilityRaw.
     aiScore:       Number(data.probability) || 0,
+    // Set here as well as in the Kanban mapping. It was missing from this one,
+    // which is harmless today because only DealsListView's weighted forecast
+    // reads it and its deals come from the board — but a mapping that populates
+    // one of a pair and not the other is exactly how the two drift apart.
+    probabilityRaw: data.probability === null || data.probability === undefined
+      ? null
+      : Number(data.probability),
     health,
     priority,
     daysSinceContact: Number(data.days_since_contact) || 0,

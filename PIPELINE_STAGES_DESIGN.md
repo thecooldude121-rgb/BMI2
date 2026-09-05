@@ -569,9 +569,12 @@ would change the response shape and turn **167 frontend reads of `deal.stage` in
 - **C1a — DONE.** All 29 outcome-by-literal sites across 13 files now ask the workspace's
   configuration. Design **Q3 is settled**: an unset probability is EXCLUDED from the
   weighted forecast, never counted as zero, and the exclusion count is shown on the card.
-- **C1b — remaining.** 5 deal-form files still import `config/pipelines.ts` and its 17
-  hardcoded stages. Split out because the deal form is a WRITE path (deal creation) and
-  belongs in its own reviewable change.
+- **C1b — DONE.** The 5 deal-form files read the workspace's pipelines, and
+  **`config/pipelines.ts` is deleted** — the last hardcoded stage catalogue in the
+  frontend. A stage an admin adds is immediately usable when creating a deal; one they
+  retire stops being offered, which matters because since Phase A the server refuses a
+  stage that is not in the deal's pipeline, so offering a stale one produced a 400 the
+  user could do nothing about.
 - **C2 — last.** Drop `deals.stage`, `is_won`, `is_lost`.
 
 **The drift gate, checked before writing C0 and now pinned in the suite:** zero mismatches

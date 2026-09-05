@@ -4,7 +4,8 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { Sparkles, Calendar, Info, GitBranch } from 'lucide-react';
 import { SUPPORTED_CURRENCIES, getCurrency, BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { formatCurrencyCompact, convertToBaseCurrency, getCurrencySymbol, getRateToUsdDisplay, RATES_SNAPSHOT_DATE } from '../../../utils/currencyUtils';
-import { PIPELINES, getPipeline, stageButtonClasses } from '../../../config/pipelines';
+import { usePipelines } from '../../../hooks/useStageLookup';
+import { findPipeline, defaultPipeline, stageHex, type ApiStage } from '../../../utils/pipelinesApi';
 import { DEAL_TYPES } from '../../../config/dealTypes';
 import {
   FORECAST_CATEGORIES,
@@ -56,8 +57,21 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
 }) => {
   const hasNameContext = !!(formData.accountName || formData.product);
   // Derive stages from the selected pipeline — never stale
-  const currentPipeline = getPipeline(formData.pipelineId || '');
-  const stages = currentPipeline.stages;
+  /*
+   * PIPELINES AND STAGES COME FROM THE WORKSPACE, not from config/pipelines.ts.
+   *
+   * This picker offered three hardcoded pipelines and their seventeen hardcoded
+   * stages — so a stage an admin added on the Deal Stages screen could not be
+   * chosen when creating a deal, and a stage they RETIRED was still offered.
+   * Since Phase A the server refuses a stage that is not in the deal's pipeline,
+   * so offering a stale one produced a 400 the user could do nothing about.
+   */
+  const { pipelines, ready: pipelinesReady } = usePipelines();
+  const currentPipeline =
+    findPipeline(pipelines, formData.pipelineId) ?? defaultPipeline(pipelines);
+  // Retired stages are excluded by the API, so a stage an admin retires stops
+  // being offered here without this file knowing anything about retirement.
+  const stages = currentPipeline?.stages ?? [];
 
   // ── Deal Value display formatting ─────────────────────────────────────────
   // formData.dealValue holds raw digits ("75000"); displayValue shows commas.
@@ -455,15 +469,17 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
               onChange={(e) => onChange('pipelineId', e.target.value)}
               className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             >
-              {PIPELINES.map((p) => (
-                <option key={p.id} value={p.id}>
+              {pipelines.map((p) => (
+                <option key={p.slug} value={p.slug}>
                   {p.name}
                 </option>
               ))}
             </select>
           </div>
           <p className="mt-1.5 text-xs text-gray-400">
-            {currentPipeline.description} · {stages.length} stages
+            {pipelinesReady
+              ? `${currentPipeline?.description ?? ''} · ${stages.length} stage${stages.length === 1 ? '' : 's'}`
+              : 'Loading your pipelines…'}
           </p>
         </div>
 
@@ -479,23 +495,33 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             className="sm:hidden w-full px-3 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {stages.map(s => (
-              <option key={s.id} value={s.id}>{s.name} ({s.probability}%)</option>
+              // "Not set" rather than "0%": an unset probability is not a
+              // prediction that the deal will not close (design question 3).
+              <option key={s.slug} value={s.slug}>
+                {s.name} ({s.probability === null ? 'not set' : `${s.probability}%`})
+              </option>
             ))}
           </select>
 
           {/* Tablet/Desktop: pill button group */}
           <div className="hidden sm:flex items-center rounded-lg border border-gray-200 overflow-hidden">
-            {stages.map((stage, idx) => {
-              const isActive = formData.stage === stage.id;
+            {stages.map((stage: ApiStage, idx: number) => {
+              const isActive = formData.stage === stage.slug;
               return (
                 <button
-                  key={stage.id}
+                  key={stage.slug}
                   type="button"
-                  onClick={() => onChange('stage', stage.id)}
-                  title={`${stage.probability}% base probability`}
+                  onClick={() => onChange('stage', stage.slug)}
+                  title={stage.probability === null
+                    ? 'No base probability set for this stage'
+                    : `${stage.probability}% base probability`}
+                  // The active pill uses the stage's OWN stored colour rather
+                  // than a Tailwind key from a hardcoded map, so a stage an
+                  // admin recoloured looks the same here as on the board.
+                  style={isActive ? { backgroundColor: stageHex(stage), color: '#fff' } : undefined}
                   className={`flex-1 py-2.5 text-xs font-medium transition-all
                     ${idx !== 0 ? 'border-l border-gray-200' : ''}
-                    ${stageButtonClasses(stage, isActive)}`}
+                    ${isActive ? '' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                 >
                   {stage.name}
                 </button>
@@ -503,7 +529,7 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
             })}
           </div>
           <p className="mt-1.5 text-xs text-gray-400">
-            Stages shown are specific to the <span className="font-medium text-gray-600">{currentPipeline.name}</span> pipeline
+            Stages shown are specific to the <span className="font-medium text-gray-600">{currentPipeline?.name ?? 'selected'}</span> pipeline
           </p>
         </div>
 

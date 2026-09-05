@@ -17,6 +17,21 @@ import {
  * One hook rather than a fetch per page, so a page adds two lines instead of an
  * effect, a state, an error path and a race.
  */
+export function usePipelines(): { pipelines: ApiPipeline[]; ready: boolean; error: string | null } {
+  const [pipelines, setPipelines] = useState<ApiPipeline[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => { if (!cancelled) { setPipelines(list); setError(null); } })
+      .catch((e: Error) => { if (!cancelled) { setPipelines([]); setError(e.message); } })
+    return () => { cancelled = true; };
+  }, []);
+
+  return { pipelines: pipelines ?? [], ready: pipelines !== null, error };
+}
+
 export function useStageLookup(): { lookup: StageLookup; ready: boolean } {
   const [pipelines, setPipelines] = useState<ApiPipeline[] | null>(null);
 
