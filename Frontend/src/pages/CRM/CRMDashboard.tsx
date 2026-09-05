@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Users, TrendingUp, DollarSign, Building2, AlertTriangle, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useDashboardData, dealValue, isOpen } from '../../hooks/useDashboardData';
+import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { isOpenWith } from '../../utils/pipelinesApi';
 import { sortActivitiesNewestFirst } from '../../utils/activitiesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useToast } from '../../contexts/ToastContext';
@@ -74,7 +76,9 @@ const CRMDashboard: React.FC = () => {
     : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
     : `$${n}`;
 
-  const openDeals = useMemo(() => deals.filter(isOpen), [deals]);
+  // See Dashboard.tsx: a won deal outside the default pipeline counted as open.
+  const { lookup: outcomeLookup } = useStageLookup();
+  const openDeals = useMemo(() => deals.filter(isOpenWith(outcomeLookup)), [deals, outcomeLookup]);
   const openPipeline = useMemo(
     () => openDeals.reduce((sum, d) => sum + dealValue(d), 0),
     [openDeals],

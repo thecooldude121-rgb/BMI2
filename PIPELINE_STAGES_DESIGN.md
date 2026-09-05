@@ -566,9 +566,12 @@ would change the response shape and turn **167 frontend reads of `deal.stage` in
 - **C0 — DONE.** The deals queries project `pipeline_stages.slug AS stage`, so the API's
   `stage` field is independent of the column before the column goes. Additive; the response
   is byte-identical today because the two values are provably the same.
-- **C1 — next.** 29 sites across 13 files still test outcomes by hardcoded slug
-  (`=== 'closed-won'`), and 5 files still import `config/pipelines.ts`, which the design
-  said Phase B would remove and which still holds all 17 stages.
+- **C1a — DONE.** All 29 outcome-by-literal sites across 13 files now ask the workspace's
+  configuration. Design **Q3 is settled**: an unset probability is EXCLUDED from the
+  weighted forecast, never counted as zero, and the exclusion count is shown on the card.
+- **C1b — remaining.** 5 deal-form files still import `config/pipelines.ts` and its 17
+  hardcoded stages. Split out because the deal form is a WRITE path (deal creation) and
+  belongs in its own reviewable change.
 - **C2 — last.** Drop `deals.stage`, `is_won`, `is_lost`.
 
 **The drift gate, checked before writing C0 and now pinned in the suite:** zero mismatches
@@ -581,6 +584,22 @@ passes vacuously, because teardown empties it.
 node-pg's row object takes the last. That was verified against this pg version rather than
 assumed, and a test corrupts `deals.stage` directly and asserts the API still answers with
 the derived value.
+
+### Q3 — settled, and the premise had changed
+
+The design said `partner-evaluation` and `renewal-quoted` would be backfilled NULL. They
+were not: the Phase A fix that materialises a known pipeline's full catalogue — made
+because "backfill only what deals reference" produced pipelines with no won or lost stage —
+also gave them their catalogue probabilities of 45 and 75. **There are zero NULL-probability
+stages and zero affected deals today**, so the rule is prospective: NULL is reachable
+because the admin screen makes probability optional.
+
+**A sum is a sum**: excluding an unassessed deal and counting it as zero produce the SAME
+total. The entire difference is whether the shortfall is declared, which is why the count
+is rendered on the card and not only in a tooltip.
+
+`aiScore` could not carry the distinction — it is mapped `d.probability || 0`, so unset and
+an explicit 0% arrive identical. A `probabilityRaw` field preserves the NULL.
 
 ### Outstanding verification, carried forward deliberately
 

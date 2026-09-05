@@ -7,7 +7,8 @@ import LeadScoreChart from './LeadScoreChart';
 import RecentActivity from './RecentActivity';
 import StatCard from './StatCard';
 import { Users } from 'lucide-react';
-import { dealValue, isOpen, isClosedWon } from '../../hooks/useDashboardData';
+import { dealValue } from '../../hooks/useDashboardData';
+import { buildStageLookup, isOpenWith, isWonWith, type ApiPipeline } from '../../utils/pipelinesApi';
 import type { Lead } from '../../types/lead';
 import type { TaskRecord, ActivityRecord } from '../../utils/activitiesApi';
 
@@ -88,18 +89,50 @@ describe('deal helpers', () => {
     expect(dealValue({ id: 'D1', value: 'n/a' })).toBe(0);
   });
 
-  it('counts a stage outside the pipeline list as open', () => {
-    // deals.stage has no CHECK constraint and the live table holds
-    // 'partner-evaluation' and 'renewal-quoted'. Matching a known set would
-    // drop these from the pipeline total.
-    expect(isOpen({ id: 'D1', stage: 'partner-evaluation' })).toBe(true);
-    expect(isOpen({ id: 'D2', stage: 'renewal-quoted' })).toBe(true);
+  /*
+   * Outcome classification moved out of useDashboardData in Phase C1.
+   *
+   * These tests used to assert that `partner-evaluation` and `renewal-quoted`
+   * counted as OPEN — which was right, but for the wrong reason: they were open
+   * because the check compared against two literals and everything else fell
+   * through, not because anything knew what those stages were. The same logic
+   * counted `partner-active` (a WIN) as open too, and no test noticed.
+   */
+  const stage = (slug: string, type: 'open' | 'won' | 'lost') => ({
+    id: slug, pipeline_id: 'p', slug, name: slug, probability: null,
+    position: 1, color: null, stage_type: type, archived_at: null,
+  });
+  const lookup = buildStageLookup([{
+    id: 'p', slug: 'partnerships', name: 'Partnerships', description: null,
+    is_default: true, is_active: true,
+    stages: [
+      stage('partner-evaluation', 'open'),
+      stage('partner-active', 'won'),
+      stage('partner-inactive', 'lost'),
+    ],
+  } as ApiPipeline]);
+
+  it('an OPEN stage counts as open, whatever its slug is called', () => {
+    expect(isOpenWith(lookup)({ id: 'D1', stage: 'partner-evaluation', pipeline_id: 'partnerships' })).toBe(true);
   });
 
-  it('excludes both closed stages from open pipeline', () => {
-    expect(isOpen({ id: 'D1', stage: 'closed-won' })).toBe(false);
-    expect(isOpen({ id: 'D2', stage: 'closed-lost' })).toBe(false);
-    expect(isClosedWon({ id: 'D1', stage: 'closed-won' })).toBe(true);
+  it('a WON stage no longer counts as open just because its slug is unfamiliar', () => {
+    // The regression this closes: `partner-active` is a win, and the literal
+    // comparison classified it as open pipeline — in the dashboard tile and in
+    // the Reports win rate.
+    expect(isOpenWith(lookup)({ id: 'D1', stage: 'partner-active', pipeline_id: 'partnerships' })).toBe(false);
+    expect(isWonWith(lookup)({ id: 'D1', stage: 'partner-active', pipeline_id: 'partnerships' })).toBe(true);
+  });
+
+  it('a LOST stage is excluded from open pipeline too', () => {
+    expect(isOpenWith(lookup)({ id: 'D1', stage: 'partner-inactive', pipeline_id: 'partnerships' })).toBe(false);
+  });
+
+  it('an unresolvable stage counts as OPEN — the old default, kept on purpose', () => {
+    // A failed pipelines fetch degrades to the previous behaviour rather than a
+    // new wrong one, and counting a deal as open understates a win rate rather
+    // than inflating it.
+    expect(isOpenWith(lookup)({ id: 'D1', stage: 'who-knows', pipeline_id: 'partnerships' })).toBe(true);
   });
 });
 

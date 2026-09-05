@@ -55,6 +55,8 @@ import {
   daysFromNow,
 } from '../../utils/dateUtils';
 import { resolveDealState, STATE_TOKENS } from '../../utils/dealState';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { outcomeOf } from '../../utils/pipelinesApi';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import { computeCommitteeCoverage } from '../../utils/dealCommittee';
 import { getContactRole, roleChipClasses, type StakeholderContact } from '../../config/contactRoles';
@@ -631,7 +633,10 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
 
   // ── Compute state chip for the deal ──────────────────────────────────────
   const closeDaysLeft = deal ? daysFromNow(deal.closeDate) : null;
-  const isClosed      = deal ? ['closed-won', 'closed-lost'].includes(deal.stage) : false;
+  // See DealKanbanCard: outcome by configuration, not by two literals.
+  const { lookup: stageLookup } = useStageLookup();
+  const outcome       = deal ? outcomeOf(stageLookup)(deal) : 'open';
+  const isClosed      = outcome !== 'open';
 
   // Build a minimal DealCard-compatible object so we can reuse resolveDealState
   const dealCardShape: DealCard | null = deal ? {
@@ -662,7 +667,7 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   } : null;
 
   const cardState = dealCardShape
-    ? resolveDealState(dealCardShape, closeDaysLeft, isClosed)
+    ? resolveDealState(dealCardShape, closeDaysLeft, outcome)
     : null;
   const stateTokens = cardState ? STATE_TOKENS[cardState.primary] : null;
   const healthExpl  = dealCardShape && !isClosed

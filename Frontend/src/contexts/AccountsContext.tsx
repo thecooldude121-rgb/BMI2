@@ -1,3 +1,4 @@
+import { fetchPipelines, buildStageLookup, isOpenWith } from '../utils/pipelinesApi';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import {
   EnhancedAccount,
@@ -262,9 +263,14 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
         dealsByAccount = new Map();
         let openCount = 0;
         let openValue = 0;
+        // Outcome from the workspace's own stages. These two literals belong to
+        // the default pipeline, so every closed Renewals and Partnerships deal
+        // was counted as OPEN — inflating both the open-deal count and the
+        // open pipeline value on every account.
+        const stageLookup = buildStageLookup(await fetchPipelines().catch(() => []));
+        const stillOpen = isOpenWith(stageLookup);
         for (const d of dealsRes.value) {
-          const stage = String(d.stage ?? '').toLowerCase();
-          if (stage === 'closed-won' || stage === 'closed-lost') continue;
+          if (!stillOpen(d)) continue;
           const value = Number(d.value) || 0;
           // Pipeline-wide totals count every open deal, linked or not — the
           // pipeline exists regardless of whether anyone has attributed it.

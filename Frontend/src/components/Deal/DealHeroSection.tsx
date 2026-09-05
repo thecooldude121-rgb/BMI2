@@ -482,7 +482,10 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   const probability = deal.probability ?? 45;
   const dealAmount = deal.amount || 30000;
   const weightedValue = Math.round(dealAmount * (probability / 100));
-  const weightedCardClass = deal.stage === 'closed-won'
+  // The stages prop already carries this deal's own pipeline, so outcome comes
+  // from it rather than from a literal that is only the default pipeline's.
+  const dealOutcome = stages.find(st => st.slug === deal.stage)?.stage_type ?? 'open';
+  const weightedCardClass = dealOutcome === 'won'
     ? 'rounded-xl border p-4 min-w-0 bg-emerald-50 border-emerald-200'
     : 'rounded-xl border p-4 min-w-0 bg-violet-50 border-violet-100';
 
@@ -827,7 +830,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               className={weightedCardClass}
               title={`Weighted forecast: ${probability}% win probability × ${formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}`}
             >
-              {deal.stage === 'closed-won' ? (
+              {dealOutcome === 'won' ? (
                 <>
                   <div className="text-xs font-semibold text-emerald-500 uppercase tracking-wide mb-1">Final Value</div>
                   <div className="text-2xl font-bold text-emerald-700 mb-1 leading-none">{formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}</div>

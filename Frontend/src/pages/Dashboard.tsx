@@ -16,7 +16,9 @@ import RecentActivity from '../components/Dashboard/RecentActivity';
 import SalesFunnel from '../components/Dashboard/SalesFunnel';
 import TaskOverview from '../components/Dashboard/TaskOverview';
 import LeadScoreChart from '../components/Dashboard/LeadScoreChart';
-import { useDashboardData, dealValue, isClosedWon, isOpen } from '../hooks/useDashboardData';
+import { useDashboardData, dealValue } from '../hooks/useDashboardData';
+import { useStageLookup } from '../hooks/useStageLookup';
+import { isWonWith, isOpenWith } from '../utils/pipelinesApi';
 
 /**
  * Reads the database instead of DataContext.
@@ -47,8 +49,12 @@ const Dashboard: React.FC = () => {
   // Open pipeline only. The old sum included closed-won AND closed-lost, so
   // "Pipeline Value" counted deals that were already decided — lost revenue
   // inflating a forward-looking number.
-  const openPipeline = deals.filter(isOpen).reduce((sum, d) => sum + dealValue(d), 0);
-  const wonDeals = deals.filter(isClosedWon).length;
+  // Outcome by the workspace's own configuration. These used to compare the
+  // slug to 'closed-won'/'closed-lost', so a won Renewals or Partnerships deal
+  // counted as OPEN — inflating open pipeline and understating won deals.
+  const { lookup } = useStageLookup();
+  const openPipeline = deals.filter(isOpenWith(lookup)).reduce((sum, d) => sum + dealValue(d), 0);
+  const wonDeals = deals.filter(isWonWith(lookup)).length;
 
   const overdueTasks = tasks.filter((t) => {
     if (t.status === 'completed' || !t.due_date) return false;

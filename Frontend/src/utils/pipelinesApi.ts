@@ -199,6 +199,11 @@ export interface StageMeta {
   total: number;
   /** 1-based position among the OPEN stages only, or null for a terminal one. */
   openIndex: number | null;
+  /**
+   * The stage's default win probability, or NULL when the workspace has not set
+   * one. NULL is not 0 — see `weightedProbability` below.
+   */
+  probability: number | null;
   /** How many open stages the pipeline has — the denominator for progress. */
   openTotal: number;
   color: string | null;
@@ -237,6 +242,7 @@ export function buildStageLookup(pipelines: ApiPipeline[]): StageLookup {
         index: i + 1,
         total: p.stages.length,
         openIndex: s.stage_type === 'open' ? openStages.findIndex(o => o.slug === s.slug) + 1 : null,
+        probability: s.probability,
         openTotal: openStages.length,
         color: s.color,
         archived: Boolean(s.archived_at),
@@ -326,3 +332,79 @@ export interface PaletteColor { name: string; hex: string; outcome_only: boolean
  */
 export const fetchPalette = () =>
   write<{ data: PaletteColor[] }>(`${API_BASE}/pipelines/palette`, { method: 'GET' }).then(r => r.data);
+
+/**
+ * A deal, as far as outcome classification is concerned.
+ *
+ * The predicates below are GENERIC over this rather than taking it directly,
+ * and both alternatives were tried and rejected against the real call sites:
+ *
+ *  - Taking `StagedDeal` plainly rejects test fixtures written as object
+ *    literals, because excess-property checking fires on a fresh literal.
+ *  - Adding an index signature fixes that and breaks the opposite direction:
+ *    `deals.filter(isOpenWith(lookup))` over a `DashboardDeal[]` then fails,
+ *    because an exact interface is not assignable to one with an index
+ *    signature.
+ *
+ * A generic parameter infers the caller's own type and satisfies both.
+ */
+export interface StagedDeal {
+  stage?: string | null;
+  pipeline_id?: string | null;
+  pipelineId?: string | null;
+}
+
+/**
+ * "Is this deal won / lost / still open", asked of the workspace's own
+ * configuration.
+ *
+ * THE SHAPE IS DELIBERATE: the lookup comes FIRST and a predicate comes back.
+ * The obvious alternative — `isClosedWon(deal, meta?)` — is a trap, because
+ * these are used as `deals.filter(isClosedWon)` and `Array.prototype.filter`
+ * passes (element, INDEX, array). The optional second parameter would silently
+ * receive a number, `meta.stage_type` would be undefined, and every deal would
+ * classify as open with no error anywhere. Currying makes the call sites fail to
+ * compile instead, which is the direction this codebase wants.
+ *
+ * An unresolvable stage is NOT closed. Same default the literal comparisons had,
+ * so a failed pipelines fetch degrades to the old behaviour rather than a new
+ * wrong one — and counting a deal as open understates a win rate rather than
+ * inflating it.
+ */
+export const outcomeOf = (lookup: StageLookup) => <T extends StagedDeal>(d: T): 'open' | 'won' | 'lost' =>
+  lookup(d.stage, d.pipeline_id ?? d.pipelineId ?? null)?.stage_type ?? 'open';
+
+export const isWonWith  = (lookup: StageLookup) => <T extends StagedDeal>(d: T) => outcomeOf(lookup)(d) === 'won';
+export const isLostWith = (lookup: StageLookup) => <T extends StagedDeal>(d: T) => outcomeOf(lookup)(d) === 'lost';
+export const isOpenWith = (lookup: StageLookup) => <T extends StagedDeal>(d: T) => outcomeOf(lookup)(d) === 'open';
+
+
+/**
+ * The probability to weight a deal by — or NULL, meaning "do not weight it".
+ *
+ * DESIGN QUESTION 3, SETTLED: a deal whose probability is not set is EXCLUDED
+ * from a weighted forecast, not counted as zero.
+ *
+ * Zero is a claim. It says "this deal will not close", which is a forecast, and
+ * a forecast nobody made. Summing it in drags the total down by exactly the
+ * amount of every deal nobody has assessed yet, and does so invisibly — the
+ * number simply looks smaller. Excluding it means the total is the weighted
+ * value of the deals that HAVE been assessed, which is a statement that can be
+ * defended, provided the count of exclusions is shown alongside it.
+ *
+ * The deal's OWN probability wins when set, because a rep may have overridden
+ * the stage default deliberately and that judgement outranks the configuration.
+ * A deal with no probability of its own falls back to its stage's. Only when
+ * neither exists is the answer NULL.
+ *
+ * Note `?? `, not `||`: a probability of 0 IS a set value — a deal explicitly
+ * assessed as dead — and `||` would treat it as unset and silently exclude the
+ * one case where zero is a real answer.
+ */
+export function weightedProbability<T extends StagedDeal & { probability?: number | null }>(
+  deal: T,
+  lookup: StageLookup,
+): number | null {
+  if (typeof deal.probability === 'number') return deal.probability;
+  return lookup(deal.stage, deal.pipeline_id ?? deal.pipelineId ?? null)?.probability ?? null;
+}

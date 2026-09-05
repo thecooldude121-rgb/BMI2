@@ -3,6 +3,8 @@ import { Button } from '../../components/ui/Button';
 import { BarChart3, TrendingUp, Users, DollarSign, Target, Filter, Download } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { aiEngine } from '../../utils/aiEngine';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { isWonWith } from '../../utils/pipelinesApi';
 
 const Analytics: React.FC = () => {
   const { leads, deals, tasks, employees } = useData();
@@ -11,7 +13,11 @@ const Analytics: React.FC = () => {
 
   // Calculate metrics
   const totalPipelineValue = deals.reduce((sum, deal) => sum + deal.value, 0);
-  const wonDeals = deals.filter(deal => deal.stage === 'closed-won');
+  // Outcome by configuration: 'closed-won' is one pipeline's win stage, so
+  // won value, average deal size and conversion rate all excluded every
+  // Renewals and Partnerships win.
+  const { lookup: stageLookup } = useStageLookup();
+  const wonDeals = deals.filter(isWonWith(stageLookup));
   const wonValue = wonDeals.reduce((sum, deal) => sum + deal.value, 0);
   const avgDealSize = wonDeals.length > 0 ? wonValue / wonDeals.length : 0;
   
@@ -31,7 +37,7 @@ const Analytics: React.FC = () => {
   const teamPerformance = employees.map(emp => {
     const empLeads = leads.filter(lead => lead.assignedTo === emp.id);
     const empDeals = deals.filter(deal => deal.assignedTo === emp.id);
-    const empWonDeals = empDeals.filter(deal => deal.stage === 'closed-won');
+    const empWonDeals = empDeals.filter(isWonWith(stageLookup));
     
     return {
       name: emp.name,
@@ -210,7 +216,7 @@ const Analytics: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">AI Predictions</h3>
             <div className="space-y-4">
               {deals.filter(d => !d.stage.startsWith('closed')).slice(0, 3).map(deal => {
-                const prediction = aiEngine.predictDealOutcome(deal, deals);
+                const prediction = aiEngine.predictDealOutcome(deal, deals, stageLookup);
                 return (
                   <div key={deal.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-2">

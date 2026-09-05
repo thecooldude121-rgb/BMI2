@@ -162,12 +162,26 @@ export const dealValue = (d: DashboardDeal): number => {
   return Number.isFinite(n) ? (n as number) : 0;
 };
 
-/**
- * deals.stage has no CHECK constraint, and the live table holds values outside
- * the pipeline_stages list — 'partner-evaluation' and 'renewal-quoted' among
- * them. So "is this deal closed" has to be asked by prefix rather than by
- * matching a known set, or those rows silently count as open pipeline.
+/*
+ * OUTCOME CLASSIFICATION MOVED TO utils/pipelinesApi (isWonWith / isLostWith /
+ * isOpenWith), which asks the workspace's own configuration.
+ *
+ * These three compared the slug to the literals 'closed-won' and 'closed-lost',
+ * which is right only for the default pipeline. A Renewals deal wins at
+ * `renewal-won` and a Partnerships deal at `partner-active`, so both counted as
+ * OPEN — in the dashboard's won-deals tile and in the Reports page's win rate.
+ *
+ * The comment that stood here made the situation sound handled: it said the
+ * check had to be "by prefix rather than by matching a known set", naming
+ * partner-evaluation and renewal-quoted specifically. The code underneath did
+ * neither — it was exact equality against two literals. A comment describing a
+ * defence the code does not implement is worse than no comment, so it goes with
+ * them.
+ *
+ * They are NOT re-exported as no-argument predicates. `deals.filter(isClosedWon)`
+ * was the usage, and Array.prototype.filter passes (element, index, array) — so
+ * a version taking optional metadata as a second parameter would silently
+ * receive a number and classify every deal as open. The replacements take the
+ * lookup first and return the predicate, which makes a stale call site fail to
+ * compile instead.
  */
-export const isClosedWon = (d: DashboardDeal): boolean => d.stage === 'closed-won';
-export const isClosedLost = (d: DashboardDeal): boolean => d.stage === 'closed-lost';
-export const isOpen = (d: DashboardDeal): boolean => !isClosedWon(d) && !isClosedLost(d);

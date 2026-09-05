@@ -18,7 +18,10 @@ import { getDealVelocity } from '../../utils/dealVelocity';
 import { findDuplicatePairs } from '../../utils/duplicateDetection';
 import type { DuplicatePair, DuplicatableDeal } from '../../utils/duplicateDetection';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
-import { fetchPipelines, buildStageLookup, type ApiPipeline } from '../../utils/pipelinesApi';
+import {
+  fetchPipelines, buildStageLookup, isOpenWith, isWonWith, isLostWith,
+  weightedProbability, type ApiPipeline,
+} from '../../utils/pipelinesApi';
 import type { DataQualityIssue } from '../../utils/dealDataQuality';
 
 // ── Advanced filter builder predicate ─────────────────────────────────────────
@@ -84,6 +87,12 @@ interface Deal {
   closeDate: string;
   stage: string;
   aiScore: number;
+  /**
+   * The stored probability with NULL preserved — see DealCard.probabilityRaw.
+   * aiScore is `d.probability || 0` and cannot tell "unset" from an explicit 0%,
+   * which the weighted forecast has to distinguish (design question 3).
+   */
+  probabilityRaw?: number | null;
   contactName: string;
   contactTitle: string;
   owner: string;
@@ -1192,32 +1201,64 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     () => sortedDeals.reduce((sum, deal) => sum + getReportingAmount(deal, reportingCurrency), 0),
     [sortedDeals, reportingCurrency],
   );
+  /*
+   * WIN RATE. Both halves were literal comparisons, so a Renewals or
+   * Partnerships outcome landed in NEITHER the numerator nor the denominator —
+   * the figure was computed over the default pipeline alone while being labelled
+   * as the workspace's rate.
+   */
   const computedWinRate = useMemo(() => {
-    const closed = allDeals.filter(d => d.stage === 'closed-won' || d.stage === 'closed-lost');
-    if (closed.length === 0) return null;
-    return Math.round((closed.filter(d => d.stage === 'closed-won').length / closed.length) * 100);
-  }, [allDeals]);
+    const won = allDeals.filter(isWonWith(stageLookup));
+    const lost = allDeals.filter(isLostWith(stageLookup));
+    const closed = won.length + lost.length;
+    if (closed === 0) return null;
+    return Math.round((won.length / closed) * 100);
+  }, [allDeals, stageLookup]);
 
   // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
   const kpiClosingCount  = filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7)).length;
   const kpiStalledCount  = filteredDeals.filter(d => isStalled(d)).length;
 
   const computedAvgDaysToClose = useMemo(() => {
-    const closedWon = filteredDeals.filter(d => d.stage === 'closed-won' && d.createdAt && d.closeDate);
+    const closedWon = filteredDeals.filter(d => isWonWith(stageLookup)(d) && d.createdAt && d.closeDate);
     if (closedWon.length === 0) return null;
     const total = closedWon.reduce((sum, d) => {
       const ms = new Date(d.closeDate).getTime() - new Date(d.createdAt!).getTime();
       return sum + Math.max(0, Math.round(ms / 86_400_000));
     }, 0);
     return Math.round(total / closedWon.length);
-  }, [filteredDeals]);
+  }, [filteredDeals, stageLookup]);
 
-  const weightedForecast = useMemo(() =>
-    filteredDeals
-      .filter(d => d.stage !== 'closed-won' && d.stage !== 'closed-lost')
-      .reduce((sum, d) => sum + getReportingAmount(d, reportingCurrency) * (d.aiScore / 100), 0),
-    [filteredDeals, reportingCurrency],
-  );
+  /*
+   * WEIGHTED FORECAST — two fixes, both of which move a revenue number.
+   *
+   * 1. OUTCOMES BY TYPE. It excluded only the literals 'closed-won' and
+   *    'closed-lost', so a WON Renewals or Partnerships deal was weighted into
+   *    the forecast as though it were still in flight — counting revenue already
+   *    booked as revenue still to come.
+   *
+   * 2. UNSET PROBABILITY IS EXCLUDED, NOT ZEROED (design Q3, settled). A deal
+   *    with no probability of its own and a stage with none either contributed
+   *    `value × 0` — silently dragging the total down by the full value of every
+   *    unassessed deal, and doing it in a way that looks like a smaller pipeline
+   *    rather than a missing input. It is now left out, and the count of
+   *    exclusions is surfaced next to the figure so the total is never quietly
+   *    computed over fewer deals than the user thinks.
+   */
+  const weightedForecast = useMemo(() => {
+    const open = filteredDeals.filter(isOpenWith(stageLookup));
+    let total = 0;
+    let unweighted = 0;
+    for (const d of open) {
+      // probabilityRaw, NOT aiScore: aiScore is `d.probability || 0`, so an
+      // unset probability arrives as a real 0 and would be weighted in as an
+      // explicit "will not close" rather than excluded as unassessed.
+      const p = weightedProbability({ ...d, probability: d.probabilityRaw ?? null }, stageLookup);
+      if (p === null) { unweighted++; continue; }
+      total += getReportingAmount(d, reportingCurrency) * (p / 100);
+    }
+    return { total, unweighted, counted: open.length - unweighted };
+  }, [filteredDeals, reportingCurrency, stageLookup]);
 
   const PIPELINE_STAGES = stageOrder;
   const stageSummary = useMemo(() => {
@@ -2060,11 +2101,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           return (
             <td key="health" className={`hidden md:table-cell ${cellPadding}`}>
               <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
-                deal.stage === 'closed-won'
+                isWonWith(stageLookup)(deal)
                   ? 'bg-emerald-100 text-emerald-700'
                   : 'bg-red-100 text-red-600'
               }`}>
-                {deal.stage === 'closed-won' ? 'Won' : 'Lost'}
+                {isWonWith(stageLookup)(deal) ? 'Won' : 'Lost'}
               </span>
             </td>
           );
@@ -2759,7 +2800,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Win Score Signals</div>
                       {isClosed ? (
                         <div className="flex items-center gap-2">
-                          {deal.stage === 'closed-won'
+                          {isWonWith(stageLookup)(deal)
                             ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
                             : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
                         </div>
@@ -3135,12 +3176,33 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           {/* Card 7: Weighted Forecast — Σ value × probability for active deals */}
           <div
             className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-l-4 border-violet-200 border-l-violet-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
-            title={`Weighted pipeline: sum of deal value × win probability for all active deals in current filter · ${reportingCurrency}`}
+            title={
+              `Weighted pipeline: sum of deal value × win probability for the ` +
+              `${weightedForecast.counted} open deal${weightedForecast.counted === 1 ? '' : 's'} ` +
+              `in this filter that have a probability set · ${reportingCurrency}` +
+              (weightedForecast.unweighted
+                ? `. ${weightedForecast.unweighted} excluded for having none — they are NOT counted as zero.`
+                : '')
+            }
           >
             <div className="text-xl sm:text-3xl font-black text-violet-900 tabular-nums">
-              {formatAmountUSD(weightedForecast)}
+              {formatAmountUSD(weightedForecast.total)}
             </div>
             <div className="text-xs text-violet-700 font-medium mt-1 uppercase tracking-wide">Weighted Forecast</div>
+            {weightedForecast.unweighted > 0 && (
+              /*
+               * SAID ON THE CARD, NOT ONLY IN A TOOLTIP.
+               *
+               * Excluding an unassessed deal and counting it as zero produce the
+               * SAME total — a sum is a sum. The whole difference is whether the
+               * shortfall is declared, so hiding that in a hover would give back
+               * exactly what the change was for: a number quietly computed over
+               * fewer deals than the user is looking at.
+               */
+              <div className="text-[11px] text-violet-800 mt-1 normal-case leading-tight">
+                {weightedForecast.unweighted} deal{weightedForecast.unweighted === 1 ? '' : 's'} excluded — no probability set
+              </div>
+            )}
           </div>
 
           {/* Card 8: Duplicate Pairs — only shown when pairs exist */}

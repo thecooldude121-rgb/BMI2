@@ -316,6 +316,8 @@ const DealsKanbanPage: React.FC = () => {
             closeDate: normalizeDateField(d.expected_close_date),
             stage: stage.id,
             aiScore: d.probability || 0,
+            // NULL kept, unlike aiScore above — see DealCard.probabilityRaw.
+            probabilityRaw: d.probability ?? null,
             contactName: d.contact_name || '',
             contactTitle: d.contact_title || '',
             owner: d.assigned_to || 'Unassigned',
@@ -521,9 +523,18 @@ const DealsKanbanPage: React.FC = () => {
     const totalDeals = activeDeals.length;
     const totalValue = activeDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-    // Win rate uses per-stage arrays (already deduped within each stage by ingestion)
-    const wonDeals  = stages.find(s => s.id === 'closed-won')?.deals.length  || 0;
-    const lostDeals = stages.find(s => s.id === 'closed-lost')?.deals.length || 0;
+    // Win rate by STAGE TYPE, summed across every terminal column. Finding the
+    // single column literally named 'closed-won' meant the Renewals board's win
+    // rate was always null (no such column exists there) and the Partnerships
+    // board's too — the KPI read "—" on two of three pipelines and nobody could
+    // tell that from a workspace with too few closed deals to show a rate.
+    const columnMeta = (slug: string) => stageLookup(slug, activePipelineSlug);
+    const wonDeals = stages
+      .filter(s => columnMeta(s.id)?.stage_type === 'won')
+      .reduce((n, s) => n + s.deals.length, 0);
+    const lostDeals = stages
+      .filter(s => columnMeta(s.id)?.stage_type === 'lost')
+      .reduce((n, s) => n + s.deals.length, 0);
     const closedTotal = wonDeals + lostDeals;
     // Require ≥3 closed deals before showing a rate; below that a single win
     // produces 100 % which is statistically meaningless and erodes trust.
@@ -545,9 +556,10 @@ const DealsKanbanPage: React.FC = () => {
     const stalledDeals = activeDeals.filter(d => d.daysSinceContact >= 5).length;
 
     // Average sales cycle from closed-won deals that have both dates.
-    const wonWithDates = (stages.find(s => s.id === 'closed-won')?.deals || []).filter(
-      d => d.createdAt && d.closeDate
-    );
+    const wonWithDates = stages
+      .filter(s => columnMeta(s.id)?.stage_type === 'won')
+      .flatMap(s => s.deals)
+      .filter(d => d.createdAt && d.closeDate);
     const rawAvgCycle = wonWithDates.length > 0
       ? Math.round(wonWithDates.reduce((sum, d) => {
           const createdMs = parseDateMs(d.createdAt);

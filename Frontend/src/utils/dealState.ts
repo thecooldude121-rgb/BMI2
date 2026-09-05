@@ -8,7 +8,7 @@
  * shared priority ordering.
  *
  * Architecture:
- *   resolveDealState(deal, closeDaysLeft, isClosed)
+ *   resolveDealState(deal, closeDaysLeft, outcome)
  *     → ResolvedDealState { primary, isHighValue, ... }
  *     → consumed by DealKanbanCard to drive ALL visual treatments
  *
@@ -183,7 +183,13 @@ const HIGH_VALUE_AMOUNT  = 100_000; // deal value threshold for the high-value m
  * @param deal         - The DealCard data object.
  * @param closeDaysLeft - Pre-computed days-from-now (null if no close date).
  *                        Pass the result of daysFromNow(deal.closeDate).
- * @param isClosed     - True if stage is 'closed-won' or 'closed-lost'.
+ * @param outcome      - 'open' | 'won' | 'lost', from the workspace's stage
+ *                       configuration. It used to be a boolean `isClosed`, and
+ *                       this function then read the slug to decide WHICH — so a
+ *                       won Renewals deal was labelled "Lost", because
+ *                       `renewal-won !== 'closed-won'` fell to the else branch.
+ *                       A boolean cannot carry the answer; the caller resolves
+ *                       it once and passes it in.
  *
  * Priority order (first matching rule wins):
  *   1. overdue           closeDaysLeft < 0 (and not closed)
@@ -197,18 +203,19 @@ const HIGH_VALUE_AMOUNT  = 100_000; // deal value threshold for the high-value m
 export function resolveDealState(
   deal: DealCard,
   closeDaysLeft: number | null,
-  isClosed: boolean,
+  outcome: 'open' | 'won' | 'lost',
   stalledOverride?: boolean,
 ): ResolvedDealState {
   const isHighValue = deal.amount >= HIGH_VALUE_AMOUNT;
 
   // Closed stages get a simplified treatment — no urgency states apply.
-  if (isClosed) {
+  if (outcome !== 'open') {
+    const won = outcome === 'won';
     return {
       primary:     'normal',
       isHighValue,
-      chipLabel:   deal.stage === 'closed-won' ? 'Won' : 'Lost',
-      description: deal.stage === 'closed-won'
+      chipLabel:   won ? 'Won' : 'Lost',
+      description: won
         ? `Deal won${isHighValue ? ' — high value' : ''}`
         : `Deal lost`,
     };

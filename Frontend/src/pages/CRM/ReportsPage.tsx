@@ -3,7 +3,9 @@ import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Sparkles, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
-import { useDashboardData, dealValue, isOpen, isClosedWon, isClosedLost } from '../../hooks/useDashboardData';
+import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { isWonWith, isLostWith, isOpenWith } from '../../utils/pipelinesApi';
 
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -182,10 +184,17 @@ const ReportsPage: React.FC = () => {
    * trend regardless of data. Real values were $55,000 / 1 / $1.56M / 50%. The
    * $2.4M was the same fabricated pipeline figure the CRM dashboard carried.
    */
+  const { lookup } = useStageLookup();
+
   const stats = useMemo(() => {
-    const won = deals.filter(isClosedWon);
-    const lost = deals.filter(isClosedLost);
-    const open = deals.filter(isOpen);
+    // The win rate below divides won by (won + lost). Classifying by the
+    // literal 'closed-won' meant a Renewals or Partnerships win landed in
+    // NEITHER bucket — it was counted as open — so the reported win rate was
+    // computed over the default pipeline alone while being labelled as the
+    // workspace's.
+    const won = deals.filter(isWonWith(lookup));
+    const lost = deals.filter(isLostWith(lookup));
+    const open = deals.filter(isOpenWith(lookup));
     const decided = won.length + lost.length;
     return {
       revenueWon: won.reduce((sum, d) => sum + dealValue(d), 0),
@@ -198,7 +207,7 @@ const ReportsPage: React.FC = () => {
       winRate: decided > 0 ? Math.round((won.length / decided) * 100) : null,
       decided,
     };
-  }, [deals]);
+  }, [lookup, deals]);
 
   const money = (n: number): string =>
     n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { isWonWith, isLostWith } from '../../utils/pipelinesApi';
 import { Download, Settings, BarChart3, Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, FileText } from 'lucide-react';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
@@ -44,6 +46,7 @@ interface DealsGridViewProps {
 
 const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onStageChange }) => {
   const navigate = useNavigate();
+  const { lookup: gridStageLookup } = useStageLookup();
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [selectedCloseDate, setSelectedCloseDate] = useState<string>('all');
@@ -380,8 +383,11 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               const stageColor = getStageStyle(deal.stage);
               const daysAway = getDaysAway(deal.closeDate);
               const isStalled = deal.daysSinceContact >= 7;
-              const isWon = deal.stage === 'closed-won';
-              const isLost = deal.stage === 'closed-lost';
+              // Outcome by configuration. These two literals are the default
+              // pipeline's, so a Renewals or Partnerships close showed neither
+              // the won border nor the lost dimming — it rendered as live.
+              const isWon = isWonWith(gridStageLookup)(deal);
+              const isLost = isLostWith(gridStageLookup)(deal);
 
               return (
                 <div

@@ -1090,11 +1090,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <h1 className="text-lg font-semibold text-gray-900 truncate">{deal.dealName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {deal.stage === 'closed-won' ? (
+            {resolvedStage.stage?.stage_type === 'won' ? (
               <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2.5 py-1 flex-shrink-0">
                 ✓ WON
               </span>
-            ) : deal.stage === 'closed-lost' ? (
+            ) : resolvedStage.stage?.stage_type === 'lost' ? (
               <span className="text-xs font-bold text-red-700 bg-red-100 border border-red-200 rounded px-2.5 py-1 flex-shrink-0">
                 ✗ LOST
               </span>

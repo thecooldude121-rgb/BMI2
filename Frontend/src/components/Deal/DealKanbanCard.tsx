@@ -39,6 +39,8 @@ import {
   resolveDealState,
   STATE_TOKENS,
 } from '../../utils/dealState';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { outcomeOf } from '../../utils/pipelinesApi';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { StakeholderContact } from '../../config/contactRoles';
 import CommitteeCoverageBar from './CommitteeCoverageBar';
@@ -57,6 +59,12 @@ export interface DealCard {
   closeDate: string;
   stage: string;
   aiScore: number;
+  /**
+   * The stored probability with NULL preserved. `aiScore` is mapped as
+   * `d.probability || 0`, so it cannot distinguish "unset" from an explicit 0%
+   * — a distinction the weighted forecast depends on. Design question 3.
+   */
+  probabilityRaw?: number | null;
   contactName: string;
   contactTitle: string;
   owner: string;
@@ -175,7 +183,14 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
 
-  const isClosed      = ['closed-won', 'closed-lost'].includes(stageId);
+  // Outcome from configuration, not from two literals: those matched only the
+  // default pipeline, so every Renewals and Partnerships close read as open.
+  const { lookup: stageLookup } = useStageLookup();
+  // No pipeline on the card shape, so the slug is resolved workspace-wide. That
+  // is exact while stage slugs are unique across pipelines, and returns null —
+  // i.e. "open" — if two pipelines ever share one, which is the safe direction.
+  const outcome       = outcomeOf(stageLookup)({ stage: stageId });
+  const isClosed      = outcome !== 'open';
   const closeDaysLeft = daysFromNow(deal.closeDate);
 
   // TODO: activate from API once revenueSchedule is a persisted DB field
@@ -184,7 +199,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
     : null;
 
   // ── Resolve the canonical deal state ──────────────────────────────────────
-  const state  = resolveDealState(deal, closeDaysLeft, isClosed, stalledOverride);
+  const state  = resolveDealState(deal, closeDaysLeft, outcome, stalledOverride);
   const tokens = STATE_TOKENS[state.primary];
 
   // ── Health explanation — computed once, used in score button + popover ────
