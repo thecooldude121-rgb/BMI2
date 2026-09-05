@@ -365,6 +365,11 @@ timeline, though the documents API is now covered.
     samples instead of one. The deals case is a plain date assertion with no timing,
     concurrency or auth component of its own, which is itself evidence the cause is
     environmental rather than in the test.
+  - **Fourth data point, 2026-09-05 (pipeline stages Phase A).**
+    `roundTrip.bulkImportRaces.test.ts` > "six concurrent imports of one account name
+    create it exactly once" failed once in a full-suite run and passed in isolation and in
+    two further full runs. That is four unrelated files now — `idConcurrency`, `rbac`,
+    `deals`, `bulkImportRaces` — every one full-suite-only. Not chased, per instruction.
 - **The id-count enumeration leak** (`C042` reveals a global row count) — deferred, lower
   severity than the race was, closed only by a move to random ids.
 - **Browser-driven form submission** — caveat 1. No form is clicked.

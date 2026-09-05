@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { pool } from '../config/database';
+import { provisionDefaultPipeline, findStage } from '../utils/pipelineStages';
 import { createApp } from '../app';
 
 /**
@@ -69,6 +70,9 @@ async function cleanup() {
   await pool.query('DELETE FROM contacts WHERE tenant_id = ANY($1::uuid[])', [ws]);
   await pool.query('DELETE FROM companies WHERE tenant_id = ANY($1::uuid[])', [ws]);
   await pool.query('DELETE FROM leads WHERE tenant_id = ANY($1::uuid[])', [ws]);
+  // After deals (stage_id FK), and stages before pipelines. Migration 037.
+  await pool.query('DELETE FROM pipeline_stages WHERE tenant_id = ANY($1::uuid[])', [ws]);
+  await pool.query('DELETE FROM pipelines WHERE tenant_id = ANY($1::uuid[])', [ws]);
   await pool.query('DELETE FROM users WHERE tenant_id = ANY($1::uuid[])', [ws]);
   await pool.query('DELETE FROM tenants WHERE id = ANY($1::uuid[])', [ws]);
 }
@@ -80,6 +84,9 @@ beforeAll(async () => {
     `INSERT INTO tenants (id, name, slug) VALUES ($1,'Workspace A','iso-ws-a'), ($2,'Workspace B','iso-ws-b')`,
     [WS_A, WS_B],
   );
+  // Both workspaces need a pipeline before either can hold a deal (migration 037).
+  await provisionDefaultPipeline(WS_A);
+  await provisionDefaultPipeline(WS_B);
 
   // Real users with real bcrypt hashes, so login is a genuine login. Creating
   // fixture users is setup; hand-minting a token would not be — it would skip
@@ -103,11 +110,18 @@ beforeAll(async () => {
             ($2,'Cliff','Contact-B','cliff@iso-b.example',$4)`,
     [IDS.contactA, IDS.contactB, WS_A, WS_B],
   );
+  // stage_id is NOT NULL (migration 037) and each workspace owns its OWN
+  // 'prospecting' row, so the two deals must reference two different stage ids.
+  // Resolved per workspace rather than hardcoded: hardcoding one id would make
+  // one of these deals point across the tenant boundary, which is precisely the
+  // thing this suite exists to prove cannot happen.
+  const stageA = await findStage(WS_A, 'new-business', 'prospecting');
+  const stageB = await findStage(WS_B, 'new-business', 'prospecting');
   await pool.query(
-    `INSERT INTO deals (id, name, title, value, stage, tenant_id)
-     VALUES ($1,'Deal in A','Deal in A',1000,'prospecting',$3),
-            ($2,'Deal in B','Deal in B',2000,'prospecting',$4)`,
-    [IDS.dealA, IDS.dealB, WS_A, WS_B],
+    `INSERT INTO deals (id, name, title, value, stage, stage_id, tenant_id)
+     VALUES ($1,'Deal in A','Deal in A',1000,'prospecting',$5,$3),
+            ($2,'Deal in B','Deal in B',2000,'prospecting',$6,$4)`,
+    [IDS.dealA, IDS.dealB, WS_A, WS_B, stageA!.id, stageB!.id],
   );
   await pool.query(
     `INSERT INTO tasks (id, title, tenant_id) VALUES ($1,'Task in A',$3), ($2,'Task in B',$4)`,

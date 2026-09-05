@@ -411,18 +411,24 @@ pass.
 
 ---
 
-## 7. Open questions — I want answers before Phase A, not during
+## 7. Open questions
 
-1. **Should `deals.stage_id` be `NOT NULL`?** Every deal has a stage today, but the column
-   permits NULL and the Add Deal form defaults to `'prospecting'` in application code. If
-   NOT NULL, the default belongs in the schema (first `open` stage by position) rather than
-   in a controller. Recommend NOT NULL with the app supplying it explicitly, but this is the
-   same "may a deal have no value" shape as the `deals.value` question and should be
-   decided, not defaulted.
-2. **Do stages belong to a pipeline, or to a workspace?** This design keeps them per
-   pipeline (matching the existing FK). It means renaming "Qualified" in New Business does
-   not rename it in Renewals — correct, but it does mean three edits for a workspace that
-   thinks of them as one list.
+**Q1 and Q2 are SETTLED (2026-09-05). Q3-Q5 remain open and are Phase B concerns.**
+
+1. **SETTLED — `deals.stage_id` IS `NOT NULL`, applied at the end of Phase A.**
+   The `deals.value` precedent points the other way here, and the distinction is the
+   point: that question stays open because *"amount not yet known"* is a genuine state of
+   an early deal. *"Not in any stage"* is not — a deal's stage IS its position in the
+   process, and a stage-less deal cannot render on the Kanban at all. The data agreed
+   (25/25 populated, and the column had been nullable the whole time), and so did both
+   write paths: the form sends `stages[0].id`, `createDeal` did `stage || 'prospecting'` —
+   the same shape as `parseFloat(d.value) || 0`. Applied in Phase A rather than Phase C so
+   the 26-file Phase B cutover does not run with an invariant everything assumes and
+   nothing enforces. No schema default: "first open stage" is per-pipeline and cannot be
+   expressed in DDL, so the application supplies it.
+2. **SETTLED — stages belong to a pipeline**, matching the existing FK. Renaming
+   "Qualified" in New Business does not rename it in Renewals. Changing this is a larger
+   redesign, not a Phase A decision.
 3. **`partner-evaluation` and `renewal-quoted` have no `probability`.** Backfilled as NULL.
    Should the UI show "not set", or should forecasting treat NULL as 0? Recommend "not set"
    and exclude from weighted forecast, since 0 is a claim.
@@ -435,6 +441,35 @@ pass.
    owning their team's pipeline is a plausible ask.
 
 ---
+
+## 7a. What Phase A found that the design did not predict
+
+Recorded because each was discovered by building or testing rather than by planning, and
+because two of them changed the design.
+
+- **A workspace with no pipeline cannot hold a deal at all.** `stage_id` is NOT NULL and
+  resolves against the workspace's own configuration, so a workspace created *after* the
+  migration has nothing to resolve and every deal creation in it fails. Thirty round-trip
+  tests failed on this. Fixed with `provisionDefaultPipeline()`, called wherever a
+  workspace is created, plus a migration step for any existing tenant with no deals to
+  backfill from. **When real workspace creation is built, it must call it.**
+- **"Backfill only what deals reference" produces unusable pipelines.** The dry run gave
+  `renewals` and `partnerships` exactly ONE stage each and NO won or lost stage, because
+  only one deal sat in each. Deals in them could never be closed. The backfill now
+  materialises the full catalogue for a pipeline slug this codebase already ships —
+  transcription, not invention — and reports any pipeline still lacking an outcome stage.
+- **The suffix heuristic would have been wrong on real data, not hypothetically.** The
+  partnerships pipeline ends at `partner-active` (won) and `partner-inactive` (lost).
+  Neither ends in `-won` or `-lost`. A `LIKE '%-won'` rule would have dropped a whole
+  pipeline's outcomes out of the forecast, using stages this product actually ships.
+- **`createDeal` defaulted pipeline and stage independently**, so a deal created with
+  `pipeline_id: 'renewals'` and no stage was written into `prospecting` — a stage not in
+  that pipeline. Unreachable from the form, reachable from the API. Resolving the default
+  from the deal's own pipeline makes it unrepresentable.
+- **The bulk stage action never validated anything**: any string was written to every
+  selected deal. It now resolves per deal against that deal's own pipeline, since a
+  selection can span pipelines, and reports what it could not move instead of silently
+  counting it as "already in that state".
 
 ## 8. What this design deliberately does not do
 

@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { pool } from '../config/database';
+import { provisionDefaultPipeline } from '../utils/pipelineStages';
 import { createApp } from '../app';
 
 /**
@@ -38,6 +39,12 @@ export async function setupWorkspace(label: string): Promise<TestWorkspace> {
   );
   const tenantId = tenant.rows[0].id;
 
+  // A workspace without a pipeline cannot hold a deal at all: deals.stage_id is
+  // NOT NULL (migration 037) and is resolved from the workspace's own stage
+  // configuration, so with none there is nothing to resolve. Real workspace
+  // creation must do this too — see provisionDefaultPipeline's note.
+  await provisionDefaultPipeline(tenantId);
+
   const email = `rt-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@roundtrip.example`;
   const user = await pool.query(
     `INSERT INTO users (email, password_hash, first_name, last_name, role, tenant_id)
@@ -69,6 +76,13 @@ export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
   await pool.query('DELETE FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM leads WHERE tenant_id = $1', [ws.tenantId]);
+  // AFTER deals, which reference pipeline_stages via stage_id (migration 037),
+  // and stages before pipelines, which they reference in turn. Same reason
+  // documents had to be added above: a leftover row blocks the tenant delete
+  // with its own tenant_id FK, and the error names the child table rather than
+  // the ordering mistake.
+  await pool.query('DELETE FROM pipeline_stages WHERE tenant_id = $1', [ws.tenantId]);
+  await pool.query('DELETE FROM pipelines WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM users WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ws.tenantId]);
 }

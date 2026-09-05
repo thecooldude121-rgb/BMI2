@@ -427,16 +427,32 @@ Recorded here because it was scoped in a planning conversation OUTSIDE the repo 
 therefore could not be found on disk. If a work item is agreed somewhere else, add a line
 here in the same session, or the next person re-derives it or guesses wrong.
 
-- **Item 5 — configurable deal pipeline stages.** Stages are fixed today: a hardcoded
-  array in `Frontend/src/config/pipelines.ts`, duplicated as six-element literals in six
-  more frontend files, while `deals.stage` is free `varchar(20)` text that nothing
-  validates. Make stages per-tenant configuration a workspace can add, rename, reorder and
-  retire. Design first (see `PIPELINE_STAGES_DESIGN.md`), then implement — the
-  `token_version` precedent.
+- **Item 5 — configurable deal pipeline stages. PHASE A IS DONE; Phase B is next.**
+  Design in `PIPELINE_STAGES_DESIGN.md`, schema in migration 037. Phase A made stages real
+  per-tenant rows (`pipeline_stages` gained `slug`, `stage_type`, `archived_at`) and
+  `deals.stage_id` a NOT NULL foreign key, dual-written alongside the `stage` text column
+  which is still what reads use. **Phase B is the cutover** — the stage-config API and
+  admin UI, and the 26 frontend files carrying hardcoded stage knowledge, one vertical
+  slice at a time with the Kanban first. Phase C drops `deals.stage` and `is_won`/`is_lost`.
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
   share nothing but the word "configuration"; do not fold one into the other.
+
+## Pipeline stages
+
+### Every workspace must be provisioned with a pipeline
+`deals.stage_id` is NOT NULL (migration 037) and is resolved against the workspace's own
+stage configuration, so **a workspace with no pipeline cannot create a single deal** — the
+write fails with a 400 rather than anything that points at the real cause. Call
+`provisionDefaultPipeline()` (`utils/pipelineStages.ts`) wherever a workspace is created.
+Today only the test helpers create workspaces; **when real workspace creation ships in the
+Settings module, it must call it too.** This was found by thirty round-trip tests failing
+at once, not by the design.
+
+Related: a stage is never accepted from a request body as an id. A caller names a stage by
+slug and the server decides which row that is, scoped to the caller's workspace — so a
+stage id from another workspace has no shape in which it can be sent.
 
 ## Known gaps in the auth shell
 - **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in

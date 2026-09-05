@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
+import { resolveStageForWrite, findStage, STAGE_NOT_IN_WORKSPACE } from '../utils/pipelineStages';
 import { workspaceDefaultCurrency } from './workspaceController';
 
 /**
@@ -241,6 +242,26 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     // column's own 'USD' default when the workspace has not chosen one.
     const resolvedCurrency = currency || (await workspaceDefaultCurrency(tenantId)) || 'USD';
 
+    // STAGE. deals.stage_id is NOT NULL as of migration 037, so this cannot be
+    // skipped: an unresolved stage would reach Postgres as a raw 23502 and be
+    // masked as a bare 500, which is the failure this file already unmasked once
+    // for deals.value. Resolved here, as a clean 400 naming the field.
+    //
+    // The fallback is the deal's OWN pipeline's first open stage. That fixes a
+    // real latent bug rather than merely satisfying the constraint: this path
+    // used to default `pipeline_id || 'new-business'` and `stage || 'prospecting'`
+    // INDEPENDENTLY, so a deal created with pipeline_id 'renewals' and no stage
+    // was written into 'prospecting' — a stage that does not exist in the
+    // renewals pipeline. The form always sends a stage so it was never reached
+    // through the UI, but the API is not the form.
+    const resolvedPipeline = pipeline_id || 'new-business';
+    const resolved = await resolveStageForWrite(tenantId, resolvedPipeline, stage);
+    if (resolved.error || !resolved.stage) {
+      res.status(400).json({ success: false, message: resolved.error ?? STAGE_NOT_IN_WORKSPACE });
+      return;
+    }
+    const stageRow = resolved.stage;
+
     const result = await pool.query(
       `INSERT INTO deals
          (name, title, lead_id, value, currency, base_amount_usd,
@@ -256,16 +277,19 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           discovery_date,
           platform_fee, custom_fee, license_fee, onboarding_fee, white_labelling_fee,
           exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
-          tenant_id)
+          stage_id, tenant_id)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
        RETURNING *`,
       [
         dealName, title || dealName, lead_id, value,
         resolvedCurrency, base_amount_usd ?? value,
-        pipeline_id || 'new-business', pipeline_name || 'New Business',
+        resolvedPipeline, pipeline_name || 'New Business',
         deal_type || 'new-business',
-        stage || 'prospecting', probability || 0, expected_close_date,
+        // DUAL-WRITE, and the text comes from the RESOLVED ROW rather than from
+        // the request body. Echoing the body back would let stage and stage_id
+        // disagree the moment a caller sent a differently-cased or unknown slug.
+        stageRow.slug, probability || 0, expected_close_date,
         close_date_is_past ?? false, close_date_override_reason ?? null,
         forecast_category ?? null,
         assigned_to, description, next_step ?? null,
@@ -287,6 +311,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         exchange_rate ?? 1, nr_margin ?? null,
         start_date ?? null, contract_end_date ?? null,
         country ?? null, account_industry ?? null,
+        stageRow.id,
         tenantId,
       ]
     );
@@ -333,6 +358,35 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
         res.status(400).json({ success: false, message: 'value must be a non-negative number.' });
         return;
       }
+    }
+
+    // STAGE, kept in step with stage_id. This generic update loop writes any
+    // field named in `fields`, so before 037 a caller could set `stage` to any
+    // string at all and nothing validated it — which is how deals ended up in
+    // stages no configuration listed. Now an explicitly supplied stage is
+    // resolved against the deal's own pipeline (the one it is being moved to, if
+    // that is changing in the same request) and both columns are written
+    // together. An omitted stage leaves both untouched, so partial updates are
+    // unaffected.
+    let resolvedStageId: string | null = null;
+    if (req.body.stage !== undefined) {
+      const currentRow = await pool.query(
+        'SELECT pipeline_id FROM deals WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, tenantId],
+      );
+      if (!currentRow.rows[0]) {
+        res.status(404).json({ success: false, message: 'Deal not found' });
+        return;
+      }
+      const targetPipeline = req.body.pipeline_id ?? currentRow.rows[0].pipeline_id;
+      const found = await findStage(tenantId, targetPipeline, String(req.body.stage ?? '').trim());
+      if (!found) {
+        res.status(400).json({ success: false, message: STAGE_NOT_IN_WORKSPACE });
+        return;
+      }
+      resolvedStageId = found.id;
+      // The resolved slug, not the raw body, so the two columns cannot diverge.
+      req.body.stage = found.slug;
     }
 
     const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
@@ -391,6 +445,14 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     if (newValueHistory !== null) {
       updates.push(`value_history = $${i++}`);
       params.push(JSON.stringify(newValueHistory));
+    }
+    // The other half of the dual-write. `stage` went in through the generic loop
+    // above (already normalised to the resolved slug); stage_id is not in
+    // `fields` because it is never accepted from a request body — a caller names
+    // a stage, the server decides which row that is.
+    if (resolvedStageId !== null) {
+      updates.push(`stage_id = $${i++}`);
+      params.push(resolvedStageId);
     }
     if (!updates.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     updates.push(`updated_at = NOW()`);
@@ -463,7 +525,7 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
     // Lock the row so two concurrent moves cannot interleave and record a
     // from_stage that was never actually the deal's stage.
     const current = await client.query(
-      'SELECT id, stage, probability FROM deals WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+      'SELECT id, stage, probability, pipeline_id FROM deals WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
       [req.params.id, tenantId],
     );
     if (!current.rows[0]) {
@@ -479,27 +541,47 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
       return;
     }
 
-    // Probability: explicit override wins; otherwise take the pipeline stage
-    // default. deals.stage holds slugs ('closed-won') while pipeline_stages
-    // holds display names ('Closed Won'), so match on a normalised form. When
-    // there is no match the existing probability is kept rather than guessed.
-    const isOverride = probability !== undefined;
-    let nextProbability: number | null = isOverride ? Number(probability) : null;
-    if (!isOverride) {
-      const stageRow = await client.query(
-        `SELECT probability FROM pipeline_stages
-         WHERE tenant_id = $1
-           AND lower(replace(name, ' ', '-')) = lower(replace($2, ' ', '-'))
-         LIMIT 1`,
-        [tenantId, to_stage],
-      );
-      nextProbability = stageRow.rows[0]?.probability ?? current.rows[0].probability ?? null;
+    // THE TARGET STAGE IS NOW A REAL ROW, RESOLVED ONCE.
+    //
+    // This used to match pipeline_stages by `lower(replace(name,' ','-'))`
+    // against the requested slug — a normalising join that worked by luck of the
+    // current values, silently found nothing for the two stages that had no row
+    // at all, and validated the destination not one bit: any string whatsoever
+    // was an acceptable to_stage, which is how deals reached stages no
+    // configuration listed. Resolution now happens against the deal's own
+    // pipeline and an unknown stage is a clean 400.
+    const target = await findStage(tenantId, current.rows[0].pipeline_id, to_stage, client);
+    if (!target) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ success: false, message: STAGE_NOT_IN_WORKSPACE });
+      return;
+    }
+    // A retired stage still holds the deals already in it, but nothing may move
+    // INTO it — that is what retirement means, and it is why this check is here
+    // rather than only in the stage picker.
+    if (target.archived_at) {
+      await client.query('ROLLBACK');
+      res.status(409).json({
+        success: false,
+        message: `"${target.name}" has been retired, so deals can no longer be moved into it`,
+      });
+      return;
     }
 
+    // Probability: an explicit override wins; otherwise the stage's own default,
+    // read off the row we just resolved rather than looked up a second time.
+    // A stage with no probability keeps the deal's existing one rather than
+    // guessing — NULL means "not set", and 0 would be a claim.
+    const isOverride = probability !== undefined;
+    const nextProbability: number | null = isOverride
+      ? Number(probability)
+      : (target.probability ?? current.rows[0].probability ?? null);
+
     const updated = await client.query(
-      `UPDATE deals SET stage = $1, probability = $2, updated_at = NOW()
+      `UPDATE deals SET stage = $1, probability = $2, stage_id = $5, updated_at = NOW()
        WHERE id = $3 AND tenant_id = $4 RETURNING *`,
-      [to_stage, nextProbability, req.params.id, tenantId],
+      // The RESOLVED slug, not the requested string, so stage and stage_id agree.
+      [target.slug, nextProbability, req.params.id, tenantId, target.id],
     );
 
     const changedBy = resolveActorName(req);
@@ -508,7 +590,9 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
          (deal_id, from_stage, to_stage, probability, probability_override,
           reason_code, note, changed_by, tenant_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [req.params.id, fromStage, to_stage, nextProbability, isOverride,
+      // target.slug, not the raw to_stage: the audit row must say what the deal
+      // actually became, or history and the deal disagree about the same move.
+      [req.params.id, fromStage, target.slug, nextProbability, isOverride,
        reason_code ?? null, note ?? null, changedBy, tenantId],
     );
 
@@ -581,11 +665,15 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
       return;
     }
 
+    // Deals a stage move could not touch, and why. Reported in the response
+    // rather than folded into `skipped`, which cannot say the reason.
+    let stageSkips: { noSuchStage: string[]; retired: string[] } | null = null;
+
     await client.query('BEGIN');
 
     // Resolve which ids actually belong to this tenant, and lock them.
     const existing = await client.query(
-      'SELECT id, stage, probability FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 FOR UPDATE',
+      'SELECT id, stage, probability, pipeline_id FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 FOR UPDATE',
       [deal_ids, tenantId],
     );
     const found = existing.rows;
@@ -651,58 +739,98 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
 
       case 'stage': {
         const toStage = payload!.stage!;
-        // Same probability rule as the single-deal transition: the pipeline
-        // stage default, or the deal's existing value when there is no match.
-        const stageRow = await client.query(
-          `SELECT probability FROM pipeline_stages
-           WHERE tenant_id = $1
-             AND lower(replace(name, ' ', '-')) = lower(replace($2, ' ', '-'))
-           LIMIT 1`,
-          [tenantId, toStage],
-        );
-        const stageDefault: number | null = stageRow.rows[0]?.probability ?? null;
         const changedBy = resolveActorName(req);
 
-        // Deals already in the target stage are left alone, so a bulk move does
-        // not write no-op history rows.
-        const moving = found.filter(d => d.stage !== toStage);
-        for (const deal of moving) {
-          const nextProbability = stageDefault ?? deal.probability ?? null;
+        // A BULK SELECTION CAN SPAN PIPELINES, so one slug cannot be resolved
+        // once for the whole batch. "qualified" exists in new-business and not
+        // in renewals; resolving globally would either move a renewals deal into
+        // another pipeline's stage or fail the whole batch over one deal.
+        //
+        // So each deal is resolved against ITS OWN pipeline, and the ones whose
+        // pipeline has no such stage are reported rather than silently skipped —
+        // the same stance as `not_found` above. The previous code validated
+        // nothing at all: any string was written to every selected deal.
+        const stageCache = new Map<string, Awaited<ReturnType<typeof findStage>>>();
+        const noSuchStage: string[] = [];
+        const retired: string[] = [];
+        let moved = 0;
+
+        for (const deal of found) {
+          const pipelineSlug = deal.pipeline_id as string;
+          if (!stageCache.has(pipelineSlug)) {
+            stageCache.set(pipelineSlug, await findStage(tenantId, pipelineSlug, toStage, client));
+          }
+          const target = stageCache.get(pipelineSlug);
+
+          if (!target) { noSuchStage.push(deal.id); continue; }
+          if (target.archived_at) { retired.push(deal.id); continue; }
+          // Already there: left alone, so a bulk move writes no no-op history.
+          if (deal.stage === target.slug) continue;
+
+          const nextProbability = target.probability ?? deal.probability ?? null;
           await client.query(
-            `UPDATE deals SET stage = $1, probability = $2, updated_at = NOW()
+            `UPDATE deals SET stage = $1, probability = $2, stage_id = $5, updated_at = NOW()
              WHERE id = $3 AND tenant_id = $4`,
-            [toStage, nextProbability, deal.id, tenantId],
+            [target.slug, nextProbability, deal.id, tenantId, target.id],
           );
           await client.query(
             `INSERT INTO deal_stage_history
                (deal_id, from_stage, to_stage, probability, probability_override,
                 reason_code, changed_by, tenant_id)
              VALUES ($1,$2,$3,$4,false,'bulk-update',$5,$6)`,
-            [deal.id, deal.stage, toStage, nextProbability, changedBy, tenantId],
+            [deal.id, deal.stage, target.slug, nextProbability, changedBy, tenantId],
           );
+          moved++;
         }
-        affected = moving.length;
+
+        // Every selected deal failing for the same reason is a mistake in the
+        // request, not a partial success — answer it as one rather than
+        // reporting "0 deals updated" and calling that a 200.
+        if (moved === 0 && noSuchStage.length === found.length && found.length > 0) {
+          await client.query('ROLLBACK');
+          res.status(400).json({ success: false, message: STAGE_NOT_IN_WORKSPACE });
+          return;
+        }
+
+        affected = moved;
+        stageSkips = { noSuchStage, retired };
         break;
       }
     }
 
     await client.query('COMMIT');
 
-    const skipped = foundIds.length - affected;
+    // "already in that state" was the only explanation `skipped` could offer, so
+    // deals the stage move could not touch have to be subtracted out of it —
+    // otherwise a deal whose pipeline lacks the stage is reported as one that
+    // was already in it, which is the wrong reason dressed as a right one.
+    const unmovable = (stageSkips?.noSuchStage.length ?? 0) + (stageSkips?.retired.length ?? 0);
+    const skipped = foundIds.length - affected - unmovable;
+
     res.json({
       success: true,
       action,
       affected,
       requested: deal_ids.length,
       not_found: notFound,
+      ...(stageSkips && unmovable
+        ? {
+            stage_not_in_pipeline: stageSkips.noSuchStage,
+            stage_retired: stageSkips.retired,
+          }
+        : {}),
       // Say plainly when the number touched is not the number asked for, rather
       // than letting the UI report a round "N deals updated".
-      ...(notFound.length || skipped
+      ...(notFound.length || skipped || unmovable
         ? {
             message:
               `${affected} of ${deal_ids.length} updated` +
               (notFound.length ? `; ${notFound.length} not found in your account` : '') +
-              (skipped ? `; ${skipped} already in that state` : ''),
+              (skipped ? `; ${skipped} already in that state` : '') +
+              (stageSkips?.noSuchStage.length
+                ? `; ${stageSkips.noSuchStage.length} in a pipeline that has no such stage` : '') +
+              (stageSkips?.retired.length
+                ? `; ${stageSkips.retired.length} could not move into a retired stage` : ''),
           }
         : {}),
     });
