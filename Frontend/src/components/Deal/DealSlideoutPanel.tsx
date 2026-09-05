@@ -506,13 +506,38 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   const previousFocusRef = useRef<Element | null>(null);
 
   // ── Mount/unmount animation ──────────────────────────────────────────────
+  //
+  // TWO WAYS TO REACH THE OPEN STATE, AND THAT IS THE FIX, NOT BELT-AND-BRACES.
+  //
+  // requestAnimationFrame is here for a real reason: the panel mounts at
+  // `translate-x-full` and the browser has to PAINT that closed position before
+  // the open class is applied, or the CSS transition has nothing to animate
+  // from and the panel simply appears. That part is unchanged.
+  //
+  // What was wrong is that it was the ONLY way isVisible could become true.
+  // rAF callbacks do not run while the document is hidden — measured, not
+  // assumed: a probe in a background tab reported no callback in 1500ms. So a
+  // click in a tab that is not frontmost mounted the panel, fetched the deal
+  // (a real GET /deals/:id in the network log), moved nothing, and left the
+  // dialog parked at translate-x-full — `left: 1540` in a 1540px viewport,
+  // exactly one viewport-width off-screen. Present, functional, invisible, and
+  // silent: no error, no failed request, nothing to see in a screenshot.
+  //
+  // Worse than the pixels: the element carries role="dialog" aria-modal="true"
+  // the whole time, so assistive tech is told a modal is open while sighted
+  // users see nothing, and the focus effect below never runs either because it
+  // keys on isVisible.
+  //
+  // The timeout is the floor. When it wins there was no frame to animate from
+  // anyway, so nothing is lost by skipping the transition; when rAF wins first
+  // the later setState is a no-op on an unchanged value. Both are cancelled on
+  // cleanup so a fast A -> B card switch cannot leave a stale timer.
   useEffect(() => {
-    if (dealId) {
-      previousFocusRef.current = document.activeElement;
-      // requestAnimationFrame ensures the DOM has painted before we apply
-      // the visible class — otherwise the CSS transition never fires.
-      requestAnimationFrame(() => setIsVisible(true));
-    }
+    if (!dealId) return;
+    previousFocusRef.current = document.activeElement;
+    const raf = requestAnimationFrame(() => setIsVisible(true));
+    const timer = window.setTimeout(() => setIsVisible(true), 100);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(timer); };
   }, [dealId]);
 
   // ── Focus close button when panel becomes visible ────────────────────────

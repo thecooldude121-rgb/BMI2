@@ -488,9 +488,12 @@ Coverage is `roundTrip.userRoles.test.ts` (14 tests). Every guard was mutation-t
 each one disabled in turn, confirming a test fails — including the advisory lock, whose
 removal fails the demote-races-deactivate test.
 
-**Not wired into the UI yet.** `TeamManagement` lists the roster and can deactivate and
-reactivate; there is no role picker on it. `rolesAssignableBy` is what should populate one,
-so a manager is never offered `admin`.
+#### TRACKED FOLLOW-UP — no role picker in the UI
+`TeamManagement` lists the roster and can deactivate and reactivate; it has no role control,
+so the endpoint above is reachable only by an API call today. `rolesAssignableBy` is what
+should populate the picker, so a manager is never offered `admin` — the same server-is-the-
+control, picker-is-a-courtesy split as the invite form. Deliberately deferred: it was not
+needed to unblock the admin-only screens, because `david@bmicrm.com` is already an admin.
 
 ### The live workspace has an admin again
 It had four `sales` and one `manager` and **zero admins**, so the stage-configuration screen
@@ -629,6 +632,47 @@ a test asserts exactly that.
 invisible from the product because the nav pointed at the other tree. That is lesson 5,
 and a route constant produces no type error and no failing test when it regresses — so
 `components/Layout/settingsNavigation.test.tsx` pins it.
+
+## Suite stability — ONE tracked flake, six data points
+
+**Canonical tracking lives here.** It accumulated across sessions in
+`PROMPT_C_SUMMARY.md`, which is a dated session record rather than a live document, so the
+tracking moved rather than being kept in two places that would drift.
+
+**The signature, and all four parts must match before adding a data point:**
+
+1. It only ever happens in a **full `npm run test:isolation` run**. The same file passes
+   repeatedly in isolation, and the same full suite passes on re-run.
+2. It presents as a **`401` whose body is `{}`** — which matches no 401 in this codebase,
+   every one of which sends a JSON message — or as a ~30-second wait for a connection.
+3. A failing run **leaves orphaned `rt-` tenants** in `bmi_crm_iso_test`, because the
+   suite's `afterAll` never completes.
+4. The affected test is a **different shape every time**, which is the strongest evidence
+   that the cause is environmental — the shared `pg` pool under load — rather than anything
+   in the test.
+
+Ruled out already: `JWT_EXPIRES_IN` (7 days), and login rate limiting (both limiters set
+`skipSuccessfulRequests`). Neither token expiry nor throttling explains it.
+
+**Six affected files to date, all unrelated:** `roundTrip.idConcurrency`, `roundTrip.rbac`,
+`roundTrip.deals` (a plain date assertion, with no timing or auth component of its own),
+`roundTrip.bulkImportRaces`, `roundTrip.documents`, and — 2026-09-06, during the
+role-change work — `roundTrip.deactivationRace`. That sixth one matched parts 1, 3 and 4 of
+the signature directly: one failure in a full run, five clean full runs and five clean runs
+of that file alone afterwards, and an orphaned `RT mutual-1-…` tenant left behind (since
+deleted and re-counted). Part 2 could NOT be confirmed — the failing run's output was lost
+before the test name was captured, so the bodyless 401 is inferred from the other three, not
+observed. Recorded that way deliberately.
+
+A mechanism consistent with all of it, and worth starting the eventual debugging pass from:
+in that suite two requests race to deactivate each other and the test accepts `[200, 401,
+409]`. A spurious 401 under pool pressure would pass the status assertion, skip its
+deactivation, and leave TWO privileged members where the test asserts exactly one — a
+failure that looks nothing like an auth problem in the output.
+
+**It still deserves a dedicated debugging pass**, and the first thing to instrument is pool
+acquisition (`pool.totalCount` / `idleCount` / `waitingCount`) during a full run, not any
+individual test.
 
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions

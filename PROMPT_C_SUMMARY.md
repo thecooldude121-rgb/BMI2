@@ -344,7 +344,11 @@ timeline, though the documents API is now covered.
 - **`DELETE` on lead notes and saved views checks no OWNERSHIP**, so any workspace member
   can delete another's. A missing ownership predicate rather than a missing role check;
   found while scoping the RBAC work and reported, not fixed.
-- **Suite stability: a bodyless-401 flake, NOT confined to one file.** Previously recorded as
+- **Suite stability: a bodyless-401 flake, NOT confined to one file.**
+  **TRACKING HAS MOVED TO CLAUDE.md ("Suite stability — ONE tracked flake"), which now owns
+  the signature and the running list of affected files. The account below is kept as the
+  dated record of how it accumulated; add new data points to CLAUDE.md, not here.**
+  Previously recorded as
   always occurring in `roundTrip.idConcurrency`; it has since appeared in
   `roundTrip.rbac.test.ts` as well, so that characterisation was wrong. It presents as a
   `401` whose body is `{}` — which matches no 401 in the codebase, since every one of them

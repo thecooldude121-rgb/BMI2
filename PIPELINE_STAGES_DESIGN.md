@@ -686,9 +686,31 @@ an explicit 0% arrive identical. A `probabilityRaw` field preserves the NULL.
   - **A D019-shaped deal renders.** Null owner and null close date — the two things that
     visibly distinguish this deal — do not break the panel.
 
-  What is left is a live-DOM question (animation, stacking or viewport position of a
-  `position: fixed`, `right: 0` portal), which needs a signed-in browser session to settle.
-  Not caused by the column drop either way — no column participates in an onClick.
+  **ROOT CAUSE, measured in the live DOM: the animation state, not stacking and not
+  position.** The dialog was present with `z-index: 50` and nothing over it, and its
+  position was the symptom rather than the cause — it still carried the CLOSED class,
+  `translate-x-full`, giving `transform: matrix(1,0,0,1,420,0)` and `left: 1540` in a 1540px
+  viewport: exactly one viewport width off-screen.
+
+  `isVisible` could only become true through `requestAnimationFrame(() => setIsVisible(true))`,
+  and **rAF callbacks do not run while the document is hidden** — proven in the page rather
+  than assumed: `document.hidden === true` and a probe rAF that never fired in 1500 ms. So a
+  click in a tab that was not frontmost mounted the panel, fetched the deal, and left it
+  parked, with no error and nothing on screen. The whole "Renewals is different" story was
+  an artefact of which tab happened to be foreground at the time.
+
+  Fixed by giving the open state a second, frame-independent route: rAF is kept (it exists
+  so the browser paints the closed position first and the CSS transition has something to
+  animate from), with a 100 ms timeout as the floor. When the timeout wins there was no
+  frame to animate anyway. Verified live in the same hidden-tab condition: transform is now
+  identity, the panel sits at 1120–1540, and it renders D019's real values — $24K, 75%,
+  `renewal-quoted`, no close date — matching the database row.
+
+  Worth noting beyond the pixels: the element carries `role="dialog" aria-modal="true"` the
+  whole time it is parked off-screen, so assistive tech was told a modal was open while
+  nobody could see it, and the focus effect never ran because it keys on `isVisible`.
+  `DealSlideoutPanel.visibility.test.tsx` pins both halves — open with no frame ever, and
+  the animation still deferred when there is one.
 - **`mark-won` / `mark-lost` use `window.confirm`.** A native dialog, in a codebase whose
   every other confirmation is a custom modal, and it blocks browser automation outright —
   so that path is verified by unit test only, not through the UI. Worth replacing when the
