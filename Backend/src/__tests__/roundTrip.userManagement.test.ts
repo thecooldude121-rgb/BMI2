@@ -315,6 +315,48 @@ describe('User management — round trip', () => {
       expect(after.rows[0].n).toBe(before.rows[0].n);
     });
 
+    it('PRIVILEGE ESCALATION: a manager cannot invite an admin', async () => {
+      // POST /invites is gated on requireRole('admin','manager') and the body's
+      // role was validated only against the full list, so a manager could mint
+      // an admin: invite themselves at a second address as admin, accept, and
+      // hold an account that can do everything they cannot — including
+      // deactivating them. Two steps and no exploit needed.
+      const manager = await addUserWithRole(ws, 'manager');
+      const res = await request(app).post('/api/v1/invites').set(auth(manager))
+        .send({ email: `esc.${Date.now()}@example.com`, role: 'admin' });
+
+      // 403: the request is well-formed and 'admin' is a real role. What fails
+      // is authorisation — the same class of refusal requireRole itself returns.
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+      expect(res.body.message).toMatch(/only invite roles at or below your own/i);
+
+      // Nothing written, so there is no token to redeem.
+      const rows = await pool.query(
+        `SELECT count(*)::int AS n FROM workspace_invites
+          WHERE workspace_id = $1 AND role = 'admin' AND accepted_at IS NULL AND revoked_at IS NULL`,
+        [ws.tenantId]);
+      expect(rows.rows[0].n).toBe(0);
+    });
+
+    it('a manager CAN still invite at or below their own level', async () => {
+      // The guard must not break the ordinary case it exists to bound.
+      const manager = await addUserWithRole(ws, 'manager');
+      for (const role of ['sales', 'hr', 'manager']) {
+        const res = await request(app).post('/api/v1/invites').set(auth(manager))
+          .send({ email: `ok.${role}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role });
+        expect(res.status, `${role}: ${JSON.stringify(res.body)}`).toBe(201);
+        // createInvite answers under `invite`, not `data`.
+        expect(res.body.invite.role).toBe(role);
+      }
+    });
+
+    it('an ADMIN may still invite an admin — the rule is "not above your own"', async () => {
+      const res = await request(app).post('/api/v1/invites').set(auth(ws))
+        .send({ email: `adm.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role: 'admin' });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(res.body.invite.role).toBe('admin');
+    });
+
     it('negative: inviting an existing member is a clean 409', async () => {
       const res = await request(app).post('/api/v1/invites').set(auth(ws))
         .send({ email: sales.email, role: 'sales' });

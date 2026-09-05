@@ -181,7 +181,31 @@ export async function reactivateMember(id: string): Promise<WorkspaceMember> {
 }
 
 /** Roles an invite may assign. Mirrors ASSIGNABLE_ROLES in invitesController. */
-export const INVITABLE_ROLES = ['sales', 'manager', 'admin'] as const;
+const ALL_INVITABLE_ROLES = ['sales', 'manager', 'admin'] as const;
+export type InvitableRole = (typeof ALL_INVITABLE_ROLES)[number];
+
+/**
+ * The roles a given inviter may hand out — never one above their own.
+ *
+ * The server is the control (`INVITABLE_BY` in invitesController, which answers
+ * 403); this exists so a manager is not offered an option that will be refused.
+ * Offering it and then explaining the refusal is a worse experience than not
+ * offering it, and keeping the two in step is the point of deriving both from
+ * the same rule rather than hardcoding two lists.
+ *
+ * An unknown role gets the narrowest set rather than the widest — the safe
+ * direction when the caller's role is not one we recognise.
+ */
+export function invitableRolesFor(inviterRole: string | undefined): readonly InvitableRole[] {
+  switch ((inviterRole ?? '').toLowerCase()) {
+    case 'admin':   return ALL_INVITABLE_ROLES;
+    case 'manager': return ['sales', 'manager'];
+    default:        return [];
+  }
+}
+
+/** @deprecated Use invitableRolesFor(role) — a manager may not invite an admin. */
+export const INVITABLE_ROLES = ALL_INVITABLE_ROLES;
 
 export interface InviteResult {
   invite: { id: string; email: string; role: string; expires_at: string };

@@ -4,7 +4,7 @@ import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, Us
 import { getRoleDisplayName, getStatusBadgeClass, getStatusIcon } from '../../../utils/teamManagementMockData';
 import {
   fetchMembers, deactivateMember, reactivateMember, inviteMember,
-  fetchPendingInvites, formatLastLogin, INVITABLE_ROLES,
+  fetchPendingInvites, formatLastLogin, invitableRolesFor,
   type WorkspaceMember, type PendingInvite, type InviteResult,
 } from '../../../utils/usersApi';
 import { NotAvailable } from '../../../components/common/NotAvailable';
@@ -424,7 +424,10 @@ const TeamManagement: React.FC = () => {
                 onChange={(e) => setInviteRole(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {INVITABLE_ROLES.map((r) => (
+                {/* Only the roles THIS user may grant. A manager offered
+                    "Admin" would be offered an option the server answers with a
+                    403 — see invitableRolesFor. */}
+                {invitableRolesFor(user?.role).map((r) => (
                   <option key={r} value={r}>{getRoleDisplayName(r as Parameters<typeof getRoleDisplayName>[0])}</option>
                 ))}
               </select>

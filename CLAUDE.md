@@ -439,6 +439,36 @@ here in the same session, or the next person re-derives it or guesses wrong.
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
   share nothing but the word "configuration"; do not fold one into the other.
 
+## Roles — who may grant what
+
+**Nobody may invite someone above their own role.** `POST /invites` is gated on
+`requireRole('admin', 'manager')`, and the role in the body was validated only against the
+full list — so a **manager could invite an admin**, accept the invite at a second address,
+and hold an account that could do everything they could not, including deactivating them.
+Two steps, no exploit required. `INVITABLE_BY` in `invitesController` now bounds it and
+answers **403**; `invitableRolesFor()` keeps the UI picker in step so a manager is never
+offered an option the server will refuse. The server is the control; the picker is a
+courtesy.
+
+### TRACKED GAP — there is no way to change an existing user's role
+`routes/users.ts` has list / deactivate / reactivate and nothing else. A role is set **once**,
+by an invite or by `db:seed:users`, and can never be changed afterwards. Consequences worth
+knowing before anyone plans around it:
+
+- A workspace whose only privileged user is a manager cannot promote them. An admin can
+  only ever be a **new account**, created by an invite — and with `EMAIL_TRANSPORT=log`
+  that invite is delivered nowhere, so the token appears only in the server log.
+- The live workspace is exactly in this state: four `sales` and one `manager`, no admin.
+  Anything gated on `requireRole('admin')` — the stage-configuration screen, for one — is
+  therefore unreachable by anyone in it today.
+
+**Not built deliberately, and not a one-liner.** A role-change endpoint needs the same
+"never above your own role" rule as invites, plus decisions this codebase has not made: who
+may demote an admin, whether the last admin can be demoted (the mutual-deactivation guard
+in `usersController` is the shape that question takes), and whether a demotion should bump
+`token_version` so the old role stops being honoured immediately. Design it before writing
+it.
+
 ## Pipeline stages
 
 ### Every workspace must be provisioned with a pipeline

@@ -25,8 +25,32 @@ import { getEmailService } from '../services/email';
  * than an admin having to re-send. `email_sent` tells the caller which happened.
  */
 
-/** Roles an invite may grant. Mirrors what the app understands. */
+/** Every role the app understands. Not every role every inviter may grant. */
 const ASSIGNABLE_ROLES = ['sales', 'manager', 'hr', 'admin'] as const;
+type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+/**
+ * NOBODY MAY INVITE SOMEONE ABOVE THEIR OWN ROLE.
+ *
+ * `POST /invites` is gated on `requireRole('admin', 'manager')` and the role in
+ * the body was validated only against the full list — so a MANAGER could invite
+ * an ADMIN. That is privilege escalation with two steps and no exploit needed:
+ * a manager invites `themselves+admin@…` as an admin, accepts the invite, and
+ * holds an account that can do everything they could not, including
+ * deactivating them. It defeats the whole point of having a role above manager.
+ *
+ * The rule is the standard one — you can grant your own level and below, never
+ * above — and it is enforced HERE rather than in the UI, because the UI hiding
+ * the option is a courtesy and this is the control.
+ *
+ * Found while building the stage-configuration screen (Q5, admin-only) and
+ * noticing that a manager could simply mint themselves an admin. Unrelated to
+ * pipeline stages; fixed on its own.
+ */
+const INVITABLE_BY: Record<string, readonly AssignableRole[]> = {
+  admin:   ['sales', 'hr', 'manager', 'admin'],
+  manager: ['sales', 'hr', 'manager'],
+};
 
 /** Long enough that guessing is hopeless; url-safe so it survives an email client. */
 const TOKEN_BYTES = 32;
@@ -51,8 +75,27 @@ export const createInvite = async (req: AuthRequest, res: Response, next: NextFu
       res.status(400).json({ success: false, message: 'A valid email is required' });
       return;
     }
-    if (!ASSIGNABLE_ROLES.includes(role as typeof ASSIGNABLE_ROLES[number])) {
+    if (!ASSIGNABLE_ROLES.includes(role as AssignableRole)) {
       res.status(400).json({ success: false, message: `role must be one of: ${ASSIGNABLE_ROLES.join(', ')}` });
+      return;
+    }
+
+    // The escalation guard. `requireRole` already established the caller is an
+    // admin or a manager; this decides what each of them may hand out.
+    //
+    // 403 rather than 400: the request is well-formed and the role is a real
+    // one — what fails is authorisation, which is exactly what 403 means, and
+    // it matches the message `requireRole` itself returns for the same class of
+    // refusal. The message names the limit rather than pretending the role does
+    // not exist, because the caller can see the role list on the same screen and
+    // a vague refusal would just look broken.
+    const inviterRole = String(req.user?.role ?? '');
+    const permitted = INVITABLE_BY[inviterRole] ?? [];
+    if (!permitted.includes(role as AssignableRole)) {
+      res.status(403).json({
+        success: false,
+        message: `A ${inviterRole || 'user'} cannot invite someone as ${role}. You can only invite roles at or below your own.`,
+      });
       return;
     }
 
