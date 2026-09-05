@@ -25,7 +25,7 @@ import {
 } from '../../utils/inspectionSignals';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
 import {
-  fetchPipelines, defaultPipeline, stageTint,
+  fetchPipelines, defaultPipeline, stageTint, buildStageLookup,
   type ApiPipeline,
 } from '../../utils/pipelinesApi';
 
@@ -154,6 +154,9 @@ const DealsKanbanPage: React.FC = () => {
   const [pipelinesError, setPipelinesError] = useState<string | null>(null);
   const [pipelinesLoading, setPipelinesLoading] = useState(true);
   const [stages, setStages] = useState<PipelineStage[]>([]);
+
+  /** Stage metadata for the data-quality engine — see DealsListView's note. */
+  const stageLookup = useMemo(() => buildStageLookup(pipelines), [pipelines]);
 
   const activePipeline = useMemo(
     () => pipelines.find(p => p.slug === activePipelineSlug) ?? null,
@@ -1364,7 +1367,7 @@ const DealsKanbanPage: React.FC = () => {
     let errors = 0;
     let warnings = 0;
     stages.flatMap(s => s.deals).forEach(d => {
-      const dq = getDealDataQuality(d);
+      const dq = getDealDataQuality(d, stageLookup(d.stage, activePipelineSlug));
       if (dq.hasErrors) errors++;
       else if (dq.hasWarnings) warnings++;
     });

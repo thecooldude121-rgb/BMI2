@@ -485,6 +485,38 @@ move must. Both now resolve the pipeline's own outcome stage by `stage_type` and
 through the transition endpoint. The stage strip's terminal detection had the same shape
 (`num === 5` / `num === 6`), which in Renewals pointed at Negotiating and Renewed.
 
+### Slice 3 — the read-only sort/group/colour paths
+
+**Done.** Every remaining hardcoded stage literal in the frontend is gone —
+`grep "'prospecting', 'qualified'"` over non-test source now returns zero. New shared
+`buildStageLookup()` resolves a stage by (pipeline, slug) and returns its type, position
+among all stages and position among OPEN stages.
+
+**"Read-only" did not mean low-risk, and neither engine had a single test.** That is why
+the suite stayed green while both changed semantics.
+
+- `dealDataQuality` inferred outcomes from SUBSTRINGS — `.includes('won')`,
+  `.includes('lost')`, `.includes('closed')`. Already wrong on shipped stages: Partnerships
+  ends at `partner-active` and `partner-inactive`, neither of which contains any of those
+  words, so a **won partnerships deal was treated as open** and chased for missing next
+  steps and close dates. Its "early stage" test named two new-business stages, so in any
+  other pipeline every open stage was "late".
+- `dealVelocity`'s `CLOSED_STAGES` was `{closed-won, closed-lost}`, so velocity — a metric
+  its own comment calls "past-tense and not actionable" — was computed for already-closed
+  Renewals and Partnerships deals. And `ACTIVE_STAGES.indexOf` returned -1 for all of them,
+  taking a branch that assigned **stageProgress = 0.5**, so a deal one step from won and
+  one fresh out of the first stage scored identically.
+- `DealsGridView` and `DealsListView` rendered **"Stage 0 of 6"** for those deals.
+- `DealsListView`'s sort comparator ranked an unknown stage at -1, i.e. *above* the first
+  real stage.
+- `config/stageColors.ts` fell back to gray, silently dropping the design system's rule
+  that green and red are reserved for outcomes — a win and an open stage looked identical.
+
+**A bug I introduced and caught in the browser, not in tests:** moving the stage-lookup
+declarations into `DealsListView` put them below a `useMemo` that used them, and the list
+view died with "Cannot access 'metaFor' before initialization". The suite was green — no
+test renders that component — and only loading the page found it.
+
 ### Outstanding verification, carried forward deliberately
 
 - **A manual drag-and-drop spot-check on the Kanban is still owed.** The gesture cannot be

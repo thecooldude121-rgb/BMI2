@@ -180,3 +180,83 @@ export function stageHex(stage: Pick<ApiStage, 'color' | 'stage_type'> | null | 
   if (stage?.stage_type === 'lost') return '#EF4444';
   return '#6B7280';
 }
+
+/**
+ * What a read-only surface needs to know about a stage.
+ *
+ * PHASE B SLICE 3. Sorting, grouping, colouring and health scoring all need
+ * stage facts, and every one of them had invented its own copy — a stage-order
+ * array, a substring test for "won", a hardcoded colour map. None could be right
+ * for a pipeline the workspace configured itself.
+ */
+export interface StageMeta {
+  slug: string;
+  name: string;
+  stage_type: 'open' | 'won' | 'lost';
+  /** 1-based position among its pipeline's stages, for "Stage 3 of 6". */
+  index: number;
+  /** How many stages that pipeline has. */
+  total: number;
+  /** 1-based position among the OPEN stages only, or null for a terminal one. */
+  openIndex: number | null;
+  /** How many open stages the pipeline has — the denominator for progress. */
+  openTotal: number;
+  color: string | null;
+  archived: boolean;
+}
+
+/**
+ * Resolve a stage by (pipeline, slug).
+ *
+ * THE PIPELINE ARGUMENT MATTERS. Stage slugs are unique per pipeline, not per
+ * workspace — `UNIQUE (tenant_id, pipeline_id, slug)` — so two pipelines may
+ * both have a `qualified`, and they may sit at different positions with
+ * different colours. A lookup keyed on the slug alone would silently answer with
+ * whichever pipeline happened to be first.
+ *
+ * When the pipeline is unknown the slug is matched across all of them, but ONLY
+ * if exactly one pipeline has it. An ambiguous slug returns null rather than a
+ * guess: "I do not know which stage you mean" is a better answer than a
+ * confident wrong one, and every caller here degrades honestly on null.
+ */
+export type StageLookup = (stageSlug: string | null | undefined, pipelineSlug?: string | null) => StageMeta | null;
+
+export function buildStageLookup(pipelines: ApiPipeline[]): StageLookup {
+  const byPipeline = new Map<string, Map<string, StageMeta>>();
+  /** slug -> every StageMeta with that slug, for the pipeline-less case. */
+  const bySlug = new Map<string, StageMeta[]>();
+
+  for (const p of pipelines) {
+    const openStages = p.stages.filter(s => s.stage_type === 'open');
+    const inner = new Map<string, StageMeta>();
+    p.stages.forEach((s, i) => {
+      const meta: StageMeta = {
+        slug: s.slug,
+        name: s.name,
+        stage_type: s.stage_type,
+        index: i + 1,
+        total: p.stages.length,
+        openIndex: s.stage_type === 'open' ? openStages.findIndex(o => o.slug === s.slug) + 1 : null,
+        openTotal: openStages.length,
+        color: s.color,
+        archived: Boolean(s.archived_at),
+      };
+      inner.set(s.slug, meta);
+      bySlug.set(s.slug, [...(bySlug.get(s.slug) ?? []), meta]);
+    });
+    byPipeline.set(p.slug, inner);
+  }
+
+  return (stageSlug, pipelineSlug) => {
+    if (!stageSlug) return null;
+    if (pipelineSlug) {
+      const hit = byPipeline.get(pipelineSlug)?.get(stageSlug);
+      if (hit) return hit;
+    }
+    const candidates = bySlug.get(stageSlug) ?? [];
+    return candidates.length === 1 ? candidates[0] : null;
+  };
+}
+
+/** A lookup that knows nothing — the honest state before pipelines load. */
+export const EMPTY_STAGE_LOOKUP: StageLookup = () => null;

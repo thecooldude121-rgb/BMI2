@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Users, TrendingUp, DollarSign, Building2, AlertTriangle, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardData, dealValue, isOpen } from '../../hooks/useDashboardData';
@@ -11,6 +11,7 @@ import LevelInfoPopover from '../../components/gamification/LevelInfoPopover';
 import ProgressDetailPopover from '../../components/gamification/ProgressDetailPopover';
 import StreakPopover from '../../components/gamification/StreakPopover';
 import ChallengeDetailModal from '../../components/gamification/ChallengeDetailModal';
+import { fetchPipelines, type ApiPipeline } from '../../utils/pipelinesApi';
 
 /**
  * /crm/dashboard — the dashboard the sidebar actually links to.
@@ -145,7 +146,36 @@ const CRMDashboard: React.FC = () => {
    * biggest stage. The old percentages (100/73/54/36/20) were fixed numbers
    * unrelated to any count.
    */
-  const STAGE_ORDER = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
+  /*
+   * Stage order from the workspace, across ALL its pipelines.
+   *
+   * This was a six-slug literal, so on the dashboard's pipeline bar every
+   * Renewals and Partnerships stage scored -1 and was pushed into the "unknown"
+   * bucket that sorts last and alphabetically — below Closed Lost. The deals
+   * were counted, but the chart implied they sat at the bottom of a funnel they
+   * are not in.
+   *
+   * The dashboard deliberately aggregates across pipelines, so the order is the
+   * concatenation of each pipeline's stages in its own order. That is honest
+   * about what the chart is: several funnels drawn on one axis. Splitting it per
+   * pipeline is a product decision, not a cutover one, and is left alone.
+   */
+  const [dashPipelines, setDashPipelines] = useState<ApiPipeline[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    // A failed load leaves STAGE_ORDER empty, which sorts every stage
+    // alphabetically rather than inventing a funnel order. The counts and values
+    // on the bar are real either way — only the ordering degrades.
+    fetchPipelines()
+      .then(list => { if (!cancelled) setDashPipelines(list); })
+      .catch(() => { /* order degrades to alphabetical; counts stay real */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const STAGE_ORDER = useMemo(
+    () => dashPipelines.flatMap(p => p.stages.map(st => st.slug)),
+    [dashPipelines],
+  );
   const pipelineStages = useMemo(() => {
     const byStage = new Map<string, { count: number; value: number }>();
     for (const d of deals) {

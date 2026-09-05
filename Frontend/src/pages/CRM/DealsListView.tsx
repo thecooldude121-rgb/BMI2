@@ -18,6 +18,7 @@ import { getDealVelocity } from '../../utils/dealVelocity';
 import { findDuplicatePairs } from '../../utils/duplicateDetection';
 import type { DuplicatePair, DuplicatableDeal } from '../../utils/duplicateDetection';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
+import { fetchPipelines, buildStageLookup, type ApiPipeline } from '../../utils/pipelinesApi';
 import type { DataQualityIssue } from '../../utils/dealDataQuality';
 
 // ── Advanced filter builder predicate ─────────────────────────────────────────
@@ -250,6 +251,31 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   openDQDrawer: openDQDrawerProp,
   onDQDrawerClose,
 }) => {
+  const stageOrder = useMemo(() => stages.map(st => st.id), [stages]);
+
+  /*
+   * Stage metadata for the velocity and data-quality engines.
+   *
+   * Both used to infer outcomes from the stage STRING — `.includes('won')`,
+   * a four-slug ACTIVE_STAGES array — and both were already wrong on live data:
+   * `partner-active` is the Partnerships won stage and contains none of "won",
+   * "lost" or "closed", so a won deal was scored as an open one. They now take
+   * the real stage, and return null / skip the check when it cannot be resolved
+   * rather than guessing.
+   */
+  const [lvPipelines, setLvPipelines] = useState<ApiPipeline[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => { if (!cancelled) setLvPipelines(list); })
+      .catch(() => { /* lookup stays empty; both engines decline rather than guess */ });
+    return () => { cancelled = true; };
+  }, []);
+  const stageLookup = useMemo(() => buildStageLookup(lvPipelines), [lvPipelines]);
+  /** Resolve a deal's stage, using its own pipeline when the row carries one. */
+  const metaFor = (d: { stage?: string | null; pipeline_id?: string | null }) =>
+    stageLookup(d.stage, d.pipeline_id ?? null);
+
   const navigate = useNavigate();
   const { isStalled, getReasons, config: stalledConfig } = useStalledConfig();
 
@@ -514,7 +540,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const velocityDealCounts = useMemo(() => {
     let ahead = 0, slipping = 0;
     for (const d of allDeals) {
-      const v = getDealVelocity(d);
+      const v = getDealVelocity(d, metaFor(d));
       if (v?.rating === 'ahead') ahead++;
       else if (v?.rating === 'slipping') slipping++;
     }
@@ -600,7 +626,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       // Velocity
       if (velocityFilter.size > 0) {
-        const v = getDealVelocity(deal);
+        const v = getDealVelocity(deal, metaFor(deal));
         const r = (v?.rating ?? 'unknown') as string;
         if (!velocityFilter.has(r as 'ahead' | 'slipping')) return false;
       }
@@ -655,7 +681,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     let result = filteredDeals;
     if (activeKpiFilter === 'closingWeek') result = result.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
     else if (activeKpiFilter === 'stalled') result = result.filter(d => isStalled(d));
-    if (showIssuesOnly) result = result.filter(d => !getDealDataQuality(d).isClean);
+    if (showIssuesOnly) result = result.filter(d => !getDealDataQuality(d, metaFor(d)).isClean);
     return result;
   }, [filteredDeals, activeKpiFilter, showIssuesOnly]);
 
@@ -672,8 +698,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         comparison = getReportingAmount(a, reportingCurrency) - getReportingAmount(b, reportingCurrency);
         break;
       case 'stage': {
-        const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-        comparison = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
+        // Unknown stages sort AFTER the known ones rather than before them:
+        // indexOf gives -1, and a raw subtraction ranked a stage this pipeline
+        // does not list above the first real stage.
+        const ia = stageOrder.indexOf(a.stage);
+        const ib = stageOrder.indexOf(b.stage);
+        const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+        const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+        comparison = ra - rb;
         break;
       }
       case 'closeDate':
@@ -719,9 +751,29 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     return stage ? stage.name : stageId;
   };
 
+  /*
+   * ONE stage order, derived from the workspace's own columns.
+   *
+   * There were FOUR copies of the same six-slug literal in this file — the sort
+   * comparator, this progress label, the stage summary strip and the stage
+   * filter dropdown — and each was wrong in its own way for a pipeline outside
+   * new-business: the comparator sorted every unknown stage to -1 and so ranked
+   * a Renewals deal above Prospecting; this label rendered "0 of 6"; the summary
+   * strip silently omitted those deals from its totals; the filter offered six
+   * options that matched nothing.
+   *
+   * `stages` is the prop the Kanban already passes from GET /pipelines, so the
+   * correct order was in scope the whole time.
+   */
+
+
+
+
   const getStageProgress = (stageId: string) => {
-    const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-    return `${stageOrder.indexOf(stageId) + 1} of ${stageOrder.length}`;
+    const i = stageOrder.indexOf(stageId);
+    // Unknown stage: no position to report rather than "0 of 6".
+    if (i === -1) return `— of ${stageOrder.length}`;
+    return `${i + 1} of ${stageOrder.length}`;
   };
 
   const getInitials = (name: string): string => {
@@ -1167,7 +1219,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     [filteredDeals, reportingCurrency],
   );
 
-  const PIPELINE_STAGES = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'] as const;
+  const PIPELINE_STAGES = stageOrder;
   const stageSummary = useMemo(() => {
     const byStage: Record<string, { count: number; value: number }> = {};
     for (const s of PIPELINE_STAGES) byStage[s] = { count: 0, value: 0 };
@@ -1192,7 +1244,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     let errors = 0;
     let warnings = 0;
     for (const d of filteredDeals) {
-      const dq = getDealDataQuality(d);
+      const dq = getDealDataQuality(d, metaFor(d));
       if (dq.hasErrors) errors++;
       else if (dq.hasWarnings) warnings++;
     }
@@ -1466,7 +1518,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 })()}
                 {/* Pipeline Hygiene dot — only shown for deals with issues */}
                 {(() => {
-                  const dq = getDealDataQuality(deal);
+                  const dq = getDealDataQuality(deal, metaFor(deal));
                   if (dq.isClean) return null;
                   const errorCount = dq.issues.filter(i => i.severity === 'error').length;
                   const dotBg = dq.hasErrors ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700';
@@ -1689,7 +1741,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 {/* Velocity chip — pace vs close-date budget */}
                 {(() => {
-                  const vel = getDealVelocity(deal);
+                  const vel = getDealVelocity(deal, metaFor(deal));
                   if (!vel) return null;
                   const chipStyle = vel.rating === 'ahead'
                     ? 'bg-green-100 text-green-700 border-green-300'
@@ -2612,7 +2664,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             const panelTab = expandedPanelTabs[deal.id] ?? 'intelligence';
             const setPanelTab = (t: 'intelligence' | 'context' | 'timeline') =>
               setExpandedPanelTabs(prev => ({ ...prev, [deal.id]: t }));
-            const dq = getDealDataQuality(expandedMerged);
+            const dq = getDealDataQuality(expandedMerged, metaFor(expandedMerged));
             const hasContextIssues = !dq.isClean;
 
             return (
@@ -2667,7 +2719,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       })()}
                       {/* Deal Velocity */}
                       {(() => {
-                        const vel = getDealVelocity(deal);
+                        const vel = getDealVelocity(deal, metaFor(deal));
                         if (!vel) return null;
                         const velColor = vel.rating === 'ahead'
                           ? { bar: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50 border-green-200' }
@@ -3121,7 +3173,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* ── Stage ──────────────────────────────────────────── */}
           {(() => {
-            const STAGE_ORDER = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'] as const;
+            const STAGE_ORDER = stageOrder;
             const isOpen = openFilter === 'stage';
             return (
               <div className="relative flex-shrink-0">
@@ -5190,7 +5242,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   onClick={() => {
                     const rows = filteredDeals
                       .flatMap(d => {
-                        const dq = getDealDataQuality(d);
+                        const dq = getDealDataQuality(d, metaFor(d));
                         if (dq.isClean) return [];
                         return dq.issues.map((i: DataQualityIssue) => `${d.dealName}\t${i.severity}\t${i.message}`);
                       })
@@ -5211,7 +5263,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
               {filteredDeals.map(d => {
-                const dq = getDealDataQuality(d);
+                const dq = getDealDataQuality(d, metaFor(d));
                 if (dq.isClean) return null;
                 const assignTarget = currentUser || availableOwners[0] || '';
                 return (

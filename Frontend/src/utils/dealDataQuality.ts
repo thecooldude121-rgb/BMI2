@@ -8,6 +8,8 @@
  * Closed-Lost deals are always skipped — they're done.
  */
 
+import type { StageMeta } from './pipelinesApi';
+
 export type DQSeverity = 'error' | 'warning';
 
 export type DQIssueType =
@@ -50,30 +52,47 @@ function stageLower(deal: DealForDQ): string {
   return (deal.stage ?? '').toLowerCase();
 }
 
-function isClosedLost(deal: DealForDQ): boolean {
-  return stageLower(deal).includes('lost');
+/*
+ * OUTCOME DETECTION BY stage_type, NOT BY SUBSTRING.
+ *
+ * These three functions tested `stage.includes('won')`, `.includes('lost')` and
+ * `.includes('closed')`. That is the same suffix heuristic migration 037
+ * refused, and it was ALREADY WRONG on this product's own shipped stages:
+ * the Partnerships pipeline ends at `partner-active` (won) and
+ * `partner-inactive` (lost), and neither string contains "won", "lost" or
+ * "closed". So a won partnerships deal was treated as open and flagged for a
+ * missing next step, a missing close date and everything else this engine
+ * checks on live deals.
+ *
+ * It fails the other way too: a workspace stage called "Won Back" — an ordinary
+ * re-engagement stage — would have been classified as a closed win.
+ *
+ * With no metadata the answer is "not closed", which is the same default as
+ * before and errs toward showing a data-quality warning rather than hiding one.
+ */
+function isClosedLost(_deal: DealForDQ, meta?: StageMeta | null): boolean {
+  return meta?.stage_type === 'lost';
 }
 
-function isClosedWon(deal: DealForDQ): boolean {
-  return stageLower(deal).includes('won');
+function isClosedWon(_deal: DealForDQ, meta?: StageMeta | null): boolean {
+  return meta?.stage_type === 'won';
 }
 
-function isClosedStage(deal: DealForDQ): boolean {
-  const s = stageLower(deal);
-  return s.includes('closed') || s.includes('won') || s.includes('lost');
+function isClosedStage(_deal: DealForDQ, meta?: StageMeta | null): boolean {
+  return meta ? meta.stage_type !== 'open' : false;
 }
 
 // ── Main function ─────────────────────────────────────────────────────────────
 
-export function getDealDataQuality(deal: DealForDQ): DealDQResult {
+export function getDealDataQuality(deal: DealForDQ, stageMeta?: StageMeta | null): DealDQResult {
   // Closed-lost deals are done — no DQ checks apply
-  if (isClosedLost(deal)) {
+  if (isClosedLost(deal, stageMeta)) {
     return { issues: [], hasErrors: false, hasWarnings: false, isClean: true };
   }
 
   const issues: DataQualityIssue[] = [];
   const sl = stageLower(deal);
-  const isClosed = isClosedStage(deal);
+  const isClosed = isClosedStage(deal, stageMeta);
 
   // ── ERRORS ────────────────────────────────────────────────────────────────
 
@@ -91,7 +110,7 @@ export function getDealDataQuality(deal: DealForDQ): DealDQResult {
 
   // Close date checks
   const hasCloseDate = !!(deal.closeDate?.trim());
-  if (isClosedWon(deal) && !hasCloseDate) {
+  if (isClosedWon(deal, stageMeta) && !hasCloseDate) {
     // Closed-Won with no close date is a reporting blocker
     issues.push({
       type: 'closed_won_no_close_date',
@@ -139,8 +158,19 @@ export function getDealDataQuality(deal: DealForDQ): DealDQResult {
   }
 
   // Missing next step (skipped for early stages and closed deals)
-  const isEarlyStage = ['prospecting', 'qualified'].some(s => sl.includes(s));
-  const stageRequiresNextStep = sl.includes('negotiation');
+  // Position, not name. `['prospecting','qualified'].some(s => sl.includes(s))`
+  // named two new-business stages, so in any other pipeline EVERY open stage was
+  // "late" and demanded a next step. First half of the open stages is "early" —
+  // a rule that means the same thing in a four-stage pipeline and a nine-stage
+  // one. Falls back to the old behaviour of "not early" when unresolvable, which
+  // shows a warning rather than hiding one.
+  const isEarlyStage = stageMeta?.openIndex
+    ? stageMeta.openIndex <= Math.ceil(stageMeta.openTotal / 2)
+    : false;
+  // The last open stage before the outcome is where a next step matters most.
+  const stageRequiresNextStep = Boolean(
+    stageMeta?.openIndex && stageMeta.openIndex === stageMeta.openTotal,
+  );
   const hasNextStep = !!(deal.nextStep?.trim());
   if (!isClosed && !isEarlyStage && !hasNextStep) {
     issues.push({

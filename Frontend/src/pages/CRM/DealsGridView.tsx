@@ -104,10 +104,22 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     return stage ? stage.name : stageId;
   };
 
+  /*
+   * "Stage 3 of 6" from the REAL columns, which since Phase B slice 1 are the
+   * workspace's own stages.
+   *
+   * This used a hardcoded six-slug array and `indexOf`, so any stage outside
+   * new-business scored -1 and the card rendered "STAGE 0 OF 6" — a visible
+   * wrong value on the two live Renewals and Partnerships deals, not a latent
+   * one. `stages` is already in scope and already correct; nothing needed to be
+   * threaded in.
+   */
   const getStageProgress = (stageId: string) => {
-    const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-    const currentIndex = stageOrder.indexOf(stageId);
-    return `Stage ${currentIndex + 1} of ${stageOrder.length}`;
+    const currentIndex = stages.findIndex(s => s.id === stageId);
+    // Unknown stage: say so rather than counting from a position it does not
+    // have. A stage retired since the board loaded lands here.
+    if (currentIndex === -1) return `Stage — of ${stages.length}`;
+    return `Stage ${currentIndex + 1} of ${stages.length}`;
   };
 
   // Coerce Grid Deal → DealCard shape for explainDealHealth.
