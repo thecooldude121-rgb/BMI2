@@ -575,7 +575,9 @@ would change the response shape and turn **167 frontend reads of `deal.stage` in
   retire stops being offered, which matters because since Phase A the server refuses a
   stage that is not in the deal's pipeline, so offering a stale one produced a 400 the
   user could do nothing about.
-- **C2 — last.** Drop `deals.stage`, `is_won`, `is_lost`.
+- **C2 — DONE.** Migration 038 drops `deals.stage`, `pipeline_stages.is_won` and
+  `pipeline_stages.is_lost`, together with every backend reference to them. Applied to
+  `bmi_crm`; the API's response shape is unchanged (see below).
 
 **The drift gate, checked before writing C0 and now pinned in the suite:** zero mismatches
 between `deals.stage` and the derived slug across every live deal, zero deals whose stage
@@ -583,10 +585,52 @@ belongs to a different pipeline than the deal, zero null `stage_id`. Two new tes
 both while the suite's data exists — a check run against the test database *afterwards*
 passes vacuously, because teardown empties it.
 
-**C0 relies on column order.** While the column exists, two fields are named `stage` and
-node-pg's row object takes the last. That was verified against this pg version rather than
-assumed, and a test corrupts `deals.stage` directly and asserts the API still answers with
-the derived value.
+**C0 relied on column order** while both existed: two fields were named `stage` and
+node-pg's row object takes the last. Verified against this pg version rather than assumed.
+With 038 applied there is no duplicate any more and the alias is the only source, so the
+test that used to corrupt `deals.stage` now asserts the field is still returned AND that the
+column is gone from `information_schema` — unread and absent are different states, and only
+the second one stops something writing it again.
+
+### C2 — what was actually verified
+
+- **The drift gate re-run on live data immediately before migrating**: 25 deals, 0
+  column-vs-slug mismatches, 0 null `stage_id`, 0 unjoinable through the tenant-scoped
+  join, 0 cross-tenant, 0 stage-from-the-wrong-pipeline, 0 `is_won`/`is_lost` disagreements
+  with `stage_type`. The same six assertions are re-run *inside* migration 038, which
+  aborts the transaction rather than dropping a column the data does not support.
+- **`pg_dump` before applying**: `~/bmi2-backups/bmi_crm_pre_migration038_2026-09-06.dump`.
+  A dropped column is not recoverable by re-running anything, unlike the additive phases.
+- **Response shape, measured rather than argued.** The pre-C2 backend was booted from a
+  detached worktree at the previous commit against live data and its payloads captured,
+  then 038 was applied and the same three endpoints captured again. `GET /deals` — 24
+  deals, identical id set, **zero differing field names and zero differing values**;
+  `GET /deals/:id` — identical. `GET /pipelines` loses exactly `is_won` and `is_lost` from
+  each stage object, with every other value identical, and the frontend has zero readers of
+  either.
+- **Through the real UI**: Kanban renders all three pipelines; every column count and total
+  cross-checked against SQL (Prospecting 1/$30K, Qualified 8/$465K, Proposal 8/$699K,
+  Negotiation 3/$261K, and Renewals' own vocabulary with 1/$24K in Quoted). Closed
+  Won/Closed Lost cards read "Won"/"Lost", which is `stage_type` classification, not a slug
+  literal.
+- **An index was carried across, not lost.** `idx_deals_tenant_active` was
+  `(tenant_id, stage) WHERE NOT archived AND NOT test` — the covering index for the main
+  list query, and `DROP COLUMN` would have taken it silently. 038 creates the `stage_id`
+  equivalent first, then drops the old one.
+
+**Two bugs C2 turned up, neither predicted by the plan.** Both are written up in CLAUDE.md's
+recorded lessons (11-13) because the mechanism generalises:
+
+1. `SELECT ... FOR UPDATE` **on a join** returned a NULL slug under contention — Postgres'
+   EvalPlanQual re-fetches the locked row but reuses the already-read joined tuple, so the
+   new `stage_id` met the old stage row and the LEFT JOIN matched nothing. The audit trail
+   recorded `from_stage = null`. Both lock sites now lock the deal alone and resolve the
+   slug in a second statement. A deterministic regression test pins it, and the test itself
+   had to be fixed twice before it failed against the broken code.
+2. Two conditionally-called hooks (`DealSlideoutPanel`, `MobileDealPreview`) crashed the
+   deal slideout with "Rendered more hooks than during the previous render" — introduced in
+   C1b, invisible to `tsc` and to 521 unit tests, and caught by clicking a card. The
+   existing `npm run lint:hooks` gate flags both; it had simply not been run.
 
 ### Q3 — settled, and the premise had changed
 
@@ -612,6 +656,12 @@ an explicit 0% arrive identical. A `probabilityRaw` field preserves the NULL.
   `transitionDealStage` the confirm dialog exercises end to end, so the write path is
   proven and only the gesture is not. **The Kanban cutover should not be called fully
   verified until someone drags a card by hand.**
+- **The Renewals deal card does not open the slideout panel on click.** Found while
+  verifying C2 in the browser: clicking the one deal in the Renewals pipeline fires no
+  request at all (backend network log unchanged), while the same gesture on a
+  Standard-pipeline card fetches `GET /deals/D019` and renders the panel. Not caused by the
+  column drop — no column participates in an onClick — and not investigated further here
+  rather than being folded into a migration checkpoint. Worth its own look.
 - **`mark-won` / `mark-lost` use `window.confirm`.** A native dialog, in a codebase whose
   every other confirmation is a custom modal, and it blocks browser automation outright —
   so that path is verified by unit test only, not through the UI. Worth replacing when the

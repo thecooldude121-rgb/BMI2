@@ -10,8 +10,9 @@ import { resolveActorName } from '../utils/actorName';
  * PHASE A UPDATE (migration 037): every stage now carries `slug` (the stable
  * machine key that survives a rename), `stage_type` ('open' | 'won' | 'lost',
  * replacing the two booleans that could contradict each other) and
- * `archived_at` (retirement). is_won / is_lost are still selected because the
- * frontend PipelineStage interface still reads them; they go in Phase C.
+ * `archived_at` (retirement). is_won / is_lost are GONE as of migration 038 —
+ * `stage_type` was the only reader left, and two independent booleans could
+ * encode `is_won AND is_lost` with no CHECK to prevent it.
  *
  * Frontend/src/utils/dealsApi.ts:27 has called GET /api/v1/pipelines since it
  * was written, and there was no such route — every call 404'd, and the function
@@ -40,7 +41,7 @@ export const getPipelines = async (req: AuthRequest, res: Response, next: NextFu
       pool.query(pipelineQuery, [tenantId]),
       pool.query(
         `SELECT id, pipeline_id, slug, name, probability, position, color,
-                stage_type, archived_at, is_won, is_lost
+                stage_type, archived_at
          FROM pipeline_stages s
          WHERE s.tenant_id = $1${archivedFilter}
          ORDER BY s.pipeline_id, s.position ASC`,
@@ -71,7 +72,7 @@ export const getPipelineById = async (req: AuthRequest, res: Response, next: Nex
       pool.query('SELECT * FROM pipelines WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]),
       pool.query(
         `SELECT id, pipeline_id, slug, name, probability, position, color,
-                stage_type, archived_at, is_won, is_lost
+                stage_type, archived_at
          FROM pipeline_stages
          WHERE pipeline_id = $1 AND tenant_id = $2
          ORDER BY position ASC`,
@@ -92,7 +93,7 @@ export const getPipelineStages = async (req: AuthRequest, res: Response, next: N
     const tenantId = requireTenantId(req);
     const result = await pool.query(
       `SELECT id, pipeline_id, slug, name, probability, position, color,
-                stage_type, archived_at, is_won, is_lost
+                stage_type, archived_at
        FROM pipeline_stages
        WHERE pipeline_id = $1 AND tenant_id = $2
        ORDER BY position ASC`,
@@ -305,14 +306,14 @@ export const createStage = async (req: AuthRequest, res: Response, next: NextFun
 
     const created = await client.query(
       `INSERT INTO pipeline_stages
-         (pipeline_id, tenant_id, slug, name, stage_type, probability, color, position, is_won, is_lost)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         (pipeline_id, tenant_id, slug, name, stage_type, probability, color, position)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING id, pipeline_id, slug, name, probability, position, color, stage_type, archived_at`,
       [
         pipeline.id, tenantId, slug, trimmed, type,
         probability === undefined || probability === null ? null : Number(probability),
         color ? String(color).toUpperCase() : STAGE_PALETTE.slate,
-        pos, type === 'won', type === 'lost',
+        pos,
       ],
     );
 
@@ -329,9 +330,9 @@ export const createStage = async (req: AuthRequest, res: Response, next: NextFun
  *
  * Renames, recolours, re-probabilities, retypes, retires and un-retires.
  *
- * THE SLUG IS NEVER WRITABLE. It is the stable machine key: `deals.stage` holds
- * it, `deal_stage_history` records it, saved views filter on it and the API
- * takes it. Letting a rename change it would silently empty every saved view
+ * THE SLUG IS NEVER WRITABLE. It is the stable machine key: the API returns it
+ * as a deal's stage, `deal_stage_history` records it, saved views filter on it
+ * and the API takes it. Letting a rename change it would silently empty every saved view
  * that referenced the stage and orphan every history row — with no error
  * anywhere, which is the class of failure this project keeps finding late.
  * Renaming changes `name` only, and everything keeps working.
@@ -424,12 +425,9 @@ export const updateStage = async (req: AuthRequest, res: Response, next: NextFun
     if (probability !== undefined) { sets.push(`probability = $${i++}`); params.push(probability === null ? null : Number(probability)); }
     if (color !== undefined)       { sets.push(`color = $${i++}`);       params.push(String(color).toUpperCase()); }
     if (stage_type !== undefined) {
+      // stage_type alone. is_won / is_lost were kept in step while both
+      // existed; migration 038 dropped them.
       sets.push(`stage_type = $${i++}`); params.push(stage_type);
-      // The booleans are still selected by this controller and read by the
-      // frontend's PipelineStage interface; Phase C drops them. Kept in step
-      // here so the two never disagree while both exist.
-      sets.push(`is_won = $${i++}`);  params.push(stage_type === 'won');
-      sets.push(`is_lost = $${i++}`); params.push(stage_type === 'lost');
     }
     if (archived !== undefined) {
       sets.push(`archived_at = ${archived ? 'NOW()' : 'NULL'}`);
@@ -628,17 +626,20 @@ export const deleteStage = async (req: AuthRequest, res: Response, next: NextFun
         return;
       }
 
+      // `stage.slug` IS the slug every one of these deals is in — they are
+      // selected by stage_id — so the snapshot value is already in scope and
+      // needs no join now that deals.stage is gone.
       const moving = await client.query(
-        'SELECT id, stage, probability FROM deals WHERE stage_id = $1 AND tenant_id = $2 FOR UPDATE',
+        'SELECT id, probability FROM deals WHERE stage_id = $1 AND tenant_id = $2 FOR UPDATE',
         [stage.id, tenantId],
       );
       const changedBy = resolveActorName(req);
       for (const d of moving.rows) {
         const nextProbability = dest.rows[0].probability ?? d.probability ?? null;
         await client.query(
-          `UPDATE deals SET stage = $1, stage_id = $2, probability = $3, updated_at = NOW()
-            WHERE id = $4 AND tenant_id = $5`,
-          [dest.rows[0].slug, dest.rows[0].id, nextProbability, d.id, tenantId],
+          `UPDATE deals SET stage_id = $1, probability = $2, updated_at = NOW()
+            WHERE id = $3 AND tenant_id = $4`,
+          [dest.rows[0].id, nextProbability, d.id, tenantId],
         );
         // Every moved deal gets an audit row. A stage deletion that silently
         // relocated deals would be indistinguishable from data loss when someone
@@ -648,7 +649,7 @@ export const deleteStage = async (req: AuthRequest, res: Response, next: NextFun
              (deal_id, from_stage, to_stage, probability, probability_override,
               reason_code, changed_by, tenant_id)
            VALUES ($1,$2,$3,$4,false,'stage-deleted',$5,$6)`,
-          [d.id, d.stage, dest.rows[0].slug, nextProbability, changedBy, tenantId],
+          [d.id, stage.slug, dest.rows[0].slug, nextProbability, changedBy, tenantId],
         );
       }
     }

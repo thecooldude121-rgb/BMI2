@@ -34,7 +34,7 @@ describe('Deals — round trip', () => {
     const id = res.body.data.id;
     dealIds.push(id);
 
-    const row = await pool.query('SELECT name, value, currency, company_id, stage FROM deals WHERE id = $1 AND tenant_id = $2', [id, ws.tenantId]);
+    const row = await pool.query(`SELECT d.name, d.value, d.currency, d.company_id, ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1 AND d.tenant_id = $2`, [id, ws.tenantId]);
     expect(row.rows[0].value).toBe('50000.00'); // DECIMAL(15,2) comes back as text from pg
     expect(row.rows[0].currency).toBe('USD');
     expect(row.rows[0].company_id).toBe(companyId);
@@ -345,7 +345,7 @@ describe('Deals — round trip', () => {
     expect(move.status, JSON.stringify(move.body)).toBe(200);
 
     // Assert against the DEAL row, not the transition response body.
-    const dealRow = await pool.query('SELECT stage, probability FROM deals WHERE id = $1', [id]);
+    const dealRow = await pool.query(`SELECT ps.slug AS stage, d.probability FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
     expect(dealRow.rows[0].stage).toBe('negotiation');
     expect(dealRow.rows[0].probability).toBe(60);
 
@@ -384,7 +384,7 @@ describe('Deals — round trip', () => {
 
     const res = await request(app).post(`/api/v1/deals/${id}/stage-transition`).set(auth(ws)).send({});
     expect(res.status).toBe(400);
-    const row = await pool.query('SELECT stage FROM deals WHERE id = $1', [id]);
+    const row = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
     expect(row.rows[0].stage).toBe('prospecting');
     const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
     expect(history.rows[0].n).toBe(0);
@@ -405,7 +405,7 @@ describe('Deals — round trip', () => {
       const moveAsB = await request(app).post(`/api/v1/deals/${id}/stage-transition`).set(auth(wsB)).send({ to_stage: 'closed-won' });
       expect(moveAsB.status).toBe(404);
 
-      const row = await pool.query('SELECT stage FROM deals WHERE id = $1', [id]);
+      const row = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
       expect(row.rows[0].stage).toBe('prospecting'); // untouched
       const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
       expect(history.rows[0].n).toBe(0);

@@ -69,14 +69,13 @@ describe('Stage configuration — round trip', () => {
     for (const [slug, name, type, pos, color] of CANON) {
       await pool.query(
         `INSERT INTO pipeline_stages
-           (pipeline_id, tenant_id, slug, name, stage_type, position, color, is_won, is_lost)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           (pipeline_id, tenant_id, slug, name, stage_type, position, color)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (tenant_id, pipeline_id, slug) DO UPDATE
            SET name = EXCLUDED.name, stage_type = EXCLUDED.stage_type,
                position = EXCLUDED.position, color = EXCLUDED.color,
-               is_won = EXCLUDED.is_won, is_lost = EXCLUDED.is_lost,
                archived_at = NULL`,
-        [pipelineId, ws.tenantId, slug, name, type, pos, color, type === 'won', type === 'lost']);
+        [pipelineId, ws.tenantId, slug, name, type, pos, color]);
     }
   });
 
@@ -304,7 +303,7 @@ describe('Stage configuration — round trip', () => {
     expect(res.body.message).toMatch(/retire this stage instead/);
 
     // Nothing orphaned, nothing nulled — the whole point of blocking.
-    const d = await pool.query('SELECT stage, stage_id FROM deals WHERE id = $1', [dealId]);
+    const d = await pool.query(`SELECT ps.slug AS stage, d.stage_id FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [dealId]);
     expect(d.rows[0].stage).toBe('proposal');
     expect(d.rows[0].stage_id).toBe(proposal.id);
     expect((await stagesOf()).map(r => r.slug)).toContain('proposal');
@@ -323,7 +322,7 @@ describe('Stage configuration — round trip', () => {
     expect(res.body.deals_reassigned).toBe(2);
 
     for (const id of [a, b]) {
-      const d = await pool.query('SELECT stage, stage_id FROM deals WHERE id = $1', [id]);
+      const d = await pool.query(`SELECT ps.slug AS stage, d.stage_id FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
       expect(d.rows[0].stage).toBe('negotiation');
       expect(d.rows[0].stage_id).toBe(negotiation.id);
       // A stage deletion that silently relocated deals would be
@@ -347,7 +346,7 @@ describe('Stage configuration — round trip', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('reassign_to does not name a stage in this pipeline');
 
-    const d = await pool.query('SELECT stage FROM deals WHERE id = $1', [dealId]);
+    const d = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [dealId]);
     expect(d.rows[0].stage).toBe('proposal');
   });
 
@@ -358,7 +357,7 @@ describe('Stage configuration — round trip', () => {
     const res = await request(app).patch(`${base()}/${proposal.id}`).set(auth(ws)).send({ archived: true });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
 
-    const d = await pool.query('SELECT stage, stage_id FROM deals WHERE id = $1', [dealId]);
+    const d = await pool.query(`SELECT ps.slug AS stage, d.stage_id FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [dealId]);
     expect(d.rows[0].stage).toBe('proposal');
     expect(d.rows[0].stage_id).toBe(proposal.id);
 
@@ -372,7 +371,7 @@ describe('Stage configuration — round trip', () => {
     expect(move.status).toBe(409);
     expect(move.body.message).toMatch(/retired/i);
 
-    const still = await pool.query('SELECT stage FROM deals WHERE id = $1', [elsewhere]);
+    const still = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [elsewhere]);
     expect(still.rows[0].stage).toBe('qualified');
   });
 });

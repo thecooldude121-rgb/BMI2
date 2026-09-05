@@ -43,11 +43,11 @@ describe('Pipeline stages — Phase A round trip', () => {
     renewalsId = p.rows[0].id;
     await pool.query(
       `INSERT INTO pipeline_stages
-         (pipeline_id, tenant_id, slug, name, stage_type, probability, color, position, is_won, is_lost)
+         (pipeline_id, tenant_id, slug, name, stage_type, probability, color, position)
        VALUES
-         ($1,$2,'renewal-review','Under Review','open',60,'#3B82F6',1,false,false),
-         ($1,$2,'renewal-won','Renewed','won',100,'#10B981',2,true,false),
-         ($1,$2,'renewal-lost','Churned','lost',0,'#EF4444',3,false,true)`,
+         ($1,$2,'renewal-review','Under Review','open',60,'#3B82F6',1),
+         ($1,$2,'renewal-won','Renewed','won',100,'#10B981',2),
+         ($1,$2,'renewal-lost','Churned','lost',0,'#EF4444',3)`,
       [renewalsId, ws.tenantId],
     );
   });
@@ -60,7 +60,7 @@ describe('Pipeline stages — Phase A round trip', () => {
   /** The stored row, never the response body. */
   const row = async (id: string) => {
     const r = await pool.query(
-      `SELECT d.stage, d.stage_id, d.probability, s.slug AS stage_slug, s.tenant_id AS stage_tenant
+      `SELECT s.slug AS stage, d.stage_id, d.probability, s.slug AS stage_slug, s.tenant_id AS stage_tenant
          FROM deals d LEFT JOIN pipeline_stages s ON s.id = d.stage_id
         WHERE d.id = $1`,
       [id],
@@ -91,39 +91,43 @@ describe('Pipeline stages — Phase A round trip', () => {
     expect(nullish.rows[0].n).toBe(0);
   });
 
-  it('the stage text column and stage_id never disagree', async () => {
-    const mismatched = await pool.query(
-      `SELECT count(*)::int AS n FROM deals d
-         JOIN pipeline_stages s ON s.id = d.stage_id
-        WHERE s.slug <> d.stage`,
+  it('the legacy stage columns are gone, not merely unread', async () => {
+    // Replaces the Phase-A dual-write assertion (deals.stage vs slug), which
+    // migration 038 retired along with the column. Unread and absent are
+    // different states: an unread column is one careless `d.*` away from being
+    // written again, which is what the drop exists to prevent.
+    const left = await pool.query(
+      `SELECT table_name, column_name FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND ((table_name = 'deals' AND column_name = 'stage')
+            OR (table_name = 'pipeline_stages' AND column_name IN ('is_won','is_lost')))`,
     );
-    expect(mismatched.rows[0].n).toBe(0);
+    expect(left.rows).toEqual([]);
   });
 
   // ── Phase C0: the API's stage field is derived, not the column ─────────────
 
-  it('C0: the stage the API returns comes from pipeline_stages, not deals.stage', async () => {
-    // The projection is `SELECT d.*, ps.slug AS stage`, so while the column
-    // still exists TWO fields are named stage and node-pg's row object takes the
-    // last. That is real, verified behaviour rather than an assumption — but it
-    // is also exactly the kind of thing that would break quietly, so it is
-    // pinned here. Corrupt the legacy column directly and the API must still
-    // answer with the derived value.
+  it('C2: the API still returns a stage field, now with no column behind it', async () => {
+    // Until migration 038 this test corrupted deals.stage directly and asserted
+    // the projected value won. There is no column left to corrupt: `ps.slug AS
+    // stage` is the only source, which is what C0 existed to arrange. What still
+    // has to hold is the RESPONSE SHAPE — 136 frontend reads of `deal.stage`
+    // depend on the field being there and being the slug.
     const created = await createDeal(ws, { stage: 'qualified' });
     const id = created.body.data.id;
 
-    await pool.query("UPDATE deals SET stage = 'DRIFTED' WHERE id = $1", [id]);
-
     const one = await request(app).get(`/api/v1/deals/${id}`).set(auth(ws));
     expect(one.status).toBe(200);
-    expect(one.body.data.stage).toBe('qualified');      // NOT 'DRIFTED'
+    expect(one.body.data.stage).toBe('qualified');
 
     const list = await request(app).get('/api/v1/deals').set(auth(ws));
-    const row = list.body.data.find((d: any) => d.id === id);
-    expect(row.stage).toBe('qualified');
+    expect(list.body.data.find((d: any) => d.id === id).stage).toBe('qualified');
 
-    // Restore, so the drift assertion below still means something.
-    await pool.query("UPDATE deals SET stage = 'qualified' WHERE id = $1", [id]);
+    // And the column really is gone, so nothing can start writing it again.
+    const col = await pool.query(
+      `SELECT count(*)::int AS n FROM information_schema.columns
+        WHERE table_name = 'deals' AND column_name = 'stage'`);
+    expect(col.rows[0].n).toBe(0);
   });
 
   it('C0: create and stage-transition responses carry the derived stage too', async () => {
@@ -140,15 +144,15 @@ describe('Pipeline stages — Phase A round trip', () => {
     expect(moved.body.data.stage).toBe('proposal');
   });
 
-  it('C0: no deal anywhere has drifted between the column and its stage row', async () => {
-    // The gate for C2. Runs while the suite's data exists, unlike a check
-    // against the test database afterwards — teardown empties it, so that
-    // version of this assertion would pass vacuously.
-    const drift = await pool.query(
-      `SELECT count(*)::int AS n
-         FROM deals d LEFT JOIN pipeline_stages s ON s.id = d.stage_id
-        WHERE d.stage IS DISTINCT FROM s.slug`);
-    expect(drift.rows[0].n).toBe(0);
+  it('C2: every deal still resolves to a stage in its own pipeline', async () => {
+    // The column-vs-slug drift assertion retired with the column — there is
+    // nothing left to drift FROM. What still matters is that stage_id resolves
+    // at all, and to the right pipeline.
+    const unresolved = await pool.query(
+      `SELECT count(*)::int AS n FROM deals d
+         LEFT JOIN pipeline_stages s ON s.id = d.stage_id
+        WHERE d.stage_id IS NULL OR s.id IS NULL`);
+    expect(unresolved.rows[0].n).toBe(0);
 
     // The subtler one: the stage must belong to the deal's OWN pipeline, not
     // merely exist in the workspace.

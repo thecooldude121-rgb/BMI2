@@ -17,6 +17,12 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
   winProbOverrideEnabled,
   winProbOverrideValue,
 }) => {
+  // Above the early return: a hook after it runs on some renders and not others,
+  // which React rejects with "Rendered more hooks than during the previous
+  // render" the first time the form goes from empty to filled. Same mistake was
+  // made in DealSlideoutPanel; see the note there.
+  const { lookup: stageLookup } = useStageLookup();
+
   const hasAnyData = formData.dealName || formData.dealValue || formData.stage;
   if (!hasAnyData) return null;
 
@@ -29,7 +35,6 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
 // immediately; one they retire stops being described here. `?? 20` used to be
 // the fallback when a stage was unknown — a made-up probability presented as the
 // deal's — so an unresolvable stage now reads as "not set" instead.
-  const { lookup: stageLookup } = useStageLookup();
   const stageObj = stageLookup(formData.stage, formData.pipelineId ?? null);
   const dealTypeObj = getDealType(formData.dealType || '');
 

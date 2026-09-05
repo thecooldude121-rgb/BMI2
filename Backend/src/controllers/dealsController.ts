@@ -42,27 +42,21 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     // unless the caller explicitly passes include_test=true (dev tooling only).
     let query = `
       SELECT d.*,
-             -- PHASE C0: the stage field comes from pipeline_stages, not from
-             -- the deals.stage column.
+             -- The stage field comes from pipeline_stages. There is no
+             -- deals.stage column any more: migration 038 dropped it, and this
+             -- alias is now the only source of the field.
              --
-             -- That column still exists and is still dual-written, and the two
-             -- are provably identical today — verified across every live deal
-             -- and pinned by roundTrip.pipelineStages. This projection is what
-             -- makes that stop mattering: once C2 drops deals.stage, d.* will no
-             -- longer contain a stage key and this alias becomes the only
-             -- source, so the response shape does not change on the day the
-             -- column goes.
-             --
-             -- Without it, dropping the column would silently turn 167 frontend
-             -- reads of deal.stage into undefined: no type error, no failing
-             -- test, exactly the silent-failure class this project keeps paying
-             -- for.
-             --
-             -- IT RELIES ON COLUMN ORDER: two fields are named stage while the
-             -- column exists, and node-pg's row object takes the LAST one. Real
-             -- behaviour, verified against this pg version rather than assumed,
-             -- and pinned by a test, because it is exactly the kind of thing
-             -- that breaks quietly.
+             -- IT WAS ADDED ONE PHASE BEFORE THE DROP, DELIBERATELY (C0). While
+             -- both existed, d.* also carried a stage key and node-pg's row
+             -- object took the LAST field of a duplicated name, so this alias
+             -- won and the two were provably identical across every live deal.
+             -- Landing the projection first meant the response shape did not
+             -- change on the day the column went — which the before/after
+             -- payload diff confirmed: 24 deals, zero differing fields or
+             -- values. Dropping the column without it would have turned 167
+             -- frontend reads of deal.stage into undefined: no type error, no
+             -- failing test, exactly the silent-failure class this project
+             -- keeps paying for.
              --
              -- (No backticks in this comment on purpose: it lives inside a JS
              -- template literal, and one would close the string. CLAUDE.md
@@ -117,7 +111,9 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
       query += ` AND d.is_archived = false`;
     }
 
-    if (stage)       { query += ` AND d.stage = $${i++}`;             params.push(stage); }
+    // Filters on the DERIVED slug now that deals.stage is gone (migration 038).
+    // The join is already in the FROM clause for the projection.
+    if (stage)       { query += ` AND ps.slug = $${i++}`;            params.push(stage); }
     if (assigned_to) { query += ` AND d.assigned_to = $${i++}`;       params.push(assigned_to); }
     if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${search}%`); i++; }
 
@@ -301,7 +297,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       `INSERT INTO deals
          (name, title, lead_id, value, currency, base_amount_usd,
           pipeline_id, pipeline_name, deal_type,
-          stage, probability, expected_close_date,
+          probability, expected_close_date,
           close_date_is_past, close_date_override_reason, forecast_category,
           assigned_to, description, next_step, next_step_due_date, next_step_owner,
           next_step_status, notes, company_name, company_id,
@@ -314,17 +310,18 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
           stage_id, tenant_id)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56)
        RETURNING *`,
       [
         dealName, title || dealName, lead_id, value,
         resolvedCurrency, base_amount_usd ?? value,
         resolvedPipeline, pipeline_name || 'New Business',
         deal_type || 'new-business',
-        // DUAL-WRITE, and the text comes from the RESOLVED ROW rather than from
-        // the request body. Echoing the body back would let stage and stage_id
-        // disagree the moment a caller sent a differently-cased or unknown slug.
-        stageRow.slug, probability || 0, expected_close_date,
+        // The dual-write is over: deals.stage is dropped (migration 038) and
+        // stage_id below is the only stored stage. The response still carries a
+        // `stage` field — see the projection in getDeals and the spread on the
+        // response — so nothing downstream changed shape.
+        probability || 0, expected_close_date,
         close_date_is_past ?? false, close_date_override_reason ?? null,
         forecast_category ?? null,
         assigned_to, description, next_step ?? null,
@@ -423,11 +420,12 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
         return;
       }
       resolvedStageId = found.id;
-      // The resolved slug, not the raw body, so the two columns cannot diverge.
-      req.body.stage = found.slug;
+      // Nothing to keep in step any more — deals.stage is gone (migration 038)
+      // and `stage` is no longer in the `fields` list below, so a caller cannot
+      // write it directly either. stage_id is appended after the loop.
     }
 
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','stage','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
@@ -561,8 +559,27 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
 
     // Lock the row so two concurrent moves cannot interleave and record a
     // from_stage that was never actually the deal's stage.
+    //
+    // LOCK FIRST, RESOLVE THE SLUG SECOND — DELIBERATELY TWO STATEMENTS.
+    //
+    // The obvious version of this joins pipeline_stages and projects ps.slug in
+    // the same locking SELECT. It is wrong under exactly the contention it
+    // exists to handle, and it is wrong SILENTLY. When this statement blocks on
+    // another transaction's lock, Postgres re-runs the plan through EvalPlanQual
+    // after that transaction commits: the locked relation is re-fetched, but the
+    // other side of the join is NOT — it keeps the tuple read before the wait.
+    // So if the winning transaction moved the deal, d.stage_id now points at a
+    // different stage than the stale ps tuple, the LEFT JOIN finds nothing, and
+    // ps.slug comes back NULL. The audit trail then records from_stage = null
+    // for a deal that plainly had a stage, breaking the history chain.
+    //
+    // Measured, not reasoned: a probe holding a stage move in one connection
+    // while this SELECT waited in another returned {stage: null} with the join
+    // and the correct slug with these two statements. It is also what the
+    // concurrency round-trip caught first.
     const current = await client.query(
-      'SELECT id, stage, probability, pipeline_id FROM deals WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+      `SELECT id, probability, pipeline_id, stage_id
+         FROM deals WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
       [req.params.id, tenantId],
     );
     if (!current.rows[0]) {
@@ -570,6 +587,15 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
       res.status(404).json({ success: false, message: 'Deal not found' });
       return;
     }
+    // deal_stage_history.from_stage is a TEXT SNAPSHOT with no FK (design §2.4),
+    // so it still needs a string — it just no longer has a column on deals to
+    // read it from. This runs after the lock is held, so it sees the committed
+    // stage_id rather than a pre-wait snapshot of it.
+    const fromRow = await client.query(
+      `SELECT slug FROM pipeline_stages WHERE id = $1 AND tenant_id = $2`,
+      [current.rows[0].stage_id, tenantId],
+    );
+    current.rows[0].stage = fromRow.rows[0]?.slug ?? null;
 
     const fromStage = current.rows[0].stage as string | null;
     if (fromStage === to_stage) {
@@ -615,10 +641,9 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
       : (target.probability ?? current.rows[0].probability ?? null);
 
     const updated = await client.query(
-      `UPDATE deals SET stage = $1, probability = $2, stage_id = $5, updated_at = NOW()
+      `UPDATE deals SET probability = $1, stage_id = $2, updated_at = NOW()
        WHERE id = $3 AND tenant_id = $4 RETURNING *`,
-      // The RESOLVED slug, not the requested string, so stage and stage_id agree.
-      [target.slug, nextProbability, req.params.id, tenantId, target.id],
+      [nextProbability, target.id, req.params.id, tenantId],
     );
 
     const changedBy = resolveActorName(req);
@@ -710,9 +735,24 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
 
     // Resolve which ids actually belong to this tenant, and lock them.
     const existing = await client.query(
-      'SELECT id, stage, probability, pipeline_id FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 FOR UPDATE',
+      // Lock only, no join — see the EvalPlanQual note on the single-deal move
+      // above. A blocked locking SELECT re-fetches the locked rows but reuses
+      // the stale joined ones, so a projected ps.slug can come back NULL for a
+      // deal that has a stage.
+      `SELECT id, probability, pipeline_id, stage_id
+         FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 FOR UPDATE`,
       [deal_ids, tenantId],
     );
+    // Slugs for the audit snapshot, resolved once for the whole batch after the
+    // locks are held. Tenant-scoped: pipeline_stages.id is a global primary key,
+    // so id alone would read across the workspace boundary.
+    const slugRows = await client.query(
+      `SELECT id, slug FROM pipeline_stages WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
+      [existing.rows.map(r => r.stage_id).filter(Boolean), tenantId],
+    );
+    const slugById = new Map<string, string>(slugRows.rows.map(r => [r.id, r.slug]));
+    for (const row of existing.rows) row.stage = slugById.get(row.stage_id) ?? null;
+
     const found = existing.rows;
     const foundIds = found.map(r => r.id);
     const notFound = deal_ids.filter(id => !foundIds.includes(id));
@@ -806,9 +846,9 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
 
           const nextProbability = target.probability ?? deal.probability ?? null;
           await client.query(
-            `UPDATE deals SET stage = $1, probability = $2, stage_id = $5, updated_at = NOW()
+            `UPDATE deals SET probability = $1, stage_id = $2, updated_at = NOW()
              WHERE id = $3 AND tenant_id = $4`,
-            [target.slug, nextProbability, deal.id, tenantId, target.id],
+            [nextProbability, target.id, deal.id, tenantId],
           );
           await client.query(
             `INSERT INTO deal_stage_history

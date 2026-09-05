@@ -484,6 +484,39 @@ Related: a stage is never accepted from a request body as an id. A caller names 
 slug and the server decides which row that is, scoped to the caller's workspace — so a
 stage id from another workspace has no shape in which it can be sent.
 
+### The stage IS `stage_id`. There is no `deals.stage` column (migration 038)
+037 created the rows and backfilled `stage_id` while leaving the old varchar `deals.stage`
+in place; 038 dropped it, along with `pipeline_stages.is_won` / `is_lost`. What that means
+for anything written from here on:
+
+- **The API still returns a `stage` field and it is still the slug** — projected as
+  `ps.slug AS stage` through a tenant-matched join. That projection landed one phase before
+  the drop precisely so the response shape would not change on the day the column went, and
+  a before/after payload diff on live data confirmed it: 24 deals, zero differing fields or
+  values, detail endpoint identical.
+- **Won/lost is `stage_type`**, one NOT NULL column with a CHECK, not two independent
+  nullable booleans that could disagree or both be true. Classify with the curried
+  predicates in `utils/pipelinesApi.ts` (`isWonWith(lookup)`), never by comparing a slug to
+  a literal — the whole point is that a workspace names its own stages.
+- A query written against `deals.stage` now fails loudly instead of silently, which is the
+  one respect in which this is easier than the `close_date` / `expected_close_date` drift
+  above.
+
+### TRACKED GAP — `deals.pipeline_id` is an unconstrained varchar slug
+It holds a pipeline **slug** as `character varying` with **no foreign key**, so nothing
+stops a typo'd or stale value from being stored, and nothing removes it when a pipeline is
+renamed or deleted. The deal and its stage can therefore disagree about which pipeline they
+are in — which is not hypothetical: it is what produced the live "Stage 1 of 6,
+Prospecting" mis-render on a Renewals deal during Phase B.
+
+Deliberately **not** folded into migration 038 — that migration's job was dropping columns,
+and a schema change with a different rationale does not belong in the same transaction.
+Same treatment as the role-change gap above: real, structural, not urgent. Whoever fixes it
+has to decide first whether the column becomes a UUID FK to `pipelines(id)` (consistent with
+`stage_id`, and it would then need `AND parent.tenant_id = child.tenant_id` on every join
+like every other FK here) or stays a slug with a composite FK to a unique
+`(tenant_id, slug)`. 038 asserts the two agree today, so the fix starts from a clean state.
+
 ## Known gaps in the auth shell
 - **Password reset is NOT built.** The "Forgot password?" link goes nowhere. It needs, in
   dependency order: transactional email delivery (provider, sender domain, SPF/DKIM) — this
@@ -747,3 +780,40 @@ something directly, do that instead of reasoning about what should be true.**
    to a real path before calling code dead. A tool reporting success (e.g. a window resize)
    is not evidence the effect happened — read the real DOM or DB output. And after a
    "successful" save, confirm the value actually changed in Postgres.
+11. **`SELECT ... FOR UPDATE` on a JOIN can return a NULL for the joined side — and only
+   under the contention it exists to handle.** When a locking SELECT blocks, Postgres
+   re-runs the plan through EvalPlanQual after the blocker commits: it re-fetches the
+   **locked** relation and reuses the tuple it already read from the other side. So
+   `SELECT d.*, ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id =
+   d.stage_id ... FOR UPDATE OF d` sees the NEW `stage_id` against the OLD `ps` row, the
+   join matches nothing, and the slug is NULL. `deal_stage_history` then recorded
+   `from_stage = null` for a deal that plainly had a stage. **Lock the row alone, then
+   resolve what you need in a second statement inside the same transaction.** Uncontended,
+   both versions are identical, which is exactly why this survives ordinary testing.
+12. **Test the test: a passing assertion under concurrency may never have raced at all.**
+   The regression test for the above passed against the broken code twice, for two
+   different wrong reasons. (a) A supertest `Test` is LAZY — assigning it to a variable and
+   awaiting it after the COMMIT dispatches the request when there is no lock left to block
+   on; force it with a trailing `.then(r => r)`. (b) `pg_stat_activity` is a statistics
+   snapshot that Postgres caches **per transaction** (`stats_fetch_consistency` defaults to
+   `cache`), so polling it from the connection holding the lock open returns the same
+   pre-block snapshot forever and reports "not blocked" for as long as you care to loop.
+   Poll from a different connection, and assert the block was actually observed before
+   asserting anything about the result — an unproven race is a test that proves nothing.
+13. **A green `lint:hooks` is only green if you ran it.** `npm run lint:hooks` gates
+   `react-hooks/rules-of-hooks` on its own, precisely because a conditionally-called hook is
+   a crash rather than a style nit. Two were shipped anyway (`DealSlideoutPanel`,
+   `MobileDealPreview` — a `useStageLookup()` placed next to its first use, which sat below
+   an `if (!x) return null`), and the gate flagged both the moment it was run. Neither
+   `tsc` nor 521 unit tests said a word; the page threw "Rendered more hooks than during the
+   previous render" on the first click. **Run it with the typecheck whenever a hook call is
+   added or moved.**
+14. **A migration that has been applied is not necessarily the migration in git.** Booting
+   against `bmi_crm` reported 037's recorded checksum no longer matching the file: it had
+   been applied from a working-copy draft and then edited before being committed. The
+   runner refuses to proceed at that point — correctly, and it means no later migration can
+   run until it is resolved. **Resolving it means proving equivalence, not overwriting the
+   ledger:** build a scratch database from the committed migrations, diff the schema of
+   every object the migration touches against live, and only then update the recorded
+   checksum. Better: never apply a migration until the version you are applying is the
+   version you have committed.

@@ -4,10 +4,12 @@ import type { PoolClient } from 'pg';
 /**
  * Resolving a deal's stage to a real, workspace-owned `pipeline_stages` row.
  *
- * PHASE A OF PIPELINE_STAGES_DESIGN.md. Migration 037 made stages real rows and
- * added `deals.stage_id NOT NULL`. This module is what keeps that column
- * populated while `deals.stage` (text) is still authoritative for reads — the
- * dual-write period. Phase B flips the direction; Phase C drops the text column.
+ * PIPELINE_STAGES_DESIGN.md, phases A-C. Migration 037 made stages real rows and
+ * added `deals.stage_id NOT NULL`; this module is what keeps that column
+ * populated. It was written for the dual-write period, when `deals.stage` (text)
+ * was still authoritative for reads. That period is over: migration 038 dropped
+ * the text column, so stage_id is now the ONLY representation of a deal's stage
+ * and this resolver is the only way one gets set.
  *
  * WHY A SHARED MODULE AND NOT A FUNCTION PER CONTROLLER. Four write paths set a
  * deal's stage — createDeal, updateDeal, the stage-transition endpoint and the
@@ -216,14 +218,12 @@ export async function provisionDefaultPipeline(
   // One statement rather than six round trips. `position` is 1..N by catalogue
   // order so the board renders in the intended sequence.
   //
-  // is_won / is_lost are passed as their own parameters rather than derived in
-  // SQL from the stage_type placeholder. Reusing one placeholder in both a text
-  // column and a boolean comparison made Postgres deduce "inconsistent types for
-  // parameter $5" and failed every suite that creates a workspace — cleverness
-  // that cost more than the two extra parameters it saved. They exist only until
-  // Phase C drops them.
+  // is_won / is_lost were written here too, as their own parameters rather than
+  // derived in SQL — reusing the stage_type placeholder in a boolean comparison
+  // made Postgres deduce "inconsistent types for parameter $5". Migration 038
+  // dropped both columns, so the workaround goes with them.
   const stages = DEFAULT_PIPELINE_TEMPLATE.stages;
-  const COLS = 10;
+  const COLS = 8;
   const rows = stages
     .map((_, n) =>
       '(' + Array.from({ length: COLS }, (_, c) => `$${n * COLS + c + 1}`).join(',') + ')')
@@ -231,12 +231,10 @@ export async function provisionDefaultPipeline(
 
   await db.query(
     `INSERT INTO pipeline_stages
-       (pipeline_id, tenant_id, slug, name, stage_type, probability, color,
-        position, is_won, is_lost)
+       (pipeline_id, tenant_id, slug, name, stage_type, probability, color, position)
      VALUES ${rows}`,
     stages.flatMap((st, n) => [
-      pipelineId, tenantId, st.slug, st.name, st.stage_type, st.probability, st.color,
-      n + 1, st.stage_type === 'won', st.stage_type === 'lost',
+      pipelineId, tenantId, st.slug, st.name, st.stage_type, st.probability, st.color, n + 1,
     ]),
   );
 }

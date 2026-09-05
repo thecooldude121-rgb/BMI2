@@ -118,9 +118,9 @@ beforeAll(async () => {
   const stageA = await findStage(WS_A, 'new-business', 'prospecting');
   const stageB = await findStage(WS_B, 'new-business', 'prospecting');
   await pool.query(
-    `INSERT INTO deals (id, name, title, value, stage, stage_id, tenant_id)
-     VALUES ($1,'Deal in A','Deal in A',1000,'prospecting',$5,$3),
-            ($2,'Deal in B','Deal in B',2000,'prospecting',$6,$4)`,
+    `INSERT INTO deals (id, name, title, value, stage_id, tenant_id)
+     VALUES ($1,'Deal in A','Deal in A',1000,$5,$3),
+            ($2,'Deal in B','Deal in B',2000,$6,$4)`,
     [IDS.dealA, IDS.dealB, WS_A, WS_B, stageA!.id, stageB!.id],
   );
   await pool.query(

@@ -470,6 +470,18 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Stage configuration, for classifying this deal's outcome by configuration
+  // rather than by two hardcoded slugs (see DealKanbanCard).
+  //
+  // UP HERE, ABOVE `if (!dealId) return null`, AND THAT IS THE WHOLE POINT.
+  // It was originally placed next to its first use, which sits after that early
+  // return — so the hook ran on renders with a deal and not on renders without
+  // one, and React threw "Rendered more hooks than during the previous render"
+  // the moment a card was clicked. The panel is unmounted-by-null far more often
+  // than it is mounted, which is exactly why the mistake was invisible until
+  // something opened it.
+  const { lookup: stageLookup } = useStageLookup();
+
   // Which field is currently being edited — only one at a time
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -647,13 +659,14 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     }
   };
 
-  // Don't render anything (not even a portal) when there's no deal selected
+  // Don't render anything (not even a portal) when there's no deal selected.
+  // Every hook this component calls must be ABOVE this line — see the
+  // useStageLookup call near the top of the component for what happens when one
+  // is not.
   if (!dealId) return null;
 
   // ── Compute state chip for the deal ──────────────────────────────────────
   const closeDaysLeft = deal ? daysFromNow(deal.closeDate) : null;
-  // See DealKanbanCard: outcome by configuration, not by two literals.
-  const { lookup: stageLookup } = useStageLookup();
   const outcome       = deal ? outcomeOf(stageLookup)(deal) : 'open';
   const isClosed      = outcome !== 'open';
 

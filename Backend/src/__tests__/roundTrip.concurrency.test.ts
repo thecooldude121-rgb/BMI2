@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { Client } from 'pg';
 import { pool } from '../config/database';
 import { app, setupWorkspace, teardownWorkspace, auth, TestWorkspace } from './helpers';
 
@@ -56,7 +57,7 @@ describe('Concurrent writes to the same row', () => {
       expect(r.body?.message ?? '').not.toMatch(/Internal Server Error/);
     }
 
-    const deal = await pool.query('SELECT stage FROM deals WHERE id = $1', [id]);
+    const deal = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
     expect(deal.rows[0].stage).toBe('negotiation');
 
     // The point of the test. The second request finds the deal ALREADY in the
@@ -81,7 +82,7 @@ describe('Concurrent writes to the same row', () => {
       expect(r.body?.message ?? '').not.toMatch(/Internal Server Error/);
     }
 
-    const deal = await pool.query('SELECT stage FROM deals WHERE id = $1', [id]);
+    const deal = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
     const hist = await pool.query(
       'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1',
       [id],
@@ -124,6 +125,90 @@ describe('Concurrent writes to the same row', () => {
     expect(cursor, `chain from prospecting ended at ${cursor}, deal is ${deal.rows[0].stage}: ${JSON.stringify(hist.rows)}`)
       .toBe(deal.rows[0].stage);
     expect(visited.size - 1, `unreachable history rows: ${JSON.stringify(hist.rows)}`).toBe(hist.rows.length);
+  });
+
+  it('a stage move that WAITS on a lock records the stage it actually waited for', async () => {
+    // Deterministic version of the race above, which found this by luck of
+    // scheduling and would not have found it every run.
+    //
+    // The bug: the locking SELECT used to join pipeline_stages and project
+    // ps.slug. When it blocks, Postgres re-runs the plan through EvalPlanQual
+    // once the blocker commits — re-fetching the LOCKED relation but reusing the
+    // already-read tuple from the other side of the join. So d.stage_id was the
+    // new value while ps was the old row, the join matched nothing, and the slug
+    // came back NULL. deal_stage_history then recorded from_stage = null for a
+    // deal that unambiguously had a stage, breaking the chain the test above
+    // walks. Locking the deal alone and resolving the slug in a second statement
+    // is what fixes it, and this pins that.
+    const id = await newDeal('prospecting');
+    const target = await pool.query(
+      `SELECT id FROM pipeline_stages WHERE tenant_id = $1 AND slug = 'qualified' LIMIT 1`,
+      [ws.tenantId],
+    );
+
+    // A dedicated connection, NOT one borrowed from the app's pool: if the
+    // holder took a pooled connection the request could end up waiting for a
+    // free connection rather than for the row lock, and the test would pass
+    // without ever exercising the contended path.
+    const holder = new Client({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'bmi_crm',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD,
+    });
+    await holder.connect();
+    let pending: Promise<request.Response>;
+    let blocked = false;
+    try {
+      await holder.query('BEGIN');
+      await holder.query('UPDATE deals SET stage_id = $1 WHERE id = $2 AND tenant_id = $3',
+        [target.rows[0].id, id, ws.tenantId]);
+
+      // Fires while the holder still has the row locked, so the controller's
+      // own SELECT ... FOR UPDATE blocks inside the transaction.
+      //
+      // The trailing .then() is load-bearing, not style. A supertest Test is
+      // LAZY: it only dispatches when it is awaited or then'd, so assigning it
+      // to a variable and awaiting it after the COMMIT sends the request when
+      // there is no lock left to block on. That is how the first draft of this
+      // test passed against the very code it was written to fail on.
+      pending = request(app).post(`/api/v1/deals/${id}/stage-transition`)
+        .set(auth(ws)).send({ to_stage: 'negotiation' }).then(r => r);
+
+      // WAIT FOR THE BLOCK TO BE OBSERVABLE, rather than sleeping a guessed
+      // interval. A fixed sleep that is fractionally too short releases the lock
+      // before the SELECT ever reaches it — the request then reads the committed
+      // row with no contention at all and the test passes without testing
+      // anything. pg_stat_activity says whether the wait is real.
+      //
+      // Polled through the app pool, NOT through `holder`. pg_stat_activity is
+      // a statistics snapshot, and Postgres caches it per transaction
+      // (stats_fetch_consistency defaults to 'cache'), so polling from the
+      // connection that is holding the lock open returns the same pre-block
+      // snapshot every iteration and reports "not blocked" forever.
+      for (let i = 0; i < 100 && !blocked; i++) {
+        const waiting = await pool.query(
+          `SELECT count(*)::int AS n FROM pg_stat_activity
+            WHERE datname = current_database() AND wait_event_type = 'Lock'
+              AND query ILIKE '%FOR UPDATE%'`);
+        blocked = waiting.rows[0].n > 0;
+        if (!blocked) await new Promise(r => setTimeout(r, 50));
+      }
+      await holder.query('COMMIT');
+    } finally {
+      await holder.end();
+    }
+    expect(blocked, 'the stage move never blocked on the row lock, so this test proved nothing').toBe(true);
+
+    const res = await pending!;
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const hist = await pool.query(
+      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1', [id]);
+    expect(hist.rows.length).toBe(1);
+    expect(hist.rows[0].from_stage).toBe('qualified');
+    expect(hist.rows[0].to_stage).toBe('negotiation');
   });
 
   it('concurrent edits to the same deal leave one valid row, never a blend or a 500', async () => {
