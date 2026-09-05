@@ -667,12 +667,28 @@ an explicit 0% arrive identical. A `probabilityRaw` field preserves the NULL.
   `transitionDealStage` the confirm dialog exercises end to end, so the write path is
   proven and only the gesture is not. **The Kanban cutover should not be called fully
   verified until someone drags a card by hand.**
-- **The Renewals deal card does not open the slideout panel on click.** Found while
-  verifying C2 in the browser: clicking the one deal in the Renewals pipeline fires no
-  request at all (backend network log unchanged), while the same gesture on a
-  Standard-pipeline card fetches `GET /deals/D019` and renders the panel. Not caused by the
-  column drop — no column participates in an onClick — and not investigated further here
-  rather than being folded into a migration checkpoint. Worth its own look.
+- **The Renewals deal slideout — PREMISE CORRECTED, root cause not yet pinned.** This was
+  first written up as "clicking the Renewals card fires no request at all". That reading was
+  wrong, and the correction matters more than the original observation: `GET /deals/D019`
+  **is** in that session's network log, D019 **is** the Renewals deal, and the slideout is
+  the only caller of that endpoint on the Kanban page. So the click reached the handler and
+  the panel mounted and fetched successfully — what did not happen is that it became
+  visible. The request I attributed to the Standard-pipeline card was this one.
+
+  Ruled out since, so the next person does not re-walk it:
+  - **The card is not pipeline-specific.** `DealKanbanCard` has two render branches and both
+    are selected by `density`, a board-level setting; `onCardClick={handleCardClick}` and
+    `id: d.id` are identical for every deal on every board.
+  - **The panel's reopen path works.** A component probe mounted it with one deal, closed it
+    with Escape, and reopened it with a second, different deal: the dialog renders both
+    times with an identical transform. The "can only be opened once per page load"
+    hypothesis is dead.
+  - **A D019-shaped deal renders.** Null owner and null close date — the two things that
+    visibly distinguish this deal — do not break the panel.
+
+  What is left is a live-DOM question (animation, stacking or viewport position of a
+  `position: fixed`, `right: 0` portal), which needs a signed-in browser session to settle.
+  Not caused by the column drop either way — no column participates in an onClick.
 - **`mark-won` / `mark-lost` use `window.confirm`.** A native dialog, in a codebase whose
   every other confirmation is a custom modal, and it blocks browser automation outright —
   so that path is verified by unit test only, not through the UI. Worth replacing when the
