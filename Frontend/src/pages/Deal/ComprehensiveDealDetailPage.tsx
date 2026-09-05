@@ -36,6 +36,10 @@ import type { DealValueHistoryEntry } from '../../types/dealManagement';
 // sound but had no real inputs. Re-import them when actual activity data exists
 // to feed it (see the note beside `momentumResult` below).
 import type { RevenueSchedule } from '../../components/Deal/RevenueTimeline';
+import {
+  fetchPipelines, findPipeline, defaultPipeline, terminalStage, stageIndex,
+  type ApiPipeline,
+} from '../../utils/pipelinesApi';
 
 /**
  * The stage ladder, in pipeline order.
@@ -50,14 +54,17 @@ import type { RevenueSchedule } from '../../components/Deal/RevenueTimeline';
  * the server normalises across them when it resolves a probability. See
  * migration 014's header for why that mapping is a separate piece of work.
  */
-const STAGE_LADDER = [
-  { key: 'prospecting',  name: 'Prospecting',  number: 1 },
-  { key: 'qualified',    name: 'Qualified',    number: 2 },
-  { key: 'proposal',     name: 'Proposal',     number: 3 },
-  { key: 'negotiation',  name: 'Negotiation',  number: 4 },
-  { key: 'closed-won',   name: 'Closed Won',   number: 5 },
-  { key: 'closed-lost',  name: 'Closed Lost',  number: 6 },
-] as const;
+/*
+ * STAGE_LADDER lived here and STAGE_MAP lived inside the fetch effect below —
+ * two of the five hardcoded copies of "every pipeline has these same six
+ * stages" that this page and its hero carried between them. Both are gone; the
+ * deal's own pipeline comes from GET /pipelines.
+ *
+ * What they got wrong was not hypothetical. STAGE_MAP had no entry for
+ * `renewal-quoted`, so a Renewals deal fell through to its default of
+ * `{ number: 1 }` and the page rendered "Stage 1 of 6" with Prospecting
+ * highlighted — a stage that does not exist in that deal's pipeline.
+ */
 
 const TABS = [
   { id: 'overview',    label: 'Overview' },
@@ -186,19 +193,13 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   useEffect(() => {
     if (!id) { setLoading(false); return; }
 
-    const STAGE_MAP: Record<string, { name: string; number: number }> = {
-      prospecting:  { name: 'Prospecting', number: 1 },
-      qualified:    { name: 'Qualified',   number: 2 },
-      proposal:     { name: 'Proposal',    number: 3 },
-      negotiation:  { name: 'Negotiation', number: 4 },
-      'closed-won': { name: 'Closed Won',  number: 5 },
-      'closed-lost':{ name: 'Closed Lost', number: 6 },
-    };
-
     getDeal(id)
       .then(({ data }) => {
         const stage = data.stage || 'prospecting';
-        const stageInfo = STAGE_MAP[stage] ?? { name: stage.charAt(0).toUpperCase() + stage.slice(1), number: 1 };
+        // Name and number are DERIVED from the pipeline below, not looked up
+        // here — this effect runs before the pipelines resolve. Seeded from the
+        // slug so the page has something honest to show for one frame.
+        const stageInfo = { name: stage.charAt(0).toUpperCase() + stage.slice(1), number: 1 };
         const closeDateIso: string = data.expected_close_date ?? '';
         const daysAway = daysFromNow(closeDateIso);
         const createdIso: string = data.created_at ?? '';
@@ -221,6 +222,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           currency: data.currency || 'USD',
           base_amount_usd: Number(data.base_amount_usd) || 0,
           stage,
+          pipelineId: data.pipeline_id || 'new-business',
           stageName: stageInfo.name,
           stageNumber: stageInfo.number,
           totalStages: 6,
@@ -577,13 +579,58 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
    * a closed deal — Closed Won has no "next", and offering one is how a modal
    * ends up claiming a move it cannot make.
    */
+  /*
+   * THE DEAL'S OWN PIPELINE. Everything stage-shaped on this page derives from
+   * it: the display name, the "Stage N of M" counter, the strip in the hero,
+   * which stage "next" means, and which stage "won" and "lost" mean.
+   */
+  const [pipelines, setPipelines] = useState<ApiPipeline[]>([]);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => { if (!cancelled) { setPipelines(list); setPipelineError(null); } })
+      .catch((e: Error) => { if (!cancelled) setPipelineError(e.message); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const dealPipeline = useMemo(
+    () => findPipeline(pipelines, deal.pipelineId) ?? defaultPipeline(pipelines),
+    [pipelines, deal.pipelineId],
+  );
+
+  /** Ordered stages of this deal's pipeline. Empty until they load. */
+  const pipelineStages = useMemo(() => dealPipeline?.stages ?? [], [dealPipeline]);
+
+  /**
+   * Name and position, resolved against the pipeline rather than a constant.
+   *
+   * A stage the pipeline does not list — one retired since the deal last moved —
+   * yields a null index, and the page shows the slug rather than pretending the
+   * deal is in stage 1. That specific wrong answer is what the old STAGE_MAP
+   * default produced for every Renewals and Partnerships deal.
+   */
+  const resolvedStage = useMemo(() => {
+    const st = pipelineStages.find(s => s.slug === deal.stage) ?? null;
+    return {
+      name: st?.name ?? deal.stageName ?? deal.stage,
+      number: stageIndex(dealPipeline, deal.stage) ?? 0,
+      total: pipelineStages.length,
+      stage: st,
+    };
+  }, [pipelineStages, dealPipeline, deal.stage, deal.stageName]);
+
   const nextStage = useMemo(() => {
-    const idx = STAGE_LADDER.findIndex(st => st.key === deal.stage);
+    const idx = pipelineStages.findIndex(st => st.slug === deal.stage);
     if (idx < 0) return null;
-    const candidate = STAGE_LADDER[idx + 1];
-    if (!candidate || candidate.key === 'closed-lost') return null;
-    return candidate;
-  }, [deal.stage]);
+    const candidate = pipelineStages[idx + 1];
+    // No "next" past the end, and never into a LOST stage — advancing a deal
+    // should not be able to mean losing it. Detected by stage_type rather than
+    // by the literal 'closed-lost', which was only ever right for one pipeline.
+    if (!candidate || candidate.stage_type === 'lost' || candidate.archived_at) return null;
+    return { key: candidate.slug, name: candidate.name, number: idx + 2 };
+  }, [pipelineStages, deal.stage]);
 
   /**
    * Days in the current stage.
@@ -737,13 +784,34 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         setShowStageChange(true);
         break;
       case 'mark-won': {
+        /*
+         * TWO BUGS FIXED HERE, both invisible while every pipeline had the same
+         * six stages.
+         *
+         * 1. It wrote the literal 'closed-won'. A Renewals deal's won stage is
+         *    `renewal-won`, so this sent a stage that does not exist in that
+         *    deal's pipeline. Before Phase A that was written silently; after
+         *    it, the server refuses with a 400 and the user saw only "Failed to
+         *    update deal stage".
+         * 2. It used updateDeal() — a plain field write — so marking a deal won
+         *    recorded NO deal_stage_history row, despite this file's own comment
+         *    on applyStageTransition saying a move must. The audit trail was
+         *    missing exactly the transition that matters most.
+         */
+        const won = terminalStage(dealPipeline, 'won');
+        if (!won) {
+          showToast(
+            `"${dealPipeline?.name ?? 'This pipeline'}" has no Won stage configured, so this deal cannot be marked won.`,
+            'error',
+          );
+          break;
+        }
         const confirmed = window.confirm(
-          `Mark "${deal.dealName}" as WON?\n\nThis will move it to Closed Won stage.`
+          `Mark "${deal.dealName}" as WON?\n\nThis will move it to the ${won.name} stage.`
         );
         if (confirmed) {
           try {
-            if (id) await updateDeal(id, { stage: 'closed-won' });
-            setDeal((prev: any) => ({ ...prev, stage: 'closed-won', stageName: 'Closed Won' }));
+            await applyStageTransition(stageIndex(dealPipeline, won.slug) ?? 0, won.name, won.slug);
             showToast('🎉 Deal marked as Won!', 'success');
           } catch {
             showToast('Failed to update deal stage.', 'error');
@@ -752,13 +820,20 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         break;
       }
       case 'mark-lost': {
+        const lost = terminalStage(dealPipeline, 'lost');
+        if (!lost) {
+          showToast(
+            `"${dealPipeline?.name ?? 'This pipeline'}" has no Lost stage configured, so this deal cannot be marked lost.`,
+            'error',
+          );
+          break;
+        }
         const confirmed = window.confirm(
-          `Mark "${deal.dealName}" as LOST?\n\nThis action will move the deal to Closed Lost.`
+          `Mark "${deal.dealName}" as LOST?\n\nThis action will move the deal to the ${lost.name} stage.`
         );
         if (confirmed) {
           try {
-            if (id) await updateDeal(id, { stage: 'closed-lost' });
-            setDeal((prev: any) => ({ ...prev, stage: 'closed-lost', stageName: 'Closed Lost' }));
+            await applyStageTransition(stageIndex(dealPipeline, lost.slug) ?? 0, lost.name, lost.slug);
             showToast('Deal marked as Lost.', 'info');
           } catch {
             showToast('Failed to update deal stage.', 'error');
@@ -1050,7 +1125,20 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       {/* Hero Section */}
       <div ref={heroRef}>
       <DealHeroSection
-        deal={{ ...deal, aiScore: healthResult.score, aiHealth: healthResult.label }}
+        // stageName / stageNumber / totalStages are OVERRIDDEN with the values
+        // resolved against the deal's own pipeline. The ones on `deal` are seeded
+        // from the slug by the fetch effect, which runs before the pipelines
+        // arrive; rendering those would show "Stage 1 of 6" for one frame on
+        // every deal and permanently on any deal outside new-business.
+        deal={{
+          ...deal,
+          aiScore: healthResult.score,
+          aiHealth: healthResult.label,
+          stageName: resolvedStage.name,
+          stageNumber: resolvedStage.number,
+          totalStages: resolvedStage.total,
+        }}
+        stages={pipelineStages}
         onEdit={() => navigate(`/crm/deals/${id}/edit`)}
         onMoreAction={handleMoreAction}
         onEmail={() => handleSendEmail(primaryStakeholder?.email ?? '', '', '')}

@@ -370,6 +370,13 @@ timeline, though the documents API is now covered.
     create it exactly once" failed once in a full-suite run and passed in isolation and in
     two further full runs. That is four unrelated files now — `idConcurrency`, `rbac`,
     `deals`, `bulkImportRaces` — every one full-suite-only. Not chased, per instruction.
+  - **Fifth data point, 2026-09-05 (pipeline stages Phase B slice 2).**
+    `roundTrip.documents.test.ts` > "tenant isolation: workspace B cannot read, list or
+    delete workspace A's document" failed once in a full run, passed in isolation and on
+    the next full run. Five unrelated files now, and the affected test is a different
+    SHAPE each time — id concurrency, RBAC, a plain date assertion, an import race, tenant
+    isolation. That variety is the strongest evidence yet that the cause is the shared
+    connection pool rather than anything in the tests themselves.
 - **The id-count enumeration leak** (`C042` reveals a global row count) — deferred, lower
   severity than the race was, closed only by a move to random ids.
 - **Browser-driven form submission** — caveat 1. No form is clicked.

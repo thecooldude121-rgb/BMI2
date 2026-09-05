@@ -465,6 +465,40 @@ one.
 the deal detail page; `config/stageColors.ts`; and `STAGES_REQUIRING_NEXT_STEP` on the
 board (a coaching prompt, not a data path).
 
+### Slice 2 — the deal detail page
+
+**Done.** `STAGE_LADDER` and `STAGE_MAP` (the page) and `ORDERED_STAGES`,
+`STAGE_KEY_MAP` and `STAGE_HEX` (the hero) are gone — **five** parallel copies of "every
+pipeline has these same six stages", all keyed on a stage number 1-6. The page now resolves
+the deal's own pipeline from `GET /pipelines`.
+
+What they got wrong, verified in the real app: a Renewals deal rendered **"Stage 1 of 6"
+with Prospecting highlighted**, because `STAGE_MAP` had no entry for `renewal-quoted` and
+fell through to its `{ number: 1 }` default. It now reads "Stage 2 of 5" with the Renewals
+vocabulary and a weighted value from the stage's real 75%.
+
+**Two further bugs fixed, neither of them anticipated.** "Mark as Won" wrote the literal
+`'closed-won'` for every deal regardless of pipeline — wrong for Renewals, whose won stage
+is `renewal-won` — and it used `updateDeal()`, a plain field write, so marking a deal won
+recorded **no `deal_stage_history` row at all**, despite this file's own comment saying a
+move must. Both now resolve the pipeline's own outcome stage by `stage_type` and route
+through the transition endpoint. The stage strip's terminal detection had the same shape
+(`num === 5` / `num === 6`), which in Renewals pointed at Negotiating and Renewed.
+
+### Outstanding verification, carried forward deliberately
+
+- **A manual drag-and-drop spot-check on the Kanban is still owed.** The gesture cannot be
+  driven by the available tooling — `@hello-pangea/dnd` ignores synthetic mouse events and
+  the keyboard lift did not complete either. The handler calls the same
+  `transitionDealStage` the confirm dialog exercises end to end, so the write path is
+  proven and only the gesture is not. **The Kanban cutover should not be called fully
+  verified until someone drags a card by hand.**
+- **`mark-won` / `mark-lost` use `window.confirm`.** A native dialog, in a codebase whose
+  every other confirmation is a custom modal, and it blocks browser automation outright —
+  so that path is verified by unit test only, not through the UI. Worth replacing when the
+  detail page is next touched; not folded into this slice because it is a UI-convention
+  change rather than a stage-configuration one.
+
 ## 7a. What Phase A found that the design did not predict
 
 Recorded because each was discovered by building or testing rather than by planning, and

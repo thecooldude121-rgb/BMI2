@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchPipelines, defaultPipeline, stageTint, type ApiPipeline } from './pipelinesApi';
+import {
+  fetchPipelines, defaultPipeline, stageTint, findPipeline, terminalStage,
+  stageIndex, stageHex, type ApiPipeline,
+} from './pipelinesApi';
 
 /**
  * The pipelines client — Phase B.
@@ -122,5 +125,93 @@ describe('stageTint', () => {
   it('falls back to a neutral tint for an unknown colour on an open stage', () => {
     expect(stageTint({ color: '#123456', stage_type: 'open' })).toBe('bg-slate-50');
     expect(stageTint({ color: null, stage_type: 'open' })).toBe('bg-slate-50');
+  });
+});
+
+/**
+ * The deal detail page's helpers — Phase B slice 2.
+ *
+ * These replace five parallel hardcoded maps (STAGE_LADDER and STAGE_MAP on the
+ * page; ORDERED_STAGES, STAGE_KEY_MAP and STAGE_HEX in the hero), every one of
+ * them keyed on a stage number 1-6 and therefore only ever correct for the
+ * new-business ladder. The Renewals fixture below is what each of them got wrong.
+ */
+const renewals: ApiPipeline = {
+  id: 'p2', slug: 'renewals', name: 'Renewals', description: null,
+  is_default: false, is_active: true,
+  stages: [
+    stage({ id: 'r1', slug: 'renewal-review', name: 'Under Review', position: 1, probability: 60 }),
+    stage({ id: 'r2', slug: 'renewal-quoted', name: 'Quoted', position: 2, probability: 75 }),
+    stage({ id: 'r3', slug: 'renewal-negotiation', name: 'Negotiating', position: 3, probability: 85 }),
+    stage({ id: 'r4', slug: 'renewal-won', name: 'Renewed', position: 4, stage_type: 'won', color: '#10B981' }),
+    stage({ id: 'r5', slug: 'renewal-lost', name: 'Churned', position: 5, stage_type: 'lost', color: '#EF4444' }),
+  ],
+};
+
+describe('findPipeline', () => {
+  it('finds a deal\'s pipeline by slug', () => {
+    expect(findPipeline([pipeline(), renewals], 'renewals')!.name).toBe('Renewals');
+  });
+  it('returns null for an unknown or absent slug rather than guessing', () => {
+    expect(findPipeline([pipeline()], 'renewals')).toBeNull();
+    expect(findPipeline([pipeline()], null)).toBeNull();
+  });
+});
+
+describe('terminalStage', () => {
+  it('finds the pipeline\'s OWN won stage, not the literal closed-won', () => {
+    // The bug this replaces: "Mark as Won" wrote 'closed-won' for every deal, so
+    // a Renewals deal was sent a stage that does not exist in its pipeline.
+    expect(terminalStage(renewals, 'won')!.slug).toBe('renewal-won');
+    expect(terminalStage(renewals, 'lost')!.slug).toBe('renewal-lost');
+  });
+
+  it('skips a RETIRED outcome stage', () => {
+    const retired: ApiPipeline = {
+      ...renewals,
+      stages: renewals.stages.map(s =>
+        s.slug === 'renewal-won' ? { ...s, archived_at: '2026-09-01T00:00:00Z' } : s),
+    };
+    // Retiring a stage must stop new deals reaching it, outcome or not.
+    expect(terminalStage(retired, 'won')).toBeNull();
+  });
+
+  it('returns null when the pipeline has no such outcome, rather than falling back', () => {
+    // Migration 037 reports pipelines in this state precisely because deals in
+    // them cannot be closed. The caller must say so, not pick something.
+    const noOutcome: ApiPipeline = { ...renewals, stages: renewals.stages.slice(0, 3) };
+    expect(terminalStage(noOutcome, 'won')).toBeNull();
+    expect(terminalStage(null, 'won')).toBeNull();
+  });
+});
+
+describe('stageIndex', () => {
+  it('numbers a stage by its position in ITS pipeline', () => {
+    // The old STAGE_MAP had no entry for renewal-quoted, so it fell through to a
+    // default of { number: 1 } and the page rendered "Stage 1 of 6" with
+    // Prospecting highlighted — a stage not in this deal's pipeline at all.
+    expect(stageIndex(renewals, 'renewal-quoted')).toBe(2);
+    expect(stageIndex(renewals, 'renewal-lost')).toBe(5);
+  });
+
+  it('returns null for a stage the pipeline does not list', () => {
+    // A stage retired since the deal last moved. Null so the caller can show the
+    // slug rather than claiming the deal is in stage 1.
+    expect(stageIndex(renewals, 'closed-won')).toBeNull();
+    expect(stageIndex(null, 'renewal-quoted')).toBeNull();
+  });
+});
+
+describe('stageHex', () => {
+  it('uses the stored colour', () => {
+    expect(stageHex(renewals.stages[3])).toBe('#10B981');
+  });
+  it('keeps outcome semantics when no colour is stored', () => {
+    expect(stageHex({ color: null, stage_type: 'won' })).toBe('#10B981');
+    expect(stageHex({ color: null, stage_type: 'lost' })).toBe('#EF4444');
+    expect(stageHex({ color: null, stage_type: 'open' })).toBe('#6B7280');
+  });
+  it('is safe on a missing stage', () => {
+    expect(stageHex(null)).toBe('#6B7280');
   });
 });

@@ -1,3 +1,5 @@
+import type { ApiStage } from '../../utils/pipelinesApi';
+import { stageHex } from '../../utils/pipelinesApi';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/Button';
 import {
@@ -17,14 +19,18 @@ import type { MomentumResult } from '../../utils/dealMomentum';
 import type { RevenueSchedule } from './RevenueTimeline';
 
 // Stage ordering (1-indexed, matching STAGE_MAP in ComprehensiveDealDetailPage)
-const ORDERED_STAGES: Record<number, string> = {
-  1: 'Prospecting',
-  2: 'Qualified',
-  3: 'Proposal',
-  4: 'Negotiation',
-  5: 'Closed Won',
-  6: 'Closed Lost',
-};
+/*
+ * ORDERED_STAGES, STAGE_HEX and STAGE_KEY_MAP lived here — three parallel
+ * Record<number, …> maps, all keyed on a stage NUMBER 1-6, which was itself an
+ * artifact of assuming every pipeline has exactly the same six stages. Between
+ * them and the detail page's STAGE_LADDER and STAGE_MAP there were FIVE copies
+ * of that assumption.
+ *
+ * They are replaced by the `stages` prop: the deal's own pipeline, from
+ * GET /pipelines. A Renewals deal now shows Under Review / Quoted / Negotiating
+ * / Renewed / Churned, and its stage number is its real position in that
+ * pipeline rather than a lookup miss defaulting to "Stage 1 of 6".
+ */
 
 // Item 2: avatar gradient per stage
 // STAGE_AVATAR_GRADIENT removed: declared, never read.
@@ -52,20 +58,6 @@ const STAGE_DOT_HEX: Record<string, string> = {
   'closed-lost':'#EF4444',
 };
 
-// Item 23: stage hex colors for pipeline strip
-const STAGE_HEX: Record<number, string> = {
-  1: '#3B82F6', 2: '#22C55E', 3: '#F97316', 4: '#A855F7', 5: '#10B981', 6: '#EF4444',
-};
-
-// API-compatible stage key per stage number
-const STAGE_KEY_MAP: Record<number, string> = {
-  1: 'prospecting',
-  2: 'qualified',
-  3: 'proposal',
-  4: 'negotiation',
-  5: 'closed-won',
-  6: 'closed-lost',
-};
 
 // Item 6: color-coded days away label (returns hex to avoid Tailwind JIT dynamic-class purge)
 
@@ -145,6 +137,12 @@ interface DealHeroSectionProps {
   timeInStage?: number;
   avgStageDuration?: number;
   onStageSelect?: (stageNum: number, stageName: string, stageKey: string) => void;
+  /**
+   * The deal's own pipeline stages, ordered. Empty while they load, or when the
+   * deal's pipeline could not be resolved — the strip renders nothing rather
+   * than a made-up ladder, which is what the old constant did.
+   */
+  stages?: ApiStage[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -172,6 +170,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   timeInStage,
   avgStageDuration,
   onStageSelect,
+  stages = [],
 }) => {
   const navigate = useNavigate();
 
@@ -399,7 +398,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
   const hasNextStage   = deal.stageNumber < deal.totalStages;
   const nextStageNum   = deal.stageNumber + 1;
-  const nextStageName  = hasNextStage ? ORDERED_STAGES[nextStageNum] ?? `Stage ${nextStageNum}` : null;
+  const nextStageName  = hasNextStage ? (stages[nextStageNum - 1]?.name ?? `Stage ${nextStageNum}`) : null;
 
   // Maps banner CTA label → existing action handler
   function handleBannerCTA(label: string) {
@@ -879,11 +878,12 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         {/* Item 23: Stage pipeline strip */}
         <div className="mb-3 relative">
           <div className="flex items-center">
-            {Object.entries(ORDERED_STAGES).map(([numStr, stageName], idx) => {
-              const num = parseInt(numStr);
+            {stages.map((st, idx) => {
+              const num = idx + 1;
+              const stageName = st.name;
               const isCompleted = num < deal.stageNumber;
               const isCurrent = num === deal.stageNumber;
-              const color = STAGE_HEX[num];
+              const color = stageHex(st);
               return (
                 <React.Fragment key={num}>
                   {idx > 0 && (
@@ -903,9 +903,14 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                     onMouseLeave={isCurrent ? undefined : (e) => { (e.currentTarget as HTMLButtonElement).style.filter = ''; }}
                     onClick={() => {
                       if (isCurrent) return;
-                      if (num === 5) { onMoreAction('mark-won'); return; }
-                      if (num === 6) { onMoreAction('mark-lost'); return; }
-                      setPendingPill({ num, name: stageName, key: STAGE_KEY_MAP[num] });
+                      // Terminal stages by TYPE, not by position. `num === 5` and
+                      // `num === 6` were only ever right for the six-stage
+                      // new-business ladder: in Renewals the won stage is at
+                      // position 4 and the lost stage at 5, so the old test fired
+                      // "mark won" on Negotiating and "mark lost" on Renewed.
+                      if (st.stage_type === 'won')  { onMoreAction('mark-won');  return; }
+                      if (st.stage_type === 'lost') { onMoreAction('mark-lost'); return; }
+                      setPendingPill({ num, name: stageName, key: st.slug });
                     }}
                   >
                     {isCompleted && <span className="text-[10px]">✓</span>}

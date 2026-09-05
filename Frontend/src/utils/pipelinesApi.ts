@@ -128,3 +128,55 @@ export function stageTint(stage: Pick<ApiStage, 'color' | 'stage_type'>): string
   if (stage.stage_type === 'lost') return 'bg-red-50';
   return 'bg-slate-50';
 }
+
+/** The pipeline a deal belongs to, by slug. Null when it is not in the list. */
+export function findPipeline(pipelines: ApiPipeline[], slug: string | null | undefined): ApiPipeline | null {
+  if (!slug) return null;
+  return pipelines.find(p => p.slug === slug) ?? null;
+}
+
+/**
+ * The pipeline's terminal stage of a given kind.
+ *
+ * REPLACES A REAL BUG, not just a hardcoded constant. The deal detail page's
+ * "Mark as Won" wrote the literal `'closed-won'` regardless of pipeline, so a
+ * Renewals deal — whose won stage is `renewal-won` — was sent a stage that does
+ * not exist in its pipeline. Before Phase A that wrote an invalid stage silently;
+ * after it, the server refuses with a 400 and the user sees "Failed to update
+ * deal stage" with no explanation. Neither is acceptable, and neither is fixable
+ * without asking the pipeline which stage means "won".
+ *
+ * Archived stages are skipped: retiring an outcome stage should stop new deals
+ * reaching it. Returns null when the pipeline has none, which the caller must
+ * handle rather than falling back to a guess — migration 037 reports pipelines
+ * in that state precisely because deals in them cannot be closed.
+ */
+export function terminalStage(
+  pipeline: ApiPipeline | null,
+  kind: 'won' | 'lost',
+): ApiStage | null {
+  if (!pipeline) return null;
+  return pipeline.stages.find(s => s.stage_type === kind && !s.archived_at) ?? null;
+}
+
+/**
+ * Where a stage sits in its pipeline, 1-based, for "Stage 3 of 6".
+ *
+ * Derived from the ORDER OF THE STAGE LIST rather than from `position`, because
+ * position values need not be contiguous — a stage retired and excluded from the
+ * response leaves a gap, and "Stage 4 of 5" with no third stage visible is worse
+ * than renumbering what is actually shown.
+ */
+export function stageIndex(pipeline: ApiPipeline | null, slug: string | null | undefined): number | null {
+  if (!pipeline || !slug) return null;
+  const i = pipeline.stages.findIndex(s => s.slug === slug);
+  return i < 0 ? null : i + 1;
+}
+
+/** The stored hex, or a semantic fallback so an outcome never loses its meaning. */
+export function stageHex(stage: Pick<ApiStage, 'color' | 'stage_type'> | null | undefined): string {
+  if (stage?.color) return stage.color;
+  if (stage?.stage_type === 'won') return '#10B981';
+  if (stage?.stage_type === 'lost') return '#EF4444';
+  return '#6B7280';
+}
