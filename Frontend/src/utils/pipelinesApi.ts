@@ -260,3 +260,69 @@ export function buildStageLookup(pipelines: ApiPipeline[]): StageLookup {
 
 /** A lookup that knows nothing — the honest state before pipelines load. */
 export const EMPTY_STAGE_LOOKUP: StageLookup = () => null;
+
+// ─── Stage configuration (admin only) ────────────────────────────────────────
+// PIPELINE_STAGES_DESIGN.md §5. Every call here is admin-gated server-side; the
+// UI hides the controls too, but the server is what enforces it.
+
+async function write<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, { headers: getAuthHeaders(), ...init });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.success === false) {
+    // The server's own words — "A pipeline must keep at least one won stage",
+    // "green and red are reserved for won and lost stages", "3 deals are still
+    // in this stage". Every one of them is actionable, and a generic "Save
+    // failed" would throw that away.
+    const err = new Error(json?.message || `Request failed (${res.status})`) as Error & { status?: number; body?: any };
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json as T;
+}
+
+export interface StageDraft {
+  name?: string;
+  stage_type?: 'open' | 'won' | 'lost';
+  probability?: number | null;
+  color?: string;
+  position?: number;
+}
+
+export const createStage = (pipelineId: string, draft: StageDraft) =>
+  write<{ data: ApiStage }>(`${API_BASE}/pipelines/${pipelineId}/stages`, {
+    method: 'POST', body: JSON.stringify(draft),
+  }).then(r => r.data);
+
+/** Rename, recolour, retype, retire. NEVER slug — the server refuses it. */
+export const updateStage = (pipelineId: string, stageId: string, patch: StageDraft & { archived?: boolean }) =>
+  write<{ data: ApiStage }>(`${API_BASE}/pipelines/${pipelineId}/stages/${stageId}`, {
+    method: 'PATCH', body: JSON.stringify(patch),
+  }).then(r => r.data);
+
+/** Takes the COMPLETE order. A partial list is refused by the server. */
+export const reorderStages = (pipelineId: string, stageIds: string[]) =>
+  write<{ data: ApiStage[] }>(`${API_BASE}/pipelines/${pipelineId}/stages/order`, {
+    method: 'PUT', body: JSON.stringify({ stage_ids: stageIds }),
+  }).then(r => r.data);
+
+/** Blocks with 409 when deals are still in the stage, unless reassignTo is given. */
+export const deleteStage = (pipelineId: string, stageId: string, reassignTo?: string) =>
+  write<{ deals_reassigned: number; message: string }>(
+    `${API_BASE}/pipelines/${pipelineId}/stages/${stageId}${reassignTo ? `?reassign_to=${encodeURIComponent(reassignTo)}` : ''}`,
+    { method: 'DELETE' },
+  );
+
+export interface PaletteColor { name: string; hex: string; outcome_only: boolean }
+
+/**
+ * The colours an admin may choose from — FETCHED, not hardcoded here.
+ *
+ * Design open question 4, settled with this screen: a free colour picker cannot
+ * coexist with "no active stage uses green or red, those are reserved for
+ * terminal outcomes", because an admin picking green for an open stage does not
+ * see a rule being broken. The server owns the list and rejects anything else,
+ * so a second copy in the client could only ever drift out of agreement with it.
+ */
+export const fetchPalette = () =>
+  write<{ data: PaletteColor[] }>(`${API_BASE}/pipelines/palette`, { method: 'GET' }).then(r => r.data);

@@ -1,347 +1,495 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
-import { Plus, ChevronUp, ChevronDown, Save } from 'lucide-react';
+import {
+  AlertCircle, AlertTriangle, ArrowDown, ArrowUp, Check, Plus, RotateCcw, Trash2, X,
+} from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  fetchPipelines, fetchPalette, createStage, updateStage, reorderStages, deleteStage,
+  defaultPipeline, type ApiPipeline, type ApiStage, type PaletteColor,
+} from '../../../utils/pipelinesApi';
 
-interface DealStage {
-  id: string;
-  name: string;
-  probability: number;
-  avgDays: number;
-  color: string;
-  colorName: string;
-  locked?: boolean;
-}
+/**
+ * Deal stages — the screen that makes pipeline stages configurable.
+ *
+ * WHAT WAS HERE. 349 lines over a hardcoded `useState` of five stages
+ * ("PROSPECTING 10%, 7 avg days", …) with Save, Add Stage and reorder buttons
+ * that changed local state and nothing else. It also had an `avgDays` column
+ * that has no column anywhere in the database — an invented number presented
+ * beside two real ones.
+ *
+ * Everything here now goes to `/api/v1/pipelines/:id/stages`, which is admin-
+ * only server-side (design Q5). Phase A made stages real rows and Phase B taught
+ * every screen to read them; this is the piece that lets a workspace change
+ * them, which is the feature as originally scoped.
+ *
+ * FOUR THINGS THIS SCREEN IS DELIBERATE ABOUT:
+ *
+ *  - RENAMING NEVER MOVES THE SLUG. The slug is what `deals.stage` holds and
+ *    what saved views filter on, so a rename that changed it would silently
+ *    empty every view referencing the stage. The slug is shown, read-only, so
+ *    an admin can see that renaming is safe rather than having to trust it.
+ *  - THE PALETTE IS FETCHED, NOT HARDCODED (design Q4). Green and red mean won
+ *    and lost; the server refuses them on an open stage and this screen does not
+ *    offer them there. A second copy of the list here could only drift.
+ *  - RETIRE IS THE PROMINENT ACTION AND DELETE IS NOT. Retiring keeps the deals
+ *    where they are and stops new ones arriving; deleting is for a stage created
+ *    by mistake and blocks while deals are in it.
+ *  - EVERY REFUSAL IS SHOWN IN THE SERVER'S OWN WORDS. "A pipeline must keep at
+ *    least one won stage" and "3 deals are still in Proposal" are both
+ *    actionable; "Save failed" is not.
+ */
+
+const TYPE_LABEL: Record<ApiStage['stage_type'], string> = {
+  open: 'Open', won: 'Won', lost: 'Lost',
+};
 
 const PipelineSettings: React.FC = () => {
-  const [stages, setStages] = useState<DealStage[]>([
-    { id: '1', name: 'PROSPECTING', probability: 10, avgDays: 7, color: '#3b82f6', colorName: 'Blue' },
-    { id: '2', name: 'QUALIFIED', probability: 25, avgDays: 14, color: '#8b5cf6', colorName: 'Purple' },
-    { id: '3', name: 'PROPOSAL', probability: 50, avgDays: 10, color: '#f59e0b', colorName: 'Orange' },
-    { id: '4', name: 'NEGOTIATION', probability: 75, avgDays: 7, color: '#10b981', colorName: 'Green' },
-    { id: '5', name: 'CLOSED-WON', probability: 100, avgDays: 0, color: '#059669', colorName: 'Dark Green', locked: true },
-    { id: '6', name: 'CLOSED-LOST', probability: 0, avgDays: 0, color: '#dc2626', colorName: 'Red', locked: true }
-  ]);
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
 
-  const [lostReasons, setLostReasons] = useState([
-    'Budget constraints',
-    'Chose competitor',
-    'No response / Ghosted',
-    'Timing not right',
-    'Not a good fit',
-    'Other'
-  ]);
+  const [pipelines, setPipelines] = useState<ApiPipeline[]>([]);
+  const [activeSlug, setActiveSlug] = useState<string | null>(null);
+  const [palette, setPalette] = useState<PaletteColor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const [wonReasons, setWonReasons] = useState([
-    'Best price',
-    'Best features',
-    'HRMS connection (warm lead)',
-    'Referral / Relationship',
-    'Superior support'
-  ]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ name: string; probability: string; color: string }>({
+    name: '', probability: '', color: '',
+  });
+  const [adding, setAdding] = useState(false);
+  const [newStage, setNewStage] = useState({ name: '', stage_type: 'open' as ApiStage['stage_type'], probability: '', color: '' });
+  const [deleting, setDeleting] = useState<ApiStage | null>(null);
+  const [reassignTo, setReassignTo] = useState<string>('');
 
-  const [autoMoveToClosed, setAutoMoveToClosed] = useState(true);
-  const [autoMoveToLost, setAutoMoveToLost] = useState(false);
-  const [staleAlerts, setStaleAlerts] = useState(true);
+  const active = useMemo(
+    () => pipelines.find(p => p.slug === activeSlug) ?? null,
+    [pipelines, activeSlug],
+  );
+  /** Retired stages are included so an admin can see and un-retire them. */
+  const stages = active?.stages ?? [];
 
-  const handleEditStage = (id: string) => {
-    alert(`Editing stage ${id}...`);
-  };
+  const reload = useCallback(async (keepSlug?: string | null) => {
+    const list = await fetchPipelines(true);
+    setPipelines(list);
+    setActiveSlug(prev => keepSlug ?? prev ?? defaultPipeline(list)?.slug ?? null);
+    return list;
+  }, []);
 
-  const handleDeleteStage = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this stage?')) {
-      setStages(stages.filter(s => s.id !== id));
-      alert('Stage deleted successfully!');
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchPipelines(true), fetchPalette()])
+      .then(([list, colors]) => {
+        if (cancelled) return;
+        setPipelines(list);
+        setPalette(colors);
+        setActiveSlug(defaultPipeline(list)?.slug ?? null);
+        setLoadError(null);
+      })
+      .catch((e: Error) => { if (!cancelled) setLoadError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  /** Every write funnels through here so no path can report a success it did not make. */
+  const run = async (fn: () => Promise<unknown>, successMessage: string) => {
+    setBusy(true);
+    setActionError(null);
+    setNotice(null);
+    try {
+      await fn();
+      await reload(activeSlug);
+      setNotice(successMessage);
+    } catch (e) {
+      setActionError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleMoveStageUp = (index: number) => {
-    if (index === 0) return;
-    const newStages = [...stages];
-    [newStages[index - 1], newStages[index]] = [newStages[index], newStages[index - 1]];
-    setStages(newStages);
-  };
+  const colorsFor = (type: ApiStage['stage_type']) =>
+    palette.filter(c => (type === 'open' ? !c.outcome_only : true));
 
-  const handleMoveStageDown = (index: number) => {
-    if (index >= stages.length - 3) return;
-    const newStages = [...stages];
-    [newStages[index], newStages[index + 1]] = [newStages[index + 1], newStages[index]];
-    setStages(newStages);
-  };
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Deal Stages</h2>
+        <p className="mt-6 text-sm text-gray-500">Loading your pipeline stages…</p>
+      </div>
+    );
+  }
 
-  const handleAddStage = () => {
-    alert('Add new stage dialog would open here...');
-  };
-
-  const handleEditReason = (type: string, reason: string) => {
-    alert(`Editing ${type} reason: ${reason}`);
-  };
-
-  const handleDeleteReason = (type: string, reason: string) => {
-    if (window.confirm(`Delete this ${type} reason?`)) {
-      if (type === 'lost') {
-        setLostReasons(lostReasons.filter(r => r !== reason));
-      } else {
-        setWonReasons(wonReasons.filter(r => r !== reason));
-      }
-      alert('Reason deleted successfully!');
-    }
-  };
-
-  const handleAddReason = (type: string) => {
-    alert(`Add new ${type} reason dialog would open here...`);
-  };
-
-  const handleSaveChanges = () => {
-    alert('All pipeline settings saved successfully!');
-  };
+  if (loadError) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Deal Stages</h2>
+        <div role="alert" className="mt-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+          <div>
+            <p className="font-medium text-red-900">Could not load your pipeline stages</p>
+            <p className="mt-1 text-sm text-red-800">{loadError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Pipeline Settings (Controls Module 5 - Deals)</h2>
-        <p className="text-sm text-gray-600 mt-1">Configure stages, reasons, and automation rules for your sales pipeline</p>
+        <h2 className="text-2xl font-bold text-gray-900">Deal Stages</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          The stages deals move through, as this workspace has configured them.
+        </p>
       </div>
 
-      <div className="space-y-6">
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">DEAL STAGES</h3>
-            <Button
-              onClick={handleAddStage}
-              size="sm" className="rounded"
+      {!isAdmin && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" />
+          <p className="text-sm text-gray-700">
+            You can see how stages are configured, but only an admin can change them.
+          </p>
+        </div>
+      )}
+
+      {pipelines.length > 1 && (
+        <div className="mb-5 flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Pipeline</span>
+          {pipelines.map(p => (
+            <button
+              key={p.slug}
+              onClick={() => { setActiveSlug(p.slug); setEditingId(null); setAdding(false); setActionError(null); setNotice(null); }}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                p.slug === activeSlug ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <Plus className="h-4 w-4" />
-              Add Stage
-            </Button>
-          </div>
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
 
-          <div className="p-6">
-            <p className="text-sm text-gray-600 mb-4">Define the stages of your sales pipeline:</p>
+      {actionError && (
+        <div role="alert" className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+          {/* The server's words, verbatim. Every refusal it produces is actionable. */}
+          <p className="text-sm text-red-800">{actionError}</p>
+        </div>
+      )}
+      {notice && (
+        <div role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          {notice}
+        </div>
+      )}
 
-            <div className="space-y-3">
-              {stages.map((stage, index) => (
-                <div key={stage.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="bg-white p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div
-                          className="w-4 h-4 rounded-full flex-shrink-0 mt-1"
-                          style={{ backgroundColor: stage.color }}
-                        />
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">
-                            {index + 1}. {stage.name}
-                          </h4>
-                          <div className="mt-2 space-y-1 text-sm text-gray-700">
-                            <div>Win Probability: <span className="font-medium">{stage.probability}%</span></div>
-                            {!stage.locked && (
-                              <div>Average Days in Stage: <span className="font-medium">{stage.avgDays} days</span></div>
-                            )}
-                            <div>Color: <span className="font-medium">{stage.color} ({stage.colorName})</span></div>
-                          </div>
-                          {stage.locked && (
-                            <div className="text-xs text-gray-500 italic mt-2">(Cannot be deleted or moved)</div>
-                          )}
-                        </div>
-                      </div>
+      <div className="overflow-hidden rounded-lg border border-gray-200">
+        <div className="grid grid-cols-[2.5rem_1fr_7rem_6rem_5rem_auto] items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2.5 text-xs font-medium uppercase text-gray-500">
+          <span>#</span><span>Stage</span><span>Type</span><span>Probability</span><span>Colour</span><span />
+        </div>
 
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditStage(stage.id)}
-                          className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
-                        >
-                          [Edit]
-                        </button>
-                        {!stage.locked && (
-                          <>
-                            <button
-                              onClick={() => handleDeleteStage(stage.id)}
-                              className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded border border-red-200 transition-colors"
-                            >
-                              [Delete]
-                            </button>
-                            <div className="flex flex-col">
-                              <button
-                                onClick={() => handleMoveStageUp(index)}
-                                disabled={index === 0}
-                                className="px-2 text-gray-600 hover:bg-gray-100 rounded-t border border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
-                              >
-                                <ChevronUp className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() => handleMoveStageDown(index)}
-                                disabled={index >= stages.length - 3}
-                                className="px-2 text-gray-600 hover:bg-gray-100 rounded-b border border-gray-200 border-t-0 disabled:opacity-30 disabled:cursor-not-allowed"
-                              >
-                                <ChevronDown className="h-3 w-3" />
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
+        {stages.map((st, i) => {
+          const isEditing = editingId === st.id;
+          const retired = Boolean(st.archived_at);
+          return (
+            <div
+              key={st.id}
+              className={`grid grid-cols-[2.5rem_1fr_7rem_6rem_5rem_auto] items-center gap-3 border-b border-gray-100 px-4 py-3 ${
+                retired ? 'bg-gray-50' : ''
+              }`}
+            >
+              <span className="text-sm text-gray-400">{i + 1}</span>
+
+              <div className="min-w-0">
+                {isEditing ? (
+                  <input
+                    aria-label="Stage name"
+                    value={draft.name}
+                    maxLength={100}
+                    onChange={e => setDraft({ ...draft, name: e.target.value })}
+                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={`truncate text-sm font-medium ${retired ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                      {st.name}
+                    </span>
+                    {retired && (
+                      <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                        Retired
+                      </span>
+                    )}
                   </div>
+                )}
+                {/* THE SLUG IS SHOWN AND IS NEVER EDITABLE. Renaming is safe
+                    precisely because this does not move, and an admin should be
+                    able to see that rather than take it on trust. */}
+                <code className="text-[11px] text-gray-400">{st.slug}</code>
+              </div>
+
+              <span className={`text-xs font-medium ${
+                st.stage_type === 'won' ? 'text-emerald-700'
+                : st.stage_type === 'lost' ? 'text-red-700' : 'text-gray-600'
+              }`}>
+                {TYPE_LABEL[st.stage_type]}
+              </span>
+
+              {isEditing ? (
+                <input
+                  aria-label="Probability"
+                  type="number" min={0} max={100}
+                  value={draft.probability}
+                  onChange={e => setDraft({ ...draft, probability: e.target.value })}
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                  placeholder="Not set"
+                />
+              ) : (
+                // NULL means "not set", never 0 — 0 is a claim about the odds.
+                <span className="text-sm text-gray-700">
+                  {st.probability === null ? <span className="text-gray-400">Not set</span> : `${st.probability}%`}
+                </span>
+              )}
+
+              {isEditing ? (
+                <div className="flex flex-wrap gap-1">
+                  {colorsFor(st.stage_type).map(c => (
+                    <button
+                      key={c.hex}
+                      title={c.name}
+                      aria-label={`Colour ${c.name}`}
+                      onClick={() => setDraft({ ...draft, color: c.hex })}
+                      className={`h-5 w-5 rounded-full ${draft.color === c.hex ? 'ring-2 ring-offset-1 ring-gray-800' : ''}`}
+                      style={{ backgroundColor: c.hex }}
+                    />
+                  ))}
                 </div>
+              ) : (
+                <span className="inline-block h-4 w-4 rounded-full" style={{ backgroundColor: st.color ?? '#6B7280' }} />
+              )}
+
+              <div className="flex items-center justify-end gap-1">
+                {isEditing ? (
+                  <>
+                    <button
+                      title="Save"
+                      disabled={busy}
+                      onClick={() => run(
+                        () => updateStage(active!.id, st.id, {
+                          name: draft.name.trim(),
+                          probability: draft.probability === '' ? null : Number(draft.probability),
+                          color: draft.color || undefined,
+                        }),
+                        `"${draft.name.trim()}" saved.`,
+                      ).then(() => setEditingId(null))}
+                      className="rounded p-1.5 text-green-700 hover:bg-green-50 disabled:opacity-50"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button title="Cancel" onClick={() => setEditingId(null)} className="rounded p-1.5 text-gray-500 hover:bg-gray-100">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : isAdmin ? (
+                  <>
+                    <button
+                      title="Move up" disabled={busy || i === 0}
+                      onClick={() => {
+                        const ids = stages.map(s => s.id);
+                        [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]];
+                        run(() => reorderStages(active!.id, ids), 'Order saved.');
+                      }}
+                      className="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      title="Move down" disabled={busy || i === stages.length - 1}
+                      onClick={() => {
+                        const ids = stages.map(s => s.id);
+                        [ids[i], ids[i + 1]] = [ids[i + 1], ids[i]];
+                        run(() => reorderStages(active!.id, ids), 'Order saved.');
+                      }}
+                      className="rounded p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingId(st.id);
+                        setDraft({
+                          name: st.name,
+                          probability: st.probability === null ? '' : String(st.probability),
+                          color: st.color ?? '',
+                        });
+                      }}
+                      className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                    >
+                      Edit
+                    </button>
+                    {/* RETIRE IS THE PROMINENT ACTION. It keeps the deals where
+                        they are — nothing orphaned, no reference nulled. */}
+                    <button
+                      disabled={busy}
+                      onClick={() => run(
+                        () => updateStage(active!.id, st.id, { archived: !retired }),
+                        retired ? `"${st.name}" is active again.` : `"${st.name}" retired. Deals already in it stay put.`,
+                      )}
+                      className="rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                    >
+                      {retired ? <RotateCcw className="h-3.5 w-3.5" /> : 'Retire'}
+                    </button>
+                    <button
+                      title="Delete" disabled={busy}
+                      onClick={() => { setDeleting(st); setReassignTo(''); setActionError(null); }}
+                      className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+
+        {adding && (
+          <div className="grid grid-cols-[2.5rem_1fr_7rem_6rem_5rem_auto] items-center gap-3 border-b border-gray-100 bg-brand-50/40 px-4 py-3">
+            <span className="text-sm text-gray-400">{stages.length + 1}</span>
+            <input
+              aria-label="New stage name"
+              autoFocus
+              value={newStage.name}
+              maxLength={100}
+              placeholder="Stage name"
+              onChange={e => setNewStage({ ...newStage, name: e.target.value })}
+              className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <select
+              aria-label="New stage type"
+              value={newStage.stage_type}
+              onChange={e => setNewStage({ ...newStage, stage_type: e.target.value as ApiStage['stage_type'], color: '' })}
+              className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            >
+              <option value="open">Open</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+            <input
+              aria-label="New stage probability"
+              type="number" min={0} max={100}
+              value={newStage.probability}
+              placeholder="Not set"
+              onChange={e => setNewStage({ ...newStage, probability: e.target.value })}
+              className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            />
+            <div className="flex flex-wrap gap-1">
+              {colorsFor(newStage.stage_type).map(c => (
+                <button
+                  key={c.hex} title={c.name} aria-label={`Colour ${c.name}`}
+                  onClick={() => setNewStage({ ...newStage, color: c.hex })}
+                  className={`h-5 w-5 rounded-full ${newStage.color === c.hex ? 'ring-2 ring-offset-1 ring-gray-800' : ''}`}
+                  style={{ backgroundColor: c.hex }}
+                />
               ))}
             </div>
-
-            <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
-              <Button
-                onClick={handleSaveChanges}
-                size="lg"
+            <div className="flex items-center justify-end gap-1">
+              <button
+                disabled={busy || !newStage.name.trim()}
+                onClick={() => run(
+                  () => createStage(active!.id, {
+                    name: newStage.name.trim(),
+                    stage_type: newStage.stage_type,
+                    probability: newStage.probability === '' ? null : Number(newStage.probability),
+                    color: newStage.color || undefined,
+                  }),
+                  `"${newStage.name.trim()}" added.`,
+                ).then(() => { setAdding(false); setNewStage({ name: '', stage_type: 'open', probability: '', color: '' }); })}
+                className="rounded p-1.5 text-green-700 hover:bg-green-50 disabled:opacity-40"
               >
-                <Save className="h-4 w-4" />
-                Save Changes
-              </Button>
+                <Check className="h-4 w-4" />
+              </button>
+              <button onClick={() => setAdding(false)} className="rounded p-1.5 text-gray-500 hover:bg-gray-100">
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">LOST REASONS</h3>
-            <Button
-              onClick={() => handleAddReason('lost')}
-              size="sm" className="rounded"
-            >
-              <Plus className="h-4 w-4" />
-              Add Reason
-            </Button>
-          </div>
+      {isAdmin && !adding && (
+        <Button onClick={() => { setAdding(true); setActionError(null); setNotice(null); }} className="mt-4">
+          <Plus className="h-4 w-4" />
+          Add Stage
+        </Button>
+      )}
 
-          <div className="p-6">
-            <p className="text-sm text-gray-600 mb-4">Track why deals are lost:</p>
-
-            <div className="space-y-2">
-              {lostReasons.map((reason) => (
-                <div key={reason} className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-700">•</span>
-                    <span className="text-gray-900">{reason}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditReason('lost', reason)}
-                      className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
-                    >
-                      [Edit]
-                    </button>
-                    <button
-                      onClick={() => handleDeleteReason('lost', reason)}
-                      className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded border border-red-200 transition-colors"
-                    >
-                      [Del]
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-xs text-gray-500 mt-4 italic">(Used in Module 5 when marking deal as lost)</p>
-          </div>
-        </div>
-
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">WON REASONS (Optional)</h3>
-            <Button
-              onClick={() => handleAddReason('won')}
-              size="sm" className="rounded"
-            >
-              <Plus className="h-4 w-4" />
-              Add Reason
-            </Button>
-          </div>
-
-          <div className="p-6">
-            <p className="text-sm text-gray-600 mb-4">Track why deals are won:</p>
-
-            <div className="space-y-2">
-              {wonReasons.map((reason) => (
-                <div key={reason} className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-700">•</span>
-                    <span className="text-gray-900">{reason}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditReason('won', reason)}
-                      className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors"
-                    >
-                      [Edit]
-                    </button>
-                    <button
-                      onClick={() => handleDeleteReason('won', reason)}
-                      className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded border border-red-200 transition-colors"
-                    >
-                      [Del]
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">PIPELINE AUTOMATION</h3>
-          </div>
-
-          <div className="p-6 space-y-6">
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">Auto-move deals:</p>
-              <div className="space-y-3">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoMoveToClosed}
-                    onChange={(e) => setAutoMoveToClosed(e.target.checked)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div>
-                    <div className="text-sm text-gray-900">Auto-move to "Closed-Won" when payment received</div>
-                    <div className="text-xs text-gray-500">(via Payment Connector - Module 10)</div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoMoveToLost}
-                    onChange={(e) => setAutoMoveToLost(e.target.checked)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="text-sm text-gray-900">Auto-move to "Closed-Lost" after 90 days in Proposal</div>
-                </label>
+      {deleting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
+              <div>
+                <h3 className="font-semibold text-gray-900">Delete “{deleting.name}”?</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Deleting removes the stage for good. If any deals are still in it the server will
+                  refuse — <strong>retiring</strong> is usually what you want: it keeps those deals
+                  where they are and just stops new ones arriving.
+                </p>
               </div>
             </div>
 
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">Stale deal alerts:</p>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={staleAlerts}
-                  onChange={(e) => setStaleAlerts(e.target.checked)}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <div className="text-sm text-gray-900">Alert when deal has no activity for 5+ days</div>
-              </label>
-            </div>
-
-            <div className="pt-4 border-t border-gray-200 flex justify-end">
-              <Button
-                onClick={handleSaveChanges}
-                size="lg"
+            <label className="mt-4 block text-sm font-medium text-gray-700">
+              If deals are in it, move them to
+              <select
+                aria-label="Reassign deals to"
+                value={reassignTo}
+                onChange={e => setReassignTo(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
-                <Save className="h-4 w-4" />
-                Save Changes
-              </Button>
+                <option value="">Don’t move anything — refuse if deals are present</option>
+                {stages
+                  .filter(s => s.id !== deleting.id && !s.archived_at)
+                  .map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+
+            {actionError && (
+              <p role="alert" className="mt-3 text-sm text-red-700">{actionError}</p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => { setDeleting(null); setActionError(null); }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true); setActionError(null);
+                  try {
+                    const r = await deleteStage(active!.id, deleting.id, reassignTo || undefined);
+                    await reload(activeSlug);
+                    setDeleting(null);
+                    setNotice(r.message);
+                  } catch (e) {
+                    // Stays open on a 409 so the reassignment can be chosen
+                    // without losing the dialog.
+                    setActionError((e as Error).message);
+                  } finally { setBusy(false); }
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {busy ? 'Deleting…' : 'Delete stage'}
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

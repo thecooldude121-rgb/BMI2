@@ -517,6 +517,44 @@ declarations into `DealsListView` put them below a `useMemo` that used them, and
 view died with "Cannot access 'metaFor' before initialization". The suite was green — no
 test renders that component — and only loading the page found it.
 
+### Slice 4 — the stage-configuration API and admin screen
+
+**Done.** §5's endpoints (create / rename+recolour+retype+retire / reorder / delete), all
+admin-only, plus `GET /pipelines/palette`, and a rebuilt Deal Stages screen driving them.
+Q4 (fixed palette) and Q5 (admin-only) are settled and built in.
+
+**THREE screens were inventing three different stage lists**, none matching the database or
+each other: `PipelineSettings` (PROSPECTING/QUALIFIED/… plus an "avg days" column with no
+column behind it), `DealStages` (Qualification / Needs Analysis / …) and
+`StageProbabilities` (the same five, read-only). An admin opening "Deal Stages" saw a stage
+called "Needs Analysis" that has never existed here. All three nav entries now render the
+one real screen.
+
+**Q4, settled: the palette is served by the API, not hardcoded in the client**, and the
+server refuses green or red on an open stage. A free colour picker cannot coexist with "no
+active stage uses green or red" — an admin choosing green does not see a rule being broken,
+they see a colour they liked. The UI does not offer them there either; the check exists in
+both places because only one of them is enforcement.
+
+### FINDING — this workspace has no admin, so the screen it ships is unreachable
+
+`users` holds four `sales` and one `manager`. Nothing else. Q5 settled admin-only without
+anyone checking whether an admin exists, so as shipped **no one in this workspace can
+configure a stage.**
+
+Not a deadlock: `POST /invites` allows `admin` *or* `manager` to issue an invite, and
+`ASSIGNABLE_ROLES` includes `admin`, so the manager can invite one. Two things follow, and
+both are decisions rather than bugs to fix here:
+
+1. **There is no endpoint to change an existing user's role at all** — `routes/users.ts` has
+   only list / deactivate / reactivate. A role is set once, by an invite or the seed script.
+   So promoting the existing manager is impossible through the product; an admin can only be
+   a *new* account. Combined with `EMAIL_TRANSPORT=log`, which does not deliver, the invite
+   token is visible only in the server log.
+2. **A manager can invite an admin, which is a privilege-escalation path.** Standard RBAC
+   says you cannot grant a role above your own. Whether that is intended is an auth
+   decision, not a stage-configuration one, so it is recorded here rather than changed.
+
 ### Outstanding verification, carried forward deliberately
 
 - **A manual drag-and-drop spot-check on the Kanban is still owed.** The gesture cannot be

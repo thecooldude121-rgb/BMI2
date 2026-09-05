@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
 import { resolveStageForWrite, findStage, STAGE_NOT_IN_WORKSPACE } from '../utils/pipelineStages';
+import { resolveActorName } from '../utils/actorName';
 import { workspaceDefaultCurrency } from './workspaceController';
 
 /**
@@ -477,10 +478,9 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
  * predicate and matched on id alone — a cross-workspace read waiting for two
  * workspaces to share an id. Consolidating removes that as well as the queries.
  */
-const resolveActorName = (req: AuthRequest): string => {
-  const name = [req.user?.first_name, req.user?.last_name].filter(Boolean).join(' ').trim();
-  return name || req.user?.email || 'Unknown';
-};
+// Moved to utils/actorName.ts when the stage-configuration controller needed it
+// too — see that file for why a fifth copy was not the answer.
+
 
 /**
  * POST /api/v1/deals/:id/stage-transition
