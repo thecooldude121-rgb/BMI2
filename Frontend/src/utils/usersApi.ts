@@ -30,9 +30,22 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
+/**
+ * An Error that keeps the HTTP status, because one caller has to tell a 409
+ * apart from everything else: the last-admin guard on a role change is a real,
+ * actionable answer ("promote someone else first"), not a failure to report as
+ * "something went wrong". `message` is still the server's own wording.
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function unwrap<T>(res: Response): Promise<T> {
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.message || `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(json?.message || `Request failed (${res.status})`, res.status);
   return (json.data ?? json) as T;
 }
 
@@ -73,7 +86,7 @@ export async function fetchUsers(): Promise<WorkspaceUser[]> {
   }));
 }
 
-/** Exactly the nine columns GET /users returns. */
+/** The nine columns GET /users returns, plus the server's per-row role verdict. */
 export interface UserRow {
   id: number | string;
   first_name: string;
@@ -84,6 +97,8 @@ export interface UserRow {
   is_active: boolean;
   last_login_at: string | null;
   created_at: string;
+  /** Server-decided: may the CALLER change this person's role? */
+  can_change_role?: boolean;
 }
 
 /** What the UI renders: the nine real fields, plus two derived for display. */
@@ -103,6 +118,16 @@ export interface WorkspaceMember {
   initials: string;
   /** Derived from the id, so a member's colour is stable across reloads. */
   avatarColor: string;
+  /**
+   * Whether THIS caller may change THIS member's role — decided by the server
+   * (`can_change_role` on the row), never re-derived here. False both for a
+   * caller who cannot change roles at all and for a member who outranks them.
+   *
+   * A false value means render NO control, not a disabled one. A disabled
+   * control advertises an action that does not exist for you and invites a
+   * support question; absence says the same thing without the tease.
+   */
+  canChangeRole: boolean;
 }
 
 /** Tailwind gradients, picked by id hash — stable, and carries no data. */
@@ -140,6 +165,9 @@ export function toMember(row: UserRow): WorkspaceMember {
     createdAt: row.created_at,
     initials: initialsOf(row.first_name, row.last_name, row.email),
     avatarColor: AVATAR_COLORS[hash % AVATAR_COLORS.length],
+    // Absent means false. An older server that does not send the field must
+    // not be read as "everything is permitted".
+    canChangeRole: row.can_change_role === true,
   };
 }
 
@@ -150,11 +178,57 @@ export function toMember(row: UserRow): WorkspaceMember {
  * -only for the assignment pickers that use it. A screen for managing
  * deactivation cannot be the screen that hides deactivated people.
  */
-export async function fetchMembers(includeInactive = true): Promise<WorkspaceMember[]> {
+export interface Roster {
+  members: WorkspaceMember[];
+  /**
+   * The roles THIS caller may assign, straight from the server's
+   * `rolesAssignableBy` — the same function `PATCH /users/:id/role` enforces
+   * with. The role picker is populated from this and from nothing else, so a
+   * manager is never shown `admin` as an option rather than being shown it and
+   * refused. Empty for a caller who may not change roles at all.
+   */
+  assignableRoles: string[];
+}
+
+export async function fetchRoster(includeInactive = true): Promise<Roster> {
   const qs = includeInactive ? '?include_inactive=true' : '';
   const res = await fetch(`${API_BASE}/users${qs}`, { headers: getAuthHeaders() });
-  const rows = await unwrap<UserRow[]>(res);
-  return rows.map(toMember);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(json?.message || `Request failed (${res.status})`, res.status);
+  return {
+    members: ((json.data ?? []) as UserRow[]).map(toMember),
+    // Not `?? ALL_ROLES`: an absent field means the server did not grant
+    // anything, and defaulting to a full list would offer options it refuses.
+    assignableRoles: (json.assignable_roles ?? []) as string[],
+  };
+}
+
+/** @deprecated Use fetchRoster — the roster's role rules travel with it. */
+export async function fetchMembers(includeInactive = true): Promise<WorkspaceMember[]> {
+  return (await fetchRoster(includeInactive)).members;
+}
+
+/**
+ * PATCH /users/:id/role.
+ *
+ * Four server-side guards can refuse this, and the two worth knowing here are
+ * the 403 ("you cannot assign that role" / "you cannot change the role of a
+ * <role>") and the **409** — the last active admin or manager cannot be demoted
+ * out of that set, including by themselves. The 409's message is the actionable
+ * one and is shown verbatim rather than replaced by a generic failure, which is
+ * why this throws `ApiError` with the status attached.
+ *
+ * NOTHING IS PRE-CHECKED HERE. The server is the control; duplicating its rules
+ * in the client is how the two drift apart. What the client does do is avoid
+ * OFFERING a role the server would refuse — a different thing, driven by the
+ * server's own `assignable_roles`.
+ */
+export async function changeMemberRole(id: string, role: string): Promise<WorkspaceMember> {
+  const res = await fetch(`${API_BASE}/users/${id}/role`, {
+    method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({ role }),
+  });
+  const row = await unwrap<UserRow>(res);
+  return toMember(row);
 }
 
 /**

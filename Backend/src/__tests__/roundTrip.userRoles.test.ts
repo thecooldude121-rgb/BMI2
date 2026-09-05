@@ -217,6 +217,44 @@ describe('Role change', () => {
     }
   });
 
+  // ── GET /users carries the rules the picker renders from ──────────────────
+
+  it('GET /users tells an ADMIN they may assign every role, and whom they may touch', async () => {
+    const res = await request(app).get('/api/v1/users?include_inactive=true').set(auth(ws));
+    expect(res.status).toBe(200);
+    expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr', 'admin']);
+    // An admin may act on everyone, including themselves — self-demotion is
+    // legal while somebody else is privileged, so the control must render.
+    expect(res.body.data.every((u: any) => u.can_change_role === true)).toBe(true);
+  });
+
+  it('GET /users never offers a MANAGER the admin role, and marks admins untouchable', async () => {
+    const manager = await addUserWithRole(ws, 'manager');
+    const admin   = await addUserWithRole(ws, 'admin');
+
+    const res = await request(app).get('/api/v1/users?include_inactive=true').set(auth(manager));
+    expect(res.status).toBe(200);
+
+    // THE POINT. The picker is populated from this, so a manager cannot be
+    // shown an option the server would answer 403 to.
+    expect(res.body.assignable_roles).not.toContain('admin');
+    expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr']);
+
+    const rowFor = (id: string) => res.body.data.find((u: any) => String(u.id) === String(id));
+    expect(rowFor(admin.userId).can_change_role).toBe(false);   // above them
+    expect(rowFor(manager.userId).can_change_role).toBe(true);  // themselves
+  });
+
+  it('GET /users offers a SALES user nothing at all — the route is open, the action is not', async () => {
+    const sales = await addUserWithRole(ws, 'sales');
+    const res = await request(app).get('/api/v1/users').set(auth(sales));
+    // The roster itself still loads: assignment pickers depend on it.
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    expect(res.body.assignable_roles).toEqual([]);
+    expect(res.body.data.every((u: any) => u.can_change_role === false)).toBe(true);
+  });
+
   // ── Validation, scoping and no-ops ────────────────────────────────────────
 
   it('rejects a role the app does not understand, before looking anything up', async () => {

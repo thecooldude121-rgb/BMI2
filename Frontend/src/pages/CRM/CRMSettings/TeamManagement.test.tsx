@@ -46,12 +46,34 @@ let fetchMock: ReturnType<typeof vi.fn>;
 const callsTo = (part: string) => fetchMock.mock.calls.filter((c) => String(c[0]).includes(part));
 
 function mockServer(overrides: Partial<{
-  users: unknown; invites: unknown; onPost: (url: string, body: unknown) => Response;
+  users: unknown;
+  /**
+   * The envelope field `GET /users` really sends — the roles THIS caller may
+   * assign, computed server-side by `rolesAssignableBy`. Defaults to absent,
+   * which is what a caller who may not change roles receives, so the existing
+   * tests below see no role controls.
+   *
+   * The shape here is pinned on the server by
+   * `Backend/src/__tests__/roundTrip.userRoles.test.ts` — "GET /users tells an
+   * ADMIN…", "…never offers a MANAGER the admin role…" and "…offers a SALES
+   * user nothing at all". If those three change, these fixtures are wrong.
+   */
+  assignableRoles: string[];
+  invites: unknown;
+  onPost: (url: string, body: unknown) => Response;
+  onPatch: (url: string, body: unknown) => Response;
 }> = {}) {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     if (method === 'GET' && url.includes('/users')) {
-      return { ok: true, status: 200, json: async () => ({ success: true, data: overrides.users ?? rows }) } as Response;
+      return { ok: true, status: 200, json: async () => ({
+        success: true,
+        data: overrides.users ?? rows,
+        ...(overrides.assignableRoles ? { assignable_roles: overrides.assignableRoles } : {}),
+      }) } as Response;
+    }
+    if (method === 'PATCH' && overrides.onPatch) {
+      return overrides.onPatch(url, init?.body ? JSON.parse(init.body as string) : undefined);
     }
     if (method === 'GET' && url.includes('/invites')) {
       return { ok: true, status: 200, json: async () => ({ success: true, data: overrides.invites ?? [] }) } as Response;
@@ -344,5 +366,182 @@ describe('TeamManagement — actions with no endpoint', () => {
     // No write of any kind left the client.
     expect(callsTo('/deactivate').length).toBe(0);
     expect(fetchMock.mock.calls.filter(c => (c[1] as RequestInit)?.method === 'POST').length).toBe(0);
+  });
+});
+
+/**
+ * ── The role picker ────────────────────────────────────────────────────────
+ *
+ * These drive the real component against the real contract of
+ * `GET /users` + `PATCH /users/:id/role`. The server half of that contract —
+ * that `assignable_roles` really excludes `admin` for a manager, and that
+ * `can_change_role` really is false for someone who outranks the caller — is
+ * pinned separately in `Backend/src/__tests__/roundTrip.userRoles.test.ts`
+ * against real Postgres. Neither half is worth much alone: the backend tests
+ * prove the server computes the rule, these prove the UI renders nothing the
+ * rule did not permit.
+ */
+describe('TeamManagement — the role picker', () => {
+  /** Rows as an ADMIN caller sees them: everyone touchable. */
+  const asAdmin = rows.map(r => ({ ...r, can_change_role: true }));
+  const ADMIN_ROLES = ['sales', 'manager', 'hr', 'admin'];
+
+  const roleButtonFor = (name: string) =>
+    screen.queryByRole('button', { name: `Change role for ${name}` });
+
+  it('populates the picker from the SERVER list — a manager is never shown "admin"', async () => {
+    // Exactly what the server sends a manager: no admin in assignable_roles,
+    // and the admin row marked untouchable.
+    mockServer({
+      users: [
+        { ...rows[0], can_change_role: true },                       // Priya, manager
+        { ...rows[1], can_change_role: true },                       // Sam, sales
+        { ...rows[2], role: 'admin', can_change_role: false },       // Dee, admin
+      ],
+      assignableRoles: ['sales', 'manager', 'hr'],
+    });
+    render(<TeamManagement />);
+    await screen.findByText('Sam Okafor');
+
+    await userEvent.click(roleButtonFor('Sam Okafor')!);
+    const select = await screen.findByLabelText('New role');
+    const options = within(select).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
+
+    // THE ASSERTION: admin is not an option at all, not merely rejected later.
+    expect(options).not.toContain('admin');
+    expect(options).toEqual(['sales', 'manager', 'hr']);
+  });
+
+  it('renders NO role control for someone already above the caller — not a disabled one', async () => {
+    mockServer({
+      users: [
+        { ...rows[0], can_change_role: true },                        // Priya — touchable
+        { ...rows[2], role: 'admin', can_change_role: false },        // Dee — an admin, above a manager
+      ],
+      assignableRoles: ['sales', 'manager', 'hr'],
+    });
+    render(<TeamManagement />);
+    await screen.findByText('Dee Activated');
+
+    // Absent, not disabled. queryByRole returns null only if it is not rendered
+    // at all — a disabled button would still be found here.
+    expect(roleButtonFor('Dee Activated')).toBeNull();
+    expect(roleButtonFor('Priya Nair')).not.toBeNull();
+
+    // And the role is still SHOWN, just not editable.
+    expect(screen.getAllByText(/Admin/).length).toBeGreaterThan(0);
+  });
+
+  it('shows the sign-out consequence BEFORE confirming, and again for your own account', async () => {
+    mockServer({ users: asAdmin, assignableRoles: ADMIN_ROLES });
+    render(<TeamManagement />);
+    await screen.findByText('Sam Okafor');
+
+    await userEvent.click(roleButtonFor('Sam Okafor')!);
+    // Present as soon as the dialog opens — before any request is made.
+    expect(
+      screen.getByText(/signs Sam Okafor out of their current session/i),
+    ).toBeInTheDocument();
+    expect(callsTo('/users/').length).toBe(0);   // nothing sent yet
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // The caller is user id 1 — Priya's row. Changing your OWN role signs YOU
+    // out, and the notice has to say so rather than talking about "them".
+    await userEvent.click(roleButtonFor('Priya Nair')!);
+    expect(screen.getByText(/signs you out of your current session/i)).toBeInTheDocument();
+  });
+
+  it('will not submit a no-op: confirm is disabled while the picker sits on the current role', async () => {
+    mockServer({ users: asAdmin, assignableRoles: ADMIN_ROLES });
+    render(<TeamManagement />);
+    await screen.findByText('Sam Okafor');
+
+    await userEvent.click(roleButtonFor('Sam Okafor')!);
+    const confirm = screen.getByRole('button', { name: 'Change role' });
+
+    // Opens on the member's current role, so it starts disabled and says why.
+    expect(confirm).toBeDisabled();
+    expect(screen.getByText(/already Sales/i)).toBeInTheDocument();
+
+    // A click on a disabled button must not fire a request. Asserting the
+    // request count matters more than asserting the attribute: this project
+    // has already recorded a test that "passed" because a disabled button
+    // meant the handler never ran and nothing was being tested.
+    await userEvent.click(confirm);
+    expect(fetchMock.mock.calls.filter(c => (c[1] as RequestInit)?.method === 'PATCH')).toHaveLength(0);
+
+    // Choose a different role and it becomes available.
+    await userEvent.selectOptions(screen.getByLabelText('New role'), 'manager');
+    expect(screen.getByRole('button', { name: 'Change role' })).toBeEnabled();
+  });
+
+  it('sends the PATCH and renders the SERVER row back', async () => {
+    mockServer({
+      users: asAdmin,
+      assignableRoles: ADMIN_ROLES,
+      onPatch: () => ({
+        ok: true, status: 200,
+        json: async () => ({ success: true, data: { ...rows[1], role: 'manager' } }),
+      } as Response),
+    });
+    render(<TeamManagement />);
+    await screen.findByText('Sam Okafor');
+
+    await userEvent.click(roleButtonFor('Sam Okafor')!);
+    await userEvent.selectOptions(screen.getByLabelText('New role'), 'manager');
+    await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+    await waitFor(() => {
+      const patches = fetchMock.mock.calls.filter(c => (c[1] as RequestInit)?.method === 'PATCH');
+      expect(patches).toHaveLength(1);
+      expect(String(patches[0][0])).toBe('http://localhost:5001/api/v1/users/2/role');
+      expect(JSON.parse((patches[0][1] as RequestInit).body as string)).toEqual({ role: 'manager' });
+    });
+
+    // Closed on success, and the toast repeats the sign-out consequence.
+    await waitFor(() => expect(screen.queryByLabelText('New role')).toBeNull());
+    expect(showToast).toHaveBeenCalledWith(
+      expect.stringMatching(/sign in again/i), 'success',
+    );
+  });
+
+  it('a 409 from the last-admin guard is shown inline, verbatim, and the dialog stays open', async () => {
+    const serverMessage =
+      'You are the last admin or manager in this workspace — promote someone else before changing your own role';
+    mockServer({
+      users: asAdmin,
+      assignableRoles: ADMIN_ROLES,
+      onPatch: () => ({
+        ok: false, status: 409,
+        json: async () => ({ success: false, message: serverMessage }),
+      } as Response),
+    });
+    render(<TeamManagement />);
+    await screen.findByText('Priya Nair');
+
+    await userEvent.click(roleButtonFor('Priya Nair')!);
+    await userEvent.selectOptions(screen.getByLabelText('New role'), 'sales');
+    await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+    // Verbatim — the server's wording is the only part that tells the user what
+    // to do instead, so it must not be replaced by "Could not change role".
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(serverMessage);
+
+    // The dialog stays open so the reason sits next to the control that caused
+    // it, and the roster is unchanged.
+    expect(screen.getByLabelText('New role')).toBeInTheDocument();
+    expect(screen.getByText('Priya Nair')).toBeInTheDocument();
+  });
+
+  it('shows no role controls at all when the server assigns the caller no roles', async () => {
+    // What a sales user receives: rows with can_change_role false and an empty
+    // assignable_roles. The roster still loads — pickers depend on it.
+    mockServer({ users: rows.map(r => ({ ...r, can_change_role: false })) });
+    render(<TeamManagement />);
+    await screen.findByText('Priya Nair');
+
+    expect(screen.queryAllByRole('button', { name: /^Change role for/ })).toHaveLength(0);
   });
 });

@@ -488,12 +488,39 @@ Coverage is `roundTrip.userRoles.test.ts` (14 tests). Every guard was mutation-t
 each one disabled in turn, confirming a test fails — including the advisory lock, whose
 removal fails the demote-races-deactivate test.
 
-#### TRACKED FOLLOW-UP — no role picker in the UI
-`TeamManagement` lists the roster and can deactivate and reactivate; it has no role control,
-so the endpoint above is reachable only by an API call today. `rolesAssignableBy` is what
-should populate the picker, so a manager is never offered `admin` — the same server-is-the-
-control, picker-is-a-courtesy split as the invite form. Deliberately deferred: it was not
-needed to unblock the admin-only screens, because `david@bmicrm.com` is already an admin.
+#### DONE — the role picker is wired, and the RULES ARE SERVED, not mirrored
+`TeamManagement` renders it, and the important part is where its options come from.
+
+**`GET /users` now carries the rules with the roster:** an envelope field
+`assignable_roles` (this caller's `rolesAssignableBy`) and a per-row `can_change_role`
+(`canActOn`). Both are computed by `utils/roles.ts` — the same module `PATCH
+/users/:id/role` and `POST /invites` enforce with — so the client renders the rule instead
+of re-deriving it. A manager therefore never SEES `admin` in the picker, and a row for
+someone who outranks the caller gets **no control at all, not a disabled one**: a disabled
+control advertises an action that does not exist for you.
+
+Both are empty/false for a caller who cannot change roles, because `GET /users` is
+deliberately ungated (assignment pickers need the roster) while the role change is not.
+
+**Why served rather than mirrored, concretely:** `invitableRolesFor()` in `usersApi.ts` is
+exactly that mirror, written for the invite form — and it has ALREADY DRIFTED. It lists
+sales/manager/admin and omits `hr`, which the server's `ASSIGNABLE_ROLES` has always
+included. That is the prediction "two lists that must agree will disagree" already come
+true, in this repo, before anyone noticed.
+
+Other behaviour worth not regressing: the confirm button is **disabled on a no-op** (the
+picker opens on the member's current role) because a no-op returns 200 and a success toast
+for a change that did not happen is this project's signature failure; a **409 is rendered
+inline, verbatim**, because the last-admin guard's message is the only part that says what
+to do instead; and the **sign-out consequence is stated before confirming**, phrased for
+yourself when the target is you.
+
+#### TRACKED FOLLOW-UP — the invite form still uses the mirrored list
+`inviteMember`'s picker is still populated by `invitableRolesFor()`, the drifted client-side
+copy described above. It should read `assignable_roles` from the roster like the role picker
+now does, after which `invitableRolesFor` and `INVITABLE_ROLES` can both be deleted. Left
+alone deliberately: it is a change to the invite flow, not the role flow, and folding it in
+would have put two unrelated behaviours in one checkpoint.
 
 ### The live workspace has an admin again
 It had four `sales` and one `manager` and **zero admins**, so the stage-configuration screen

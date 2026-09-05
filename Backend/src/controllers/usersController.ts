@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import {
   ASSIGNABLE_ROLES, PRIVILEGED_ROLES, canAssign, canActOn, rolesAssignableBy,
@@ -10,6 +10,28 @@ import {
  * GET /api/v1/users
  *
  * `?include_inactive=true` also returns deactivated members.
+ *
+ * THE RESPONSE CARRIES THE ROLE RULES, so the client never re-implements them.
+ * Two additions, both derived from `utils/roles.ts` — the same module
+ * `PATCH /users/:id/role` and `POST /invites` enforce with:
+ *
+ *   - envelope `assignable_roles` — exactly what this caller may hand out.
+ *     A manager's list has no `admin` in it, so the picker cannot offer an
+ *     option the server would refuse.
+ *   - per-row `can_change_role` — false when the caller may not touch that
+ *     person, which is the "never act on someone above your own role" guard.
+ *     The row with it false gets NO control, not a disabled one: a disabled
+ *     control advertises an action that does not exist for you.
+ *
+ * Both are empty/false for a caller who cannot reach the endpoint at all,
+ * because this route is deliberately ungated (assignment pickers need the
+ * roster) while the role change is not.
+ *
+ * WHY THE SERVER AND NOT A MIRROR IN THE CLIENT. `invitableRolesFor()` in
+ * `usersApi.ts` is that mirror, written for the invite form, and it has already
+ * drifted: it lists sales/manager/admin and omits `hr`, which the server's
+ * ASSIGNABLE_ROLES has always included. Two lists that must agree are two lists
+ * that will disagree — so this one is served, not copied.
  *
  * THE DEFAULT IS DELIBERATELY UNCHANGED. Every existing caller — owner pickers,
  * assignment dropdowns — wants active people only, and quietly widening this
@@ -30,7 +52,18 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
         ORDER BY is_active DESC, first_name`,
       [tenantId]
     );
-    res.json({ success: true, data: result.rows });
+
+    const callerRole = String(req.user?.role ?? '');
+    const mayManageRoles = (DESTRUCTIVE_ACTION_ROLES as readonly string[]).includes(callerRole);
+
+    res.json({
+      success: true,
+      data: result.rows.map(row => ({
+        ...row,
+        can_change_role: mayManageRoles && canActOn(callerRole, row.role),
+      })),
+      assignable_roles: mayManageRoles ? rolesAssignableBy(callerRole) : [],
+    });
   } catch (error) { next(error); }
 };
 

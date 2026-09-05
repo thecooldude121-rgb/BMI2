@@ -3,8 +3,8 @@ import { Button } from '../../../components/ui/Button';
 import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, User, Calendar, Clock, BarChart3, Briefcase, Shield, TrendingUp, FileText, Lock, CheckCircle, ChevronRight, X, Trash2 } from 'lucide-react';
 import { getRoleDisplayName, getStatusBadgeClass, getStatusIcon } from '../../../utils/teamManagementMockData';
 import {
-  fetchMembers, deactivateMember, reactivateMember, inviteMember,
-  fetchPendingInvites, formatLastLogin, invitableRolesFor,
+  fetchRoster, deactivateMember, reactivateMember, inviteMember, changeMemberRole,
+  fetchPendingInvites, formatLastLogin, invitableRolesFor, ApiError,
   type WorkspaceMember, type PendingInvite, type InviteResult,
 } from '../../../utils/usersApi';
 import { NotAvailable } from '../../../components/common/NotAvailable';
@@ -25,6 +25,19 @@ import { NotAvailable } from '../../../components/common/NotAvailable';
  * absent fields are worth a schema addition.
  */
 type TeamMember = WorkspaceMember;
+
+/**
+ * A human label for a role slug.
+ *
+ * A LOOKUP, NOT A LIST. It never decides which roles exist — the server does
+ * that — so a role slug it has never heard of renders as itself rather than
+ * disappearing or being labelled "Unknown".
+ */
+const ROLE_LABELS: Record<string, string> = {
+  sales: 'Sales', manager: 'Manager', hr: 'HR', admin: 'Admin',
+};
+const roleLabel = (role: string): string =>
+  ROLE_LABELS[(role ?? '').toLowerCase()] ?? role;
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
 import ForbiddenAccess from '../../../components/common/ForbiddenAccess';
@@ -53,6 +66,13 @@ const TeamManagement: React.FC = () => {
   const [inviteRole, setInviteRole] = useState<string>('sales');
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<InviteResult | null>(null);
+  // Role change. `assignableRoles` is SERVED, never derived here — see
+  // fetchRoster. An empty list means this caller may not change roles, and the
+  // per-row `canChangeRole` says which people they may change.
+  const [assignableRoles, setAssignableRoles] = useState<string[]>([]);
+  const [roleTarget, setRoleTarget] = useState<TeamMember | null>(null);
+  const [roleChoice, setRoleChoice] = useState<string>('');
+  const [roleError, setRoleError] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownButtonRefs = useRef<{ [key: string]: React.RefObject<HTMLButtonElement> }>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -63,13 +83,14 @@ const TeamManagement: React.FC = () => {
     try {
       // Deactivated members are INCLUDED here: the screen that manages
       // deactivation cannot be the one screen that hides deactivated people.
-      const [members, invites] = await Promise.all([
-        fetchMembers(true),
+      const [roster, invites] = await Promise.all([
+        fetchRoster(true),
         // Invites are admin/manager only. A 403 resolves to null rather than
         // throwing, so a sales user still sees the roster.
         fetchPendingInvites().catch(() => null),
       ]);
-      setTeamMembersState(members);
+      setTeamMembersState(roster.members);
+      setAssignableRoles(roster.assignableRoles);
       setPendingInvites(invites);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the team');
@@ -244,6 +265,60 @@ const TeamManagement: React.FC = () => {
       const message = e instanceof Error ? e.message : 'Could not deactivate this member';
       setActionError(message);
       showToast(message, 'error');
+    } finally {
+      setBusyMemberId(null);
+    }
+  };
+
+  /**
+   * Role change — open the dialog. Only ever reachable from a row the SERVER
+   * marked `canChangeRole`, so there is no client-side rule here to drift.
+   */
+  const openRoleDialog = (member: TeamMember) => {
+    setRoleTarget(member);
+    setRoleChoice(member.role);   // starts on the current role, so Confirm starts disabled
+    setRoleError(null);
+  };
+
+  const closeRoleDialog = () => {
+    setRoleTarget(null);
+    setRoleChoice('');
+    setRoleError(null);
+  };
+
+  /**
+   * REAL. PATCH /users/:id/role.
+   *
+   * The 409 is the interesting failure and is shown VERBATIM: it is the
+   * last-admin guard, and its message tells the user what to do instead
+   * ("promote someone else before changing your own role"). Replacing that with
+   * "Could not change role" would throw away the only actionable part. A 403 is
+   * shown verbatim too — the server names which rule refused.
+   *
+   * The dialog stays open on failure, for the reason recorded on the
+   * deactivation handler above: closing it in `finally` dismissed the server's
+   * explanation as it arrived.
+   */
+  const handleRoleConfirm = async (member: TeamMember, role: string) => {
+    // Belt on the no-op: the button is disabled, but a form submit or an
+    // Enter key could still arrive. A no-op that returns 200 would render as a
+    // success toast for a change that did not happen — the exact "success toast
+    // over an unchanged database" failure this project has already paid for.
+    if (role === member.role) return;
+
+    setRoleError(null);
+    setBusyMemberId(member.id);
+    try {
+      const updated = await changeMemberRole(member.id, role);
+      setTeamMembersState(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+      showToast(`${updated.name} is now ${roleLabel(updated.role)}. They will need to sign in again.`, 'success');
+      closeRoleDialog();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not change this role';
+      setRoleError(message);
+      // A 409 is a rule, not a fault: it belongs in the dialog next to the
+      // control, and a red toast on top would overstate it.
+      if (!(e instanceof ApiError && e.status === 409)) showToast(message, 'error');
     } finally {
       setBusyMemberId(null);
     }
@@ -731,8 +806,31 @@ const TeamManagement: React.FC = () => {
                       {getStatusIcon(member.status as Parameters<typeof getStatusIcon>[0])} {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
                     </span>
                   </div>
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">Role:</span> {getRoleDisplayName(member.role as Parameters<typeof getRoleDisplayName>[0])}
+                  {/* THE ROLE CONTROL RENDERS ONLY WHEN THE SERVER SAYS SO.
+                      `canChangeRole` is false both for a caller who may not
+                      change roles at all and for a member who outranks them,
+                      and the row then shows the role as plain text with NO
+                      control — not a disabled one. A disabled control
+                      advertises an action that does not exist for you. */}
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <span className="font-medium">Role:</span>
+                    {/* roleLabel, not getRoleDisplayName: that helper maps the
+                        FABRICATED role vocabulary (sales_manager, sales_rep,
+                        account_executive) and of the four roles the server
+                        actually issues it maps only `admin` — so this line read
+                        "sales" / "manager" / "hr" / "Administrator", an
+                        inconsistent mix, and disagreed with the picker below. */}
+                    <span>{roleLabel(member.role)}</span>
+                    {member.canChangeRole && assignableRoles.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => openRoleDialog(member)}
+                        aria-label={`Change role for ${member.name}`}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                      >
+                        Change role
+                      </button>
+                    )}
                   </div>
                   {/* A free-text "permissions" string was invented alongside
                       the role. The role IS the permission model — see
@@ -923,6 +1021,94 @@ const TeamManagement: React.FC = () => {
         unavailable, which is the established convention here: a control that
         admits it does nothing beats a control that lies.
       */}
+
+      {/* Change role — REAL. PATCH /users/:id/role.
+
+          Every option in the select comes from `assignableRoles`, which the
+          server computed with the same `rolesAssignableBy` that the endpoint
+          enforces with. A manager therefore never SEES "admin" here, rather
+          than seeing it and being refused. */}
+      {roleTarget && (() => {
+        const isSelf     = String(roleTarget.id) === String(user?.id);
+        const unchanged  = roleChoice === roleTarget.role;
+        const busy       = busyMemberId === roleTarget.id;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="role-title">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+              <h3 id="role-title" className="text-lg font-semibold text-gray-900 mb-2">
+                Change role for {roleTarget.name}
+              </h3>
+
+              <label htmlFor="role-select" className="block text-sm font-medium text-gray-700 mb-1">
+                New role
+              </label>
+              <select
+                id="role-select"
+                value={roleChoice}
+                onChange={(e) => { setRoleChoice(e.target.value); setRoleError(null); }}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-1"
+              >
+                {/* The member's CURRENT role is included even if this caller
+                    could not assign it, so the select opens on where they
+                    actually are instead of silently pre-selecting a change. */}
+                {(assignableRoles.includes(roleTarget.role)
+                  ? assignableRoles
+                  : [roleTarget.role, ...assignableRoles]
+                ).map(r => (
+                  <option key={r} value={r}>
+                    {roleLabel(r)}{r === roleTarget.role ? ' (current)' : ''}
+                  </option>
+                ))}
+              </select>
+              {unchanged && (
+                <p className="mb-3 text-xs text-gray-500">
+                  Pick a different role to continue — {roleTarget.name} is already {roleLabel(roleTarget.role)}.
+                </p>
+              )}
+
+              {/* THE SIGN-OUT NOTICE, SHOWN BEFORE CONFIRMING AND NOT AFTER.
+                  The server bumps token_version on every real role change, so
+                  the target's current session stops working immediately. That
+                  is a consequence of pressing this button, so it belongs next
+                  to the button — including, and especially, when the person
+                  being signed out is you. */}
+              <p className="mb-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {isSelf
+                  ? 'This signs you out of your current session — you will need to log in again straight away.'
+                  : `This signs ${roleTarget.name} out of their current session. They will need to log in again before they can continue.`}
+              </p>
+
+              {roleError && (
+                <p role="alert" className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {roleError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeRoleDialog}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRoleConfirm(roleTarget, roleChoice)}
+                  /* Disabled on a no-op rather than allowed to submit: a
+                     request that changes nothing still answers 200, and a
+                     success toast for a change that did not happen is exactly
+                     the failure this project keeps paying for. */
+                  disabled={unchanged || busy}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                >
+                  {busy ? 'Changing…' : 'Change role'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Deactivate — REAL. A plain confirmation, because the old modal offered
           to reassign deals, contacts and tasks and no endpoint does that. */}
