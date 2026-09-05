@@ -1507,7 +1507,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 {/* getNextBestAction() is a pure synchronous function — safe to call inline in render.
                     For >500 deals, memoize per deal.id using useMemo. */}
                 {(() => {
-                  const nba = getNextBestAction(deal);
+                  const nba = getNextBestAction(deal, metaFor(deal));
                   if (nba.urgency === 'low') return null;
                   return (
                     <p className={`text-[11px] mt-0.5 truncate leading-tight flex items-center gap-1 ${nba.urgency === 'high' ? 'text-red-600' : 'text-amber-600'}`}>
@@ -2549,7 +2549,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
         {/* 8.3 — Next Best Action banner */}
         {!isClosed && (() => {
-          const nba = getNextBestAction(deal);
+          const nba = getNextBestAction(deal, metaFor(deal));
           if (nba.urgency === 'low') return null;
           const bannerColor = nba.urgency === 'high'
             ? 'bg-red-50 border-red-200 text-red-800'
@@ -2696,7 +2696,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     <>
                       {/* Next Best Action */}
                       {(() => {
-                        const nba = getNextBestAction(deal);
+                        const nba = getNextBestAction(deal, metaFor(deal));
                         const urgencyBg = nba.urgency === 'high'
                           ? 'bg-red-50 border-red-200 text-red-800'
                           : nba.urgency === 'medium'
@@ -3904,7 +3904,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       <p className="text-xs text-gray-500 truncate mt-0.5">{deal.companyName}</p>
                     )}
                     {(() => {
-                      const nba = getNextBestAction(deal);
+                      const nba = getNextBestAction(deal, metaFor(deal));
                       if (nba.urgency === 'low') return null;
                       return (
                         <p className={`text-[11px] mt-1 flex items-center gap-1 ${nba.urgency === 'high' ? 'text-red-600' : 'text-amber-600'}`}>

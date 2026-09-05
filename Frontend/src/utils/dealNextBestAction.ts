@@ -7,6 +7,8 @@
  * → "proposal sent N days ago and no follow-up"). No real activity log needed.
  */
 
+import type { StageMeta } from './pipelinesApi';
+
 export type NBAUrgency = 'high' | 'medium' | 'low';
 
 export interface NextBestAction {
@@ -42,9 +44,30 @@ function daysUntil(dateStr: string): number {
   return Math.round((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
 }
 
-function isClosedStage(stage: string): boolean {
-  const lower = stage.toLowerCase();
-  return lower.includes('closed') || lower.includes('won') || lower.includes('lost');
+/*
+ * OUTCOME BY stage_type, NOT BY SUBSTRING — the same defect slice 3 removed from
+ * dealDataQuality and dealVelocity, which survived here because this file was
+ * not on that slice's list.
+ *
+ * It tested `.includes('closed') || .includes('won') || .includes('lost')`, and
+ * that is already wrong on stages this product ships: the Partnerships pipeline
+ * ends at `partner-active` (won) and `partner-inactive` (lost), and neither
+ * string contains any of those words. So a WON partnerships deal was not
+ * recognised as closed and fell through to the live-deal branches below — it was
+ * told to "add a primary contact", or that its close date had passed and it
+ * should be marked won or lost. A deal that is already won being advised to mark
+ * itself won is a wrong recommendation shown to a user, not latent cleanup.
+ *
+ * It fails the other way too: a stage called "Won Back" — an ordinary
+ * re-engagement stage — would have been treated as closed and given no action at
+ * all.
+ *
+ * With no metadata the answer is "not closed", the same default as before: a
+ * live-deal recommendation on a closed deal is a smaller harm than silently
+ * withholding one from a deal that is genuinely open.
+ */
+function isClosedStage(meta?: StageMeta | null): boolean {
+  return meta ? meta.stage_type !== 'open' : false;
 }
 
 function getDaysSinceContact(deal: DealForNBA): number | null {
@@ -55,9 +78,9 @@ function getDaysSinceContact(deal: DealForNBA): number | null {
 
 // ── Main function ─────────────────────────────────────────────────────────────
 
-export function getNextBestAction(deal: DealForNBA): NextBestAction {
+export function getNextBestAction(deal: DealForNBA, stageMeta?: StageMeta | null): NextBestAction {
   const stage = deal.stage ?? '';
-  const isClosed = stage ? isClosedStage(stage) : false;
+  const isClosed = isClosedStage(stageMeta);
   const daysSinceContact = getDaysSinceContact(deal);
   const closeDateDaysUntil = deal.closeDate ? daysUntil(deal.closeDate) : null;
   const hasContact = !!(deal.contactName?.trim());
@@ -66,7 +89,7 @@ export function getNextBestAction(deal: DealForNBA): NextBestAction {
 
   // Closed deals — no action needed
   if (isClosed) {
-    const isWon = stage.toLowerCase().includes('won');
+    const isWon = stageMeta?.stage_type === 'won';
     return {
       text: isWon
         ? 'Deal closed won — no further action needed'

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getDealVelocity } from './dealVelocity';
 import { getDealDataQuality } from './dealDataQuality';
+import { getNextBestAction } from './dealNextBestAction';
 import { buildStageLookup, type ApiPipeline, type StageMeta } from './pipelinesApi';
 import { getStageColors } from '../config/stageColors';
 
@@ -202,5 +203,40 @@ describe('getStageColors — an outcome always reads as an outcome', () => {
 
   it('still falls back to gray with no metadata at all', () => {
     expect(getStageColors('partner-active').bg).toBe('#6b7280');
+  });
+});
+
+describe('getNextBestAction — a won deal is not told to close itself', () => {
+  const deal = { id: 'D9', stage: 'partner-active', contactName: '', closeDate: '2020-01-01' };
+
+  it('recognises a won stage whose slug says nothing about winning', () => {
+    // `.includes('won')` is false for 'partner-active', so a won Partnerships
+    // deal fell through to the live-deal branches: it was told to add a primary
+    // contact, or that its close date had passed and it should be "marked won,
+    // lost, or rescheduled". A wrong recommendation shown to a user.
+    const nba = getNextBestAction(deal, meta('partner-active', 'partnerships'));
+    expect(nba.shortLabel).toBe('Closed won');
+    expect(nba.text).toMatch(/no further action needed/);
+    expect(nba.urgency).toBe('low');
+  });
+
+  it('recognises a lost stage the same way', () => {
+    const nba = getNextBestAction(
+      { ...deal, stage: 'partner-inactive' }, meta('partner-inactive', 'partnerships'));
+    expect(nba.shortLabel).toBe('Closed lost');
+    expect(nba.text).toMatch(/loss analysis/);
+  });
+
+  it('still advises an OPEN stage, and does not mistake it for closed', () => {
+    const nba = getNextBestAction(
+      { ...deal, stage: 'partner-agreement' }, meta('partner-agreement', 'partnerships'));
+    expect(nba.shortLabel).not.toMatch(/Closed/);
+  });
+
+  it('without metadata it treats the deal as open', () => {
+    // The safe direction: a live-deal recommendation on a closed deal is a
+    // smaller harm than withholding one from a deal that is genuinely open.
+    const nba = getNextBestAction({ ...deal, stage: 'partner-active' }, null);
+    expect(nba.shortLabel).not.toMatch(/Closed/);
   });
 });
