@@ -442,6 +442,29 @@ pass.
 
 ---
 
+## 6a. Phase B progress — slice 1 of n: the Kanban board
+
+**Done.** The board's columns come from `GET /pipelines` instead of a six-element
+literal, filtered to one pipeline at a time with a selector for the others.
+
+**The hardcoded array was not merely inflexible — it deleted data from the board.**
+Deals were bucketed with `filter(d => d.stage === stage.id)`, so any deal whose stage was
+not one of the six matched no column and vanished with no empty state, no warning and no
+count. Two live deals were invisible on the pipeline board for exactly that reason. There
+is now an `unplacedDeals` banner that names any deal matching no column and links to it, so
+the failure cannot be silent again.
+
+**A pipeline selector was part of the slice, not a nice-to-have.** Showing one pipeline's
+stages is right — seventeen columns across three pipelines is not a board — but without a
+way to reach the others, the cutover would have swapped one silent drop for a different
+one.
+
+**Still hardcoded, and deliberately left for later slices:** the six
+`['prospecting','qualified',…]` literals in `DealsListView` (×3), `DealsGridView`,
+`CRMDashboard`, `dealVelocity` and `dealDataQuality`; `STAGE_LADDER` and `STAGE_KEY_MAP` on
+the deal detail page; `config/stageColors.ts`; and `STAGES_REQUIRING_NEXT_STEP` on the
+board (a coaching prompt, not a data path).
+
 ## 7a. What Phase A found that the design did not predict
 
 Recorded because each was discovered by building or testing rather than by planning, and

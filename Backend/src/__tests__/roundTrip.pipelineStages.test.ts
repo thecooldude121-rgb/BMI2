@@ -344,6 +344,58 @@ describe('Pipeline stages — Phase A round trip', () => {
     }
   });
 
+  // ── what the user actually sees when a stage is invalid ────────────────────
+
+  it('an invalid bulk stage NEVER surfaces a raw constraint violation', async () => {
+    // The dangerous case is now unreachable by two independent means — the FK
+    // and the NOT NULL on deals.stage_id — but "unreachable" is not the standard.
+    // A raw 23503/23502 reaching errorHandler becomes a bare 500 telling the
+    // caller nothing, which is what this project has spent its history
+    // unmasking. Validation must catch it FIRST, so the constraint is a
+    // backstop and never the messenger.
+    const a = await createDeal(ws, { stage: 'prospecting' });
+    const id = a.body.data.id;
+
+    for (const bad of [
+      'totally-invented',
+      'renewal-won',            // real, but in another pipeline
+      'Qualified',              // right stage, wrong case — slugs are exact
+      "'; DROP TABLE deals; --",
+    ]) {
+      const res = await request(app).post('/api/v1/deals/bulk').set(auth(ws))
+        .send({ action: 'stage', deal_ids: [id], payload: { stage: bad } });
+
+      expect(res.status, `stage=${bad}`).toBe(400);
+      expect(res.body.message).toBe('stage does not name a stage in this workspace');
+      // No Postgres error code, no SQL, no stack, no table names.
+      const body = JSON.stringify(res.body);
+      expect(body).not.toMatch(/23503|23502|violates|constraint|pipeline_stages|null value/i);
+      expect(res.body.stack).toBeUndefined();
+    }
+
+    // And the deal never moved.
+    expect((await row(id)).stage).toBe('prospecting');
+  });
+
+  it('a missing bulk stage is refused before any deal is touched', async () => {
+    const a = await createDeal(ws, { stage: 'prospecting' });
+    const res = await request(app).post('/api/v1/deals/bulk').set(auth(ws))
+      .send({ action: 'stage', deal_ids: [a.body.data.id], payload: { stage: '' } });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('payload.stage is required for the stage action');
+    expect((await row(a.body.data.id)).stage).toBe('prospecting');
+  });
+
+  it('a single-deal transition to an invalid stage is equally clean', async () => {
+    const a = await createDeal(ws, { stage: 'prospecting' });
+    const res = await request(app).post(`/api/v1/deals/${a.body.data.id}/stage-transition`)
+      .set(auth(ws)).send({ to_stage: 'nonsense' });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).not.toMatch(/23502|violates|constraint/i);
+  });
+
   // ── provisioning ───────────────────────────────────────────────────────────
 
   it('a workspace is born able to hold a deal', async () => {

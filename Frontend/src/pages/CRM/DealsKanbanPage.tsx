@@ -24,6 +24,10 @@ import {
   getInspectionBadge,
 } from '../../utils/inspectionSignals';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
+import {
+  fetchPipelines, defaultPipeline, stageTint,
+  type ApiPipeline,
+} from '../../utils/pipelinesApi';
 
 // ── localStorage helpers for user-created saved views ────────────────────────
 
@@ -119,14 +123,82 @@ const DealsKanbanPage: React.FC = () => {
   // API returns real data and the two datasets share IDs.
   const [fetchError, setFetchError] = useState(false);
 
-  const [stages, setStages] = useState<PipelineStage[]>([
-    { id: 'prospecting', name: 'Prospecting', color: 'bg-indigo-50', deals: [] },
-    { id: 'qualified',   name: 'Qualified',   color: 'bg-sky-50',    deals: [] },
-    { id: 'proposal',    name: 'Proposal',    color: 'bg-amber-50',  deals: [] },
-    { id: 'negotiation', name: 'Negotiation', color: 'bg-violet-50', deals: [] },
-    { id: 'closed-won',  name: 'Closed-Won',  color: 'bg-emerald-50',deals: [] },
-    { id: 'closed-lost', name: 'Closed-Lost', color: 'bg-red-50',    deals: [] },
-  ]);
+  /*
+   * PHASE B: THE COLUMNS COME FROM THE WORKSPACE, NOT FROM THIS FILE.
+   *
+   * They used to be a six-element literal right here, and that array was not
+   * merely inflexible — it silently DELETED DATA FROM THE BOARD. Deals were
+   * bucketed with `filter(d => d.stage === stage.id)`, so any deal whose stage
+   * was not one of these six matched no column and was dropped with no empty
+   * state, no warning and no count. Two live deals (in `renewal-quoted` and
+   * `partner-evaluation`) were invisible on the pipeline board for exactly that
+   * reason, on a screen whose entire purpose is showing every deal in the
+   * pipeline.
+   *
+   * Columns are now the active pipeline's stages, ordered by `position`, and
+   * `unplacedDeals` below catches anything that still matches no column so the
+   * failure can never be silent again.
+   */
+  /** Deals in this pipeline that match no column. Rendered, never discarded. */
+  const [unplacedDeals, setUnplacedDeals] = useState<any[]>([]);
+  /**
+   * The current column slugs, read by the fetch effect.
+   *
+   * A ref rather than a dependency: the fetch effect SETS `stages`, so
+   * depending on `stages` would re-run it on its own output and loop.
+   */
+  const stageSlugsRef = useRef<string[]>([]);
+
+  const [pipelines, setPipelines] = useState<ApiPipeline[]>([]);
+  const [activePipelineSlug, setActivePipelineSlug] = useState<string | null>(null);
+  const [pipelinesError, setPipelinesError] = useState<string | null>(null);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
+  const [stages, setStages] = useState<PipelineStage[]>([]);
+
+  const activePipeline = useMemo(
+    () => pipelines.find(p => p.slug === activePipelineSlug) ?? null,
+    [pipelines, activePipelineSlug],
+  );
+
+  /*
+   * A PIPELINE SELECTOR IS PART OF THIS CUTOVER, NOT A NICE-TO-HAVE.
+   *
+   * Showing one pipeline's stages is right — seventeen columns across three
+   * pipelines is not a board. But without a way to reach the other pipelines,
+   * cutting over would have swapped one silent drop for a different one: the
+   * renewals and partnerships deals would still be unreachable, just for a new
+   * reason. The selector is what makes "one pipeline at a time" honest.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => {
+        if (cancelled) return;
+        setPipelines(list);
+        setPipelinesError(null);
+        // Only on first load: never yank the board out from under a user who
+        // has deliberately switched pipeline.
+        setActivePipelineSlug(prev => prev ?? defaultPipeline(list)?.slug ?? null);
+      })
+      .catch((e: Error) => { if (!cancelled) setPipelinesError(e.message); })
+      .finally(() => { if (!cancelled) setPipelinesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Columns follow the active pipeline. Deals are re-attached by the fetch
+  // effect below, which depends on the same slug.
+  useEffect(() => {
+    if (!activePipeline) return;
+    const cols = activePipeline.stages.map(st => ({
+      id: st.slug,
+      name: st.name,
+      color: stageTint(st),
+      deals: [] as DealCard[],
+    }));
+    stageSlugsRef.current = cols.map(c => c.id);
+    setStages(cols);
+    setUnplacedDeals([]);
+  }, [activePipeline]);
 
   // Fetch all deals from the backend and populate stages.
   // Re-runs on mount and whenever triggerRefetch() is called (explicit actions).
@@ -203,11 +275,32 @@ const DealsKanbanPage: React.FC = () => {
 
       if (!dedupedDeals.length) return;
 
+      /*
+       * ONLY THIS PIPELINE'S DEALS, and the filter is on pipeline_id rather than
+       * on "does its stage happen to match a column". A deal in the renewals
+       * pipeline whose stage is coincidentally named like a new-business one
+       * must not appear on the new-business board.
+       */
+      const forThisPipeline = activePipelineSlug
+        ? dedupedDeals.filter((d: any) => (d.pipeline_id ?? 'new-business') === activePipelineSlug)
+        : dedupedDeals;
+
+      /*
+       * THE DROP IS NOW VISIBLE. Anything in this pipeline that matches no
+       * column — a stage retired since the board loaded, or data that predates a
+       * configuration change — is counted and surfaced in the UI instead of
+       * vanishing. This is the specific failure the hardcoded array caused.
+       */
+      const columnSlugs = new Set(stageSlugsRef.current);
+      setUnplacedDeals(
+        forThisPipeline.filter((d: any) => !columnSlugs.has(d.stage)),
+      );
+
       setStages(prev => prev.map(stage => {
         // Build each stage's deal list and apply a final ID-dedup pass so the
         // board state invariant "every deal appears exactly once per stage" is
         // guaranteed at storage time, not just at render time.
-        const raw = dedupedDeals
+        const raw = forThisPipeline
           .filter((d: any) => d.stage === stage.id)
           .map((d: any) => ({
             id: d.id,
@@ -306,8 +399,11 @@ const DealsKanbanPage: React.FC = () => {
   // refetchKey is incremented by triggerRefetch() on explicit mutations.
   // contextDeals is intentionally excluded — its length fluctuates during
   // drag-and-drop optimistic updates and caused stale-fetch races.
+  // activePipelineSlug is a dependency because switching pipeline changes which
+  // deals belong on the board — without it the new columns would be populated
+  // from the previous pipeline's deals.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refetchKey]);
+  }, [refetchKey, activePipelineSlug]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -1980,6 +2076,103 @@ const DealsKanbanPage: React.FC = () => {
             retry
           </button>
           <span>.</span>
+        </div>
+      )}
+
+      {/* LOADING, not "no deals". The first render of this cutover showed a
+          completely blank board while the pipelines request was in flight, which
+          is indistinguishable from a pipeline that legitimately has no stages —
+          the same class of ambiguity as a failed fetch rendering an empty list.
+          Caught by screenshotting mid-load rather than by reasoning about it. */}
+      {pipelinesLoading && (
+        <div className="mx-6 mt-4 flex gap-4" aria-busy="true" aria-label="Loading pipeline stages">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="h-3 w-24 rounded bg-gray-200 animate-pulse" />
+              <div className="mt-3 h-16 rounded bg-gray-100 animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pipelinesError && (
+        <div className="mx-6 mt-4 flex items-center gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          {/* The server's own words. An empty board and a failed pipelines
+              request must not look alike — the first is a claim about the
+              workspace, the second about the request. */}
+          <span>Could not load your pipeline stages: {pipelinesError}</span>
+        </div>
+      )}
+
+      {!pipelinesLoading && !pipelinesError && pipelines.length === 0 && (
+        <div className="mx-6 mt-4 flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <span>
+            This workspace has no pipeline configured, so there are no stages to show.
+            A deal cannot be created until one exists.
+          </span>
+        </div>
+      )}
+
+      {/* PIPELINE SELECTOR. Only when there is a choice — a single-pipeline
+          workspace should not be shown a control with one option. */}
+      {pipelines.length > 1 && (
+        <div className="mx-6 mt-4 flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Pipeline</span>
+          <div className="flex items-center gap-1.5" role="tablist" aria-label="Pipeline">
+            {pipelines.map(p => {
+              const isActive = p.slug === activePipelineSlug;
+              return (
+                <button
+                  key={p.slug}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActivePipelineSlug(p.slug)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {p.name}
+                  <span className={`ml-1.5 ${isActive ? 'text-white/70' : 'text-gray-400'}`}>
+                    {p.stages.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* DEALS THAT MATCH NO COLUMN. The hardcoded array dropped these silently;
+          the whole point of the cutover is that it cannot any more. */}
+      {unplacedDeals.length > 0 && (
+        <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <span>
+              <strong>{unplacedDeals.length}</strong>{' '}
+              {unplacedDeals.length === 1 ? 'deal is' : 'deals are'} in a stage this board has
+              no column for, so {unplacedDeals.length === 1 ? 'it is' : 'they are'} not shown
+              above. {unplacedDeals.length === 1 ? 'Its stage' : 'Their stages'} may have been
+              retired or renamed.
+            </span>
+          </div>
+          <ul className="mt-2 ml-6 space-y-1">
+            {unplacedDeals.map((d: any) => (
+              <li key={d.id}>
+                <button
+                  onClick={() => navigate(`/crm/deals/${d.id}`)}
+                  className="underline hover:no-underline"
+                >
+                  {d.name || d.title || d.id}
+                </button>
+                <span className="text-amber-700"> — stage “{d.stage ?? 'none'}”</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

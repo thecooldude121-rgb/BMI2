@@ -24,18 +24,10 @@ export async function getUsers(): Promise<any[]> {
   return json.success ? json.data : [];
 }
 
-export async function getPipelines(): Promise<any[]> {
-  const res = await fetch(`${API_BASE}/pipelines`, { headers: getAuthHeaders() });
-  // Was `return []`, the only swallow left in this file: a failed request and a
-  // workspace with no pipelines produced the same value, and "no pipelines" is a
-  // claim about the data, not about the request.
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.message || `Failed to load pipelines (HTTP ${res.status})`);
-  }
-  const json = await res.json();
-  return json.success ? json.data : [];
-}
+// getPipelines() lived here, returned `any[]`, and was called by nothing at all.
+// It is now `fetchPipelines()` in utils/pipelinesApi.ts — typed, with the stage
+// shape spelled out, because Phase B has real callers that need to know a stage
+// has a slug, a stage_type and an archived_at. One way to ask, not two.
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('authToken');
