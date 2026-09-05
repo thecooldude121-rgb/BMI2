@@ -555,6 +555,33 @@ both are decisions rather than bugs to fix here:
    says you cannot grant a role above your own. Whether that is intended is an auth
    decision, not a stage-configuration one, so it is recorded here rather than changed.
 
+### Phase C — reframed into three steps, because it is not one
+
+The grep before touching anything found the gate is **not zero**, and found a structural
+blocker the design had not accounted for: `getDeals` selects `d.*` and the write paths use
+`RETURNING *`, so `stage` is in the API's JSON only because the column exists. Dropping it
+would change the response shape and turn **167 frontend reads of `deal.stage` into
+`undefined`** — no type error, no failing test.
+
+- **C0 — DONE.** The deals queries project `pipeline_stages.slug AS stage`, so the API's
+  `stage` field is independent of the column before the column goes. Additive; the response
+  is byte-identical today because the two values are provably the same.
+- **C1 — next.** 29 sites across 13 files still test outcomes by hardcoded slug
+  (`=== 'closed-won'`), and 5 files still import `config/pipelines.ts`, which the design
+  said Phase B would remove and which still holds all 17 stages.
+- **C2 — last.** Drop `deals.stage`, `is_won`, `is_lost`.
+
+**The drift gate, checked before writing C0 and now pinned in the suite:** zero mismatches
+between `deals.stage` and the derived slug across every live deal, zero deals whose stage
+belongs to a different pipeline than the deal, zero null `stage_id`. Two new tests assert
+both while the suite's data exists — a check run against the test database *afterwards*
+passes vacuously, because teardown empties it.
+
+**C0 relies on column order.** While the column exists, two fields are named `stage` and
+node-pg's row object takes the last. That was verified against this pg version rather than
+assumed, and a test corrupts `deals.stage` directly and asserts the API still answers with
+the derived value.
+
 ### Outstanding verification, carried forward deliberately
 
 - **A manual drag-and-drop spot-check on the Kanban is still owed.** The gesture cannot be

@@ -42,6 +42,32 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     // unless the caller explicitly passes include_test=true (dev tooling only).
     let query = `
       SELECT d.*,
+             -- PHASE C0: the stage field comes from pipeline_stages, not from
+             -- the deals.stage column.
+             --
+             -- That column still exists and is still dual-written, and the two
+             -- are provably identical today — verified across every live deal
+             -- and pinned by roundTrip.pipelineStages. This projection is what
+             -- makes that stop mattering: once C2 drops deals.stage, d.* will no
+             -- longer contain a stage key and this alias becomes the only
+             -- source, so the response shape does not change on the day the
+             -- column goes.
+             --
+             -- Without it, dropping the column would silently turn 167 frontend
+             -- reads of deal.stage into undefined: no type error, no failing
+             -- test, exactly the silent-failure class this project keeps paying
+             -- for.
+             --
+             -- IT RELIES ON COLUMN ORDER: two fields are named stage while the
+             -- column exists, and node-pg's row object takes the LAST one. Real
+             -- behaviour, verified against this pg version rather than assumed,
+             -- and pinned by a test, because it is exactly the kind of thing
+             -- that breaks quietly.
+             --
+             -- (No backticks in this comment on purpose: it lives inside a JS
+             -- template literal, and one would close the string. CLAUDE.md
+             -- lesson 7 — and I did it here anyway before catching it.)
+             ps.slug AS stage,
              -- DATE columns re-projected as text. A DATE is a calendar day with
              -- no time and no timezone, but the pg driver builds a JS Date at
              -- LOCAL midnight and res.json() serialises that with toISOString():
@@ -72,6 +98,11 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
       -- workspace's lead email. Filtering the base table is not enough:
       -- a join is a read.
       LEFT JOIN leads l ON d.lead_id = l.id AND l.tenant_id = d.tenant_id
+      -- Tenant-matched like every other join here: pipeline_stages.id is a
+      -- global primary key, so without it a bad stage_id could project another
+      -- workspace's stage name. LEFT so a deal is never dropped from the list
+      -- by a stage that cannot be resolved.
+      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
       WHERE d.tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
@@ -145,8 +176,11 @@ export const getDealById = async (req: AuthRequest, res: Response, next: NextFun
               co.city     AS company_city,
               co.state    AS company_state,
               co.country  AS company_country,
-              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
+              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact,
+              -- PHASE C0, same reasoning as getDeals: see the long note there.
+              ps.slug AS stage
        FROM deals d
+       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
        -- Scoped for the same reason as getDeals: see the comment there.
        LEFT JOIN leads l ON d.lead_id = l.id AND l.tenant_id = d.tenant_id
        -- deals_company_id_fkey (migration 027) references companies(id)
@@ -316,7 +350,10 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         tenantId,
       ]
     );
-    res.status(201).json({ success: true, data: result.rows[0] });
+    // RETURNING * cannot join, but the resolved stage row is already in scope,
+    // so the response carries the same `stage` the read paths project rather
+    // than the raw column. Keeps every response shape identical through C2.
+    res.status(201).json({ success: true, data: { ...result.rows[0], stage: stageRow.slug } });
   } catch (error) { next(error); }
 };
 
@@ -597,7 +634,7 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
     );
 
     await client.query('COMMIT');
-    res.json({ success: true, data: updated.rows[0] });
+    res.json({ success: true, data: { ...updated.rows[0], stage: target.slug } });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     next(error);

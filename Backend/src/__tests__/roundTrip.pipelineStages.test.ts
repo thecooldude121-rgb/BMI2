@@ -100,6 +100,67 @@ describe('Pipeline stages — Phase A round trip', () => {
     expect(mismatched.rows[0].n).toBe(0);
   });
 
+  // ── Phase C0: the API's stage field is derived, not the column ─────────────
+
+  it('C0: the stage the API returns comes from pipeline_stages, not deals.stage', async () => {
+    // The projection is `SELECT d.*, ps.slug AS stage`, so while the column
+    // still exists TWO fields are named stage and node-pg's row object takes the
+    // last. That is real, verified behaviour rather than an assumption — but it
+    // is also exactly the kind of thing that would break quietly, so it is
+    // pinned here. Corrupt the legacy column directly and the API must still
+    // answer with the derived value.
+    const created = await createDeal(ws, { stage: 'qualified' });
+    const id = created.body.data.id;
+
+    await pool.query("UPDATE deals SET stage = 'DRIFTED' WHERE id = $1", [id]);
+
+    const one = await request(app).get(`/api/v1/deals/${id}`).set(auth(ws));
+    expect(one.status).toBe(200);
+    expect(one.body.data.stage).toBe('qualified');      // NOT 'DRIFTED'
+
+    const list = await request(app).get('/api/v1/deals').set(auth(ws));
+    const row = list.body.data.find((d: any) => d.id === id);
+    expect(row.stage).toBe('qualified');
+
+    // Restore, so the drift assertion below still means something.
+    await pool.query("UPDATE deals SET stage = 'qualified' WHERE id = $1", [id]);
+  });
+
+  it('C0: create and stage-transition responses carry the derived stage too', async () => {
+    // RETURNING * cannot join, so those paths attach the resolved slug from
+    // scope. If they did not, a response shape would change the day the column
+    // is dropped — on the write paths rather than the read ones, which is worse
+    // because it would look like the write failed.
+    const created = await createDeal(ws, { stage: 'prospecting' });
+    expect(created.body.data.stage).toBe('prospecting');
+
+    const moved = await request(app).post(`/api/v1/deals/${created.body.data.id}/stage-transition`)
+      .set(auth(ws)).send({ to_stage: 'proposal' });
+    expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+    expect(moved.body.data.stage).toBe('proposal');
+  });
+
+  it('C0: no deal anywhere has drifted between the column and its stage row', async () => {
+    // The gate for C2. Runs while the suite's data exists, unlike a check
+    // against the test database afterwards — teardown empties it, so that
+    // version of this assertion would pass vacuously.
+    const drift = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM deals d LEFT JOIN pipeline_stages s ON s.id = d.stage_id
+        WHERE d.stage IS DISTINCT FROM s.slug`);
+    expect(drift.rows[0].n).toBe(0);
+
+    // The subtler one: the stage must belong to the deal's OWN pipeline, not
+    // merely exist in the workspace.
+    const wrongPipeline = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM deals d
+         JOIN pipeline_stages s ON s.id = d.stage_id
+         JOIN pipelines p       ON p.id = s.pipeline_id
+        WHERE p.slug IS DISTINCT FROM d.pipeline_id`);
+    expect(wrongPipeline.rows[0].n).toBe(0);
+  });
+
   // ── createDeal ─────────────────────────────────────────────────────────────
 
   it('create: a named stage resolves to a real row, and both columns agree', async () => {
