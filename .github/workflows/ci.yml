@@ -1,0 +1,183 @@
+# The first CI this repository has ever had.
+#
+# Until this file, `gh pr checks` on a pull request answered "no checks reported"
+# — not pending, not failing: none configured, no .github/ directory at all. Every
+# gate the project relies on (backend round-trip tests against real Postgres, the
+# frontend suite, the typecheck, the hooks lint) existed only as something a human
+# remembered to run locally, and a PR with no red X read as "CI passed" when the
+# truth was "CI does not exist".
+#
+# Two of this project's recorded lessons are directly about gates that were green
+# for the wrong reason, and one is about a gate that was simply never run: two
+# conditionally-called hooks shipped and crashed a page, and `npm run lint:hooks`
+# flagged both the moment someone finally ran it. That is the failure this file
+# removes.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push supersedes the previous run for the same ref. The backend job takes
+# ~40s of real database work; there is no reason to keep a stale one going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — round-trip tests against real Postgres
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # 16, matching the local development database (16.14). The schema uses
+        # gen_random_uuid(), which is built in from 13 onward, and TIMESTAMPTZ
+        # and DEFERRABLE unique constraints throughout — so the major version is
+        # not incidental.
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # The suite REFUSES to run against any database whose name does not
+          # look like a test one — it writes and deletes rows — so this name is
+          # load-bearing, not cosmetic. See src/__tests__/helpers.ts.
+          #
+          # Creating it here rather than with `npm run test:isolation:setup`,
+          # which does `dropdb --if-exists && createdb` and therefore depends on
+          # the postgresql-client binaries happening to be on the runner image.
+          # A container that starts with the database already present needs
+          # neither. The migration step below is the half of that script that
+          # actually matters.
+          POSTGRES_DB: bmi_crm_iso_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: bmi_crm_iso_test
+      NODE_ENV: test
+      # A value, not a secret: this database is created and destroyed inside the
+      # job and nothing it signs leaves the runner. A repository secret here
+      # would imply the tokens matter after the job ends.
+      JWT_SECRET: ci-only-not-a-real-secret
+      # 'log' renders mail to the console and DELIVERS NOTHING, which is what the
+      # invite tests assert (`email_sent` is reported from ok && transport
+      # .delivers, never from ok alone). The server refuses to boot with this
+      # combined with NODE_ENV=production; NODE_ENV is test here.
+      EMAIL_TRANSPORT: log
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install
+        working-directory: Backend
+        run: npm ci
+
+      - name: Migrate the test database
+        working-directory: Backend
+        # 000_baseline_schema.sql is a pg_dump that is SKIPPED on an existing
+        # database and runs only on a genuinely empty one — which is exactly the
+        # CI case, so this builds the whole schema from scratch every run. That
+        # also makes this step a real check on the migration chain: a migration
+        # that only works against a database that already drifted into the right
+        # shape fails here rather than months later.
+        run: npm run db:migrate
+
+      - name: Round-trip tests
+        working-directory: Backend
+        run: npm run test:isolation
+
+  frontend:
+    name: Frontend — tests, typecheck against baseline, hooks lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install
+        working-directory: Frontend
+        run: npm ci
+
+      - name: Unit and component tests
+        working-directory: Frontend
+        run: npm test
+
+      - name: Typecheck — must not exceed the recorded baseline
+        working-directory: Frontend
+        # NOT A PLAIN PASS/FAIL, DELIBERATELY.
+        #
+        # This project carries 281 pre-existing type errors. Gating on zero would
+        # fail every build from day one and the gate would be switched off within
+        # a week, which is how it ends up meaning nothing. Gating on "no worse
+        # than the recorded number" makes it useful immediately.
+        #
+        # Note also that `npx tsc --noEmit` at the Frontend root checks NOTHING —
+        # the root tsconfig is solution-style with "files": [], so it compiles an
+        # empty file list and exits 0. `npm run typecheck` (tsconfig.app.json) is
+        # the real gate. That discovery is why TYPECHECK_BASELINE.md exists.
+        run: |
+          set -euo pipefail
+
+          BASELINE=$(grep -m1 -oE '^## Baseline: [0-9]+' TYPECHECK_BASELINE.md | grep -oE '[0-9]+' || true)
+          if [ -z "${BASELINE}" ]; then
+            echo "::error file=Frontend/TYPECHECK_BASELINE.md::Could not read the baseline count."
+            echo "Expected a line like '## Baseline: 281 errors at <sha>'. Failing rather than"
+            echo "silently treating an unreadable baseline as permission to regress."
+            exit 1
+          fi
+
+          ACTUAL=$(npm run --silent typecheck:count | tail -n 1 | tr -d '[:space:]')
+          if ! [ "${ACTUAL}" -eq "${ACTUAL}" ] 2>/dev/null; then
+            echo "::error::typecheck:count did not return a number (got '${ACTUAL}')."
+            exit 1
+          fi
+
+          echo "baseline: ${BASELINE}   this build: ${ACTUAL}"
+
+          if [ "${ACTUAL}" -gt "${BASELINE}" ]; then
+            echo "::error::Typecheck regressed: ${ACTUAL} errors against a baseline of ${BASELINE} (+$((ACTUAL - BASELINE)))."
+            echo ""
+            echo "Run 'npm run typecheck' in Frontend/ to see them. Triage by REACHABILITY —"
+            echo "is the file routed, does it touch a real API — not by error code. Two live,"
+            echo "user-facing bugs in this project were hiding in errors dismissed as noise."
+            exit 1
+          fi
+
+          if [ "${ACTUAL}" -lt "${BASELINE}" ]; then
+            echo "::notice::Typecheck improved: ${ACTUAL} vs a baseline of ${BASELINE} (-$((BASELINE - ACTUAL)))."
+            echo "Lower the number in Frontend/TYPECHECK_BASELINE.md so the gate keeps the ground you just gained."
+          fi
+
+      - name: Hooks lint
+        working-directory: Frontend
+        # Its own gate, separate from `npm run lint` (~1,000 pre-existing
+        # problems, so it cannot fail a build without failing every build). A
+        # conditionally-called hook is not a style nit — it throws "Rendered more
+        # hooks than during the previous render" and takes out the subtree. Two
+        # shipped in this repo; neither tsc nor 500+ unit tests said a word.
+        run: npm run lint:hooks
