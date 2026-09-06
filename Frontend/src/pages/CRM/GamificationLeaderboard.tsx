@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Trophy, TrendingUp, TrendingDown, Minus, Award, Target, Gift,
-  Users, BarChart3, ArrowRight, Flame, ChevronRight, Medal,
-  DollarSign, Activity, Percent, Building2, Crown, Star,
-  Zap, Eye, Calendar, Phone, Mail, FileText
-} from 'lucide-react';
+import { Trophy, TrendingUp, TrendingDown, Minus, Target, Gift, Users, BarChart3, ArrowRight, Flame, ChevronRight, Medal, DollarSign, Percent, Building2, Star, Zap } from 'lucide-react';
 
 interface LeaderboardEntry {
   rank: number;

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Button } from '../ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { Users, ChevronRight, Mail, Phone, Calendar, TrendingUp, DollarSign, Target, Clock, AlertCircle } from 'lucide-react';
+import { Users, ChevronRight, Mail, Phone, Calendar, TrendingUp, DollarSign, Target, Clock } from 'lucide-react';
 
 interface DirectReport {
   id: string;
@@ -162,12 +163,11 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2">
-                <button
+                <Button
                   onClick={() => onViewProfile(report.id)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                 >
                   View Profile
-                </button>
+                </Button>
                 {report.coachingStatus.performanceTrend && (
                   <span className="text-xs text-slate-500 flex items-center gap-1">
                     <TrendingUp className="w-3 h-3" />

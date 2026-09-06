@@ -1,7 +1,4 @@
-import type {
-  AssignmentRule, AssignmentResult, RuleTrace, ConditionTrace,
-  RuleCondition, ConditionField, TerritoryDefinition, FollowUpTaskConfig,
-} from './types';
+import type { AssignmentRule, AssignmentResult, RuleTrace, ConditionTrace, RuleCondition, TerritoryDefinition } from './types';
 import { PERSONA_PRESETS } from './types';
 import { getRules } from './rulesStore';
 import { getTerritories, matchTerritory } from './territoryStore';

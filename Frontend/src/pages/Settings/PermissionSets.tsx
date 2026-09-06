@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Plus, Search, Edit, Trash2, Copy, Users, Shield,
-  ChevronRight, X, Check, AlertTriangle, Package
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Plus, Search, Edit, Trash2, Copy, Users, X, Check, AlertTriangle, Package } from 'lucide-react';
 import { PermissionSetBuilder } from '../../components/Permissions/PermissionSetBuilder';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 
@@ -190,16 +188,15 @@ const PermissionSets: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">Permission Sets</h2>
           <p className="text-gray-600 mt-1">Create reusable permission templates to apply across multiple roles</p>
         </div>
-        <button
+        <Button
           onClick={() => {
             setSelectedSet(null);
             setShowCreateModal(true);
           }}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           <Plus className="h-4 w-4 mr-2" />
           Create Permission Set
-        </button>
+        </Button>
       </div>
 
       <div className="flex items-center space-x-4">
@@ -489,13 +486,13 @@ const PermissionSets: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={confirmApply}
                 disabled={selectedRoles.length === 0}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="disabled:bg-gray-300"
               >
                 Apply to {selectedRoles.length} Role{selectedRoles.length !== 1 ? 's' : ''}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

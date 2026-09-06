@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Share2, Shield, Users, Lock, Eye, Edit, Settings, Plus, Trash2, Copy,
-  CheckCircle, XCircle, AlertTriangle, Search, Filter, Download, Upload,
-  Save, RefreshCw, ChevronRight, ChevronDown, Play, Pause, Info, Zap
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { CheckCircle, ChevronRight, Copy, Download, Edit, Eye, Filter, Info, Lock, Pause, Play, Plus, RefreshCw, Save, Search, Share2, Shield, Trash2, Users, X, Zap } from 'lucide-react';
 
 interface OrgWideDefault {
   module: string;
@@ -453,14 +450,14 @@ const SharingRules: React.FC = () => {
           </div>
 
           <div className="mt-6 flex justify-end">
-            <button
+            <Button
               onClick={handleSaveDefaults}
               disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              size="lg"
             >
               {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               <span>{loading ? 'Saving...' : 'Save Defaults'}</span>
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -492,16 +489,15 @@ const SharingRules: React.FC = () => {
                 ))}
               </select>
             </div>
-            <button
+            <Button
               onClick={() => {
                 setEditingRule(null);
                 setShowRuleBuilder(true);
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
             >
               <Plus className="h-4 w-4" />
               <span>Create Sharing Rule</span>
-            </button>
+            </Button>
           </div>
 
           {/* Rules List */}
@@ -738,7 +734,7 @@ const SharingRules: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Rule Name *
                 </label>
-                <input
+                <input aria-label="Rule Name"
                   type="text"
                   value={newRule.name}
                   onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
@@ -752,7 +748,7 @@ const SharingRules: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Module *
                   </label>
-                  <select
+                  <select aria-label="Module"
                     value={newRule.module}
                     onChange={(e) => setNewRule({ ...newRule, module: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -767,7 +763,7 @@ const SharingRules: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Rule Type *
                   </label>
-                  <select
+                  <select aria-label="Rule Type"
                     value={newRule.ruleType}
                     onChange={(e) => setNewRule({ ...newRule, ruleType: e.target.value as any })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -784,7 +780,7 @@ const SharingRules: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Access Level *
                 </label>
-                <select
+                <select aria-label="Access Level"
                   value={newRule.accessLevel}
                   onChange={(e) => setNewRule({ ...newRule, accessLevel: e.target.value as any })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -813,7 +809,7 @@ const SharingRules: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   const rule: SharingRule = {
                     id: editingRule?.id || Date.now().toString(),
@@ -849,10 +845,9 @@ const SharingRules: React.FC = () => {
                     enabled: true
                   });
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 {editingRule ? 'Update Rule' : 'Create Rule'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

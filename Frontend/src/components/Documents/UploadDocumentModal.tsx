@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Search, Tag, Users, Building2, TrendingUp, Phone, FileText, AlertCircle, Link2 } from 'lucide-react';
+import { X, Upload, Tag, Users, Building2, TrendingUp, Phone, FileText, AlertCircle, Link2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { documentsService } from '../../services/documentsService';
 
@@ -398,10 +398,16 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
       setUploadedDocuments(uploadedDocs);
 
       const failedCount = validFiles.length - uploadedDocs.length;
-      if (failedCount > 0) {
+      if (failedCount > 0 && uploadedDocs.length === 0) {
+        // Don't lead with "0 uploaded successfully" when nothing uploaded.
+        showToast(
+          `Nothing was uploaded — all ${failedCount} file(s) failed`,
+          'error'
+        );
+      } else if (failedCount > 0) {
         showToast(
           `${uploadedDocs.length} document(s) uploaded successfully, ${failedCount} failed`,
-          uploadedDocs.length > 0 ? 'success' : 'error'
+          'success'
         );
       } else {
         showToast(`${uploadedDocs.length} document(s) uploaded successfully`, 'success');
@@ -831,7 +837,7 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-sm font-medium mb-2" style={{ color: '#374151' }}>
               Document Name: <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <input
+            <input aria-label="Document Name:"
               type="text"
               value={documentName}
               onChange={(e) => setDocumentName(e.target.value)}
@@ -847,7 +853,7 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-sm font-medium mb-2" style={{ color: '#374151' }}>
               Category: <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <select
+            <select aria-label="Category:"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2"
@@ -1098,7 +1104,7 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             <label className="block text-sm font-medium mb-2" style={{ color: '#374151' }}>
               Description: <span className="text-xs font-normal" style={{ color: '#9ca3af' }}>(optional)</span>
             </label>
-            <textarea
+            <textarea aria-label="Description: (optional)"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Enter document description"

@@ -136,6 +136,16 @@ export interface Lead {
   source: string;
   score: number;
   aiScore?: number;
+  /**
+   * The deal's stored win probability, with NULL PRESERVED.
+   *
+   * `aiScore` cannot carry this: it is mapped as `d.probability || 0`, so an
+   * unset probability and an explicit 0% are the same value by the time any
+   * consumer sees it. That is fine for a display score and fatal for a weighted
+   * forecast, where "nobody has assessed this" and "this will not close" must
+   * not sum the same way. Design question 3.
+   */
+  probabilityRaw?: number | null;
   temperature: 'hot' | 'warm' | 'cold';
   estimatedValue?: number;
   probability?: number;

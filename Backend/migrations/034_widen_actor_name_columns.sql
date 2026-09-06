@@ -1,0 +1,59 @@
+-- Migration 034: widen the remaining columns that hold a resolved actor name.
+--
+-- CONFIRMED REACHABLE, not theorised. Migration 032 noted this as a latent
+-- defect after fixing documents.uploaded_by; it has now been reproduced through
+-- the real API with a real login:
+--
+--   a user with first_name = 50 chars and last_name = 50 chars (both columns are
+--   VARCHAR(50) NOT NULL, so this is simply the maximum a user may register)
+--   resolves to a 101-character actor name, and then
+--     POST /api/v1/activities -> 500 Internal Server Error
+--     POST /api/v1/tasks      -> 500 Internal Server Error
+--     POST /api/v1/documents  -> 201  (already widened by migration 032)
+--
+-- Nothing caps first_name or last_name upstream — authController.register puts
+-- them straight from the request body into the INSERT — so 101 characters is an
+-- ordinary registration, not a contrived one. Postgres answers "value too long
+-- for type character varying(100)" and errorHandler masks it as a bare 500, the
+-- same shape as the documents bug.
+--
+-- WHICH COLUMNS. resolveActorName is written in exactly four places
+-- (activitiesController:222, tasksController:253, dealsController:487 and :646,
+-- documentsController:150 and :355), reaching five columns. Widening the three
+-- that are still narrow:
+--
+--   activities.created_by    VARCHAR(100) -> 255   overflows at 101
+--   activities.assigned_to   VARCHAR(100) -> 255   overflows at 101
+--   tasks.assigned_to        VARCHAR(100) -> 255   overflows at 101
+--   deal_stage_history.changed_by  already 255     safe
+--   documents.uploaded_by          already 255     safe (migration 032)
+--
+-- tasks.assigned_to is included even though the reported defect named only the
+-- two activities columns: it is the same value from the same function and its
+-- 500 was reproduced in the same run, so leaving it would mean knowingly
+-- shipping a confirmed failure. 255 matches the convention now established
+-- across this table family.
+--
+-- 255 rather than 101 because the email fallback in resolveActorName can return
+-- up to users.email's VARCHAR(150) when the user row cannot be read, and
+-- because sizing a column to the exact current maximum is how this bug happened
+-- in the first place.
+--
+-- DELIBERATELY NOT TOUCHED, different source, out of this migration's mandate:
+--   deals.assigned_to, leads.assigned_to, quotes.assigned_to  VARCHAR(100)
+--   audit_log.changed_by                                      VARCHAR(100)
+-- These receive an owner id or name from a REQUEST BODY, not resolveActorName,
+-- so they are a separate question about client-supplied length. Also unexamined:
+-- eight VARCHAR(10) created_by/assigned_to columns on out-of-scope tables
+-- (blueprints, email_templates, macros, pipelines, quotes, signals, web_forms,
+-- workflow_rules) — none is written by these controllers, but VARCHAR(10) for a
+-- created_by is the same latent shape and worth a look if those features are
+-- ever built.
+--
+-- Widening a varchar is metadata-only in Postgres: no table rewrite, and no
+-- existing value can be invalidated because every current value already fits in
+-- 100 characters.
+
+ALTER TABLE activities ALTER COLUMN created_by  TYPE VARCHAR(255);
+ALTER TABLE activities ALTER COLUMN assigned_to TYPE VARCHAR(255);
+ALTER TABLE tasks      ALTER COLUMN assigned_to TYPE VARCHAR(255);

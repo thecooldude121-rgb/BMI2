@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Download, FileText, FileType, File, Code } from 'lucide-react';
 
 interface DownloadTranscriptModalProps {
@@ -171,13 +172,12 @@ const DownloadTranscriptModal: React.FC<DownloadTranscriptModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleDownload}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             Download
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@ import {
 import type { LeadScoreBreakdown, ScoreComponent } from '../../types/leadScoring';
 import type { Lead } from '../../types/lead';
 import type { MultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
-import { BAND_LABELS } from '../../utils/leadScoring/multiFactorScore';
+
 import { explainScore } from '../../utils/leadScoring/scoreExplainer';
 import type { ScoreDriver, ActivitySignal, ConfidenceLevel } from '../../utils/leadScoring/scoreExplainer';
 import { getFeedbackState, type FeedbackType } from '../../utils/leadScoring/scoreFeedback';

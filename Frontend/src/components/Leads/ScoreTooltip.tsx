@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { MultiFactorScore, MultiFactorDim, ScoreBand } from '../../utils/leadScoring/multiFactorScore';
 import type { ScoreExplanation, ScoreDriver, ConfidenceLevel } from '../../utils/leadScoring/scoreExplainer';

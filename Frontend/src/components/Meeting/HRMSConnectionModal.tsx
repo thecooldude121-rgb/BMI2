@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { X, Building2, TrendingUp, Calendar, ArrowRight, Lightbulb } from 'lucide-react';
 
 interface HRMSConnectionModalProps {
@@ -61,15 +61,15 @@ export default function HRMSConnectionModal({ isOpen, onClose, hrmsData }: HRMSC
             </div>
             <div className="space-y-2">
               <div className="flex items-start gap-2">
-                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-600 flex-shrink-0" />
+                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-600 flex-shrink-0" />
                 <p className="text-sm text-gray-700">Warm introduction through trusted connection</p>
               </div>
               <div className="flex items-start gap-2">
-                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-600 flex-shrink-0" />
+                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-600 flex-shrink-0" />
                 <p className="text-sm text-gray-700">Existing relationship with recruited employee</p>
               </div>
               <div className="flex items-start gap-2">
-                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-600 flex-shrink-0" />
+                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-brand-600 flex-shrink-0" />
                 <p className="text-sm text-gray-700">
                   <span className="font-semibold text-emerald-600">33% higher close rate</span> with HRMS connections
                 </p>

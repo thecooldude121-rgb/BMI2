@@ -1,10 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Info,
-  Globe, Activity, Sparkles, Rocket, Shield, Award, Users, Zap
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+
+/**
+ * DEV-ONLY LOGIN AUTOFILL.
+ *
+ * `npm run db:seed:users` rotates the seeded users' passwords and writes the two
+ * vars below into `Frontend/.env.development.local` (gitignored via `*.local`).
+ * This fills the form from them so nobody has to memorise a password that
+ * changes on every seed.
+ *
+ * Why it is safe, and why the alternative was refused: CLAUDE.md forbids
+ * advertised demo credentials, because this project once shipped a login page
+ * with a hardcoded "Demo Access" panel naming an account that did not exist.
+ * The login page is the one unauthenticated surface in the app, so anything
+ * rendered there is readable by anyone who can reach it, and anything hardcoded
+ * survives into a deployed bundle.
+ *
+ * This does neither:
+ *   - `import.meta.env.DEV` is a compile-time constant, so `npm run build`
+ *     evaluates this to false and dead-code-eliminates the whole block. Verified
+ *     by grepping the production bundle for the address.
+ *   - The values come from a gitignored env file, never from source. A
+ *     production build has no such file, so they are `undefined` and the gate
+ *     fails twice over.
+ *   - Nothing is DISPLAYED. It fills the inputs; the password stays masked. The
+ *     page never tells a reader what the credentials are.
+ */
+const DEV_LOGIN = {
+  email: import.meta.env.VITE_DEV_LOGIN_EMAIL as string | undefined,
+  password: import.meta.env.VITE_DEV_LOGIN_PASSWORD as string | undefined,
+};
+const DEV_LOGIN_AVAILABLE = Boolean(
+  import.meta.env.DEV && DEV_LOGIN.email && DEV_LOGIN.password,
+);
 
 interface FormErrors {
   email?: string;
@@ -14,6 +45,7 @@ interface FormErrors {
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, login } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -31,13 +63,15 @@ const Login: React.FC = () => {
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [rateLimited, setRateLimited] = useState(false);
 
-  // Redirect if already logged in
+  // Redirect once a session exists. Prefers the page the user was trying to
+  // reach (RequireAuth passes it in `location.state.from`) over a role-based
+  // guess — sending an Admin to /settings when they clicked a deal link is a
+  // small thing that feels broken.
   useEffect(() => {
-    if (user) {
-      const redirectPath = user.role === 'Admin' ? '/settings' : '/';
-      navigate(redirectPath);
-    }
-  }, [user, navigate]);
+    if (!user) return;
+    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+    navigate(from ?? '/', { replace: true });
+  }, [user, navigate, location.state]);
 
   // Email validation
   const validateEmail = (email: string): string | undefined => {
@@ -141,9 +175,13 @@ const Login: React.FC = () => {
     setErrors({});
 
     try {
-      const success = await login(formData.email, formData.password);
+      // login() returns { ok, message }. Destructured deliberately: it used to
+      // return a boolean, and `if (result)` on an object is always truthy — the
+      // compiler cannot catch that, so a failed sign-in would have looked
+      // successful and left the user on a blank app with no session.
+      const { ok, message } = await login(formData.email, formData.password);
 
-      if (success) {
+      if (ok) {
         if (formData.rememberMe) {
           localStorage.setItem('rememberMe', 'true');
           localStorage.setItem('userEmail', formData.email);
@@ -151,11 +189,12 @@ const Login: React.FC = () => {
           localStorage.removeItem('rememberMe');
           localStorage.removeItem('userEmail');
         }
+        // The redirect is handled by the effect watching `user`.
       } else {
         setLoginAttempts(prev => prev + 1);
-        setErrors({
-          general: 'Invalid email or password. Please try again.'
-        });
+        // Show the server's own reason rather than assuming a bad password —
+        // an unreachable server is not the same failure.
+        setErrors({ general: message ?? 'Invalid email or password. Please try again.' });
       }
     } catch (error) {
       setLoginAttempts(prev => prev + 1);
@@ -304,19 +343,14 @@ const Login: React.FC = () => {
             <p className="text-gray-600">Sign in to access your dashboard</p>
           </div>
 
-          {/* Demo Credentials Notice */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-start space-x-2">
-              <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-semibold text-blue-900 mb-1">Demo Access</h3>
-                <p className="text-xs text-blue-800 leading-relaxed">
-                  <strong>Email:</strong> demo@company.com<br />
-                  <strong>Password:</strong> password123
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* A "Demo Access" panel used to sit here advertising
+              demo@company.com / password123. No such user has ever existed. It
+              appeared to work only because login accepted any input; once login
+              became real it became a credential that is guaranteed to fail.
+              Removed rather than replaced — an advertised demo account is a
+              fabricated credential presented as real, which is the same rule
+              that governs fabricated data. Real credentials come from
+              `npm run db:seed:users`, which prints them to the console. */}
 
           {/* General Error Message */}
           {errors.general && (
@@ -487,10 +521,10 @@ const Login: React.FC = () => {
             </div>
 
             {/* Sign In Button */}
-            <button
+            <Button
               type="submit"
               disabled={loading || rateLimited}
-              className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+              fullWidth className="border border-transparent shadow-sm font-semibold duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
             >
               {loading ? (
                 <>
@@ -506,8 +540,53 @@ const Login: React.FC = () => {
                   Sign In
                 </>
               )}
-            </button>
+            </Button>
+
+            {/*
+              * `import.meta.env.DEV` is FIRST and inline, deliberately. Vite
+              * replaces it with the literal `false` in a production build, so
+              * the minifier drops this whole subtree. Gating only on the
+              * module-scope constant left the button's markup (though never the
+              * credentials) in the production bundle — verified by grepping
+              * dist/ for the label.
+              */}
+            {import.meta.env.DEV && DEV_LOGIN_AVAILABLE && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      email: DEV_LOGIN.email!,
+                      password: DEV_LOGIN.password!,
+                    }));
+                    // Clear any stale validation state from a previous attempt so
+                    // the filled form does not render as invalid.
+                    setErrors({});
+                    setTouched({ email: true, password: true });
+                  }}
+                  className="w-full rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2
+                             text-xs font-medium text-gray-600 hover:bg-gray-100
+                             focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-1"
+                  title="Fills the form from Frontend/.env.development.local (dev builds only)"
+                >
+                  Fill dev login
+                  <span className="ml-2 font-normal text-gray-500">
+                    · local dev only, not in production builds
+                  </span>
+                </button>
+              </div>
+            )}
           </form>
+
+          {/* Registration had no UI at all — POST /auth/register existed but the
+              only way to reach it was curl. */}
+          <p className="text-sm text-gray-600 text-center mt-6">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-brand-600 font-medium hover:underline">
+              Create one
+            </Link>
+          </p>
 
           {/* Divider */}
           <div className="mt-6">

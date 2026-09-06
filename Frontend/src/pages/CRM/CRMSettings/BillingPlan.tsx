@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Check } from 'lucide-react';
 
 const BillingPlan: React.FC = () => {
@@ -34,9 +35,9 @@ const BillingPlan: React.FC = () => {
       </div>
 
       <div className="flex gap-3">
-        <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+        <Button size="lg">
           Upgrade Plan
-        </button>
+        </Button>
         <button className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
           Change Plan
         </button>

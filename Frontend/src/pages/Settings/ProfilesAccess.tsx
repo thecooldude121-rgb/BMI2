@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Plus, Search, Filter, Users, Mail, Building, Shield,
-  ChevronDown, X, Check, AlertTriangle, Edit, Trash2,
-  Download, Power, Clock, Globe, Calendar, ArrowLeft
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Plus, Search, Users, Building, Shield, X, Check, AlertTriangle, Edit, Power, Clock, Globe, Calendar, ArrowLeft } from 'lucide-react';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 
 interface User {
@@ -311,13 +308,13 @@ const ProfilesAccess: React.FC = () => {
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Users</h2>
-              <button
+              <Button
                 onClick={() => setShowAddUserModal(true)}
-                className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                size="sm"
               >
                 <Plus className="h-4 w-4 mr-1" />
                 Add User
-              </button>
+              </Button>
             </div>
 
             <div className="relative mb-3">
@@ -625,7 +622,7 @@ const ProfilesAccess: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         First Name
                       </label>
-                      <input
+                      <input aria-label="First Name"
                         type="text"
                         value={editingUser.firstName}
                         onChange={(e) => setEditingUser({ ...editingUser, firstName: e.target.value })}
@@ -637,7 +634,7 @@ const ProfilesAccess: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Last Name
                       </label>
-                      <input
+                      <input aria-label="Last Name"
                         type="text"
                         value={editingUser.lastName}
                         onChange={(e) => setEditingUser({ ...editingUser, lastName: e.target.value })}
@@ -650,7 +647,7 @@ const ProfilesAccess: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email
                     </label>
-                    <input
+                    <input aria-label="Email"
                       type="email"
                       value={editingUser.email}
                       onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
@@ -662,7 +659,7 @@ const ProfilesAccess: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Role <span className="text-red-500">*</span>
                     </label>
-                    <select
+                    <select aria-label="Role"
                       value={editingUser.roleId}
                       onChange={(e) => {
                         const role = roles.find(r => r.id === e.target.value);
@@ -692,7 +689,7 @@ const ProfilesAccess: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Business Unit
                     </label>
-                    <select
+                    <select aria-label="Business Unit"
                       value={editingUser.businessUnit || ''}
                       onChange={(e) => setEditingUser({ ...editingUser, businessUnit: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -708,7 +705,7 @@ const ProfilesAccess: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Status
                     </label>
-                    <select
+                    <select aria-label="Status"
                       value={editingUser.status}
                       onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value as 'active' | 'inactive' })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -726,7 +723,7 @@ const ProfilesAccess: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Time Zone
                         </label>
-                        <select
+                        <select aria-label="Time Zone"
                           value={editingUser.timezone}
                           onChange={(e) => setEditingUser({ ...editingUser, timezone: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -741,7 +738,7 @@ const ProfilesAccess: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Language
                         </label>
-                        <select
+                        <select aria-label="Language"
                           value={editingUser.language}
                           onChange={(e) => setEditingUser({ ...editingUser, language: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -756,7 +753,7 @@ const ProfilesAccess: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Date Format
                         </label>
-                        <select
+                        <select aria-label="Date Format"
                           value={editingUser.dateFormat}
                           onChange={(e) => setEditingUser({ ...editingUser, dateFormat: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -777,12 +774,11 @@ const ProfilesAccess: React.FC = () => {
                   >
                     Cancel
                   </button>
-                  <button
+                  <Button
                     onClick={handleSaveUser}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     Save Changes
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -815,7 +811,7 @@ const ProfilesAccess: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     First Name <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="First Name"
                     type="text"
                     value={newUser.firstName}
                     onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
@@ -827,7 +823,7 @@ const ProfilesAccess: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Last Name <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Last Name"
                     type="text"
                     value={newUser.lastName}
                     onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
@@ -840,7 +836,7 @@ const ProfilesAccess: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Email"
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
@@ -852,7 +848,7 @@ const ProfilesAccess: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Role <span className="text-red-500">*</span>
                 </label>
-                <select
+                <select aria-label="Role"
                   value={newUser.roleId}
                   onChange={(e) => setNewUser({ ...newUser, roleId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -868,7 +864,7 @@ const ProfilesAccess: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Business Unit
                 </label>
-                <select
+                <select aria-label="Business Unit"
                   value={newUser.businessUnit}
                   onChange={(e) => setNewUser({ ...newUser, businessUnit: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -898,12 +894,11 @@ const ProfilesAccess: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddUser}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Add User
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -986,7 +981,7 @@ const ProfilesAccess: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   if (bulkAction === 'changeRole') {
                     const select = document.getElementById('bulkRoleSelect') as HTMLSelectElement;
@@ -1007,10 +1002,10 @@ const ProfilesAccess: React.FC = () => {
                   }
                 }}
                 disabled={!bulkAction || (bulkAction === 'changeRole' && !(document.getElementById('bulkRoleSelect') as HTMLSelectElement)?.value)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="disabled:bg-gray-300"
               >
                 {bulkAction === 'changeRole' ? 'Preview Changes' : 'Apply'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1086,16 +1081,15 @@ const ProfilesAccess: React.FC = () => {
               >
                 Back
               </button>
-              <button
+              <Button
                 onClick={() => {
                   handleBulkAction();
                   setShowBulkPreview(false);
                   setPreviewAction(null);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Confirm Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

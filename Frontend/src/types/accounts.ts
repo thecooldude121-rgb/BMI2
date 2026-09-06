@@ -6,6 +6,8 @@ export interface EnhancedAccount {
   type: 'prospect' | 'customer' | 'partner' | 'vendor' | 'competitor';
   industry: string;
   subIndustry?: string;
+  /** companies.domain — a real column, previously missing from this type. */
+  domain?: string;
   accountSize: '1-10' | '11-50' | '51-200' | '201-500' | '501-1000' | '1001-5000' | '5000+';
   annualRevenue?: number;
   revenueCurrency: string;
@@ -71,8 +73,33 @@ export interface EnhancedAccount {
   deletedAt?: string;
 
   hierarchy?: AccountHierarchy;
+
+  /**
+   * RESOLVED FROM REAL DATA by AccountsContext.refreshAccounts.
+   *
+   * These were declared here from the start and never populated —
+   * mapRowToAccount leaves them out on purpose, since /companies returns no
+   * related records. Every consumer read `.length || 0`, so each account row
+   * reported "0 contacts / 0 active deals" while real contacts pointed straight
+   * at those accounts.
+   *
+   * `undefined` means the lookup did not run (still loading, or the request
+   * failed). That is deliberately distinct from `[]`, which means none — a
+   * failed join must not render as an authoritative zero.
+   *
+   * BOTH ARE NOW EXACT. relatedContacts joins on contacts.company_id and
+   * relatedDeals on deals.company_id (migration 027), which replaced the
+   * free-text company_name match this note used to describe — that match
+   * attributed exactly 1 of 25 deals and silently missed the rest.
+   *
+   * An empty array still does NOT mean "this account has no deals": 22 of 25
+   * deals carry no company_id, because the column is new and linking is a
+   * user's action. It means "no deals are LINKED", and the UI must say which
+   * of the two it is rather than printing a bare 0.
+   */
   relatedContacts?: AccountContact[];
   relatedDeals?: AccountDeal[];
+
   recentActivities?: AccountActivity[];
   stats?: AccountStats;
 }
@@ -94,19 +121,37 @@ export interface AccountHierarchy {
   path: string[];
 }
 
+/**
+ * A contact shown against an account.
+ *
+ * PHASE 2: this described a normalised join row (contactId, relationshipType,
+ * influenceLevel, createdAt/updatedAt) while every value in the codebase is a
+ * FLAT record — `{ id, accountId, name, role, email, isPrimary }`. The type and
+ * the data had never agreed, which is why sampleAccountsData.ts and three
+ * account pages carried permanent type errors that everyone had learned to
+ * ignore. The type now describes the data that exists.
+ *
+ * There is no account<->contact join table. Real contacts for an account come
+ * from GET /contacts?account_id=, typed as `Contact`.
+ */
 export interface AccountContact {
   id: string;
   accountId: string;
-  contactId: string;
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  isPrimary?: boolean;
+  /** Only present on the normalised shape, which nothing produces yet. */
+  contactId?: string;
   contact?: Contact;
-  relationshipType: 'business' | 'technical' | 'billing' | 'executive' | 'other';
-  isPrimary: boolean;
+  relationshipType?: 'business' | 'technical' | 'billing' | 'executive' | 'other';
   title?: string;
   department?: string;
-  influenceLevel: 'low' | 'medium' | 'high' | 'decision_maker';
+  influenceLevel?: 'low' | 'medium' | 'high' | 'decision_maker';
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Contact {
@@ -123,13 +168,26 @@ export interface Contact {
   status: 'active' | 'inactive' | 'bounced' | 'unsubscribed';
 }
 
+/**
+ * A deal shown against an account. Same story as AccountContact: the declared
+ * join shape (dealId, isPrimaryAccount) never matched the flat records the code
+ * actually passes around — `{ id, accountId, name, amount, stage, closeDate,
+ * probability }` — so `deal.amount` and `deal.name` were type errors everywhere
+ * despite being the real fields.
+ */
 export interface AccountDeal {
   id: string;
   accountId: string;
-  dealId: string;
+  name?: string;
+  amount?: number;
+  stage?: string;
+  closeDate?: string;
+  probability?: number;
+  /** Only present on the normalised shape, which nothing produces yet. */
+  dealId?: string;
   deal?: Deal;
-  isPrimaryAccount: boolean;
-  createdAt: string;
+  isPrimaryAccount?: boolean;
+  createdAt?: string;
 }
 
 export interface Deal {

@@ -1,15 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Trophy, Star, Zap, Target, TrendingUp, Award, Crown, Flame,
-  Users, DollarSign, Phone, Mail, Calendar, CheckSquare, Plus,
-  ChevronRight, ChevronUp, ChevronDown, Sparkles, Gift, Clock,
-  BarChart3, Activity, MessageSquare, Video, FileText, Bot,
-  Lightbulb, Rocket, Shield, Diamond, Heart, ThumbsUp, Eye,
-  ArrowUp, ArrowDown, PlayCircle, PauseCircle, RefreshCw,
-  Bell, Settings, Share2, Download, Filter, Search, X, Check
-} from 'lucide-react';
-import { useData } from '../../contexts/DataContext';
+import { Trophy, Star, Zap, Target, TrendingUp, Award, Crown, Flame, Users, DollarSign, Phone, Mail, Calendar, CheckSquare, Plus, ChevronRight, Sparkles, Gift, BarChart3, Activity, MessageSquare, Bot, Lightbulb, Heart, Eye, ArrowUp, ArrowDown, RefreshCw, X } from 'lucide-react';
 
 // Enhanced TypeScript Interfaces for Gamification
 interface GamificationUser {
@@ -28,6 +19,23 @@ interface GamificationUser {
   monthlyXP: number;
   isOnline: boolean;
   lastActivity: string;
+}
+
+/**
+ * `Achievement` was referenced by the interface below but never defined or
+ * imported anywhere — a TS2304 the type checker could not report while the
+ * Sequences parse error suppressed all semantic errors.
+ *
+ * Shaped from the real gamification_achievements table (id, employee_id,
+ * badge_id, earned_at), which exists in Postgres with no controller and no API.
+ * Every `achievements` value in this file is `[]`, so nothing populates it yet —
+ * the type is here to be honest about the shape, not to imply the feature works.
+ */
+interface Achievement {
+  id: string;
+  employeeId: string;
+  badgeId: string;
+  earnedAt: string;
 }
 
 interface Badge {
@@ -85,7 +93,14 @@ interface TeamComparison {
 
 const GamificationPage: React.FC = () => {
   const navigate = useNavigate();
-  const { leads, deals, tasks, employees } = useData();
+  // Deliberately NOT reading useData(). This page destructured leads, deals, tasks
+  // and employees and then never used any of them — the destructure was dead, which
+  // made a wholly fabricated page look data-driven. Every figure below (Level 12,
+  // 2.8K XP, the 7-day streak, the leaderboard, "92% confident" coach insights,
+  // challenge progress) is a hardcoded literal in local state, independent of the
+  // database. That is finding F14 in FABRICATED_DATA_AUDIT.md and it is still OPEN:
+  // wiring DataContext to real data does not touch it, because it never consumed
+  // the provider. Gamification is also absent from the Phase-1 page list.
   
   // State Management
   const [currentUser, setCurrentUser] = useState<GamificationUser | null>(null);

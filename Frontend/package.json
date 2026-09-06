@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint:hooks": "node scripts/lint-hooks.mjs",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck:count": "tsc -p tsconfig.app.json --noEmit 2>&1 | grep -c \"error TS\" || true"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -23,6 +28,7 @@
     "@eslint/js": "^9.9.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.6",
     "@types/react": "^18.3.5",
     "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-dom": "^18.3.0",

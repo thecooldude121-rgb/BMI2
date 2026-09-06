@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Button } from '../ui/Button';
 import { X, Plus, Trash2, GripVertical, ChevronDown, Copy, Pencil, Check } from 'lucide-react';
-import type {
-  AdvancedFilter, FilterGroup, FilterCondition,
-  FilterFieldId, FilterOperator, FilterValue, GroupLogic,
-} from '../../types/leadFilter';
+import type { AdvancedFilter, FilterGroup, FilterCondition, FilterFieldId, FilterOperator, FilterValue } from '../../types/leadFilter';
 import {
   FILTER_FIELDS, FILTER_FIELD_CATEGORIES,
   OPERATOR_FULL_LABELS,
@@ -60,6 +58,15 @@ interface ValueInputProps {
 
 function ValueInput({ fieldId, operator, value, leads, onChange }: ValueInputProps) {
   const meta = FILTER_FIELDS.find(f => f.id === fieldId);
+
+  // Hoisted above every early return and branch below. This was originally
+  // declared inside the `fieldId === 'country'` branch, where it is called on
+  // some renders and not others — which breaks React's hook ordering for the
+  // whole subtree, not just this input.
+  const countries = useMemo(
+    () => Array.from(new Set(leads.map(l => l.country).filter(Boolean))).sort(),
+    [leads],
+  );
 
   if (NO_VALUE_OPERATORS.has(operator)) return null;
 
@@ -139,11 +146,6 @@ function ValueInput({ fieldId, operator, value, leads, onChange }: ValueInputPro
 
   // country with is/is_not/is_any_of: distinct dropdown
   if (fieldId === 'country' && (operator === 'is' || operator === 'is_not')) {
-    const countries = useMemo(
-      () => Array.from(new Set(leads.map(l => l.country).filter(Boolean))).sort(),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [leads],
-    );
     return (
       <select
         value={typeof value === 'string' ? value : ''}
@@ -574,12 +576,12 @@ export default function AdvancedFilterDrawer({
           >
             Clear all
           </button>
-          <button
+          <Button
             onClick={handleApply}
-            className="text-xs text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded font-medium transition-colors"
+            className="rounded"
           >
             Apply filters
-          </button>
+          </Button>
         </div>
       </div>
     </>

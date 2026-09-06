@@ -57,7 +57,7 @@ export default function Step4Rules({ rules, onRulesChange }: Props) {
         {/* Default Status */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Default Lead Status</label>
-          <select
+          <select aria-label="Default Lead Status"
             value={rules.defaultStatus}
             onChange={e => set('defaultStatus', e.target.value as ImportRules['defaultStatus'])}
             className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -70,7 +70,7 @@ export default function Step4Rules({ rules, onRulesChange }: Props) {
         {/* Default Owner */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign To</label>
-          <select
+          <select aria-label="Assign To"
             value={rules.defaultOwnerId}
             onChange={e => set('defaultOwnerId', e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -83,7 +83,7 @@ export default function Step4Rules({ rules, onRulesChange }: Props) {
         {/* Source Override */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Source Override</label>
-          <input
+          <input aria-label="Source Override"
             type="text"
             value={rules.sourceOverride}
             onChange={e => set('sourceOverride', e.target.value)}

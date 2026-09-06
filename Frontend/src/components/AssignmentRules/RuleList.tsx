@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import type { AssignmentRule } from '../../utils/assignmentRules/types';
 import { getRules, toggleRule, deleteRule, reorderRules } from '../../utils/assignmentRules/rulesStore';
@@ -57,12 +58,11 @@ export default function RuleList({ onEdit, onNew, refresh }: Props) {
         <p className="text-sm text-gray-500">
           Rules are evaluated in priority order — first match wins. Drag rows to reorder.
         </p>
-        <button
+        <Button
           onClick={onNew}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
         >
           + New Rule
-        </button>
+        </Button>
       </div>
 
       {rules.length === 0 && (

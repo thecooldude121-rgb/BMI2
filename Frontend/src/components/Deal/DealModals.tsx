@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, AlertCircle, CheckCircle2, Search, Mail, Phone, Video } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { X, Clock, CheckCircle2, Search } from 'lucide-react';
 
 interface MoreOptionsDropdownProps {
   isOpen: boolean;
@@ -84,15 +85,15 @@ export const StageChangeModal: React.FC<StageChangeModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               onConfirm();
               onClose();
             }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            fullWidth
           >
             Move Stage
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -138,7 +139,7 @@ export const UpdateAmountModal: React.FC<UpdateAmountModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">New Amount:</label>
-            <input
+            <input aria-label="New Amount:"
               type="number"
               value={newAmount}
               onChange={(e) => setNewAmount(e.target.value)}
@@ -149,7 +150,7 @@ export const UpdateAmountModal: React.FC<UpdateAmountModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Reason:</label>
-            <input
+            <input aria-label="Reason:"
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -166,13 +167,13 @@ export const UpdateAmountModal: React.FC<UpdateAmountModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleUpdate}
             disabled={!reason.trim() || !newAmount}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             Update
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -324,15 +325,15 @@ export const FindCEOModal: React.FC<FindCEOModalProps> = ({ isOpen, onClose, onA
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   onAddContact(foundCEO);
                   onClose();
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                fullWidth
               >
                 Add to Deal
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -385,7 +386,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search existing contacts:</label>
-            <input
+            <input aria-label="Search existing contacts:"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -430,15 +431,15 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               onAddContact('new-contact', selectedRole);
               onClose();
             }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            fullWidth
           >
             Add
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -478,7 +479,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
         <div className="p-6 space-y-4 overflow-y-auto">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">To:</label>
-            <input
+            <input aria-label="To:"
               type="text"
               value={to}
               readOnly
@@ -488,7 +489,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Subject:</label>
-            <input
+            <input aria-label="Subject:"
               type="text"
               value={emailSubject}
               onChange={(e) => setEmailSubject(e.target.value)}
@@ -499,7 +500,7 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Message:</label>
-            <textarea
+            <textarea aria-label="Message:"
               value={emailBody}
               onChange={(e) => setEmailBody(e.target.value)}
               placeholder="Type your message..."
@@ -516,15 +517,15 @@ export const EmailComposerModal: React.FC<EmailComposerModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               alert('Email sent!');
               onClose();
             }}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            size="lg"
           >
             Send Email
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -551,7 +552,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Contact:</label>
-            <input
+            <input aria-label="Contact:"
               type="text"
               value={contactName}
               readOnly
@@ -561,7 +562,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Outcome:</label>
-            <select
+            <select aria-label="Outcome:"
               value={outcome}
               onChange={(e) => setOutcome(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -575,7 +576,7 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes:</label>
-            <textarea
+            <textarea aria-label="Notes:"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Call notes..."
@@ -592,15 +593,15 @@ export const CallLogModal: React.FC<CallLogModalProps> = ({ isOpen, onClose, con
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               alert('Call logged!');
               onClose();
             }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            fullWidth
           >
             Save Call
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -634,7 +635,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title:</label>
-            <input
+            <input aria-label="Title:"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -645,7 +646,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date:</label>
-            <input
+            <input aria-label="Date:"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -655,7 +656,7 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Time:</label>
-            <input
+            <input aria-label="Time:"
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -678,16 +679,16 @@ export const MeetingSchedulerModal: React.FC<MeetingSchedulerModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={() => {
               onSchedule({ title, date, time });
               onClose();
             }}
             disabled={!title || !date || !time}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50"
+            fullWidth
           >
             Schedule
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -753,7 +754,7 @@ export const DuplicateDealModal: React.FC<DuplicateDealModalProps> = ({
         {/* Editable name */}
         <div className="mb-5">
           <label className="block text-sm font-medium text-gray-700 mb-1">New Deal Name</label>
-          <input
+          <input aria-label="New Deal Name"
             type="text"
             value={newName}
             onChange={e => setNewName(e.target.value)}
@@ -794,14 +795,14 @@ export const DuplicateDealModal: React.FC<DuplicateDealModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             type="button"
             disabled={!newName.trim() || isLoading}
             onClick={() => onConfirm(newName.trim())}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             {isLoading ? 'Creating…' : 'Create Duplicate'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

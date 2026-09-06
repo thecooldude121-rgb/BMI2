@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, Users, Building, DollarSign,
-  Activity, FileText, BarChart3, Target, Calendar, UserCheck,
+  Activity, FileText, BarChart3, Calendar, UserCheck,
   Plug, Settings, Trophy, ChevronDown, ChevronRight,
   Building2, Phone, Video, CheckSquare, PanelLeftClose,
   PanelLeftOpen, Bookmark, Clock, PauseCircle
@@ -26,7 +26,10 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     items: [
       { name: 'Leads',     href: '/crm/leads',     icon: UserPlus },
       { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
-      { name: 'Accounts',  href: '/accounts',      icon: Building },
+      // Was '/accounts', which rendered a placeholder telling the user to
+      // "navigate to CRM \u2192 Accounts" \u2014 a sidebar entry that does not exist.
+      // The real accounts list is CRMModule's /crm/accounts.
+      { name: 'Accounts',  href: '/crm/accounts',  icon: Building },
       { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
       {
         name: 'Pinned Views', icon: Bookmark,
@@ -40,6 +43,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
       {
         name: 'Activities', icon: Activity,
         children: [
+          // The superset view, listed first. It was routed and API-backed but
+          // reachable from NO navigation at all, which made the manual
+          // activity-logging surface undiscoverable — a page nobody can find is
+          // not a built feature. A second, fabricated feed used to sit at
+          // /crm/activities/all; it was deleted rather than linked.
+          { name: 'All Activities', href: '/crm/activities', icon: Activity },
           { name: 'Tasks',    href: '/crm/tasks',    icon: CheckSquare },
           { name: 'Meetings', href: '/crm/meetings', icon: Video },
           { name: 'Calls',    href: '/crm/calls',    icon: Phone },
@@ -53,7 +62,6 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     label: 'Modules',
     items: [
       { name: 'HRMS',            href: '/hrms',                         icon: UserCheck },
-      { name: 'Lead Generation', href: '/lead-generation/dashboard',    icon: Target },
       { name: 'Analytics',       href: '/analytics',                    icon: BarChart3 },
       { name: 'Calendar',        href: '/calendar',                     icon: Calendar },
       { name: 'Team',            href: '/team',                         icon: Users },
@@ -88,7 +96,7 @@ const Sidebar: React.FC = () => {
             className="flex items-center gap-2 cursor-pointer overflow-hidden"
             onClick={() => navigate('/crm/dashboard')}
           >
-            <div className="flex items-center justify-center w-7 h-7 bg-blue-600 rounded-lg shrink-0">
+            <div className="flex items-center justify-center w-7 h-7 bg-brand-600 rounded-lg shrink-0">
               <Building2 className="h-4 w-4 text-white" />
             </div>
             <span className="text-sm font-bold text-white tracking-tight whitespace-nowrap">
@@ -172,7 +180,7 @@ const Sidebar: React.FC = () => {
                                   className={({ isActive }) =>
                                     `flex items-center gap-3 pl-10 pr-4 py-2 text-sm transition-colors ${
                                       isActive
-                                        ? 'text-white bg-blue-600/20 border-l-2 border-blue-500'
+                                        ? 'text-white bg-brand-600/20 border-l-2 border-blue-500'
                                         : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                                     }`
                                   }
@@ -201,7 +209,7 @@ const Sidebar: React.FC = () => {
                           collapsed ? 'justify-center px-0' : 'gap-3 px-4'
                         } ${
                           isActive
-                            ? 'text-white bg-blue-600 border-l-2 border-blue-400'
+                            ? 'text-white bg-brand-600 border-l-2 border-blue-400'
                             : 'text-gray-400 hover:text-white hover:bg-gray-800'
                         }`
                       }
@@ -219,17 +227,27 @@ const Sidebar: React.FC = () => {
         ))}
       </nav>
 
-      {/* Settings pinned at bottom */}
+      {/*
+        * Settings pinned at bottom.
+        *
+        * POINTS AT /crm/settings, NOT /settings. This link used to go to the
+        * latter — the dead Supabase tree — so the three Settings screens that
+        * are actually wired (workspace preferences, the team roster, your
+        * profile and password) were unreachable from the main nav, and the page
+        * a user landed on was the one with no backend. That is CLAUDE.md's
+        * lesson 5 in its original form: the fix was verified at one route while
+        * the nav pointed at another.
+        */}
       <div className="border-t border-gray-700 py-2">
         <NavLink
-          to="/settings"
+          to="/crm/settings"
           title={collapsed ? 'Settings' : undefined}
           className={({ isActive }) =>
             `flex items-center py-2.5 text-sm transition-colors ${
               collapsed ? 'justify-center px-0' : 'gap-3 px-4'
             } ${
               isActive
-                ? 'text-white bg-blue-600'
+                ? 'text-white bg-brand-600'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800'
             }`
           }

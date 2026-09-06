@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Button } from '../../ui/Button';
 import { Mail, ChevronDown, ChevronUp, Sparkles, X, Loader2 } from 'lucide-react';
 import { emailParser, ParsedEmailExtraction } from '../../../utils/emailParser';
 import { EmailExtractionReview } from './EmailExtractionReview';
@@ -179,10 +180,10 @@ export const EmailToDealPanel: React.FC<EmailToDealPanelProps> = ({
         )}
 
         {/* Extract button */}
-        <button
+        <Button
           onClick={handleExtract}
           disabled={!emailText.trim() || parsing}
-          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+          fullWidth className="mt-3 font-semibold rounded-xl"
         >
           {parsing ? (
             <>
@@ -195,7 +196,7 @@ export const EmailToDealPanel: React.FC<EmailToDealPanelProps> = ({
               Extract Fields
             </>
           )}
-        </button>
+        </Button>
 
         {/* No results notice */}
         {extraction !== null && Object.keys(extraction).length === 0 && (

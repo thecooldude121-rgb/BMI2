@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  AlertTriangle, CheckCircle, XCircle, Download, Users,
-  Shield, TrendingUp, TrendingDown, FileText, X, Play
-} from 'lucide-react';
+import { Button } from '../ui/Button';
+import { AlertTriangle, CheckCircle, XCircle, Download, Users, Shield, X, Play } from 'lucide-react';
 
 interface ChangeImpact {
   type: 'added' | 'removed' | 'modified' | 'conflict';
@@ -87,7 +85,7 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
+            <div className="p-2 bg-brand-600 rounded-lg">
               <Play className="h-6 w-6 text-white" />
             </div>
             <div>
@@ -215,14 +213,14 @@ export const WhatIfSimulator: React.FC<WhatIfSimulatorProps> = ({
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={onApply}
                   disabled={conflictCount > 0}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  size="lg" className="disabled:bg-gray-300"
                   aria-label="Apply changes"
                 >
                   Apply Changes
-                </button>
+                </Button>
               </div>
             </div>
           </>

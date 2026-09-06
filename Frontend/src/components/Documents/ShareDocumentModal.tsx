@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X } from 'lucide-react';
 
 interface TeamMember {
@@ -81,7 +82,7 @@ const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               Share with Team Member
             </label>
-            <select
+            <select aria-label="Share with Team Member"
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -99,7 +100,7 @@ const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               Visibility
             </label>
-            <select
+            <select aria-label="Visibility"
               value={visibility}
               onChange={(e) => setVisibility(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -116,7 +117,7 @@ const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               Message (Optional)
             </label>
-            <textarea
+            <textarea aria-label="Message (Optional)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Add a message..."
@@ -133,13 +134,12 @@ const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleShare}
             disabled={!selectedUser}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Share Doc
-          </button>
+          </Button>
         </div>
       </div>
     </div>

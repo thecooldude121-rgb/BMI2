@@ -32,11 +32,8 @@ export const getSnapshots = async (req: AuthRequest, res: Response, next: NextFu
  * Body: { period_label, reps: [{ rep_name, pipeline, best_case, commit, closed, deal_count }] }
  *
  * Captures the current pipeline state for each rep as a named snapshot for the period.
- * Upserts on (period_label, rep_name, snapshot_date) so re-running today overwrites,
- * but historical dates are preserved.
- *
- * NOTE: that UNIQUE constraint pre-dates multi-tenancy and is not yet
- * tenant-scoped — see Phase 1 summary.
+ * Upserts on (tenant_id, period_label, rep_name, snapshot_date) so re-running today
+ * overwrites, but historical dates are preserved (see migration 009).
  */
 export const createSnapshot = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -58,7 +55,7 @@ export const createSnapshot = async (req: AuthRequest, res: Response, next: Next
           `INSERT INTO forecast_snapshots
              (period_label, rep_name, pipeline, best_case, commit, closed, deal_count, tenant_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           ON CONFLICT (period_label, rep_name, snapshot_date)
+           ON CONFLICT (tenant_id, period_label, rep_name, snapshot_date)
            DO UPDATE SET
              pipeline   = EXCLUDED.pipeline,
              best_case  = EXCLUDED.best_case,

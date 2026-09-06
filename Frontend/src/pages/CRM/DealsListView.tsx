@@ -1,28 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Button } from '../../components/ui/Button';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
-  Building2, User, Sparkles, Mail, Phone, Eye, MoreHorizontal,
-  CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, GripVertical, Archive,
-  StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX,
-  Pencil, ArrowLeftRight, UserCog, Zap, FileText,
-  CheckSquare, ClipboardList, Workflow, Link2,
-  AlignJustify, LayoutList, Columns2, ListFilter, Swords, AlertCircle, Search,
-  TrendingUp, TrendingDown,
-} from 'lucide-react';
-import {
-  formatAmountUSD, formatAmountCompact,
-  SUPPORTED_REPORTING_CURRENCIES, type SupportedCurrency, CURRENCY_SYMBOLS,
-  getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency,
-} from '../../utils/currencyUtils';
+import { Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Building2, User, Sparkles, Mail, Phone, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Copy, Trash2, Archive, StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX, Pencil, ArrowLeftRight, UserCog, Zap, FileText, CheckSquare, ClipboardList, Workflow, Link2, ListFilter, Swords, AlertCircle, Search, TrendingUp, TrendingDown } from 'lucide-react';
+import { formatAmountUSD, formatAmountCompact, type SupportedCurrency, CURRENCY_SYMBOLS, getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency } from '../../utils/currencyUtils';
 import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
 import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
-import { AdvancedFilterBuilder } from '../../components/Deals/AdvancedFilterBuilder';
-import type { FilterCondition, Conjunction } from '../../components/Deals/AdvancedFilterBuilder';
+
+import type { FilterCondition, Conjunction } from '../../components/Deal/AdvancedFilterBuilder';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
 import { getNextBestAction } from '../../utils/dealNextBestAction';
 import { getRelationshipRisk } from '../../utils/relationshipRisk';
@@ -30,6 +18,10 @@ import { getDealVelocity } from '../../utils/dealVelocity';
 import { findDuplicatePairs } from '../../utils/duplicateDetection';
 import type { DuplicatePair, DuplicatableDeal } from '../../utils/duplicateDetection';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
+import {
+  fetchPipelines, buildStageLookup, isOpenWith, isWonWith, isLostWith,
+  weightedProbability, type ApiPipeline,
+} from '../../utils/pipelinesApi';
 import type { DataQualityIssue } from '../../utils/dealDataQuality';
 
 // ── Advanced filter builder predicate ─────────────────────────────────────────
@@ -95,6 +87,12 @@ interface Deal {
   closeDate: string;
   stage: string;
   aiScore: number;
+  /**
+   * The stored probability with NULL preserved — see DealCard.probabilityRaw.
+   * aiScore is `d.probability || 0` and cannot tell "unset" from an explicit 0%,
+   * which the weighted forecast has to distinguish (design question 3).
+   */
+  probabilityRaw?: number | null;
   contactName: string;
   contactTitle: string;
   owner: string;
@@ -262,6 +260,31 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   openDQDrawer: openDQDrawerProp,
   onDQDrawerClose,
 }) => {
+  const stageOrder = useMemo(() => stages.map(st => st.id), [stages]);
+
+  /*
+   * Stage metadata for the velocity and data-quality engines.
+   *
+   * Both used to infer outcomes from the stage STRING — `.includes('won')`,
+   * a four-slug ACTIVE_STAGES array — and both were already wrong on live data:
+   * `partner-active` is the Partnerships won stage and contains none of "won",
+   * "lost" or "closed", so a won deal was scored as an open one. They now take
+   * the real stage, and return null / skip the check when it cannot be resolved
+   * rather than guessing.
+   */
+  const [lvPipelines, setLvPipelines] = useState<ApiPipeline[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => { if (!cancelled) setLvPipelines(list); })
+      .catch(() => { /* lookup stays empty; both engines decline rather than guess */ });
+    return () => { cancelled = true; };
+  }, []);
+  const stageLookup = useMemo(() => buildStageLookup(lvPipelines), [lvPipelines]);
+  /** Resolve a deal's stage, using its own pipeline when the row carries one. */
+  const metaFor = (d: { stage?: string | null; pipeline_id?: string | null }) =>
+    stageLookup(d.stage, d.pipeline_id ?? null);
+
   const navigate = useNavigate();
   const { isStalled, getReasons, config: stalledConfig } = useStalledConfig();
 
@@ -526,7 +549,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const velocityDealCounts = useMemo(() => {
     let ahead = 0, slipping = 0;
     for (const d of allDeals) {
-      const v = getDealVelocity(d);
+      const v = getDealVelocity(d, metaFor(d));
       if (v?.rating === 'ahead') ahead++;
       else if (v?.rating === 'slipping') slipping++;
     }
@@ -612,7 +635,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       // Velocity
       if (velocityFilter.size > 0) {
-        const v = getDealVelocity(deal);
+        const v = getDealVelocity(deal, metaFor(deal));
         const r = (v?.rating ?? 'unknown') as string;
         if (!velocityFilter.has(r as 'ahead' | 'slipping')) return false;
       }
@@ -667,7 +690,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     let result = filteredDeals;
     if (activeKpiFilter === 'closingWeek') result = result.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
     else if (activeKpiFilter === 'stalled') result = result.filter(d => isStalled(d));
-    if (showIssuesOnly) result = result.filter(d => !getDealDataQuality(d).isClean);
+    if (showIssuesOnly) result = result.filter(d => !getDealDataQuality(d, metaFor(d)).isClean);
     return result;
   }, [filteredDeals, activeKpiFilter, showIssuesOnly]);
 
@@ -684,8 +707,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         comparison = getReportingAmount(a, reportingCurrency) - getReportingAmount(b, reportingCurrency);
         break;
       case 'stage': {
-        const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-        comparison = stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
+        // Unknown stages sort AFTER the known ones rather than before them:
+        // indexOf gives -1, and a raw subtraction ranked a stage this pipeline
+        // does not list above the first real stage.
+        const ia = stageOrder.indexOf(a.stage);
+        const ib = stageOrder.indexOf(b.stage);
+        const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+        const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+        comparison = ra - rb;
         break;
       }
       case 'closeDate':
@@ -726,17 +755,35 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const formatDate = formatCloseDate;
 
-
   const getStageName = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);
     return stage ? stage.name : stageId;
   };
 
-  const getStageProgress = (stageId: string) => {
-    const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-    return `${stageOrder.indexOf(stageId) + 1} of ${stageOrder.length}`;
-  };
+  /*
+   * ONE stage order, derived from the workspace's own columns.
+   *
+   * There were FOUR copies of the same six-slug literal in this file — the sort
+   * comparator, this progress label, the stage summary strip and the stage
+   * filter dropdown — and each was wrong in its own way for a pipeline outside
+   * new-business: the comparator sorted every unknown stage to -1 and so ranked
+   * a Renewals deal above Prospecting; this label rendered "0 of 6"; the summary
+   * strip silently omitted those deals from its totals; the filter offered six
+   * options that matched nothing.
+   *
+   * `stages` is the prop the Kanban already passes from GET /pipelines, so the
+   * correct order was in scope the whole time.
+   */
 
+
+
+
+  const getStageProgress = (stageId: string) => {
+    const i = stageOrder.indexOf(stageId);
+    // Unknown stage: no position to report rather than "0 of 6".
+    if (i === -1) return `— of ${stageOrder.length}`;
+    return `${i + 1} of ${stageOrder.length}`;
+  };
 
   const getInitials = (name: string): string => {
     if (!name) return '?';
@@ -1154,34 +1201,66 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     () => sortedDeals.reduce((sum, deal) => sum + getReportingAmount(deal, reportingCurrency), 0),
     [sortedDeals, reportingCurrency],
   );
+  /*
+   * WIN RATE. Both halves were literal comparisons, so a Renewals or
+   * Partnerships outcome landed in NEITHER the numerator nor the denominator —
+   * the figure was computed over the default pipeline alone while being labelled
+   * as the workspace's rate.
+   */
   const computedWinRate = useMemo(() => {
-    const closed = allDeals.filter(d => d.stage === 'closed-won' || d.stage === 'closed-lost');
-    if (closed.length === 0) return null;
-    return Math.round((closed.filter(d => d.stage === 'closed-won').length / closed.length) * 100);
-  }, [allDeals]);
+    const won = allDeals.filter(isWonWith(stageLookup));
+    const lost = allDeals.filter(isLostWith(stageLookup));
+    const closed = won.length + lost.length;
+    if (closed === 0) return null;
+    return Math.round((won.length / closed) * 100);
+  }, [allDeals, stageLookup]);
 
   // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
   const kpiClosingCount  = filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7)).length;
   const kpiStalledCount  = filteredDeals.filter(d => isStalled(d)).length;
 
   const computedAvgDaysToClose = useMemo(() => {
-    const closedWon = filteredDeals.filter(d => d.stage === 'closed-won' && d.createdAt && d.closeDate);
+    const closedWon = filteredDeals.filter(d => isWonWith(stageLookup)(d) && d.createdAt && d.closeDate);
     if (closedWon.length === 0) return null;
     const total = closedWon.reduce((sum, d) => {
       const ms = new Date(d.closeDate).getTime() - new Date(d.createdAt!).getTime();
       return sum + Math.max(0, Math.round(ms / 86_400_000));
     }, 0);
     return Math.round(total / closedWon.length);
-  }, [filteredDeals]);
+  }, [filteredDeals, stageLookup]);
 
-  const weightedForecast = useMemo(() =>
-    filteredDeals
-      .filter(d => d.stage !== 'closed-won' && d.stage !== 'closed-lost')
-      .reduce((sum, d) => sum + getReportingAmount(d, reportingCurrency) * (d.aiScore / 100), 0),
-    [filteredDeals, reportingCurrency],
-  );
+  /*
+   * WEIGHTED FORECAST — two fixes, both of which move a revenue number.
+   *
+   * 1. OUTCOMES BY TYPE. It excluded only the literals 'closed-won' and
+   *    'closed-lost', so a WON Renewals or Partnerships deal was weighted into
+   *    the forecast as though it were still in flight — counting revenue already
+   *    booked as revenue still to come.
+   *
+   * 2. UNSET PROBABILITY IS EXCLUDED, NOT ZEROED (design Q3, settled). A deal
+   *    with no probability of its own and a stage with none either contributed
+   *    `value × 0` — silently dragging the total down by the full value of every
+   *    unassessed deal, and doing it in a way that looks like a smaller pipeline
+   *    rather than a missing input. It is now left out, and the count of
+   *    exclusions is surfaced next to the figure so the total is never quietly
+   *    computed over fewer deals than the user thinks.
+   */
+  const weightedForecast = useMemo(() => {
+    const open = filteredDeals.filter(isOpenWith(stageLookup));
+    let total = 0;
+    let unweighted = 0;
+    for (const d of open) {
+      // probabilityRaw, NOT aiScore: aiScore is `d.probability || 0`, so an
+      // unset probability arrives as a real 0 and would be weighted in as an
+      // explicit "will not close" rather than excluded as unassessed.
+      const p = weightedProbability({ ...d, probability: d.probabilityRaw ?? null }, stageLookup);
+      if (p === null) { unweighted++; continue; }
+      total += getReportingAmount(d, reportingCurrency) * (p / 100);
+    }
+    return { total, unweighted, counted: open.length - unweighted };
+  }, [filteredDeals, reportingCurrency, stageLookup]);
 
-  const PIPELINE_STAGES = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'] as const;
+  const PIPELINE_STAGES = stageOrder;
   const stageSummary = useMemo(() => {
     const byStage: Record<string, { count: number; value: number }> = {};
     for (const s of PIPELINE_STAGES) byStage[s] = { count: 0, value: 0 };
@@ -1206,7 +1285,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     let errors = 0;
     let warnings = 0;
     for (const d of filteredDeals) {
-      const dq = getDealDataQuality(d);
+      const dq = getDealDataQuality(d, metaFor(d));
       if (dq.hasErrors) errors++;
       else if (dq.hasWarnings) warnings++;
     }
@@ -1469,7 +1548,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 {/* getNextBestAction() is a pure synchronous function — safe to call inline in render.
                     For >500 deals, memoize per deal.id using useMemo. */}
                 {(() => {
-                  const nba = getNextBestAction(deal);
+                  const nba = getNextBestAction(deal, metaFor(deal));
                   if (nba.urgency === 'low') return null;
                   return (
                     <p className={`text-[11px] mt-0.5 truncate leading-tight flex items-center gap-1 ${nba.urgency === 'high' ? 'text-red-600' : 'text-amber-600'}`}>
@@ -1480,7 +1559,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 })()}
                 {/* Pipeline Hygiene dot — only shown for deals with issues */}
                 {(() => {
-                  const dq = getDealDataQuality(deal);
+                  const dq = getDealDataQuality(deal, metaFor(deal));
                   if (dq.isClean) return null;
                   const errorCount = dq.issues.filter(i => i.severity === 'error').length;
                   const dotBg = dq.hasErrors ? 'bg-red-50 border-red-200 text-red-700' : 'bg-amber-50 border-amber-200 text-amber-700';
@@ -1703,7 +1782,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 {/* Velocity chip — pace vs close-date budget */}
                 {(() => {
-                  const vel = getDealVelocity(deal);
+                  const vel = getDealVelocity(deal, metaFor(deal));
                   if (!vel) return null;
                   const chipStyle = vel.rating === 'ahead'
                     ? 'bg-green-100 text-green-700 border-green-300'
@@ -1779,10 +1858,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         <span>Closed-Lost</span>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600">
-                      <div>Total: 40 days in pipeline</div>
-                      <div>Avg cycle: {avgDaysCycle} days</div>
-                    </div>
+                    {/* Stage-duration summary removed. "Total: 40 days in pipeline"
+                        was a hardcoded literal, and `avgDaysCycle` was never
+                        declared anywhere in this file — it rendered as nothing.
+                        The type checker could not report it while the Sequences
+                        parse error was suppressing all semantic errors.
+                        Restore it from deal_stage_history (migration 014), which
+                        now records the transitions needed to compute a real
+                        cycle time. */}
                   </div>
                 )}
               </div>
@@ -2018,11 +2101,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           return (
             <td key="health" className={`hidden md:table-cell ${cellPadding}`}>
               <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
-                deal.stage === 'closed-won'
+                isWonWith(stageLookup)(deal)
                   ? 'bg-emerald-100 text-emerald-700'
                   : 'bg-red-100 text-red-600'
               }`}>
-                {deal.stage === 'closed-won' ? 'Won' : 'Lost'}
+                {isWonWith(stageLookup)(deal) ? 'Won' : 'Lost'}
               </span>
             </td>
           );
@@ -2235,7 +2318,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
                   <div className="mb-3">
                     <label className="text-xs text-gray-500 mb-1 block">Primary competitor</label>
-                    <select
+                    <select aria-label="Primary competitor"
                       value={effectiveForComp.primaryCompetitor ?? ''}
                       onChange={e => {
                         const val = e.target.value || undefined;
@@ -2507,7 +2590,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
         {/* 8.3 — Next Best Action banner */}
         {!isClosed && (() => {
-          const nba = getNextBestAction(deal);
+          const nba = getNextBestAction(deal, metaFor(deal));
           if (nba.urgency === 'low') return null;
           const bannerColor = nba.urgency === 'high'
             ? 'bg-red-50 border-red-200 text-red-800'
@@ -2622,7 +2705,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             const panelTab = expandedPanelTabs[deal.id] ?? 'intelligence';
             const setPanelTab = (t: 'intelligence' | 'context' | 'timeline') =>
               setExpandedPanelTabs(prev => ({ ...prev, [deal.id]: t }));
-            const dq = getDealDataQuality(expandedMerged);
+            const dq = getDealDataQuality(expandedMerged, metaFor(expandedMerged));
             const hasContextIssues = !dq.isClean;
 
             return (
@@ -2654,7 +2737,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                     <>
                       {/* Next Best Action */}
                       {(() => {
-                        const nba = getNextBestAction(deal);
+                        const nba = getNextBestAction(deal, metaFor(deal));
                         const urgencyBg = nba.urgency === 'high'
                           ? 'bg-red-50 border-red-200 text-red-800'
                           : nba.urgency === 'medium'
@@ -2677,7 +2760,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       })()}
                       {/* Deal Velocity */}
                       {(() => {
-                        const vel = getDealVelocity(deal);
+                        const vel = getDealVelocity(deal, metaFor(deal));
                         if (!vel) return null;
                         const velColor = vel.rating === 'ahead'
                           ? { bar: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50 border-green-200' }
@@ -2717,7 +2800,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       <div className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase mb-2">Win Score Signals</div>
                       {isClosed ? (
                         <div className="flex items-center gap-2">
-                          {deal.stage === 'closed-won'
+                          {isWonWith(stageLookup)(deal)
                             ? <><CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /><span className="text-sm text-gray-500">Deal won — no active signals</span></>
                             : <><X className="h-4 w-4 text-red-400 flex-shrink-0" /><span className="text-sm text-gray-500">Deal lost — no active signals</span></>}
                         </div>
@@ -3093,12 +3176,33 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           {/* Card 7: Weighted Forecast — Σ value × probability for active deals */}
           <div
             className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-l-4 border-violet-200 border-l-violet-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
-            title={`Weighted pipeline: sum of deal value × win probability for all active deals in current filter · ${reportingCurrency}`}
+            title={
+              `Weighted pipeline: sum of deal value × win probability for the ` +
+              `${weightedForecast.counted} open deal${weightedForecast.counted === 1 ? '' : 's'} ` +
+              `in this filter that have a probability set · ${reportingCurrency}` +
+              (weightedForecast.unweighted
+                ? `. ${weightedForecast.unweighted} excluded for having none — they are NOT counted as zero.`
+                : '')
+            }
           >
             <div className="text-xl sm:text-3xl font-black text-violet-900 tabular-nums">
-              {formatAmountUSD(weightedForecast)}
+              {formatAmountUSD(weightedForecast.total)}
             </div>
             <div className="text-xs text-violet-700 font-medium mt-1 uppercase tracking-wide">Weighted Forecast</div>
+            {weightedForecast.unweighted > 0 && (
+              /*
+               * SAID ON THE CARD, NOT ONLY IN A TOOLTIP.
+               *
+               * Excluding an unassessed deal and counting it as zero produce the
+               * SAME total — a sum is a sum. The whole difference is whether the
+               * shortfall is declared, so hiding that in a hover would give back
+               * exactly what the change was for: a number quietly computed over
+               * fewer deals than the user is looking at.
+               */
+              <div className="text-[11px] text-violet-800 mt-1 normal-case leading-tight">
+                {weightedForecast.unweighted} deal{weightedForecast.unweighted === 1 ? '' : 's'} excluded — no probability set
+              </div>
+            )}
           </div>
 
           {/* Card 8: Duplicate Pairs — only shown when pairs exist */}
@@ -3120,7 +3224,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         </div>
       </div>
 
-
       </div>{/* end sticky KPI + stage wrapper */}
 
       {/* ── Filter Bar ──────────────────────────────────────────────────────── */}
@@ -3132,7 +3235,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
           {/* ── Stage ──────────────────────────────────────────── */}
           {(() => {
-            const STAGE_ORDER = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'] as const;
+            const STAGE_ORDER = stageOrder;
             const isOpen = openFilter === 'stage';
             return (
               <div className="relative flex-shrink-0">
@@ -3632,7 +3735,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         )}
       </div>
 
-
       {/* ── Table + Card List ────────────────────────────────────────────────── */}
       <div className="-mx-6 py-0">
 
@@ -3864,7 +3966,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       <p className="text-xs text-gray-500 truncate mt-0.5">{deal.companyName}</p>
                     )}
                     {(() => {
-                      const nba = getNextBestAction(deal);
+                      const nba = getNextBestAction(deal, metaFor(deal));
                       if (nba.urgency === 'low') return null;
                       return (
                         <p className={`text-[11px] mt-1 flex items-center gap-1 ${nba.urgency === 'high' ? 'text-red-600' : 'text-amber-600'}`}>
@@ -4008,19 +4110,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Date</label>
-                  <input type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)}
+                  <input aria-label="Date" type="date" value={followUpDate} onChange={e => setFollowUpDate(e.target.value)}
                     min={new Date().toISOString().split('T')[0]}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Time</label>
-                  <input type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)}
+                  <input aria-label="Time" type="time" value={followUpTime} onChange={e => setFollowUpTime(e.target.value)}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Notes (optional)</label>
-                <textarea value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)}
+                <textarea aria-label="Notes (optional)" value={followUpNotes} onChange={e => setFollowUpNotes(e.target.value)}
                   placeholder="What to discuss, prep notes..."
                   rows={3}
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400 resize-none" />
@@ -4036,7 +4138,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const name = scheduleFollowUpDeal.dealName;
                   setScheduleFollowUpDeal(null);
-                  showBulkToast(`Follow-up scheduled for "${name}"`);
+                  showBulkToast(`Follow-up for "${name}" is not saved yet — it will be gone after a refresh`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Schedule
@@ -4064,19 +4166,19 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Task title</label>
-                <input type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)}
+                <input aria-label="Task title" type="text" value={taskTitle} onChange={e => setTaskTitle(e.target.value)}
                   placeholder="e.g. Send follow-up email, Prepare proposal..."
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Due date</label>
-                  <input type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)}
+                  <input aria-label="Due date" type="date" value={taskDueDate} onChange={e => setTaskDueDate(e.target.value)}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Priority</label>
-                  <select value={taskPriority} onChange={e => setTaskPriority(e.target.value as 'high' | 'medium' | 'low')}
+                  <select aria-label="Priority" value={taskPriority} onChange={e => setTaskPriority(e.target.value as 'high' | 'medium' | 'low')}
                     className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 bg-white">
                     <option value="high">🔴 High</option>
                     <option value="medium">🟡 Medium</option>
@@ -4086,7 +4188,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Assign to</label>
-                <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}
+                <select aria-label="Assign to" value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 bg-white">
                   <option value="">Select owner...</option>
                   {ownerFilterOptions.map(o => <option key={o} value={o}>{o}</option>)}
@@ -4103,7 +4205,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const name = createTaskDeal.dealName;
                   setCreateTaskDeal(null);
-                  showBulkToast(`Task created for "${name}"`);
+                  showBulkToast(`Task for "${name}" is not saved yet — it will be gone after a refresh`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Create task
@@ -4154,14 +4256,14 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Meeting notes</label>
-                <textarea value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)}
+                <textarea aria-label="Meeting notes" value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)}
                   placeholder="What was discussed, key objections, decisions made..."
                   rows={3}
                   className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-400 resize-none" />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Next step</label>
-                <input type="text" value={meetingNextStep} onChange={e => setMeetingNextStep(e.target.value)}
+                <input aria-label="Next step" type="text" value={meetingNextStep} onChange={e => setMeetingNextStep(e.target.value)}
                   placeholder="e.g. Send revised proposal by Friday..."
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400" />
               </div>
@@ -4176,7 +4278,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const name = logMeetingDeal.dealName;
                   setLogMeetingDeal(null);
-                  showBulkToast(`Meeting outcome logged for "${name}"`);
+                  showBulkToast(`Meeting outcome for "${name}" is not saved yet — it will be gone after a refresh`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Log outcome
@@ -4230,7 +4332,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={() => {
                   const seq = STUB_SEQUENCES.find(s => s.id === selectedSequence);
                   setAddSequenceDeal(null);
-                  showBulkToast(`Added "${addSequenceDeal.dealName}" to "${seq?.name}"`);
+                  showBulkToast(`Adding "${addSequenceDeal.dealName}" to "${seq?.name}" is not available yet — nothing was changed`);
                 }}
                 className="flex-1 text-sm font-medium bg-indigo-600 text-white px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 Add to sequence
@@ -4324,7 +4426,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   onClick={() => {
                     onBulkAction?.('delete', [deleteConfirmDeal.id]);
                     setDeleteConfirmDeal(null);
-                    showBulkToast(`"${deleteConfirmDeal.dealName}" deleted`);
+                    showBulkToast(`"${deleteConfirmDeal.dealName}" was NOT deleted — deleting deals is not available yet`);
                   }}
                   className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                 >
@@ -4401,7 +4503,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setBulkDeleteConfirm(false);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`${count} deal${count !== 1 ? 's' : ''} deleted`);
+                      showBulkToast(`No deals were deleted — deleting deals is not available yet`);
                     }}
                     className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                   >
@@ -4425,7 +4527,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                  <input
+                  <input aria-label="To"
                     type="email"
                     defaultValue={showEmailModal.contactName}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -4433,7 +4535,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                  <input
+                  <input aria-label="Subject"
                     type="text"
                     defaultValue={`Re: ${showEmailModal.dealName}`}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -4441,7 +4543,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                  <textarea
+                  <textarea aria-label="Message"
                     rows={8}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Type your message..."
@@ -4456,12 +4558,11 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => setShowEmailModal(null)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -4478,7 +4579,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                  <input
+                  <input aria-label="Contact"
                     type="text"
                     defaultValue={showCallModal.contactName}
                     disabled
@@ -4487,7 +4588,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Call Duration</label>
-                  <input
+                  <input aria-label="Call Duration"
                     type="text"
                     placeholder="e.g., 15 minutes"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -4495,7 +4596,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Call Notes</label>
-                  <textarea
+                  <textarea aria-label="Call Notes"
                     rows={5}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="What was discussed..."
@@ -4503,7 +4604,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Outcome" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option>Successful</option>
                     <option>No Answer</option>
                     <option>Left Voicemail</option>
@@ -4635,7 +4736,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setOpenPopover(null);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`Stage updated for ${count} deal${count !== 1 ? 's' : ''}`);
+                      showBulkToast(`Stage changed on screen for ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                     }}
                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors"
                   >
@@ -4672,7 +4773,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setOpenPopover(null);
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
-                      showBulkToast(`Owner updated for ${count} deal${count !== 1 ? 's' : ''}`);
+                      showBulkToast(`Owner changed on screen for ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                     }}
                     className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 transition-colors"
                   >
@@ -4713,7 +4814,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                         setSelectedDeals([]);
                         lastSelectedIndex.current = null;
                         setTagInput('');
-                        showBulkToast(`Tag added to ${count} deal${count !== 1 ? 's' : ''}`);
+                        showBulkToast(`Tag added on screen to ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                       }
                       if (e.key === 'Escape') setOpenPopover(null);
                     }}
@@ -4727,7 +4828,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                       setSelectedDeals([]);
                       lastSelectedIndex.current = null;
                       setTagInput('');
-                      showBulkToast(`Tag added to ${count} deal${count !== 1 ? 's' : ''}`);
+                      showBulkToast(`Tag added on screen to ${count} deal${count !== 1 ? 's' : ''} — not saved yet`);
                     }}
                     className="px-2.5 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
                   >
@@ -5203,7 +5304,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   onClick={() => {
                     const rows = filteredDeals
                       .flatMap(d => {
-                        const dq = getDealDataQuality(d);
+                        const dq = getDealDataQuality(d, metaFor(d));
                         if (dq.isClean) return [];
                         return dq.issues.map((i: DataQualityIssue) => `${d.dealName}\t${i.severity}\t${i.message}`);
                       })
@@ -5224,7 +5325,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
               {filteredDeals.map(d => {
-                const dq = getDealDataQuality(d);
+                const dq = getDealDataQuality(d, metaFor(d));
                 if (dq.isClean) return null;
                 const assignTarget = currentUser || availableOwners[0] || '';
                 return (

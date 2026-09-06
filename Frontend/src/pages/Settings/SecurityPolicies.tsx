@@ -1,9 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Shield, Lock, Globe, Smartphone, Monitor, AlertTriangle, CheckCircle,
-  XCircle, Eye, EyeOff, Info, Plus, X, Trash2, Download, Save, RefreshCw,
-  Activity, Clock, MapPin, Users, Key, Bell, FileText, TrendingUp, Zap
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
+import { Shield, Lock, Globe, Smartphone, Monitor, AlertTriangle, CheckCircle, Plus, X, Trash2, Download, Save, RefreshCw, Activity, Clock, MapPin, Key } from 'lucide-react';
 
 interface PasswordPolicy {
   minLength: number;
@@ -459,7 +456,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Minimum Password Length
                 </label>
-                <input
+                <input aria-label="Minimum Password Length"
                   type="number"
                   min="6"
                   max="128"
@@ -474,7 +471,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Maximum Password Length
                 </label>
-                <input
+                <input aria-label="Maximum Password Length"
                   type="number"
                   min="8"
                   max="256"
@@ -535,7 +532,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Password History Count
                 </label>
-                <input
+                <input aria-label="Password History Count"
                   type="number"
                   min="0"
                   max="24"
@@ -551,7 +548,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Password Expiry (days)
                 </label>
-                <select
+                <select aria-label="Password Expiry (days)"
                   value={passwordPolicy.expiryDays}
                   onChange={(e) => setPasswordPolicy({ ...passwordPolicy, expiryDays: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -569,7 +566,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Max Login Attempts
                 </label>
-                <select
+                <select aria-label="Max Login Attempts"
                   value={passwordPolicy.maxLoginAttempts}
                   onChange={(e) => setPasswordPolicy({ ...passwordPolicy, maxLoginAttempts: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -584,7 +581,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Lockout Duration
                 </label>
-                <select
+                <select aria-label="Lockout Duration"
                   value={passwordPolicy.lockoutDuration}
                   onChange={(e) => setPasswordPolicy({ ...passwordPolicy, lockoutDuration: parseInt(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -598,14 +595,14 @@ const SecurityPolicies: React.FC = () => {
             </div>
 
             <div className="mt-8 flex justify-end">
-              <button
+              <Button
                 onClick={handleSavePasswordPolicy}
                 disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                size="lg"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 <span>{loading ? 'Saving...' : 'Save Password Policy'}</span>
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -638,7 +635,7 @@ const SecurityPolicies: React.FC = () => {
                       onChange={(e) => setTwoFactorSettings({ ...twoFactorSettings, enabled: e.target.checked })}
                       className="sr-only peer"
                     />
-                    <div className="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
+                    <div className="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-brand-600"></div>
                   </label>
                 </div>
               </div>
@@ -650,7 +647,7 @@ const SecurityPolicies: React.FC = () => {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Enforcement Mode
                     </label>
-                    <select
+                    <select aria-label="Enforcement Mode"
                       value={twoFactorSettings.enforcementMode}
                       onChange={(e) => setTwoFactorSettings({ ...twoFactorSettings, enforcementMode: e.target.value as any })}
                       className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -728,14 +725,14 @@ const SecurityPolicies: React.FC = () => {
             </div>
 
             <div className="mt-8 flex justify-end">
-              <button
+              <Button
                 onClick={handleSave2FASettings}
                 disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                size="lg"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 <span>{loading ? 'Saving...' : 'Save 2FA Settings'}</span>
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -748,13 +745,12 @@ const SecurityPolicies: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">IP Restrictions & Network Security</h2>
                 <p className="text-gray-600">Control access based on IP addresses and geographic locations</p>
               </div>
-              <button
+              <Button
                 onClick={() => setShowAddIPModal(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add IP Restriction</span>
-              </button>
+              </Button>
             </div>
 
             {/* IP Restrictions List */}
@@ -818,7 +814,7 @@ const SecurityPolicies: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Idle Timeout (minutes)
                   </label>
-                  <input
+                  <input aria-label="Idle Timeout (minutes)"
                     type="number"
                     min="5"
                     max="1440"
@@ -832,7 +828,7 @@ const SecurityPolicies: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Absolute Timeout (minutes)
                   </label>
-                  <input
+                  <input aria-label="Absolute Timeout (minutes)"
                     type="number"
                     min="30"
                     max="1440"
@@ -846,7 +842,7 @@ const SecurityPolicies: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Max Concurrent Sessions
                   </label>
-                  <input
+                  <input aria-label="Max Concurrent Sessions"
                     type="number"
                     min="1"
                     max="10"
@@ -1004,7 +1000,7 @@ const SecurityPolicies: React.FC = () => {
                           event.severity === 'critical' ? 'bg-red-600 text-white' :
                           event.severity === 'high' ? 'bg-orange-600 text-white' :
                           event.severity === 'medium' ? 'bg-yellow-600 text-white' :
-                          'bg-blue-600 text-white'
+                          'bg-brand-600 text-white'
                         }`}>
                           {event.severity.toUpperCase()}
                         </span>
@@ -1071,7 +1067,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Restriction Type
                 </label>
-                <select
+                <select aria-label="Restriction Type"
                   value={newIPRestriction.type}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, type: e.target.value as any })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1085,7 +1081,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   IP Address *
                 </label>
-                <input
+                <input aria-label="IP Address"
                   type="text"
                   value={newIPRestriction.ipAddress}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, ipAddress: e.target.value })}
@@ -1098,7 +1094,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description
                 </label>
-                <input
+                <input aria-label="Description"
                   type="text"
                   value={newIPRestriction.description}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, description: e.target.value })}
@@ -1111,7 +1107,7 @@ const SecurityPolicies: React.FC = () => {
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Country (Optional)
                 </label>
-                <input
+                <input aria-label="Country (Optional)"
                   type="text"
                   value={newIPRestriction.country}
                   onChange={(e) => setNewIPRestriction({ ...newIPRestriction, country: e.target.value })}
@@ -1128,12 +1124,11 @@ const SecurityPolicies: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddIPRestriction}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Add Restriction
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1175,16 +1170,16 @@ const SecurityPolicies: React.FC = () => {
                 ))}
               </div>
 
-              <button
+              <Button
                 onClick={() => {
                   const codesText = backupCodes.join('\n');
                   navigator.clipboard.writeText(codesText);
                   alert('Backup codes copied to clipboard!');
                 }}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                fullWidth
               >
                 Copy All Codes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

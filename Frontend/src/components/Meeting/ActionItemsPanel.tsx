@@ -1,5 +1,6 @@
-import React from 'react';
+
 import { X, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface ActionItem {
   id: string;
@@ -47,7 +48,7 @@ export default function ActionItemsPanel({ isOpen, onClose, actionItems, meeting
             </div>
             <div className="mt-2 h-2 bg-blue-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-600 rounded-full transition-all"
+                className="h-full bg-brand-600 rounded-full transition-all"
                 style={{ width: `${(completedCount / actionItems.length) * 100}%` }}
               />
             </div>
@@ -103,10 +104,10 @@ export default function ActionItemsPanel({ isOpen, onClose, actionItems, meeting
             ))}
           </div>
 
-          <button className="w-full mt-6 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2">
+          <Button fullWidth className="mt-6">
             View All Tasks
             <ArrowRight className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

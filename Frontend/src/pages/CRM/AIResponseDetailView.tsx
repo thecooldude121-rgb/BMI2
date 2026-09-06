@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { ArrowLeft, Share2, Download, Printer, CheckSquare, Mail, RefreshCw, ThumbsUp, ThumbsDown, MessageCircle, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -608,12 +609,12 @@ export default function AIResponseDetailView() {
                         >
                           Schedule Call
                         </button>
-                        <button
+                        <Button
                           onClick={() => handleSendEmail('john@acme.com', 'Follow-up: Sales Optimization Discussion', 'Hi John,\n\nI wanted to follow up on our conversation about optimizing your sales process...')}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                          size="sm" className="rounded"
                         >
                           Send Email
-                        </button>
+                        </Button>
                         <button
                           onClick={() => setTemplateModalOpen(true)}
                           className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 transition-colors"
@@ -649,12 +650,12 @@ export default function AIResponseDetailView() {
                         >
                           Use Template
                         </button>
-                        <button
+                        <Button
                           onClick={() => handleScheduleCall('David Park', 'TechStart Inc', 42000)}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                          size="sm" className="rounded"
                         >
                           Schedule Call
-                        </button>
+                        </Button>
                         <button
                           onClick={() => handleSendEmail('sarah@bmi.com', 'Introduction Request: TechStart Inc', 'Hi Sarah,\n\nCan you introduce me to David Park at TechStart? I think there\'s a great opportunity...')}
                           className="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 transition-colors"
@@ -678,12 +679,12 @@ export default function AIResponseDetailView() {
                         >
                           Use Calculator
                         </button>
-                        <button
+                        <Button
                           onClick={() => handleScheduleCall('Emily Chen & Robert Martinez', 'DataFlow Inc', 95000)}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+                          size="sm" className="rounded"
                         >
                           Schedule Call
-                        </button>
+                        </Button>
                         <button
                           onClick={() => handleSendEmail('emily@dataflow.com', 'Meeting Agenda: DataFlow Implementation', 'Hi Emily,\n\nHere\'s the agenda for our upcoming discussion:\n\n1. Solution overview\n2. ROI analysis\n3. Implementation timeline...')}
                           className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-medium hover:bg-gray-300 transition-colors"

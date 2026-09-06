@@ -1,10 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Plus, Upload, Search, ChevronDown, CheckCircle, Mail, Phone, Eye,
-  UserPlus, Link as LinkIcon, X, BookmarkCheck,
-  Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal,
-} from 'lucide-react';
+import { Plus, Upload, Search, ChevronDown, CheckCircle, UserPlus, Link as LinkIcon, X, BookmarkCheck, Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
@@ -12,6 +8,7 @@ import { useLeadsPageState } from '../../hooks/useLeadsPageState';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SORT_OPTIONS } from '../../utils/leadSorting';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import { Button } from '../../components/ui/Button';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import SavedViewsBar from '../../components/Leads/SavedViewsBar';
 import SavedViewModal from '../../components/Leads/SavedViewModal';
@@ -107,7 +104,7 @@ const getCtaStyle = (color: string): string => {
     case 'green': return 'bg-green-600 text-white hover:bg-green-700';
     case 'red':   return 'bg-red-600   text-white hover:bg-red-700';
     case 'amber': return 'bg-amber-500 text-white hover:bg-amber-600';
-    case 'blue':  return 'bg-blue-600  text-white hover:bg-blue-700';
+    case 'blue':  return 'bg-brand-600 text-white hover:bg-brand-700';
     default:      return 'bg-gray-100  text-gray-700 hover:bg-gray-200';
   }
 };
@@ -116,8 +113,6 @@ const getAgingDays = (lead: Lead): number => {
   const ref = lead.stage_entered_at ?? lead.created_at;
   return Math.floor((Date.now() - new Date(ref).getTime()) / 86_400_000);
 };
-
-
 
 // Modals not yet implemented — show a toast instead of opening a stub modal
 const STUB_MODALS = new Set<ModalId>(['assignOwner', 'addTag', 'enrichLead', 'editLead']);
@@ -279,7 +274,6 @@ const LeadsPage: React.FC = () => {
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   // ── Single-lead modal actions (triggered from row ⋯ menu) ─────────────────
-
 
   const handleSingleDelete = () => {
     if (activeLead) {
@@ -689,13 +683,17 @@ const LeadsPage: React.FC = () => {
             {/* Split-button: Quick Add (primary) + dropdown for Full Form / Import CSV */}
             <div ref={addMenuRef} className="relative">
               <div className="flex items-center rounded-lg overflow-hidden shadow-sm">
-                <button
+                <Button
                   onClick={() => setQuickAddOpen(true)}
-                  className="flex items-center px-5 py-2.5 bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm font-semibold"
+                  size="lg"
+                  leadingIcon={<Plus className="h-4 w-4" />}
+                  // Left half of a split control, so the inner edge stays square.
+                  // Button honours className, which keeps a one-off a one-off
+                  // instead of forcing a new variant into the primitive.
+                  className="rounded-r-none font-semibold"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
                   Quick Add
-                </button>
+                </Button>
                 <button
                   onClick={() => setAddMenuOpen(o => !o)}
                   aria-label="More lead creation options"
@@ -914,12 +912,9 @@ const LeadsPage: React.FC = () => {
               {can('leads.manage_views') && (
                 <div className="flex items-center space-x-2">
                   {isUserViewActive && (
-                    <button
-                      onClick={updateActiveView}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700"
-                    >
+                    <Button onClick={updateActiveView} size="sm" className="font-semibold">
                       Update {activeViewLabel}
-                    </button>
+                    </Button>
                   )}
                   <button
                     onClick={() => openModal('createView')}
@@ -940,7 +935,7 @@ const LeadsPage: React.FC = () => {
                 <button
                   onClick={() => setStatusViewMode('simplified')}
                   className={`px-2.5 py-1 font-medium transition-colors ${
-                    statusViewMode === 'simplified' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    statusViewMode === 'simplified' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   Simple
@@ -948,7 +943,7 @@ const LeadsPage: React.FC = () => {
                 <button
                   onClick={() => setStatusViewMode('detailed')}
                   className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
-                    statusViewMode === 'detailed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                    statusViewMode === 'detailed' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   Detailed
@@ -969,7 +964,7 @@ const LeadsPage: React.FC = () => {
                     key={value}
                     onClick={() => setFilterStatus(value)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      filterState.status === value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      filterState.status === value ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     {label}
@@ -985,7 +980,7 @@ const LeadsPage: React.FC = () => {
                     key={status}
                     onClick={() => setFilterStatus(status)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      filterState.status === status ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      filterState.status === status ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     {status === 'all' ? 'All' : getStatusLabel(status)}
@@ -1005,7 +1000,7 @@ const LeadsPage: React.FC = () => {
                   onClick={() => setFilterSource(source === 'all' ? 'all' : source)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     filterState.source === (source === 'all' ? 'all' : source)
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-brand-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
@@ -1029,7 +1024,7 @@ const LeadsPage: React.FC = () => {
                   key={score.value}
                   onClick={() => setFilterScore(score.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterState.score === score.value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    filterState.score === score.value ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {score.label}
@@ -1066,7 +1061,7 @@ const LeadsPage: React.FC = () => {
                 <SlidersHorizontal className="h-4 w-4" />
                 Filters
                 {hasActiveAdvancedFilter && (
-                  <span className="ml-1 bg-blue-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className="ml-1 bg-brand-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                     {advancedFilter.groups.reduce((s, g) => s + g.conditions.length, 0)}
                   </span>
                 )}
@@ -1243,12 +1238,9 @@ const LeadsPage: React.FC = () => {
                   Showing {Math.min(displayedCount, sortedLeads.length)} of {sortedLeads.length} leads
                 </div>
                 {displayedCount < sortedLeads.length && (
-                  <button
-                    onClick={loadMore}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                  >
+                  <Button onClick={loadMore} size="lg">
                     Load More…
-                  </button>
+                  </Button>
                 )}
               </div>
             </>
@@ -1279,12 +1271,9 @@ const LeadsPage: React.FC = () => {
                   Showing {Math.min(displayedCount, sortedLeads.length)} of {sortedLeads.length} leads
                 </div>
                 {displayedCount < sortedLeads.length && (
-                  <button
-                    onClick={loadMore}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                  >
+                  <Button onClick={loadMore} size="lg">
                     Load More…
-                  </button>
+                  </Button>
                 )}
               </div>
             </>
@@ -1439,7 +1428,9 @@ const LeadsPage: React.FC = () => {
           isOpen={isModalOpen('convertLead')}
           onClose={closeModal}
           onUpdateLead={async (id, updates) => {
-            await updateLead(id, updates);
+            // Returned so the wizard can tell success from a rejected write.
+            const accepted = await updateLead(id, updates);
+            if (!accepted) return false;
             if (updates.status === 'converted') {
               const targetType =
                 updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
@@ -1447,6 +1438,7 @@ const LeadsPage: React.FC = () => {
                 : 'contact';
               actions.convert(activeLead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
             }
+            return true;
           }}
         />
       )}

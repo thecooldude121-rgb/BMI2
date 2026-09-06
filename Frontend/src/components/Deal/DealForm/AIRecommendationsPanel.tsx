@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../ui/Button';
 import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
@@ -105,12 +106,12 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
                   <div className="text-xs text-gray-600 mt-1">Reason: {rec.reason}</div>
                 </div>
               </div>
-              <button
+              <Button
                 onClick={rec.action}
-                className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
+                size="sm" fullWidth
               >
                 {rec.title.includes('Add Tag') || rec.title.includes('Priority') || rec.title.includes('Close Date') ? 'Apply' : rec.title.includes('Contact') ? 'Find & Add CEO' : 'Create Task'}
-              </button>
+              </Button>
             </div>
           );
         })}

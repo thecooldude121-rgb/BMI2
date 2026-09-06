@@ -1,10 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  X, ExternalLink, ChevronUp, ChevronDown,
-  Mail, Phone, MapPin, Building2, Calendar, Clock,
-  User, CheckCircle, XCircle, Circle, MessageSquare,
-  Zap, Activity, TrendingUp, Briefcase, Link2,
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, ExternalLink, ChevronUp, ChevronDown, Mail, Phone, MapPin, Building2, Calendar, User, CheckCircle, XCircle, Circle, MessageSquare, TrendingUp, Briefcase, Link2 } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import { buildTimeline, buildLastTouchSummary } from '../../utils/leadTimeline';
 import ActivityTimeline from './ActivityTimeline';

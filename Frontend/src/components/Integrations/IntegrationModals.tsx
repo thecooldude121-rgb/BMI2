@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { ConnectedIntegration, AvailableIntegration, IntegrationProvider } from '../../types/integrations';
 
 interface ConfigureModalProps {
@@ -39,7 +40,7 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               API Key
             </label>
-            <input
+            <input aria-label="API Key"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -52,7 +53,7 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               API Endpoint (Optional)
             </label>
-            <input
+            <input aria-label="API Endpoint (Optional)"
               type="url"
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
@@ -75,12 +76,12 @@ export const ConfigureModal: React.FC<ConfigureModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            fullWidth
           >
             Save Configuration
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -219,7 +220,7 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Provider
             </label>
-            <select
+            <select aria-label="Select Provider"
               value={selectedProvider}
               onChange={(e) => setSelectedProvider(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -239,7 +240,7 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   API Key
                 </label>
-                <input
+                <input aria-label="API Key"
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
@@ -252,7 +253,7 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   API Endpoint (Optional)
                 </label>
-                <input
+                <input aria-label="API Endpoint (Optional)"
                   type="url"
                   value={endpoint}
                   onChange={(e) => setEndpoint(e.target.value)}
@@ -277,13 +278,13 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleConnect}
             disabled={!selectedProvider || !apiKey}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             Connect
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -357,12 +358,12 @@ export const LearnMoreModal: React.FC<LearnMoreModalProps> = ({
         </div>
 
         <div className="mt-6">
-          <button
+          <Button
             onClick={onClose}
-            className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            fullWidth
           >
             Close
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -575,7 +576,7 @@ export const TestWebhookModal: React.FC<TestWebhookModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Event Type:
             </label>
-            <select
+            <select aria-label="Event Type:"
               value={eventType}
               onChange={(e) => setEventType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -701,7 +702,7 @@ export const AddCustomIntegrationModal: React.FC<AddCustomIntegrationModalProps>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Integration Name:
               </label>
-              <input
+              <input aria-label="Integration Name:"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -752,7 +753,7 @@ export const AddCustomIntegrationModal: React.FC<AddCustomIntegrationModalProps>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Description:
               </label>
-              <textarea
+              <textarea aria-label="Description:"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Enter description..."
@@ -767,7 +768,7 @@ export const AddCustomIntegrationModal: React.FC<AddCustomIntegrationModalProps>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 API Endpoint:
               </label>
-              <input
+              <input aria-label="API Endpoint:"
                 type="url"
                 value={endpoint}
                 onChange={(e) => setEndpoint(e.target.value)}
@@ -780,7 +781,7 @@ export const AddCustomIntegrationModal: React.FC<AddCustomIntegrationModalProps>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 API Key / Token:
               </label>
-              <input
+              <input aria-label="API Key / Token:"
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
@@ -804,13 +805,13 @@ export const AddCustomIntegrationModal: React.FC<AddCustomIntegrationModalProps>
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleNext}
             disabled={step === 1 ? !name || !description : false}
-            className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            fullWidth
           >
             {step === 1 ? 'Next: Configure' : 'Add Integration'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

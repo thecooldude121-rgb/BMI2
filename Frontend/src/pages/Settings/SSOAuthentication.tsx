@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Key, Shield, Users, CheckCircle, XCircle, AlertTriangle, Download, Upload,
-  Save, RefreshCw, Settings, Globe, Lock, Cloud, Server, Smartphone, FileText,
-  Copy, Eye, EyeOff, Plus, Trash2, Edit, X, TestTube, Zap, Activity
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Key, Shield, CheckCircle, Download, Save, RefreshCw, Settings, Globe, Lock, Cloud, Server, Smartphone, FileText, Plus, Trash2, Edit, TestTube, Zap, Activity } from 'lucide-react';
 
 interface SAMLConfig {
   id: string;
@@ -349,16 +346,15 @@ const SSOAuthentication: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">SAML 2.0 Configuration</h2>
                 <p className="text-gray-600">Configure SAML identity providers for single sign-on</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setEditingConfig(null);
                   setShowSAMLModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add SAML Provider</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -487,16 +483,15 @@ const SSOAuthentication: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">OAuth 2.0 / OpenID Connect</h2>
                 <p className="text-gray-600">Configure OAuth providers for social login and enterprise SSO</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setEditingConfig(null);
                   setShowOAuthModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add OAuth Provider</span>
-              </button>
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -601,16 +596,15 @@ const SSOAuthentication: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">LDAP / Active Directory Integration</h2>
                 <p className="text-gray-600">Connect to your corporate directory for user authentication and sync</p>
               </div>
-              <button
+              <Button
                 onClick={() => {
                   setEditingConfig(null);
                   setShowLDAPModal(true);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
               >
                 <Plus className="h-4 w-4" />
                 <span>Add LDAP Connection</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -776,7 +770,7 @@ const SSOAuthentication: React.FC = () => {
                           }}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                       </label>
                     </div>
                   </div>
@@ -897,7 +891,7 @@ const SSOAuthentication: React.FC = () => {
                           }}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                       </label>
                     </div>
                   </div>
@@ -940,14 +934,14 @@ const SSOAuthentication: React.FC = () => {
 
       {/* Save Button */}
       <div className="mt-6 flex justify-end">
-        <button
+        <Button
           onClick={handleSave}
           disabled={loading}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          size="lg"
         >
           {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           <span>{loading ? 'Saving...' : 'Save Configuration'}</span>
-        </button>
+        </Button>
       </div>
     </div>
   );

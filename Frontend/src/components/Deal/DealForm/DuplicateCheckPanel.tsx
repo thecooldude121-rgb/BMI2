@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../ui/Button';
 import { AlertTriangle } from 'lucide-react';
 
 interface DuplicateCheckPanelProps {
@@ -35,12 +36,12 @@ export const DuplicateCheckPanel: React.FC<DuplicateCheckPanelProps> = ({
               <div>Created: {dup.createdDate}</div>
             </div>
             <div className="flex items-center space-x-2 mt-3">
-              <button
+              <Button
                 onClick={() => onViewDeal(dup.id)}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
+                size="sm"
               >
                 View Existing Deal
-              </button>
+              </Button>
               <button
                 onClick={onMerge}
                 className="px-3 py-1.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium transition-colors"

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Button } from '../../ui/Button';
 import { X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useLeads } from '../../../contexts/LeadContext';
+import { DEFAULT_RULES as DEFAULT_RULES_VALUE } from './types';
 import { buildInitialMappings } from './columnMapper';
 import { buildValidatedRows } from './importValidator';
 import Step1Upload from './Step1Upload';
@@ -9,11 +11,7 @@ import Step3Validation from './Step3Validation';
 import Step4Rules from './Step4Rules';
 import Step5Confirm from './Step5Confirm';
 import Step6Results from './Step6Results';
-import type {
-  ImportStep, ParsedCSV, ColumnMapping, ParsedRow,
-  ImportRules, ImportProgress, ImportResult, DEFAULT_RULES,
-} from './types';
-import { DEFAULT_RULES as DEFAULT_RULES_VALUE } from './types';
+import type { ImportStep, ParsedCSV, ColumnMapping, ParsedRow, ImportRules, ImportProgress, ImportResult } from './types';
 
 // ── Step metadata ─────────────────────────────────────────────────────────────
 
@@ -238,7 +236,7 @@ export default function ImportWizard({ onClose }: Props) {
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                     isComplete ? 'bg-blue-500 text-white'
-                    : isActive ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                    : isActive ? 'bg-brand-600 text-white ring-4 ring-blue-100'
                     : 'bg-gray-100 text-gray-400'
                   }`}>
                     {isComplete ? <Check className="h-3.5 w-3.5" /> : s.id}
@@ -308,14 +306,14 @@ export default function ImportWizard({ onClose }: Props) {
               <ArrowLeft className="h-4 w-4" />
               Back
             </button>
-            <button
+            <Button
               onClick={goNext}
               disabled={!canGoNext()}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              size="lg" className="rounded-xl font-semibold"
             >
               Continue
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
       )}

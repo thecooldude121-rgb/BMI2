@@ -1,79 +1,16 @@
-import type { ParsedCSV } from './types';
+/**
+ * Lead-import sample file.
+ *
+ * The parser that used to live here moved to utils/csvParse.ts when contacts
+ * and accounts gained CSV import — one parser, one set of tests, rather than
+ * three feature-local copies drifting apart. Two silent bugs were fixed in the
+ * move (a quoted field containing a newline was torn into two rows, and a blank
+ * header shifted every later column); see that file for the details. This
+ * wizard reads the fixed parser through the re-exports below, so its behaviour
+ * changed only in that those two cases now work.
+ */
 
-export const MAX_ROWS = 1000;
-
-function parseRow(line: string): string[] {
-  const fields: string[] = [];
-  let i = 0;
-
-  while (i <= line.length) {
-    if (i === line.length) { fields.push(''); break; }
-
-    if (line[i] === '"') {
-      let field = '';
-      i++;
-      while (i < line.length) {
-        if (line[i] === '"' && line[i + 1] === '"') {
-          field += '"';
-          i += 2;
-        } else if (line[i] === '"') {
-          i++;
-          break;
-        } else {
-          field += line[i++];
-        }
-      }
-      while (i < line.length && line[i] !== ',') i++;
-      if (i < line.length) i++;
-      fields.push(field.trim());
-    } else {
-      const start = i;
-      while (i < line.length && line[i] !== ',') i++;
-      fields.push(line.slice(start, i).trim());
-      if (i < line.length) i++;
-    }
-  }
-
-  return fields;
-}
-
-export function parseCSV(text: string): ParsedCSV {
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const lines = normalized.split('\n');
-
-  // Drop trailing empty lines
-  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
-
-  if (lines.length === 0) return { headers: [], rows: [] };
-
-  const headers = parseRow(lines[0]).map(h => h.trim()).filter(Boolean);
-  if (headers.length === 0) return { headers: [], rows: [] };
-
-  const rows: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) continue;
-
-    const values = parseRow(line);
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = (values[idx] ?? '').trim();
-    });
-    rows.push(row);
-  }
-
-  return { headers, rows };
-}
-
-export function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => resolve((e.target?.result as string) ?? '');
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsText(file, 'UTF-8');
-  });
-}
+export { parseCsv as parseCSV, readFileAsText, MAX_ROWS } from '../../../utils/csvParse';
 
 export function generateSampleCSV(): string {
   const header = 'First Name,Last Name,Email,Phone,Company,Job Title,Industry,LinkedIn URL,Tags,Notes';

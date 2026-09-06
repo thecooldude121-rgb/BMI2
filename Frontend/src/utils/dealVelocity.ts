@@ -35,19 +35,43 @@ export interface DealForVelocity {
   closeDate?: string;
 }
 
-// ── Stage order ───────────────────────────────────────────────────────────────
-// STAGE_ORDER must match deal.stage values exactly — update when pipeline stages change.
-
-const ACTIVE_STAGES = ['prospecting', 'qualified', 'proposal', 'negotiation'];
-const CLOSED_STAGES = new Set(['closed-won', 'closed-lost']);
+/*
+ * STAGE ORDER COMES FROM THE WORKSPACE, not from this file.
+ *
+ * There used to be two constants here — ACTIVE_STAGES (four slugs) and
+ * CLOSED_STAGES ('closed-won', 'closed-lost') — with a comment saying they
+ * "must match deal.stage values exactly, update when pipeline stages change".
+ * That was already false for live data:
+ *
+ *   - A Renewals or Partnerships deal matched NEITHER list. `CLOSED_STAGES` did
+ *     not contain `renewal-won` or `partner-active`, so velocity was computed
+ *     for deals that are already closed — for a metric this file's own comment
+ *     calls "past-tense and not actionable".
+ *   - `ACTIVE_STAGES.indexOf` returned -1 for every one of those stages, and the
+ *     code took its "unknown stage" branch: stageProgress = 0.5, a hardcoded
+ *     midpoint. So a renewals deal one step from renewal-won and one fresh out
+ *     of renewal-review both scored exactly 50% progress.
+ *
+ * The caller now passes the stage's real metadata. When it cannot — the
+ * pipelines have not loaded, or the stage is not in any pipeline — this returns
+ * null rather than falling back to the old guess. Declining to rate a deal is
+ * honest; rating it from a midpoint that means nothing is not.
+ */
+import type { StageMeta } from './pipelinesApi';
 
 // ── Main function ─────────────────────────────────────────────────────────────
 
-export function getDealVelocity(deal: DealForVelocity): DealVelocity | null {
-  const stage = (deal.stage ?? '').toLowerCase();
+export function getDealVelocity(
+  deal: DealForVelocity,
+  stageMeta?: StageMeta | null,
+): DealVelocity | null {
+  // Guard: an unresolvable stage. Not an error — the pipelines may simply not
+  // have loaded yet — but nothing below can be computed truthfully without it.
+  if (!stageMeta) return null;
 
-  // Guard: closed deals — velocity is past-tense and not actionable
-  if (CLOSED_STAGES.has(stage)) return null;
+  // Guard: closed deals — velocity is past-tense and not actionable. By
+  // stage_type, so it is right in every pipeline rather than only the default.
+  if (stageMeta.stage_type !== 'open') return null;
 
   // Guard: missing required fields
   if (!deal.createdAt || !deal.closeDate) return null;
@@ -82,11 +106,13 @@ export function getDealVelocity(deal: DealForVelocity): DealVelocity | null {
     };
   }
 
-  // Stage progress: position in active pipeline (1-indexed, so first stage ≠ 0%)
-  const stageIndex = ACTIVE_STAGES.indexOf(stage);
-  const stageProgress = stageIndex === -1
-    ? 0.5  // unknown stage — assume midpoint rather than erroring
-    : (stageIndex + 1) / ACTIVE_STAGES.length;
+  // Stage progress: position among the pipeline's OPEN stages, 1-indexed so the
+  // first stage is not 0%. Terminal stages are excluded from the denominator —
+  // they were from the old ACTIVE_STAGES too — so a four-open-stage pipeline and
+  // a six-open-stage one both run 0 to 1.
+  const stageProgress = stageMeta.openTotal > 0 && stageMeta.openIndex
+    ? stageMeta.openIndex / stageMeta.openTotal
+    : 0;
 
   // Time consumed: may exceed 1.0 for overdue deals — correct slipping behavior
   const timeConsumed = daysInPipeline / totalBudgetDays;

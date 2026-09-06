@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { CheckCircle, HelpCircle } from 'lucide-react';
 import { CRM_FIELD_LABELS, CRM_FIELDS_ORDERED, getSampleValues, autoDetectField } from './columnMapper';
 import type { ColumnMapping, ParsedCSV, CRMField } from './types';

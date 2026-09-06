@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Users, ChevronDown, ChevronRight, Plus, Copy, Trash2, Edit2,
-  Save, X, Search, AlertCircle, CheckCircle, Shield, Clock,
-  User, Calendar, FileText, Eye, EyeOff, Info, Move, List, GitBranch, ArrowLeft
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Users, ChevronDown, ChevronRight, Plus, Copy, Trash2, Edit2, Save, X, Search, AlertCircle, Shield, Clock, User, Calendar, FileText, Eye, EyeOff, List, GitBranch, ArrowLeft } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
 import { SystemRole } from '../../types/settings';
 import { RolePermissionEditor } from '../../components/Permissions/RolePermissionEditor';
 import { RoleHierarchyView } from '../../components/Permissions/RoleHierarchyView';
 import BreadcrumbNav, { BreadcrumbItem } from '../../components/navigation/BreadcrumbNav';
+import { NotAvailable, stubControl } from '../../components/common/NotAvailable';
 
 interface RoleNode extends SystemRole {
   children: RoleNode[];
@@ -116,7 +114,35 @@ const RolesManagement: React.FC = () => {
     setShowPermissions(false);
   };
 
+  /*
+   * EVERY WRITE ON THIS PAGE REFUSES, and the refusal is here rather than only
+   * on the buttons.
+   *
+   * The page is a complete role administration UI — create, clone, rename,
+   * delete, drag a role to a new parent, edit a permission set — over
+   * SettingsContext, whose calls go to Supabase. There is no Supabase in this
+   * architecture (CLAUDE.md), so every one of those requests fails, and every
+   * handler here swallowed the failure: `createRole` returns null on error and
+   * the modal simply stayed open with no message; `updateRole` returns false and
+   * `handleSaveEdit` did nothing at all. Nothing lied, but nothing worked, and
+   * nothing said so — which is how this survived long enough to look finished.
+   *
+   * There is also no endpoint to rewire these to. This product's permission
+   * model is the four roles on `users.role`, checked by `requireRole`
+   * server-side; there are no custom roles, no role hierarchy, no per-field
+   * permissions and no tables for any of it. So this is not "unwired" work
+   * waiting for a client — it is a UI for a feature that does not exist.
+   *
+   * Guarding the handlers as well as disabling the buttons is deliberate: a
+   * disabled button is bypassable by a keyboard submit or a code path that
+   * reaches the handler directly, and this file has thirteen such call sites.
+   */
+  const REFUSAL = 'Role administration is not available: this product has no custom-role backend.';
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const refuseWrite = (): false => { setRefusal(REFUSAL); return false; };
+
   const handleSaveEdit = async () => {
+    if (refuseWrite()) return;
     if (!selectedRole) return;
 
     const success = await updateRole(selectedRole.id, editedRole);
@@ -130,7 +156,9 @@ const RolesManagement: React.FC = () => {
     }
   };
 
-  const handleSavePermissions = async (permissions: Record<string, any>): Promise<boolean> => {
+  const handleSavePermissions = async (_permissions: Record<string, any>): Promise<boolean> => {
+    return refuseWrite();
+    // eslint-disable-next-line no-unreachable
     if (!selectedRole) return false;
 
     try {
@@ -201,6 +229,7 @@ const RolesManagement: React.FC = () => {
   };
 
   const handleCreateRole = async () => {
+    if (refuseWrite()) return;
     if (!validateRoleName(newRoleData.name)) return;
 
     const parentId = newRoleData.parent_role_id || parentRoleForNew;
@@ -237,6 +266,7 @@ const RolesManagement: React.FC = () => {
   };
 
   const handleCloneRole = async () => {
+    if (refuseWrite()) return;
     if (!selectedRole) return;
 
     const result = await createRole({
@@ -255,6 +285,7 @@ const RolesManagement: React.FC = () => {
   };
 
   const handleDeleteRole = async () => {
+    if (refuseWrite()) return;
     if (!selectedRole) return;
 
     if (selectedRole.children.length > 0) {
@@ -500,7 +531,33 @@ const RolesManagement: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full flex-col bg-gray-50">
+      {/*
+        * The banner is inside the page rather than replacing it: the layout is
+        * still the clearest statement of what a role administration screen
+        * would look like, and it is the reason both dead Settings trees are
+        * kept as UI reference (CLAUDE.md). What it must not do is read as
+        * working, and an empty role list with a live "Create Role" button reads
+        * as a workspace that happens to have no custom roles yet.
+        */}
+      <div className="px-6 pt-6">
+        <NotAvailable
+          feature="Custom roles and the role hierarchy"
+          detail="This screen is not connected to anything. Its reads and writes go through
+                  SettingsContext to Supabase, which this product does not use, so the role
+                  list is empty because every request fails — not because no roles exist. Nor
+                  is there an endpoint to point it at: this product's permission model is the
+                  four fixed roles on users.role (admin, manager, sales, hr), enforced by
+                  requireRole on the API. There are no custom roles, no hierarchy and no
+                  per-field permissions in the database. To change a colleague's role, use
+                  CRM Settings → Team Management, which is wired to the real API."
+        />
+        {refusal && (
+          <p role="alert" className="mt-3 text-sm text-red-700">{refusal}</p>
+        )}
+      </div>
+
+      <div className="flex min-h-0 flex-1">
       {/* Sidebar - Role Tree (hidden in hierarchy view) */}
       {viewMode === 'list' && (
         <div className="w-80 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
@@ -510,16 +567,9 @@ const RolesManagement: React.FC = () => {
               <Users className="h-6 w-6 text-blue-600" />
               <h2 className="text-lg font-semibold text-gray-900">Roles</h2>
             </div>
-            <button
-              onClick={() => {
-                setParentRoleForNew(null);
-                setShowCreateModal(true);
-              }}
-              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              title="Create new role"
-            >
+            <Button {...stubControl('Creating a role')} className="p-2">
               <Plus className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
 
           <div className="space-y-3">
@@ -602,16 +652,10 @@ const RolesManagement: React.FC = () => {
                 <p className="text-sm text-gray-600">Organizational structure and reporting relationships</p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setParentRoleForNew(null);
-                setShowCreateModal(true);
-              }}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
+            <Button {...stubControl('Creating a role')}>
               <Plus className="h-4 w-4 mr-2" />
               Create Role
-            </button>
+            </Button>
             </div>
           </div>
           <div className="flex-1">
@@ -719,14 +763,14 @@ const RolesManagement: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <button
+                      <Button
                         onClick={() => setIsEditing(true)}
-                        className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        size="sm"
                         disabled={selectedRole.is_system}
                       >
                         <Edit2 className="h-4 w-4 mr-2" />
                         Edit
-                      </button>
+                      </Button>
                       <button
                         onClick={() => setShowCloneModal(true)}
                         className="flex items-center px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -1041,6 +1085,7 @@ const RolesManagement: React.FC = () => {
         )}
         </div>
       )}
+      </div>
 
       {/* Create Role Modal */}
       {showCreateModal && (
@@ -1122,7 +1167,7 @@ const RolesManagement: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Parent Role
                 </label>
-                <select
+                <select aria-label="Parent Role"
                   value={newRoleData.parent_role_id || parentRoleForNew || ''}
                   onChange={(e) => {
                     setNewRoleData({ ...newRoleData, parent_role_id: e.target.value });
@@ -1154,7 +1199,7 @@ const RolesManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
+                <textarea aria-label="Description"
                   value={newRoleData.description}
                   onChange={(e) => setNewRoleData({ ...newRoleData, description: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1165,7 +1210,7 @@ const RolesManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Business Unit</label>
-                <input
+                <input aria-label="Business Unit"
                   type="text"
                   value={newRoleData.business_unit}
                   onChange={(e) => setNewRoleData({ ...newRoleData, business_unit: e.target.value })}
@@ -1187,13 +1232,13 @@ const RolesManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCreateRole}
                 disabled={!newRoleData.name.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="disabled:bg-gray-300"
               >
                 Create Role
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1229,13 +1274,12 @@ const RolesManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCloneRole}
-                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 <Copy className="h-4 w-4 mr-2" />
                 Clone Role
-              </button>
+              </Button>
             </div>
           </div>
         </div>

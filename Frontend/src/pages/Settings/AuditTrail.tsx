@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Clock, User, Shield, Filter, Search, Download, RefreshCw,
-  ChevronDown, X, Calendar, Activity, FileText, Eye, ArrowRight,
-  AlertCircle, CheckCircle, Trash2, Copy, Plus, Edit
-} from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Clock, User, Shield, Filter, Search, Download, RefreshCw, X, Activity, FileText, Eye, CheckCircle, Trash2, Copy, Plus, Edit } from 'lucide-react';
 import BreadcrumbNav from '../../components/navigation/BreadcrumbNav';
 
 interface AuditLog {
@@ -47,21 +42,15 @@ const AuditTrail: React.FC = () => {
   }, [auditLogs, searchQuery, selectedActionType, selectedEntityType, selectedUser, dateFrom, dateTo]);
 
   const loadAuditLogs = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
-      setAuditLogs(data || []);
-    } catch (error) {
-      console.error('Error loading audit logs:', error);
-    } finally {
-      setLoading(false);
-    }
+    // TODO: reference only, backend removed.
+    // This read Supabase's `audit_logs` table. There is no Supabase in this
+    // architecture (see CLAUDE.md) and no audit_logs table on our Postgres
+    // schema either, so there is nothing to repoint this at. The markup below is
+    // kept for visual reference until the Settings module is rebuilt against our
+    // API; it renders its own empty state, so leaving the list empty is correct
+    // rather than a regression.
+    setAuditLogs([]);
+    setLoading(false);
   };
 
   const applyFilters = () => {
@@ -238,7 +227,7 @@ const AuditTrail: React.FC = () => {
               <Filter className="h-4 w-4 mr-2" />
               Filters
               {hasActiveFilters && (
-                <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+                <span className="ml-2 px-2 py-0.5 bg-brand-600 text-white text-xs rounded-full">
                   {[searchQuery, selectedActionType !== 'all', selectedEntityType !== 'all',
                     selectedUser !== 'all', dateFrom, dateTo].filter(Boolean).length}
                 </span>
@@ -271,7 +260,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Action Type
                 </label>
-                <select
+                <select aria-label="Action Type"
                   value={selectedActionType}
                   onChange={(e) => setSelectedActionType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -291,7 +280,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Entity Type
                 </label>
-                <select
+                <select aria-label="Entity Type"
                   value={selectedEntityType}
                   onChange={(e) => setSelectedEntityType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -310,7 +299,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   User
                 </label>
-                <select
+                <select aria-label="User"
                   value={selectedUser}
                   onChange={(e) => setSelectedUser(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -326,7 +315,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date From
                 </label>
-                <input
+                <input aria-label="Date From"
                   type="date"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
@@ -338,7 +327,7 @@ const AuditTrail: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date To
                 </label>
-                <input
+                <input aria-label="Date To"
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Send, Paperclip, Sparkles, Save } from 'lucide-react';
 
 interface TeamEmailComposerModalProps {
@@ -150,7 +151,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
           {/* From */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">From</label>
-            <input
+            <input aria-label="From"
               type="text"
               value={currentUserEmail}
               disabled
@@ -161,7 +162,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
           {/* To (read-only) */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">To</label>
-            <input
+            <input aria-label="To"
               type="text"
               value={memberEmail}
               disabled
@@ -172,7 +173,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
           {/* CC */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">CC (optional)</label>
-            <input
+            <input aria-label="CC (optional)"
               type="text"
               value={cc}
               onChange={(e) => setCc(e.target.value)}
@@ -184,7 +185,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
           {/* BCC */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">BCC (optional)</label>
-            <input
+            <input aria-label="BCC (optional)"
               type="text"
               value={bcc}
               onChange={(e) => setBcc(e.target.value)}
@@ -199,7 +200,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
               <Sparkles className="w-4 h-4 inline mr-1 text-blue-600" />
               Template
             </label>
-            <select
+            <select aria-label="Template"
               value={selectedTemplate}
               onChange={(e) => applyTemplate(e.target.value)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -215,7 +216,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
           {/* Subject */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Subject</label>
-            <input
+            <input aria-label="Subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -227,7 +228,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
           {/* Message Body */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Message</label>
-            <textarea
+            <textarea aria-label="Message"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder={`Hi ${firstName},\n\n[Compose message]\n\nBest regards`}
@@ -305,10 +306,10 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
                 </>
               )}
             </button>
-            <button
+            <Button
               onClick={handleSend}
               disabled={sending || !subject.trim() || !body.trim()}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              size="lg" className="disabled:bg-slate-300"
             >
               {sending ? (
                 <>
@@ -321,7 +322,7 @@ export const TeamEmailComposerModal: React.FC<TeamEmailComposerModalProps> = ({
                   Send Email
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

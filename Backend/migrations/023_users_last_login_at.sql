@@ -1,0 +1,11 @@
+-- Migration 023: users.last_login_at.
+--
+-- Required by the spec's users table and missing from the database. login() now
+-- stamps it, and without the column that UPDATE would be swallowed by a catch —
+-- a write that silently does nothing, which is the pattern this project has been
+-- removing everywhere else. Better to add the column than to keep the catch
+-- honest-but-useless.
+--
+-- Nullable on purpose: a user who has never signed in has no last login, and
+-- NOW() would be a lie about an event that never happened.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;

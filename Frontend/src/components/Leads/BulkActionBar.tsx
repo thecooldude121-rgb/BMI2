@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import {
   X, ChevronDown, Download, ArrowRightCircle, Archive,
   XCircle, Trash2, UserCheck, Tag, Sparkles, GitMerge,
@@ -178,7 +179,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       >
         {/* ── Select-all banner ─────────────────────────────────────────── */}
         {isPageFullySelected && !areAllFiltered && totalFiltered > count && (
-          <div className="bg-blue-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg flex items-center gap-2 whitespace-nowrap">
+          <div className="bg-brand-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg flex items-center gap-2 whitespace-nowrap">
             <span>All {count} on this page selected.</span>
             <button
               onClick={onSelectAllFiltered}
@@ -189,7 +190,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
           </div>
         )}
         {areAllFiltered && totalFiltered > 0 && (
-          <div className="bg-blue-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg whitespace-nowrap">
+          <div className="bg-brand-600 text-white text-xs rounded-full px-4 py-1.5 shadow-lg whitespace-nowrap">
             All {totalFiltered} filtered lead{totalFiltered !== 1 ? 's' : ''} selected.
           </div>
         )}
@@ -297,13 +298,13 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   ))}
                 </div>
 
-                <button
+                <Button
                   onClick={handleApplyFollowUp}
                   disabled={!followUpDate}
-                  className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  size="sm" fullWidth
                 >
                   Set Follow-up
-                </button>
+                </Button>
               </div>
             )}
           </div>

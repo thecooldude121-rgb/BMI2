@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, GitMerge } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
@@ -57,7 +58,10 @@ const AccountMergePage: React.FC = () => {
               Source Account: {account.name}
             </h2>
             <p className="text-blue-700">
-              {account.industry} • {account.employeeCount || 0} employees
+              {/* See AccountsPage: employeeCount has no column, and `|| 0`
+                  rendered its absence as "0 employees". */}
+              {account.industry}
+              {account.accountSize ? ` • ${account.accountSize} employees` : ''}
             </p>
           </div>
 
@@ -74,12 +78,12 @@ const AccountMergePage: React.FC = () => {
               <li>• Merge contacts, deals, and activities</li>
               <li>• Maintain data integrity throughout the process</li>
             </ul>
-            <button
+            <Button
               onClick={() => navigate(`/crm/accounts/${accountId}`)}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              size="lg"
             >
               Return to Account Details
-            </button>
+            </Button>
           </div>
         </div>
       </div>

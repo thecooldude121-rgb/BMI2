@@ -32,5 +32,12 @@ supabase/
 .replit
 shared/
 server/
+# Also covers Frontend/.env.development.local, which `npm run db:seed:users`
+# writes with the seeded users' real (rotating) passwords, for the dev-only
+# login autofill. Do not drop this pattern without replacing that coverage.
 *.local
 *.log
+
+# Uploaded document files (local-disk storage — see Backend/src/config/fileStorage.ts).
+# Never commit user content; the storage root is configurable via FILE_STORAGE_PATH.
+Backend/storage/

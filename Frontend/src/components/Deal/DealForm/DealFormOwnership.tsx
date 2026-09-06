@@ -97,7 +97,7 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Deal Owner: <span className="text-red-500">*</span>
           </label>
-          <select
+          <select aria-label="Deal Owner:"
             value={formData.owner}
             onChange={(e) => onChange('owner', e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -116,7 +116,7 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Source: <span className="text-red-500">*</span>
           </label>
-          <select
+          <select aria-label="Source:"
             value={formData.source}
             onChange={(e) => onChange('source', e.target.value)}
             className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 ${
@@ -166,7 +166,7 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-orange-900 mb-1">Recruited Person:</label>
-                <select
+                <select aria-label="Recruited Person:"
                   className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
                   value={formData.hrmsConnection?.recruited || ''}
                   onChange={(e) => onChange('hrmsConnection', { ...formData.hrmsConnection, recruited: e.target.value })}
@@ -180,7 +180,7 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-orange-900 mb-1">Recruitment Date:</label>
-                <input
+                <input aria-label="Recruitment Date:"
                   type="date"
                   value={formData.hrmsConnection?.recruitmentDate || '2024-11-14'}
                   onChange={(e) => onChange('hrmsConnection', { ...formData.hrmsConnection, recruitmentDate: e.target.value })}
@@ -201,7 +201,7 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
         {/* Priority */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Priority:</label>
-          <select
+          <select aria-label="Priority:"
             value={formData.priority}
             onChange={(e) => onChange('priority', e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

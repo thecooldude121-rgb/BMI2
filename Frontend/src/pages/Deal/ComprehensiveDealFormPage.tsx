@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronRight, Search, X, Building2, User, Sparkles, CheckCircle2, AlertTriangle, Briefcase, Target, Calendar } from 'lucide-react';
+import { Sparkles, Briefcase } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { SmartSearchPanel } from '../../components/Deal/DealForm/SmartSearchPanel';
 import { DealFormBasicInfo } from '../../components/Deal/DealForm/DealFormBasicInfo';
@@ -17,17 +18,18 @@ import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPane
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
 import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
-import { createDeal, updateDeal, fetchDeals } from '../../utils/dealsApi';
+import { createDeal, updateDeal, fetchDeals, getDeal } from '../../utils/dealsApi';
 import { useData } from '../../contexts/DataContext';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
 import { generateDealName } from '../../utils/dealNameGenerator';
-import { DEFAULT_PIPELINE, getPipeline, getStageProbability } from '../../config/pipelines';
+import { usePipelines, useStageLookup } from '../../hooks/useStageLookup';
+import { findPipeline, defaultPipeline } from '../../utils/pipelinesApi';
 import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
 import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
 import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
-import { getSuggestedDealValue, valueMatchesSuggestion, PriceResult } from '../../utils/productPricingEngine';
+import { getSuggestedDealValue, PriceResult } from '../../utils/productPricingEngine';
 import { DealFormAttachments } from '../../components/Deal/DealForm/DealFormAttachments';
 import { ValidationChecklistPanel } from '../../components/Deal/DealForm/ValidationChecklistPanel';
 import { DealFormCommercialDocs } from '../../components/Deal/DealForm/DealFormCommercialDocs';
@@ -37,7 +39,26 @@ import { MobileDealPreview } from '../../components/Deal/DealForm/MobileDealPrev
 import { MobileAIRecommendations } from '../../components/Deal/DealForm/MobileAIRecommendations';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 
+// Postgres DATE columns come back as full ISO timestamps; <input type="date"> needs yyyy-MM-dd.
+const toDateInput = (value: string | null | undefined): string => (value ? String(value).slice(0, 10) : '');
+
 export const ComprehensiveDealFormPage: React.FC = () => {
+  /*
+   * The workspace's pipelines. The form used to derive its initial state
+   * synchronously from config/pipelines.ts; an API cannot do that, so the
+   * defaults are filled in by an effect once the list arrives (below).
+   */
+  const { pipelines, ready: pipelinesReady } = usePipelines();
+  const { lookup: stageLookup } = useStageLookup();
+  const defaultPl = defaultPipeline(pipelines);
+  /*
+   * A ref, not a dependency. The deal-loading effect below is keyed on the deal
+   * id; adding `pipelines` to its dependencies would re-run the fetch when they
+   * arrive and clobber anything the user had already typed.
+   */
+  const pipelinesRef = useRef<typeof pipelines>(pipelines);
+  useEffect(() => { pipelinesRef.current = pipelines; }, [pipelines]);
+
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -50,11 +71,16 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     dealValue: '',
     currency: 'USD',
     closeDate: '',
-    pipelineId: DEFAULT_PIPELINE.id,
-    pipelineName: DEFAULT_PIPELINE.name,
+    // Blank until the workspace's pipelines load. They cannot be known
+    // synchronously any more, and seeding a hardcoded 'new-business' would make
+    // the form briefly claim a pipeline the workspace may not have.
+    pipelineId: '',
+    pipelineName: '',
     dealType: DEFAULT_DEAL_TYPE.id,
-    stage: DEFAULT_PIPELINE.stages[0].id,
-    probability: DEFAULT_PIPELINE.stages[0].probability,
+    stage: '',
+    // Stays a number: this is an editable form input, and Q3 concerns the
+    // weighted forecast, which reads the API's value rather than this one.
+    probability: 0,
     accountId: '',
     accountName: '',
     primaryContactId: '',
@@ -83,6 +109,25 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     clientDiscovers: '',
     discoveryDate: '',
   });
+
+  /*
+   * Seed the pipeline/stage defaults for a NEW deal once the workspace's
+   * pipelines arrive.
+   *
+   * Guarded on `!formData.pipelineId` so it fires exactly once and never
+   * overwrites either a pipeline the user picked or one loaded from an existing
+   * deal — which is the failure this shape of effect usually causes.
+   */
+  useEffect(() => {
+    if (!pipelinesReady || !defaultPl || formData.pipelineId) return;
+    setFormData(prev => prev.pipelineId ? prev : ({
+      ...prev,
+      pipelineId: defaultPl.slug,
+      pipelineName: defaultPl.name,
+      stage: prev.stage || defaultPl.stages[0]?.slug || '',
+      probability: prev.probability || defaultPl.stages[0]?.probability || 0,
+    }));
+  }, [pipelinesReady, defaultPl, formData.pipelineId]);
 
   const [selectedAccount, setSelectedAccount] = useState<any>(null);
   const [selectedContact, setSelectedContact] = useState<any>(null);
@@ -218,60 +263,89 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   }, [formData.product, formData.contractTerm, formData.currency, dealValueUserEdited]);
 
   const loadDealData = async (dealId: string) => {
-    // Mock loading existing deal data - Acme Corp deal
-    const mockDeal = {
-      dealName: 'Acme Corp - Enterprise Plan',
-      dealValue: '50000',
-      currency: 'USD',
-      closeDate: '2026-03-15',
-      stage: 'proposal',
-      probability: 67,
-      accountId: 'acc-1',
-      accountName: 'Acme Corp',
-      primaryContactId: 'con-2',
-      primaryContactName: 'John Smith',
-      contactRole: 'Champion',
-      additionalContacts: [],
-      owner: 'current-user',
-      source: 'lead-gen-apollo',
-      hrmsConnection: null,
-      priority: 'High',
-      tags: ['VIP', 'Enterprise', 'Hot Lead'],
-      product: 'Enterprise Plan',
-      contractTerm: 'Annual',
-      paymentTerms: 'Net 30',
-      description: '',
-      nextSteps: '',
-    };
+    try {
+      const { data: deal } = await getDeal(dealId);
+      if (!deal) throw new Error('Deal not found');
 
-    // Set selected account and contact for edit mode
-    const mockAccount = {
-      id: 'acc-1',
-      type: 'account',
-      name: 'Acme Corp',
-      employees: '75 employees',
-      industry: 'SaaS',
-      revenue: '$12M revenue',
-      primaryContact: 'John Smith (VP Sales)',
-      avgDealSize: 50000,
-      winRate: 68
-    };
+      const stakeholders = Array.isArray(deal.stakeholders) ? deal.stakeholders : [];
+      const primary = stakeholders.find((s: any) => s.isPrimary);
+      const additional = stakeholders.filter((s: any) => !s.isPrimary);
+      const pipeline = findPipeline(pipelinesRef.current, deal.pipeline_id) ?? defaultPipeline(pipelinesRef.current);
 
-    const mockContact = {
-      id: 'con-2',
-      type: 'contact',
-      name: 'John Smith',
-      title: 'VP Sales',
-      company: 'Acme Corp',
-      email: 'john@acme.com',
-      phone: '+1 555-0123'
-    };
+      setFormData(prev => ({
+        ...prev,
+        dealName: deal.name ?? deal.title ?? '',
+        dealValue: deal.value != null ? String(deal.value) : '',
+        currency: deal.currency || BASE_CURRENCY_CODE,
+        closeDate: toDateInput(deal.expected_close_date),
+        pipelineId: pipeline?.slug ?? deal.pipeline_id ?? '',
+        pipelineName: pipeline?.name ?? '',
+        dealType: deal.deal_type || DEFAULT_DEAL_TYPE.id,
+        stage: deal.stage || pipeline?.stages[0]?.slug || '',
+        probability: deal.probability ?? 0,
+        accountName: deal.company_name ?? '',
+        primaryContactId: primary?.id ?? '',
+        primaryContactName: deal.contact_name ?? primary?.name ?? '',
+        contactEmail: deal.contact_email ?? '',
+        contactRole: deal.contact_title || primary?.role || DEFAULT_CONTACT_ROLE.id,
+        primaryContactSentiment: primary?.sentiment ?? 'neutral',
+        additionalContacts: additional as StakeholderContact[],
+        competitors: (Array.isArray(deal.competitors) ? deal.competitors : []) as Competitor[],
+        forecastCategory: deal.forecast_category ?? '',
+        owner: deal.assigned_to ?? '',
+        source: deal.source ?? '',
+        priority: deal.priority || 'Medium',
+        tags: Array.isArray(deal.tags) ? deal.tags : [],
+        product: deal.product ?? '',
+        contractTerm: deal.contract_term ?? '',
+        paymentTerms: deal.payment_terms ?? '',
+        description: deal.description ?? '',
+        nextSteps: deal.next_step ?? '',
+        closeDateOverrideReason: deal.close_date_override_reason ?? '',
+        salesDriveFolder: deal.sales_drive_folder ?? '',
+        agreementUrl: deal.agreement_url ?? '',
+        accountModuleSetup: deal.account_module_setup ?? '',
+        clientDiscovers: deal.client_discovers ?? '',
+        discoveryDate: toDateInput(deal.discovery_date),
+      }));
 
-    setFormData(mockDeal as any);
-    setSelectedAccount(mockAccount);
-    setSelectedContact(mockContact);
-    setShowSmartSearch(false);
-    showToast('success', 'Loaded deal: Acme Corp - Enterprise Plan');
+      // Saved values are authoritative in edit mode — suppress the auto-generators
+      // that would otherwise overwrite the name, value, and forecast category.
+      setDealNameUserEdited(true);
+      setDealValueUserEdited(true);
+      setForecastCategoryUserSet(!!deal.forecast_category);
+
+      if (deal.win_prob_override_reason) {
+        setWinProbOverrideEnabled(true);
+        setWinProbOverrideValue(deal.probability ?? '');
+        setWinProbOverrideReason(deal.win_prob_override_reason);
+      }
+
+      if (deal.company_name) {
+        setSelectedAccount({
+          id: deal.company_name,
+          type: 'account',
+          name: deal.company_name,
+          industry: deal.account_industry ?? undefined,
+        });
+      }
+      if (deal.contact_name) {
+        setSelectedContact({
+          id: primary?.id ?? deal.contact_name,
+          type: 'contact',
+          name: deal.contact_name,
+          title: deal.contact_title ?? undefined,
+          company: deal.company_name ?? undefined,
+          email: deal.contact_email ?? undefined,
+        });
+      }
+      setShowSmartSearch(false);
+      setHasUnsavedChanges(false);
+      setAutoSaveStatus('saved');
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to load deal');
+      navigate('/deals');
+    }
   };
 
   const checkForDuplicates = async () => {
@@ -474,9 +548,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     setHasDraftRestored(false);
     setFormData({
       dealName: '', dealValue: '', currency: 'USD', closeDate: '',
-      pipelineId: DEFAULT_PIPELINE.id, pipelineName: DEFAULT_PIPELINE.name,
-      dealType: DEFAULT_DEAL_TYPE.id, stage: DEFAULT_PIPELINE.stages[0].id,
-      probability: DEFAULT_PIPELINE.stages[0].probability,
+      pipelineId: defaultPl?.slug ?? '', pipelineName: defaultPl?.name ?? '',
+      dealType: DEFAULT_DEAL_TYPE.id, stage: defaultPl?.stages[0]?.slug ?? '',
+      probability: defaultPl?.stages[0]?.probability ?? 0,
       accountId: '', accountName: '', primaryContactId: '', primaryContactName: '',
       contactEmail: '', contactRole: DEFAULT_CONTACT_ROLE.id,
       primaryContactSentiment: 'neutral' as 'positive' | 'neutral' | 'negative',
@@ -570,8 +644,10 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   // Calculate win probability based on multiple factors
   const calculateWinProbability = (data: any): number => {
-    // Base probability comes from the pipeline config — never stale across pipelines
-    let probability = getStageProbability(data.pipelineId || DEFAULT_PIPELINE.id, data.stage);
+    // Base probability comes from the workspace's stage, not a hardcoded
+    // catalogue. A stage with none set contributes no baseline rather than the
+    // old `?? 20` — a number nobody chose, presented as the deal's.
+    let probability = stageLookup(data.stage, data.pipelineId ?? null)?.probability ?? 0;
 
     // Contact level boost — check primary and all additional stakeholders
     const allRoles: string[] = [
@@ -609,12 +685,14 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   };
 
   const handlePipelineChange = (pipelineId: string) => {
-    const pipeline = getPipeline(pipelineId);
-    const firstStage = pipeline.stages[0];
+    const pipeline = findPipeline(pipelines, pipelineId) ?? defaultPipeline(pipelines);
+    const firstStage = pipeline?.stages[0];
 
-    // Check if the current stage exists in the new pipeline
-    const stageStillValid = pipeline.stages.some(s => s.id === formData.stage);
-    const newStage = stageStillValid ? formData.stage : firstStage.id;
+    // Check if the current stage exists in the new pipeline. Matching on SLUG,
+    // which is the stable key — a stage renamed on the admin screen keeps its
+    // slug, so a deal mid-edit does not silently jump to the first stage.
+    const stageStillValid = (pipeline?.stages ?? []).some(s => s.slug === formData.stage);
+    const newStage = stageStillValid ? formData.stage : (firstStage?.slug ?? '');
 
     const suggestedCategory = !forecastCategoryUserSet
       ? getSuggestedForecastCategory(newStage)
@@ -626,8 +704,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
     const newData = {
       ...formData,
-      pipelineId: pipeline.id,
-      pipelineName: pipeline.name,
+      pipelineId: pipeline?.slug ?? pipelineId,
+      pipelineName: pipeline?.name ?? '',
       stage: newStage,
       forecastCategory: suggestedCategory,
     };
@@ -873,11 +951,11 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       dealValue: '',
       currency: 'USD',
       closeDate: '',
-      pipelineId: DEFAULT_PIPELINE.id,
-      pipelineName: DEFAULT_PIPELINE.name,
+      pipelineId: defaultPipeline(pipelinesRef.current)?.slug ?? '',
+      pipelineName: defaultPipeline(pipelinesRef.current)?.name ?? '',
       dealType: DEFAULT_DEAL_TYPE.id,
-      stage: DEFAULT_PIPELINE.stages[0].id,
-      probability: DEFAULT_PIPELINE.stages[0].probability,
+      stage: defaultPipeline(pipelinesRef.current)?.stages[0]?.slug ?? '',
+      probability: defaultPipeline(pipelinesRef.current)?.stages[0]?.probability ?? 0,
       accountId: '',
       accountName: '',
       primaryContactId: '',
@@ -1017,13 +1095,13 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             >
               Save as Draft
             </button>
-            <button
+            <Button
               onClick={() => handleSave(false)}
               disabled={isSaving || !validation.isValid}
-              className="flex-1 sm:flex-none px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 min-h-[44px] sm:min-h-0"
+              fullWidth className="sm:flex-none sm:py-1.5 sm:text-xs min-h-[44px] sm:min-h-0"
             >
               {isSaving ? 'Saving...' : 'Save Deal'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

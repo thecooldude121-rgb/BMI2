@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import {
   ChevronRight, ChevronLeft, Check, X, Plus, Trash2,
   Users, Database, Filter, Calendar, AlertCircle, Info
@@ -158,7 +159,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Rule Name <span className="text-red-500">*</span>
               </label>
-              <input
+              <input aria-label="Rule Name"
                 type="text"
                 value={rule.name}
                 onChange={(e) => setRule({ ...rule, name: e.target.value })}
@@ -170,7 +171,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-              <textarea
+              <textarea aria-label="Description"
                 value={rule.description}
                 onChange={(e) => setRule({ ...rule, description: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -242,13 +243,13 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
               {rule.conditions.map((condition, index) => (
                 <div key={condition.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start space-x-3">
-                    <span className="flex items-center justify-center w-6 h-6 bg-blue-600 text-white text-xs font-bold rounded-full mt-2">
+                    <span className="flex items-center justify-center w-6 h-6 bg-brand-600 text-white text-xs font-bold rounded-full mt-2">
                       {index + 1}
                     </span>
                     <div className="flex-1 grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Field</label>
-                        <input
+                        <input aria-label="Field"
                           type="text"
                           value={condition.field}
                           onChange={(e) => updateCondition(condition.id, 'field', e.target.value)}
@@ -258,7 +259,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Operator</label>
-                        <select
+                        <select aria-label="Operator"
                           value={condition.operator}
                           onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -270,7 +271,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Value</label>
-                        <input
+                        <input aria-label="Value"
                           type="text"
                           value={condition.value}
                           onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
@@ -329,7 +330,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select {rule.targetType.charAt(0).toUpperCase() + rule.targetType.slice(1)} <span className="text-red-500">*</span>
               </label>
-              <select
+              <select aria-label="Select"
                 value={rule.targetId}
                 onChange={(e) => setRule({ ...rule, targetId: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -371,7 +372,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                 >
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      rule.accessLevel[key as keyof typeof rule.accessLevel] ? 'bg-blue-600' : 'bg-gray-300'
+                      rule.accessLevel[key as keyof typeof rule.accessLevel] ? 'bg-brand-600' : 'bg-gray-300'
                     }`}>
                       <Check className="h-5 w-5 text-white" />
                     </div>
@@ -497,7 +498,7 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
                 <div className="flex flex-col items-center">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                     currentStep === step.number
-                      ? 'bg-blue-600 text-white ring-4 ring-blue-100'
+                      ? 'bg-brand-600 text-white ring-4 ring-blue-100'
                       : currentStep > step.number
                       ? 'bg-green-600 text-white'
                       : 'bg-gray-200 text-gray-600'
@@ -559,13 +560,12 @@ export const SharingRuleBuilder: React.FC<SharingRuleBuilderProps> = ({
           </div>
 
           {currentStep < steps.length ? (
-            <button
+            <Button
               onClick={nextStep}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <span>Next</span>
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </Button>
           ) : (
             <button
               onClick={handleSave}

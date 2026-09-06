@@ -1,4 +1,7 @@
+import type { ApiStage } from '../../utils/pipelinesApi';
+import { stageHex } from '../../utils/pipelinesApi';
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../ui/Button';
 import {
   Edit, Building2, Sparkles,
   Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown,
@@ -7,7 +10,7 @@ import {
   StickyNote, ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { daysFromNowLabel, closeDateUrgencyClass } from '../../utils/dateUtils';
+import { closeDateUrgencyClass } from '../../utils/dateUtils';
 import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 import { getUsers } from '../../utils/dealsApi';
 import type { DealOwnerInfo, DealValueHistoryEntry } from '../../types/dealManagement';
@@ -16,34 +19,24 @@ import type { MomentumResult } from '../../utils/dealMomentum';
 import type { RevenueSchedule } from './RevenueTimeline';
 
 // Stage ordering (1-indexed, matching STAGE_MAP in ComprehensiveDealDetailPage)
-const ORDERED_STAGES: Record<number, string> = {
-  1: 'Prospecting',
-  2: 'Qualified',
-  3: 'Proposal',
-  4: 'Negotiation',
-  5: 'Closed Won',
-  6: 'Closed Lost',
-};
+/*
+ * ORDERED_STAGES, STAGE_HEX and STAGE_KEY_MAP lived here — three parallel
+ * Record<number, …> maps, all keyed on a stage NUMBER 1-6, which was itself an
+ * artifact of assuming every pipeline has exactly the same six stages. Between
+ * them and the detail page's STAGE_LADDER and STAGE_MAP there were FIVE copies
+ * of that assumption.
+ *
+ * They are replaced by the `stages` prop: the deal's own pipeline, from
+ * GET /pipelines. A Renewals deal now shows Under Review / Quoted / Negotiating
+ * / Renewed / Churned, and its stage number is its real position in that
+ * pipeline rather than a lookup miss defaulting to "Stage 1 of 6".
+ */
 
 // Item 2: avatar gradient per stage
-const STAGE_AVATAR_GRADIENT: Record<string, string> = {
-  prospecting:  'from-blue-500 to-blue-600',
-  qualified:    'from-green-500 to-green-600',
-  proposal:     'from-orange-500 to-orange-600',
-  negotiation:  'from-purple-500 to-purple-600',
-  'closed-won': 'from-emerald-500 to-emerald-600',
-  'closed-lost':'from-red-500 to-red-600',
-};
+// STAGE_AVATAR_GRADIENT removed: declared, never read.
 
 // Item 5: stage dot color (Tailwind class)
-const STAGE_DOT_COLOR: Record<string, string> = {
-  prospecting:  'bg-blue-500',
-  qualified:    'bg-green-500',
-  proposal:     'bg-orange-500',
-  negotiation:  'bg-purple-500',
-  'closed-won': 'bg-emerald-500',
-  'closed-lost':'bg-red-500',
-};
+// STAGE_DOT_COLOR removed: declared, never read.
 
 // Inline CSS gradient per stage (avoids Tailwind JIT dynamic-class purge)
 const STAGE_GRADIENT_CSS: Record<string, string> = {
@@ -65,20 +58,6 @@ const STAGE_DOT_HEX: Record<string, string> = {
   'closed-lost':'#EF4444',
 };
 
-// Item 23: stage hex colors for pipeline strip
-const STAGE_HEX: Record<number, string> = {
-  1: '#3B82F6', 2: '#22C55E', 3: '#F97316', 4: '#A855F7', 5: '#10B981', 6: '#EF4444',
-};
-
-// API-compatible stage key per stage number
-const STAGE_KEY_MAP: Record<number, string> = {
-  1: 'prospecting',
-  2: 'qualified',
-  3: 'proposal',
-  4: 'negotiation',
-  5: 'closed-won',
-  6: 'closed-lost',
-};
 
 // Item 6: color-coded days away label (returns hex to avoid Tailwind JIT dynamic-class purge)
 
@@ -142,7 +121,12 @@ interface DealHeroSectionProps {
   onAssignOwner?: (ownerName: string) => void;
   onSaveAmount?: (amount: number) => void;
   onSaveCloseDate?: (isoDate: string) => void;
-  onShowShortcuts?: () => void;
+  // onShowShortcuts was declared here and NEVER READ — the page passed
+  // `() => setShowShortcuts(true)` into a prop this component ignores, so the
+  // hero has no shortcuts affordance at all. Lesson 9 in CLAUDE.md, found by
+  // the compiler's TS6133 in the file that lesson was written about. The `?`
+  // key still opens the modal via the page's own listener; only the unused
+  // prop is gone.
   momentumResult?: MomentumResult;
   revenueSchedule?: RevenueSchedule | null;
   onViewRevenue?: () => void;
@@ -153,6 +137,12 @@ interface DealHeroSectionProps {
   timeInStage?: number;
   avgStageDuration?: number;
   onStageSelect?: (stageNum: number, stageName: string, stageKey: string) => void;
+  /**
+   * The deal's own pipeline stages, ordered. Empty while they load, or when the
+   * deal's pipeline could not be resolved — the strip renders nothing rather
+   * than a made-up ladder, which is what the old constant did.
+   */
+  stages?: ApiStage[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -170,7 +160,6 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   onAssignOwner,
   onSaveAmount,
   onSaveCloseDate,
-  onShowShortcuts,
   momentumResult,
   revenueSchedule,
   onViewRevenue,
@@ -181,6 +170,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   timeInStage,
   avgStageDuration,
   onStageSelect,
+  stages = [],
 }) => {
   const navigate = useNavigate();
 
@@ -316,9 +306,23 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
   // ── Inline edit helpers ────────────────────────────────────────────────────
 
+  /**
+   * Convert a displayed date back to the YYYY-MM-DD the API stores.
+   *
+   * THIS WAS CORRUPTING DATA, not just displaying it wrong. It used
+   * d.toISOString().split('T')[0]: new Date(display) yields LOCAL midnight,
+   * toISOString() converts that to UTC, and in IST (UTC+5:30) local midnight
+   * lands at 18:30 the PREVIOUS day — so the string written back was one day
+   * earlier than what the user saw. Every save through this path moved the date
+   * back a day, and repeated edits walked it backwards.
+   *
+   * Reading the local components is the fix: the calendar day the user picked is
+   * the calendar day that gets stored, in any timezone.
+   */
   function displayDateToIso(display: string): string {
     const d = new Date(display);
-    return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   function openValueEdit() {
@@ -386,26 +390,15 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
     return 'text-red-600';
   };
 
-  const getHealthBarColor = (score: number) => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
+  // getHealthBarColor removed: declared, never read.
 
   // ── Stage helpers ──────────────────────────────────────────────────────────
 
-  const getStageEmoji = (stage: string) => {
-    const emojiMap: Record<string, string> = {
-      'prospecting': '🔍', 'qualified': '✅', 'proposal': '🟠',
-      'negotiation': '🤝', 'closed-won': '🎉', 'closed-lost': '❌',
-    };
-    return emojiMap[stage.toLowerCase()] || '📊';
-  };
+  // getStageEmoji removed: declared, never read.
 
   const hasNextStage   = deal.stageNumber < deal.totalStages;
   const nextStageNum   = deal.stageNumber + 1;
-  const nextStageName  = hasNextStage ? ORDERED_STAGES[nextStageNum] ?? `Stage ${nextStageNum}` : null;
+  const nextStageName  = hasNextStage ? (stages[nextStageNum - 1]?.name ?? `Stage ${nextStageNum}`) : null;
 
   // Maps banner CTA label → existing action handler
   function handleBannerCTA(label: string) {
@@ -453,28 +446,46 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
   })() : null;
 
   // ── Velocity strip computations ───────────────────────────────────────────
-  const VELOCITY_STAGE_AVG: Record<string, number> = {
-    prospecting: 14, qualified: 10, proposal: 12, negotiation: 21,
-  };
+  /**
+   * Stage velocity: how long this deal has sat in its current stage.
+   *
+   * WHAT WAS REMOVED, AND WHY
+   * This block used to compare that figure against VELOCITY_STAGE_AVG — a
+   * hardcoded map { prospecting: 14, qualified: 10, proposal: 12,
+   * negotiation: 21 } — and render a verdict from the ratio: "Moving Fast",
+   * "On Track", "Slowing", "Stalled", plus "avg 14d" and "6d to avg". Every
+   * one of those numbers was a literal. The strip therefore told the user a
+   * deal was moving fast relative to a benchmark nobody had measured, in the
+   * confident register of a computed statistic.
+   *
+   * A real average IS computable, from deal_stage_history across the tenant —
+   * that is exactly what migration 014 exists to make possible. It is not
+   * computed yet because the table holds almost no rows: the only writer was
+   * the kanban board, and the detail page bypassed it entirely until this
+   * change. Once there is history to average, the average belongs in the API
+   * response beside days_since_contact, not in a constant in a component.
+   *
+   * `avgStageDuration` is kept as an optional prop for that day. When it is
+   * absent, the comparison is simply not drawn — the days-in-stage figure is
+   * real on its own and stands without a verdict attached.
+   */
   const velocityStageKey = (deal.stage || '').toLowerCase();
-  const velocityDaysInStage = timeInStage ?? 8;
-  const resolvedAvgDays = avgStageDuration ?? VELOCITY_STAGE_AVG[velocityStageKey] ?? 12;
-  const velocityPct = Math.round((velocityDaysInStage / resolvedAvgDays) * 100);
-  const showVelocityStrip = !['closed-won', 'closed-lost'].includes(velocityStageKey) && velocityDaysInStage > 0;
-  const velocityStatus =
-    velocityPct <= 75
-      ? { label: 'Moving Fast', icon: '⚡', textColor: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' }
-      : velocityPct <= 100
-      ? { label: 'On Track',    icon: '✓',  textColor: 'text-blue-700',  bg: 'bg-blue-50',  border: 'border-blue-200' }
-      : velocityPct <= 140
-      ? { label: 'Slowing',     icon: '⚠',  textColor: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200' }
-      : { label: 'Stalled',     icon: '●',  textColor: 'text-red-700',   bg: 'bg-red-50',   border: 'border-red-200' };
+  // No `?? 8` fallback: an unknown time in stage renders nothing, rather than
+  // eight days that belong to no deal.
+  const velocityDaysInStage = timeInStage;
+  const resolvedAvgDays = avgStageDuration;
+  const showVelocityStrip =
+    !['closed-won', 'closed-lost'].includes(velocityStageKey) &&
+    velocityDaysInStage != null && velocityDaysInStage > 0;
 
   // ── Weighted forecast card values ─────────────────────────────────────────
   const probability = deal.probability ?? 45;
   const dealAmount = deal.amount || 30000;
   const weightedValue = Math.round(dealAmount * (probability / 100));
-  const weightedCardClass = deal.stage === 'closed-won'
+  // The stages prop already carries this deal's own pipeline, so outcome comes
+  // from it rather than from a literal that is only the default pipeline's.
+  const dealOutcome = stages.find(st => st.slug === deal.stage)?.stage_type ?? 'open';
+  const weightedCardClass = dealOutcome === 'won'
     ? 'rounded-xl border p-4 min-w-0 bg-emerald-50 border-emerald-200'
     : 'rounded-xl border p-4 min-w-0 bg-violet-50 border-violet-100';
 
@@ -555,13 +566,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   className="w-full text-2xl font-bold text-blue-900 bg-white border border-blue-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
                 />
                 <div className="flex gap-1.5">
-                  <button
+                  <Button
                     type="button"
                     onClick={commitValue}
-                    className="flex-1 text-xs font-semibold bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 transition-colors"
+                    fullWidth className="font-semibold rounded-md"
                   >
                     ✓ Save
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => setActiveInlineEdit(null)}
@@ -650,13 +661,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   className="w-full text-base font-bold bg-white border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 mb-2"
                 />
                 <div className="flex gap-1.5">
-                  <button
+                  <Button
                     type="button"
                     onClick={commitCloseDate}
-                    className="flex-1 text-xs font-semibold bg-blue-600 text-white rounded-md py-1.5 hover:bg-blue-700 transition-colors"
+                    fullWidth className="font-semibold rounded-md"
                   >
                     ✓ Save
-                  </button>
+                  </Button>
                   <button
                     type="button"
                     onClick={() => setActiveInlineEdit(null)}
@@ -817,19 +828,19 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
             <div
               style={{ flex: 1 }}
               className={weightedCardClass}
-              title={`Weighted forecast: ${probability}% win probability × ${formatCurrencyCompact(dealAmount)}`}
+              title={`Weighted forecast: ${probability}% win probability × ${formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}`}
             >
-              {deal.stage === 'closed-won' ? (
+              {dealOutcome === 'won' ? (
                 <>
                   <div className="text-xs font-semibold text-emerald-500 uppercase tracking-wide mb-1">Final Value</div>
-                  <div className="text-2xl font-bold text-emerald-700 mb-1 leading-none">{formatCurrencyCompact(dealAmount)}</div>
+                  <div className="text-2xl font-bold text-emerald-700 mb-1 leading-none">{formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}</div>
                   <div className="text-xs text-emerald-500 font-medium">🎉 Deal Won</div>
                 </>
               ) : (
                 <>
                   <div className="text-xs font-semibold text-violet-500 uppercase tracking-wide mb-1">Weighted Value</div>
-                  <div className="text-2xl font-bold text-violet-700 mb-1 leading-none">{formatCurrencyCompact(weightedValue)}</div>
-                  <div className="text-xs text-violet-400">{probability}% of {formatCurrencyCompact(dealAmount)}</div>
+                  <div className="text-2xl font-bold text-violet-700 mb-1 leading-none">{formatCurrencyCompact(weightedValue, deal.currency || BASE_CURRENCY_CODE)}</div>
+                  <div className="text-xs text-violet-400">{probability}% of {formatCurrencyCompact(dealAmount, deal.currency || BASE_CURRENCY_CODE)}</div>
                 </>
               )}
             </div>
@@ -870,11 +881,12 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
         {/* Item 23: Stage pipeline strip */}
         <div className="mb-3 relative">
           <div className="flex items-center">
-            {Object.entries(ORDERED_STAGES).map(([numStr, stageName], idx) => {
-              const num = parseInt(numStr);
+            {stages.map((st, idx) => {
+              const num = idx + 1;
+              const stageName = st.name;
               const isCompleted = num < deal.stageNumber;
               const isCurrent = num === deal.stageNumber;
-              const color = STAGE_HEX[num];
+              const color = stageHex(st);
               return (
                 <React.Fragment key={num}>
                   {idx > 0 && (
@@ -894,9 +906,14 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                     onMouseLeave={isCurrent ? undefined : (e) => { (e.currentTarget as HTMLButtonElement).style.filter = ''; }}
                     onClick={() => {
                       if (isCurrent) return;
-                      if (num === 5) { onMoreAction('mark-won'); return; }
-                      if (num === 6) { onMoreAction('mark-lost'); return; }
-                      setPendingPill({ num, name: stageName, key: STAGE_KEY_MAP[num] });
+                      // Terminal stages by TYPE, not by position. `num === 5` and
+                      // `num === 6` were only ever right for the six-stage
+                      // new-business ladder: in Renewals the won stage is at
+                      // position 4 and the lost stage at 5, so the old test fired
+                      // "mark won" on Negotiating and "mark lost" on Renewed.
+                      if (st.stage_type === 'won')  { onMoreAction('mark-won');  return; }
+                      if (st.stage_type === 'lost') { onMoreAction('mark-lost'); return; }
+                      setPendingPill({ num, name: stageName, key: st.slug });
                     }}
                   >
                     {isCompleted && <span className="text-[10px]">✓</span>}
@@ -959,24 +976,16 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           )}
         </div>
 
-        {/* Stage Velocity strip */}
+        {/* Stage Velocity strip — see the note beside velocityStageKey above. */}
         {showVelocityStrip && (
-          <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border text-xs my-2 ${velocityStatus.bg} ${velocityStatus.border}`}>
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs my-2">
             <span className="font-semibold text-gray-500 flex-shrink-0">Stage Velocity</span>
-            <span className={`font-bold flex-shrink-0 ${velocityStatus.textColor}`}>
-              {velocityStatus.icon} {velocityStatus.label}
+            <span className="text-gray-700">
+              <strong>{velocityDaysInStage}d</strong> in {deal.stageName || deal.stage}
             </span>
-            <span className="text-gray-500">
-              {velocityDaysInStage}d in {deal.stageName || deal.stage}
-              &nbsp;·&nbsp;avg {resolvedAvgDays}d
-            </span>
-            {velocityPct > 100 ? (
-              <span className={`ml-auto font-semibold flex-shrink-0 ${velocityStatus.textColor}`}>
-                +{velocityDaysInStage - resolvedAvgDays}d over avg
-              </span>
-            ) : (
-              <span className="ml-auto text-gray-400 flex-shrink-0">
-                {resolvedAvgDays - velocityDaysInStage}d to avg
+            {resolvedAvgDays != null && (
+              <span className="ml-auto text-gray-500 flex-shrink-0">
+                Tenant average {resolvedAvgDays}d
               </span>
             )}
           </div>
@@ -1146,11 +1155,11 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
           <div className="hidden md:flex items-center gap-1 px-6 py-2 border-t border-gray-200 overflow-hidden">
 
             {/* ── Communication group ── */}
-            <button title="Email (E)" onClick={onEmail} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
+            <Button title="Email (E)" onClick={onEmail} className="rounded-md px-2.5 whitespace-nowrap flex-shrink-0">
               <Mail className="h-3.5 w-3.5" />
               Email
               <KbdBadge char="E" />
-            </button>
+            </Button>
             <button title="Call (C)" onClick={onCall} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white transition-colors whitespace-nowrap flex-shrink-0">
               <Phone className="h-3.5 w-3.5" />
               Call
@@ -1211,13 +1220,13 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
         {/* ── Mobile action row ── */}
         <div className="flex md:hidden items-center gap-2 mt-4">
-          <button
+          <Button
             onClick={onEmail}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm"
+            fullWidth
           >
             <Mail className="h-4 w-4" />
             Follow Up
-          </button>
+          </Button>
           <button
             onClick={() => setShowMobileSheet(true)}
             className="flex items-center gap-1.5 px-4 py-2.5 bg-gray-700 text-white rounded-lg font-medium text-sm"

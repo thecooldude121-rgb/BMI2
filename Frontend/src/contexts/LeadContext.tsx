@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 // All data comes from the Express backend → PostgreSQL (bmi_crm in pgAdmin 4).
 import {
   fetchLeadsFromAPI,
@@ -31,24 +31,7 @@ import {
   enrichLeadViaAPI,
 } from '../utils/leadsApi';
 import { useAuth } from './AuthContext';
-import {
-  Lead,
-  LeadActivity,
-  LeadNote,
-  LeadTask,
-  LeadEmail,
-  LeadCall,
-  LeadMeeting,
-  Tag,
-  LeadPipeline,
-  LeadPipelineStage,
-  LeadView,
-  LeadAIInsight,
-  LeadFilters,
-  BulkOperation,
-  LeadEnrichmentRequest,
-  LeadEnrichmentResponse
-} from '../types/lead';
+import { Lead, LeadActivity, LeadNote, LeadTask, LeadEmail, LeadCall, LeadMeeting, Tag, LeadPipeline, LeadView, LeadAIInsight, LeadFilters, BulkOperation, LeadEnrichmentRequest, LeadEnrichmentResponse } from '../types/lead';
 
 interface LeadContextType {
   leads: Lead[];
@@ -65,8 +48,6 @@ interface LeadContextType {
   getLead: (id: string) => Promise<Lead | null>;
   createLead: (lead: Partial<Lead>) => Promise<Lead | null>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
-<<<<<<< Updated upstream
-=======
   /** Server message from the last rejected write, so a caller can show the real
    *  reason instead of reporting success. Cleared on the next successful write.
    *  Use for RENDERING. */
@@ -81,7 +62,6 @@ interface LeadContextType {
    *  reported "the server rejected it" without saying why. Read this instead when
    *  you need the reason immediately after the await. */
   lastWriteErrorRef: React.MutableRefObject<string | null>;
->>>>>>> Stashed changes
   deleteLead: (id: string) => Promise<boolean>;
   bulkDeleteLeads: (ids: string[]) => Promise<boolean>;
 
@@ -92,7 +72,7 @@ interface LeadContextType {
   getLeadNotes: (leadId: string) => Promise<LeadNote[]>;
   createNote: (note: Partial<LeadNote>) => Promise<LeadNote | null>;
   updateNote: (id: string, updates: Partial<LeadNote>) => Promise<boolean>;
-  deleteNote: (id: string) => Promise<boolean>;
+  deleteNote: (id: string, leadId: string) => Promise<boolean>;
 
   getLeadTasks: (leadId: string) => Promise<LeadTask[]>;
   createTask: (task: Partial<LeadTask>) => Promise<LeadTask | null>;
@@ -158,13 +138,10 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-<<<<<<< Updated upstream
-=======
   const [lastWriteError, setLastWriteError] = useState<string | null>(null);
   const lastWriteErrorRef = useRef<string | null>(null);
   const [lastReadError, setLastReadError] = useState<string | null>(null);
   const lastReadErrorRef = useRef<string | null>(null);
->>>>>>> Stashed changes
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [currentFilters, setCurrentFilters] = useState<LeadFilters>({});
   const [currentView, setCurrentView] = useState<LeadView | null>(null);
@@ -249,13 +226,24 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     return created;
   };
 
+  // Keeps its Promise<boolean> contract — every existing consumer already treats
+  // false as failure — but no longer loses WHY. updateLeadViaAPI now throws with
+  // the server's message; that message is recorded on `lastWriteError` so a caller
+  // can show the real reason instead of guessing or, worse, reporting success.
   const updateLead = async (id: string, updates: Partial<Lead>): Promise<boolean> => {
-    const updated = await updateLeadViaAPI(id, updates);
-    if (updated) {
+    try {
+      await updateLeadViaAPI(id, updates);
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+      lastWriteErrorRef.current = null;
+      setLastWriteError(null);
       return true;
+    } catch (err: any) {
+      const message = err?.message || 'The server rejected the update.';
+      console.error('[LeadContext] updateLead:', message);
+      lastWriteErrorRef.current = message;
+      setLastWriteError(message);
+      return false;
     }
-    return false;
   };
 
   const deleteLead = async (id: string): Promise<boolean> => {
@@ -302,15 +290,8 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     return guardWrite('updateNote', () => updateNoteViaAPI(updates.lead_id!, id, updates), false);
   };
 
-<<<<<<< Updated upstream
-  const deleteNote = async (id: string, leadId?: string): Promise<boolean> => {
-    if (!leadId) return false;
-    return deleteNoteViaAPI(leadId, id);
-  };
-=======
   const deleteNote = (id: string, leadId: string): Promise<boolean> =>
     guardWrite('deleteNote', () => deleteNoteViaAPI(leadId, id), false);
->>>>>>> Stashed changes
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
   const getLeadTasks = (leadId: string) =>
@@ -496,13 +477,10 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     leads,
     loading,
     error,
-<<<<<<< Updated upstream
-=======
     lastWriteError,
     lastWriteErrorRef,
     lastReadError,
     lastReadErrorRef,
->>>>>>> Stashed changes
     selectedLeadIds,
     currentFilters,
     currentView,

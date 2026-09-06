@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, BarChart3, Target, Mail, TrendingUp, Lightbulb, ThumbsUp, ThumbsDown, Copy, RotateCw, ExternalLink, Calendar, FileText, CheckSquare, Download, Eye } from 'lucide-react';
+import { Send, BarChart3, Target, Mail, TrendingUp, Lightbulb, ThumbsUp, ThumbsDown, Copy, RotateCw, Eye } from 'lucide-react';
 import DealRecommendationCard from './DealRecommendationCard';
 
 interface DealRecommendation {

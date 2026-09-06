@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Shield, AlertTriangle, Globe, Smartphone, Lock, Eye, Activity, FileText,
-  Search, Filter, Download, Upload, RefreshCw, CheckCircle, XCircle, Clock,
-  MapPin, Wifi, Key, User, Database, Settings, TrendingUp, BarChart, Target,
-  Zap, AlertCircle, Info, Play, Pause, Trash2, Edit, Plus, X, Save, Bell,
-  Fingerprint, Cpu, Monitor, HardDrive, Chrome, Server, GitBranch, Users
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Shield, AlertTriangle, Globe, Smartphone, Lock, Eye, FileText, Search, Filter, Download, RefreshCw, CheckCircle, XCircle, Clock, MapPin, Database, AlertCircle, Trash2, Edit, Plus, Fingerprint, Monitor } from 'lucide-react';
 
 interface ThreatEvent {
   id: string;
@@ -362,7 +357,7 @@ const AdvancedSecurity: React.FC = () => {
             </div>
             <div className="text-sm font-medium text-gray-700">Security Score</div>
             <div className="w-full bg-blue-200 rounded-full h-1.5 mt-2">
-              <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: `${securityScore}%` }} />
+              <div className="bg-brand-600 h-1.5 rounded-full" style={{ width: `${securityScore}%` }} />
             </div>
           </div>
 
@@ -597,10 +592,10 @@ const AdvancedSecurity: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Threat Monitoring</h2>
                 <p className="text-gray-600">Real-time security threat detection and response</p>
               </div>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors">
+              <Button >
                 <RefreshCw className="h-4 w-4" />
                 <span>Refresh</span>
-              </button>
+              </Button>
             </div>
 
             {/* Filters */}
@@ -712,10 +707,10 @@ const AdvancedSecurity: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Device Management & Trust</h2>
                 <p className="text-gray-600">Monitor and manage device access and compliance</p>
               </div>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors">
+              <Button >
                 <Plus className="h-4 w-4" />
                 <span>Register Device</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -844,10 +839,10 @@ const AdvancedSecurity: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Network Security Controls</h2>
                 <p className="text-gray-600">Manage IP rules, geo-blocking, and network access policies</p>
               </div>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors">
+              <Button >
                 <Plus className="h-4 w-4" />
                 <span>Add Rule</span>
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -925,10 +920,10 @@ const AdvancedSecurity: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-2">Compliance Management</h2>
                 <p className="text-gray-600">Track regulatory compliance and generate audit reports</p>
               </div>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors">
+              <Button >
                 <Download className="h-4 w-4" />
                 <span>Export Report</span>
-              </button>
+              </Button>
             </div>
 
             {/* Compliance Overview */}
@@ -1038,10 +1033,10 @@ const AdvancedSecurity: React.FC = () => {
                   <Filter className="h-4 w-4" />
                   <span>Advanced Filter</span>
                 </button>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors">
+                <Button >
                   <Download className="h-4 w-4" />
                   <span>Export Logs</span>
-                </button>
+                </Button>
               </div>
             </div>
 

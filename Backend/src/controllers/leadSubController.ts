@@ -342,10 +342,11 @@ export const updateMeeting = async (req: AuthRequest, res: Response, next: NextF
 };
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
-// NOTE: tags.name has a global UNIQUE constraint (pre-dates multi-tenancy).
-// tenant_id is now stamped on every row, but the constraint itself is not yet
-// tenant-scoped (would need UNIQUE(tenant_id, name)) — see summary for why
-// that DDL change was deliberately left out of this phase.
+// tags.name was globally UNIQUE (pre-dating multi-tenancy), which made the
+// upsert below a cross-tenant data leak: ON CONFLICT (name) matched another
+// tenant's row, updated its colour, and returned that row — including its
+// tenant_id — to the caller. Migration 010 replaces the constraint with
+// UNIQUE(tenant_id, name) and the conflict target below is scoped to match.
 
 export const getTags = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -366,7 +367,7 @@ export const createTag = async (req: AuthRequest, res: Response, next: NextFunct
     const result = await pool.query(
       `INSERT INTO tags (name, color, description, category, tenant_id)
        VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color RETURNING *`,
+       ON CONFLICT (tenant_id, name) DO UPDATE SET color = EXCLUDED.color RETURNING *`,
       [name, color || null, description || null, category || null, tenantId]
     );
     res.status(201).json({ success: true, data: result.rows[0] });

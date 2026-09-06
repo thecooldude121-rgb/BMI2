@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Button } from '../../components/ui/Button';
+import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
 import { useNavigate } from 'react-router-dom';
-import {
-  Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar,
-  Users, BarChart3, Building2, Search, Filter, Download, Upload, Settings,
-  Phone, Mail, Video, CheckCircle, Clock, FileText, Target
-} from 'lucide-react';
+import { Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
 
 interface Activity {
   id: string;
-  type: 'meeting' | 'call' | 'email' | 'task' | 'note';
+  // The live activities_type_check allows 12 values, not 5. getActivityIcon and
+  // getStatusBadge both take a string with a default case, so widening is safe.
+  type:
+    | 'meeting' | 'call' | 'email' | 'task' | 'note'
+    | 'sms' | 'whatsapp' | 'linkedin' | 'demo' | 'proposal' | 'document' | 'visit';
   title: string;
   time: string;
   date: string;
@@ -70,6 +72,26 @@ const ActivitiesPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [quickFilters, setQuickFilters] = useState<string[]>([]);
 
+  // PHASE 2: the activity feed is real. Errors surface instead of collapsing
+  // into an empty timeline.
+  const [records, setRecords] = useState<ActivityRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadActivities = useCallback(async () => {
+    setLoading(true);
+    try {
+      setRecords(await fetchActivities({ limit: 200 }));
+      setLoadError(null);
+    } catch (e: any) {
+      setLoadError(e?.message ?? 'Could not load activities');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadActivities(); }, [loadActivities]);
+
   // Check if any filters are active
   const hasActiveFilters = () => {
     return (
@@ -94,214 +116,120 @@ const ActivitiesPage: React.FC = () => {
     setQuickFilters([]);
   };
 
-  const stats = [
-    { label: 'Total', value: '247', trend: null },
-    { label: 'Today', value: '45', trend: '+12%' },
-    { label: 'This Week', value: '32', trend: '+45%' },
-    { label: 'Overdue', value: '18', trend: null, alert: true },
-    { label: 'Meetings Today', value: '12', trend: null },
-    { label: 'Calls Today', value: '15', trend: null },
-  ];
+  // PHASE 2: these were the literals 247 / 45 / 32 / 18 / 12 / 15, two of them
+  // with invented "+12%" / "+45%" trends. Derived from the loaded activities now.
+  // The trends stay null: a period-over-period comparison needs a second query,
+  // and a made-up percentage is what Phase 0 removed everywhere else.
+  // `trend` is typed explicitly: every value is null today, and without the
+  // annotation TS narrows it to `never` and the render's stat.trend.startsWith
+  // stops compiling. Typed so a real period-over-period trend can be added
+  // without touching the render.
+  const stats = useMemo((): Array<{ label: string; value: string; trend: string | null; alert?: boolean }> => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfToday.getDay());
 
-  const activities: Activity[] = [
-    {
-      id: 'ACT-2025-001',
-      type: 'meeting',
-      title: 'TechStart Discovery Call',
-      time: '2:00 PM',
-      date: 'Today',
-      relatedTo: {
-        account: 'TechStart Inc',
-        deal: '$42K Deal',
-        contact: 'Sarah Lee'
+    const when = (r: ActivityRecord) => r.completed_at ?? r.scheduled_at ?? r.created_at;
+    const inRange = (r: ActivityRecord, from: Date) => new Date(when(r)) >= from;
+    const isToday = (r: ActivityRecord) => inRange(r, startOfToday);
+
+    return [
+      { label: 'Total', value: String(records.length), trend: null },
+      { label: 'Today', value: String(records.filter(isToday).length), trend: null },
+      { label: 'This Week', value: String(records.filter(r => inRange(r, startOfWeek)).length), trend: null },
+      {
+        label: 'Overdue',
+        value: String(records.filter(r =>
+          r.status === 'planned' && r.scheduled_at && new Date(r.scheduled_at) < now).length),
+        trend: null,
+        alert: true,
       },
-      owner: 'Alex Rodriguez',
-      status: 'upcoming',
-      duration: '30 minutes',
-      location: 'Zoom',
-      source: 'HRMS (Warm intro)',
-      hrmsConnection: {
-        contactName: 'Sarah Lee (CFO)',
-        recruitedDate: 'Nov 2024',
-        closeRate: '33% higher'
+      { label: 'Meetings Today', value: String(records.filter(r => r.type === 'meeting' && isToday(r)).length), trend: null },
+      { label: 'Calls Today', value: String(records.filter(r => r.type === 'call' && isToday(r)).length), trend: null },
+    ];
+  }, [records]);
+
+  /**
+   * PHASE 2: ~200 lines of inline fixture activities used to sit here. The
+   * activities table now has an API, so this maps the real rows onto the shape
+   * this page renders.
+   *
+   * The local Activity shape is much richer than the table: aiSummary,
+   * emailTracking, hrmsConnection, riskAlert and aiInsight have no columns and no
+   * data source. They are left ABSENT — every render site already guards with
+   * `activity.x && ...`, so those panels simply do not appear. Do not fill them
+   * with placeholders; that is what Phase 0 spent its time removing.
+   */
+  const activities: Activity[] = useMemo(() => records.map((r): Activity => {
+    const stamp = r.completed_at ?? r.scheduled_at ?? r.created_at;
+    const d = new Date(stamp);
+    const now = new Date();
+
+    // Local status vocabulary is completed | upcoming | overdue | sent, which is
+    // not the DB's. 'sent' is email-specific and not represented server-side.
+    let status: Activity['status'];
+    if (r.status === 'completed') status = 'completed';
+    else if (r.scheduled_at && new Date(r.scheduled_at) < now) status = 'overdue';
+    else status = 'upcoming';
+
+    return {
+      id: r.id,
+      type: (r.type ?? 'note') as Activity['type'],
+      title: r.subject,
+      time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+      date: d.toLocaleDateString(),
+      relatedTo: {
+        // The server joins these, so no extra request per row.
+        account: r.company_name ?? '',
+        deal: r.deal_name ?? undefined,
+        contact: r.contact_name?.trim() || r.lead_name || undefined,
+      },
+      owner: r.assigned_to ?? 'Unassigned',
+      status,
+      duration: r.duration != null ? `${r.duration} min` : undefined,
+      // outcome is free text in the database; the local field is a
+      // positive/neutral/negative enum, so the text goes to notes rather than
+      // being coerced into a sentiment it does not express.
+      notes: [r.description, r.outcome].filter(Boolean).join(' — ') || undefined,
+    };
+  }), [records]);
+
+  /**
+   * Group activities by calendar day, newest day first, naming today and
+   * yesterday. Replaces four hardcoded date buckets.
+   */
+  const activityGroups = useMemo(() => {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+    const byDay = new Map<string, { key: string; label: string; sortKey: number; items: Activity[] }>();
+
+    records.forEach((r, idx) => {
+      const activity = activities[idx];
+      if (!activity) return;
+      const when = new Date(r.completed_at ?? r.scheduled_at ?? r.created_at);
+      const dayStart = new Date(when.getFullYear(), when.getMonth(), when.getDate());
+      const key = dayStart.toISOString().slice(0, 10);
+
+      let label: string;
+      if (dayStart.getTime() === startOfToday.getTime()) {
+        label = `TODAY (${dayStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`;
+      } else if (dayStart.getTime() === startOfYesterday.getTime()) {
+        label = `YESTERDAY (${dayStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`;
+      } else {
+        label = dayStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       }
-    },
-    {
-      id: 'ACT-2025-002',
-      type: 'call',
-      title: 'BigCo Enterprise Follow-up',
-      time: '11:30 AM',
-      date: 'Today',
-      relatedTo: {
-        account: 'BigCo',
-        deal: '$75K',
-        contact: 'Mike Chen'
-      },
-      owner: 'Sarah Chen',
-      status: 'completed',
-      duration: '15 minutes',
-      outcome: 'positive',
-      notes: 'Integration requirements. Pricing Monday.',
-      source: 'Lead Gen → Lead → Deal'
-    },
-    {
-      id: 'ACT-2025-003',
-      type: 'email',
-      title: 'Proposal sent to Acme Corp',
-      time: '9:45 AM',
-      date: 'Today',
-      relatedTo: {
-        account: 'Acme Corp',
-        deal: '$50K',
-        contact: 'John Smith'
-      },
-      owner: 'Alex',
-      status: 'sent',
-      source: 'Lead Gen',
-      emailTracking: {
-        delivered: '9:45 AM',
-        opens: [
-          { time: '10:23 AM', number: 1 },
-          { time: '2:15 PM', number: 2 }
-        ],
-        attachmentOpened: '10:25 AM',
-        engagement: '3 opens, 8 mins read'
-      },
-      aiInsight: 'High engagement! 78% reply rate'
-    },
-    {
-      id: '4',
-      type: 'task',
-      title: 'Prepare Acme proposal',
-      time: '4:30 PM',
-      date: 'Yesterday',
-      relatedTo: {
-        account: 'Acme Corp',
-        deal: '$50K'
-      },
-      owner: 'Alex',
-      status: 'completed'
-    },
-    {
-      id: '5',
-      type: 'meeting',
-      title: 'Acme Corp Product Demo',
-      time: '2:00 PM',
-      date: 'Yesterday',
-      relatedTo: {
-        account: 'Acme Corp',
-        deal: '$50K',
-        contact: 'John Smith'
-      },
-      owner: 'Alex Rodriguez',
-      status: 'completed',
-      duration: '45 minutes',
-      aiSummary: {
-        budget: '$50K confirmed',
-        timeline: 'Q1 2026',
-        concerns: ['Salesforce integration'],
-        competitor: 'Using Salesforce (3x more expensive)',
-        sentiment: 'Positive (85%)',
-        actionItems: [
-          { item: 'Send proposal', status: 'Done', dueDate: 'Dec 7' },
-          { item: 'Address integration concerns', status: 'Done' },
-          { item: 'Schedule CEO approval call', status: 'Pending' },
-          { item: 'Technical demo with IT team', status: 'Pending', dueDate: 'Dec 10' }
-        ],
-        talkingPoints: [
-          'Salesforce integration details',
-          'ROI comparison vs current solution (240% better)',
-          'SaaS success stories'
-        ],
-        crmUpdates: [
-          { field: 'Stage', value: 'Qualified → Proposal' },
-          { field: 'Amount', value: '$50K' },
-          { field: 'Close date', value: 'March 15, 2026' },
-          { field: 'Tasks created', value: '4' },
-          { field: 'Competitor noted', value: 'Salesforce' }
-        ]
-      }
-    },
-    {
-      id: 'ACT-2025-006',
-      type: 'note',
-      title: 'StartCo competitor research',
-      time: '10:00 AM',
-      date: 'Yesterday',
-      relatedTo: {
-        account: 'StartCo'
-      },
-      owner: 'Mike',
-      status: 'completed',
-      notes: 'Basic tools - upsell opportunity. Budget concerns but growth interest. vs ClickUp, Monday.com.'
-    },
-    {
-      id: '7',
-      type: 'email',
-      title: 'Warm outreach to DataFlow Inc',
-      time: '3:15 PM',
-      date: 'Dec 5',
-      relatedTo: {
-        account: 'DataFlow Inc',
-        deal: '$95K',
-        contact: 'Emma Wilson'
-      },
-      owner: 'Alex Rodriguez',
-      status: 'sent',
-      source: 'HRMS (Warm intro)',
-      hrmsConnection: {
-        contactName: 'Emma Wilson (VP Marketing)',
-        recruitedDate: 'Oct 2024'
-      },
-      emailTracking: {
-        delivered: '3:15 PM',
-        opens: [{ time: '4:02 PM (47 minutes - FAST!)', number: 1 }],
-        engagement: 'Replied 4:35 PM (1h 20m total)',
-        reply: {
-          time: '4:35 PM',
-          text: 'Hi Alex, thanks for reaching out! I remember our great conversations during my interview process. Happy to discuss how BMI CRM can help DataFlow. Let\'s set up a call next week.'
-        }
-      },
-      aiInsight: 'HRMS warm intro = Fast response! 92% of HRMS emails get replies vs 23% cold outreach. Average response time: 2 hours vs 2 days. Sentiment: 85% positive'
-    },
-    {
-      id: '8',
-      type: 'task',
-      title: 'InnovateLabs follow-up',
-      time: '11:30 AM',
-      date: 'Dec 5',
-      relatedTo: {
-        account: 'InnovateLabs',
-        deal: '$35K'
-      },
-      owner: 'Mike',
-      status: 'overdue',
-      riskAlert: {
-        message: 'DEAL AT RISK',
-        healthDrop: '74 → 58 (dropped 16 points)',
-        lossRate: '65% loss rate',
-        recommendation: 'Contact immediately'
-      }
-    },
-    {
-      id: '9',
-      type: 'call',
-      title: 'HealthPlus check-in',
-      time: '1:00 PM',
-      date: 'Dec 4',
-      relatedTo: {
-        account: 'HealthPlus',
-        deal: '$28K',
-        contact: 'David Brown'
-      },
-      owner: 'Sarah',
-      status: 'completed',
-      duration: '12 minutes',
-      outcome: 'neutral',
-      notes: 'Board meeting Dec 10. Follow up Dec 11.',
-      aiInsight: 'Send case study before board meeting'
-    }
-  ];
+
+      const existing = byDay.get(key);
+      if (existing) existing.items.push(activity);
+      else byDay.set(key, { key, label, sortKey: dayStart.getTime(), items: [activity] });
+    });
+
+    return Array.from(byDay.values()).sort((a, b) => b.sortKey - a.sortKey);
+  }, [records, activities]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -531,7 +459,7 @@ const ActivitiesPage: React.FC = () => {
               <div className="flex gap-2">
                 {activity.type === 'meeting' && activity.status === 'upcoming' && (
                   <>
-                    <button
+                    <Button
                       onClick={() => {
                         if (activity.location?.includes('Zoom')) {
                           window.open('https://zoom.us/start', '_blank');
@@ -541,10 +469,10 @@ const ActivitiesPage: React.FC = () => {
                           alert(`Opening meeting: ${activity.location || 'Virtual'}`);
                         }
                       }}
-                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      size="sm"
                     >
                       Join Meeting
-                    </button>
+                    </Button>
                     <button
                       onClick={() => navigate(`/crm/activities/${activity.id}`)}
                       className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
@@ -743,10 +671,10 @@ const ActivitiesPage: React.FC = () => {
             <p className="text-gray-600 mt-1">Track all customer interactions across your CRM</p>
           </div>
           <div className="flex gap-3">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium">
+            <Button >
               <Plus className="w-5 h-5" />
               Log Activity
-            </button>
+            </Button>
             <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
               <MoreVertical className="w-5 h-5" />
             </button>
@@ -772,11 +700,31 @@ const ActivitiesPage: React.FC = () => {
           ))}
         </div>
 
+        {/*
+          PREVIEW PANEL — every figure below is a hardcoded literal.
+          "32 activities, up 45%" and "18 overdue" sit directly above stat cards
+          reading 0 Total and 0 Overdue, because `activities` has no rows. The
+          contradiction is the tell.
+
+          Labelled rather than removed or built, which is the treatment the owner
+          settled on for the gamification panel and the CRMDashboard panels: AI
+          features are Phase 2 per CLAUDE.md, so making these real is out of
+          scope, and an unlabelled invented metric is the defect this project has
+          spent several sessions removing. It became urgent when this page was
+          added to the sidebar — until then nothing linked here.
+        */}
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-6 mb-6 text-white">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
             <TrendingUp className="w-6 h-6" />
             <h2 className="text-xl font-bold">🤖 AI INSIGHTS</h2>
+            <span className="ml-1 rounded border border-white/40 bg-white/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
+              Preview · Sample content
+            </span>
           </div>
+          <p className="mb-4 text-sm text-white/80">
+            These figures are examples, not calculated from your data. Your real activity
+            counts are in the cards above.
+          </p>
 
           <div className="space-y-3">
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
@@ -984,7 +932,7 @@ const ActivitiesPage: React.FC = () => {
               <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 My Open Tasks
-                <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">8</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">8</span>
               </button>
               <button className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-100 text-sm font-medium flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />
@@ -994,12 +942,12 @@ const ActivitiesPage: React.FC = () => {
               <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
                 <Video className="w-4 h-4" />
                 Today's Meetings
-                <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">12</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">12</span>
               </button>
               <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 This Week
-                <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">32</span>
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">32</span>
               </button>
               <button className="px-3 py-1.5 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
@@ -1029,10 +977,10 @@ const ActivitiesPage: React.FC = () => {
               Get started by logging your first customer interaction or import from connected tools
             </p>
 
-            <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium mb-8 inline-flex items-center gap-2">
+            <Button size="xl" className="mb-8">
               <Plus className="w-5 h-5" />
               Log Activity
-            </button>
+            </Button>
 
             <div className="mb-8">
               <div className="text-sm text-gray-500 mb-4 flex items-center gap-3 justify-center">
@@ -1089,12 +1037,12 @@ const ActivitiesPage: React.FC = () => {
               Try adjusting your filters or search query
             </p>
 
-            <button
+            <Button
               onClick={clearAllFilters}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium mb-8"
+              size="xl" className="mb-8"
             >
               Clear All Filters
-            </button>
+            </Button>
 
             <div className="bg-gray-50 rounded-lg p-6 max-w-lg mx-auto">
               <div className="text-sm font-semibold text-gray-700 mb-3">Active Filters:</div>
@@ -1140,76 +1088,54 @@ const ActivitiesPage: React.FC = () => {
           </div>
         )}
 
-        {viewMode === 'timeline' && activities.length > 0 && (
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
-                <h2 className="text-base font-bold text-gray-900 tracking-wider px-3">TODAY (Dec 7, 2025)</h2>
-                <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
+        {viewMode === 'timeline' && (
+          <>
+            {/* Three distinct states. A failed fetch must not read as "no activity". */}
+            {loadError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-4">
+                <p className="text-sm font-medium text-red-800">Could not load activities</p>
+                <p className="mt-1 text-sm text-red-700">{loadError}</p>
               </div>
-              <div className="space-y-4">
-                {activities.filter(a => a.date === 'Today').map(renderActivityCard)}
+            )}
+            {loading && !loadError && (
+              <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500">
+                Loading activities…
               </div>
-            </div>
+            )}
+            {!loading && !loadError && activities.length === 0 && (
+              <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center">
+                <p className="text-sm font-medium text-gray-900">No activity logged yet</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Calls, emails and meetings logged against a lead, deal, contact or account appear here.
+                </p>
+              </div>
+            )}
 
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
-                <h2 className="text-base font-bold text-gray-900 tracking-wider px-3">YESTERDAY (Dec 6, 2025)</h2>
-                <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
+            {/* PHASE 2: the timeline used to be four hardcoded groups filtered by
+                the literal strings 'Today', 'Yesterday', 'Dec 5' and 'Dec 4',
+                with a footer reading "Showing 9 of 247". Real dates never match
+                those, so the feed would have rendered empty. Grouped by actual
+                day now, newest first, with Today/Yesterday named as such. */}
+            {!loading && !loadError && activityGroups.length > 0 && (
+              <div className="space-y-6">
+                {activityGroups.map(group => (
+                  <div key={group.key}>
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
+                      <h2 className="text-base font-bold text-gray-900 tracking-wider px-3">{group.label}</h2>
+                      <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
+                    </div>
+                    <div className="space-y-4">
+                      {group.items.map(renderActivityCard)}
+                    </div>
+                  </div>
+                ))}
+                <div className="text-center py-6 text-sm text-gray-500">
+                  Showing {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
+                </div>
               </div>
-              <div className="space-y-4">
-                {activities.filter(a => a.date === 'Yesterday').map(renderActivityCard)}
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
-                <h2 className="text-base font-bold text-gray-900 tracking-wider px-3">Dec 5, 2025</h2>
-                <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
-              </div>
-              <div className="space-y-4">
-                {activities.filter(a => a.date === 'Dec 5').map(renderActivityCard)}
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center gap-4 mb-6">
-                <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
-                <h2 className="text-base font-bold text-gray-900 tracking-wider px-3">Dec 4, 2025</h2>
-                <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
-              </div>
-              <div className="space-y-4">
-                {activities.filter(a => a.date === 'Dec 4').map(renderActivityCard)}
-              </div>
-            </div>
-
-            <div className="text-center py-6">
-              <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
-                Load More Activities...
-              </button>
-              <div className="text-sm text-gray-500 mt-2">
-                Showing 9 of 247 activities
-              </div>
-            </div>
-          </div>
-        )}
-
-        {viewMode !== 'timeline' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-            <div className="text-gray-400 mb-4">
-              <BarChart3 className="w-16 h-16 mx-auto" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {viewMode === 'byType' && 'By Type View'}
-              {viewMode === 'byOwner' && 'By Owner View'}
-              {viewMode === 'byAccount' && 'By Account View'}
-              {viewMode === 'calendar' && 'Calendar View'}
-            </h3>
-            <p className="text-gray-600">This view is coming soon</p>
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>

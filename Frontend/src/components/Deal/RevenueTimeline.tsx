@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import {
   CheckCircle2, Clock, AlertTriangle, Plus, X, CalendarDays, Edit2,
 } from 'lucide-react';
@@ -245,13 +246,12 @@ export const RevenueTimeline: React.FC<RevenueTimelineProps> = ({
 
           {/* Save / Cancel */}
           <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
-            <button
+            <Button
               type="button"
               onClick={handleSave}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               Save Schedule
-            </button>
+            </Button>
             <button
               type="button"
               onClick={handleCancel}

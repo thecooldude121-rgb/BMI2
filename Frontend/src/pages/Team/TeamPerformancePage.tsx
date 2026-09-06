@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { Users, TrendingUp, Target, Trophy, Building2, Search, Download, ChevronDown, X, ExternalLink, AlertCircle } from 'lucide-react';
+import { Users, TrendingUp, Target, Trophy, Building2, Search, Download, X, ExternalLink } from 'lucide-react';
 
 type Role = 'CEO' | 'VP' | 'Manager' | 'Rep' | 'Admin' | 'Analyst' | 'Support';
 
@@ -235,12 +236,12 @@ export default function TeamPerformancePage() {
           <p className="text-slate-600 mb-6">
             Team Performance is not available for Support role. Contact your administrator for access.
           </p>
-          <button
+          <Button
             onClick={() => navigate('/dashboard')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            size="lg"
           >
             Return to Dashboard
-          </button>
+          </Button>
         </div>
       </div>
     );

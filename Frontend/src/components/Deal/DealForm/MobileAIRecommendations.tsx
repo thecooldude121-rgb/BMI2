@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../ui/Button';
 import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2 } from 'lucide-react';
 import { hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
@@ -77,13 +78,13 @@ export const MobileAIRecommendations: React.FC<MobileAIRecommendationsProps> = (
                   <p className="text-xs text-gray-500">{rec.reason}</p>
                 </div>
               </div>
-              <button
+              <Button
                 type="button"
                 onClick={rec.action}
-                className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors min-h-[36px]"
+                className="flex-shrink-0 px-2.5 min-h-[36px]"
               >
                 Apply
-              </button>
+              </Button>
             </div>
           );
         })}

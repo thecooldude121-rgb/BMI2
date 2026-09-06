@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Check, ChevronRight, Zap, Users, Shield, Headphones, Settings, TrendingUp } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { X, Check, ChevronRight, Zap, Users, Shield, Headphones, TrendingUp } from 'lucide-react';
 
 interface UpgradePlanModalProps {
   isOpen: boolean;
@@ -125,7 +126,7 @@ const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
             {/* Business Plan */}
             <div className="border-2 border-blue-600 rounded-xl p-6 bg-gradient-to-br from-blue-50 to-white relative">
               <div className="absolute top-4 right-4">
-                <span className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-full">
+                <span className="px-3 py-1 bg-brand-600 text-white text-xs font-bold rounded-full">
                   POPULAR
                 </span>
               </div>
@@ -158,13 +159,13 @@ const UpgradePlanModal: React.FC<UpgradePlanModalProps> = ({
                 ))}
               </ul>
 
-              <button
+              <Button
                 onClick={() => handleUpgrade('business')}
-                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center justify-center gap-2"
+                fullWidth className="font-semibold"
               >
                 Upgrade to Business
                 <ChevronRight className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
 
             {/* Enterprise Plan */}

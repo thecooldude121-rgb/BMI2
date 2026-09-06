@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { AssignmentRule } from '../../utils/assignmentRules/types';
 import { createBlankRule, resetRulesToDefaults } from '../../utils/assignmentRules/rulesStore';
 import RuleList from '../../components/AssignmentRules/RuleList';

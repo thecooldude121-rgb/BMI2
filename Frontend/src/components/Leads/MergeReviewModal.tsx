@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, AlertTriangle, ChevronLeft, ChevronRight, Merge, CheckSquare, Square } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { DuplicateCandidate } from '../../utils/leadDuplicates';
@@ -53,7 +53,10 @@ interface Props {
   candidates:  DuplicateCandidate[];
   isOpen:      boolean;
   onClose:     () => void;
-  onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<void>;
+  // Promise<boolean> in practice — LeadContext.updateLead reports whether the
+  // write was accepted. Typed as Promise<void> here, which rejected the real
+  // function.
+  onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<boolean | void>;
   onShowToast:  (msg: string, type: 'success' | 'error' | 'info') => void;
   onMergeComplete?: (absorbedLeadId: string, absorbedLeadName: string) => void;
 }

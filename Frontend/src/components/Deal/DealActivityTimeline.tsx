@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Clock, Mail, Phone, Video, FileText, TrendingUp, User, Sparkles, CheckCircle2, Calendar, Eye, MessageSquare, Share2, Plus, Filter } from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Clock, Mail, Phone, Video, FileText, TrendingUp, Sparkles, CheckCircle2, Eye, MessageSquare, Share2, Plus } from 'lucide-react';
 import { computeWeeklyBuckets } from '../../utils/contactEngagement';
 import { EmailDetailModal, ShareSummaryModal, LogActivityModal } from './DealActivityModals';
 import { MeetingSchedulerModal } from './DealModals';
@@ -44,6 +45,13 @@ interface Activity {
 
 interface DealActivityTimelineProps {
   activities: Activity[];
+  /**
+   * True while the fetch is in flight. Without it an empty `activities` renders
+   * "No activity recorded yet" during loading, which is a claim about the data
+   * made before the data has arrived — the same mistake as reading a screen
+   * before the request resolves (CLAUDE.md, recorded lesson 4).
+   */
+  loading?: boolean;
   daysSinceLastContact: number;
   contacts?: { id: string; name: string }[];
 }
@@ -71,7 +79,7 @@ function heatmapSquareColor(count: number): string {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, daysSinceLastContact, contacts }) => {
+export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ activities, loading, daysSinceLastContact, contacts }) => {
   const [filterType, setFilterType] = useState<string>('all');
   const [heatmapView, setHeatmapView] = useState<'combined' | 'per-contact'>('combined');
   const [showEmailDetail, setShowEmailDetail] = useState(false);
@@ -196,13 +204,25 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
     setShowScheduleFollowup(true);
   };
 
-  const handleMeetingScheduled = (meetingData: any) => {
+  const handleMeetingScheduled = () => {
     showToast('success', 'Follow-up meeting scheduled!');
   };
 
   const handleLoadMore = () => {
     showToast('info', 'Loading more activities...');
   };
+
+  // Loading is distinct from empty. Rendering the "no activity recorded yet"
+  // state while the request is still in flight would assert something about the
+  // data before it has arrived.
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+        <div className="h-4 w-40 bg-gray-100 rounded animate-pulse" />
+        {[0, 1, 2].map(i => <div key={i} className="h-14 bg-gray-50 rounded animate-pulse" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
@@ -223,13 +243,13 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
             <option value="meeting">Meetings</option>
             <option value="note">Notes</option>
           </select>
-          <button
+          <Button
             onClick={() => setShowLogActivity(true)}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            size="sm"
           >
             <Plus className="h-4 w-4 inline mr-1" />
             Log Activity
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -267,13 +287,13 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
             <p className="text-sm text-gray-500 max-w-xs">
               No activity recorded yet. Log your first activity to start tracking engagement.
             </p>
-            <button
+            <Button
               onClick={() => setShowLogActivity(true)}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm"
             >
               <Plus className="h-3.5 w-3.5" />
               Log Activity
-            </button>
+            </Button>
           </div>
         ) : (
           /* Coloured squares — oldest left, newest right */
@@ -324,7 +344,12 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
       <div className="mb-8">
         <div className="flex items-center space-x-2 mb-4">
           <div className="h-px flex-1 bg-gray-300"></div>
-          <span className="text-sm font-bold text-gray-700">TODAY (Dec 7)</span>
+          {/* Was the literal "TODAY (Dec 7)", printed on every deal on every
+              day of the year — a date that belonged to whenever this component
+              was written. */}
+          <span className="text-sm font-bold text-gray-700">
+            TODAY ({new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})
+          </span>
           <div className="h-px flex-1 bg-gray-300"></div>
         </div>
 
@@ -344,12 +369,12 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
               >
                 Log Activity
               </button>
-              <button
+              <Button
                 onClick={handleScheduleFollowup}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                size="sm"
               >
                 Schedule Follow-up
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -532,13 +557,13 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
                           Play Recording
                         </button>
                       )}
-                      <button
+                      <Button
                         onClick={() => setShowShareSummary(true)}
-                        className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                        size="sm"
                       >
                         <Share2 className="h-4 w-4 inline mr-1" />
                         Share Summary
-                      </button>
+                      </Button>
                       <button
                         onClick={handleAddNote}
                         className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"

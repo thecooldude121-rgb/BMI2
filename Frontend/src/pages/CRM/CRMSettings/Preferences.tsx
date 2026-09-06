@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { Save, Settings } from 'lucide-react';
 
 const Preferences: React.FC = () => {
@@ -143,7 +144,7 @@ const Preferences: React.FC = () => {
           <div className="p-6 space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
-              <select
+              <select aria-label="Language"
                 value={generalPrefs.language}
                 onChange={(e) => setGeneralPrefs({ ...generalPrefs, language: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -164,7 +165,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
-              <select
+              <select aria-label="Timezone"
                 value={generalPrefs.timezone}
                 onChange={(e) => setGeneralPrefs({ ...generalPrefs, timezone: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -186,7 +187,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Date Format</label>
-              <select
+              <select aria-label="Date Format"
                 value={generalPrefs.dateFormat}
                 onChange={(e) => setGeneralPrefs({ ...generalPrefs, dateFormat: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -202,7 +203,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Time Format</label>
-              <select
+              <select aria-label="Time Format"
                 value={generalPrefs.timeFormat}
                 onChange={(e) => setGeneralPrefs({ ...generalPrefs, timeFormat: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -217,7 +218,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Week Starts On</label>
-              <select
+              <select aria-label="Week Starts On"
                 value={generalPrefs.weekStart}
                 onChange={(e) => setGeneralPrefs({ ...generalPrefs, weekStart: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -229,7 +230,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-              <select
+              <select aria-label="Currency"
                 value={generalPrefs.currency}
                 onChange={(e) => setGeneralPrefs({ ...generalPrefs, currency: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -248,13 +249,13 @@ const Preferences: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200">
-              <button
+              <Button
                 onClick={handleSaveGeneral}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                size="lg"
               >
                 <Save className="h-4 w-4" />
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -333,7 +334,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Default View for Deals</label>
-              <select
+              <select aria-label="Default View for Deals"
                 value={displayPrefs.defaultDealsView}
                 onChange={(e) => setDisplayPrefs({ ...displayPrefs, defaultDealsView: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -349,7 +350,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Default View for Leads</label>
-              <select
+              <select aria-label="Default View for Leads"
                 value={displayPrefs.defaultLeadsView}
                 onChange={(e) => setDisplayPrefs({ ...displayPrefs, defaultLeadsView: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -364,7 +365,7 @@ const Preferences: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Items Per Page</label>
-              <select
+              <select aria-label="Items Per Page"
                 value={displayPrefs.itemsPerPage}
                 onChange={(e) => setDisplayPrefs({ ...displayPrefs, itemsPerPage: parseInt(e.target.value) })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -380,13 +381,13 @@ const Preferences: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200">
-              <button
+              <Button
                 onClick={handleSaveDisplay}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                size="lg"
               >
                 <Save className="h-4 w-4" />
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -399,7 +400,7 @@ const Preferences: React.FC = () => {
           <div className="p-6 space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Default Landing Page</label>
-              <select
+              <select aria-label="Default Landing Page"
                 value={dashboardPrefs.defaultLandingPage}
                 onChange={(e) => setDashboardPrefs({ ...dashboardPrefs, defaultLandingPage: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -472,13 +473,13 @@ const Preferences: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200">
-              <button
+              <Button
                 onClick={handleSaveDashboard}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                size="lg"
               >
                 <Save className="h-4 w-4" />
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Eye, Edit, Trash2, Users, DollarSign, Calendar, Tag, ExternalLink, Briefcase, Target, UserPlus, X, Copy, UserCog, FileText, GitMerge } from 'lucide-react';
+import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertTriangle, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, Target, UserPlus, X, UserCog, FileText, GitMerge } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
 import { EnhancedAccount } from '../../types/accounts';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import { NotAvailableBadge } from '../../components/common/NotAvailable';
 
 const AccountsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,7 +20,8 @@ const AccountsPage: React.FC = () => {
     selectedAccountIds,
     executeBulkAction,
     getKPIs,
-    deleteAccount
+    deleteAccount,
+    dealStats
   } = useAccounts();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +41,39 @@ const AccountsPage: React.FC = () => {
   const [displayCount, setDisplayCount] = useState(3);
 
   const kpis = getKPIs();
+
+  /**
+   * Contact count for a row. `undefined` means the join has not resolved (still
+   * loading, or /contacts failed) and must NOT print as 0 — the previous code
+   * was `relatedContacts?.length || 0`, which collapsed "unknown" into "none".
+   */
+  const contactCountLabel = (account: EnhancedAccount): string => {
+    const n = account.relatedContacts?.length;
+    if (n === undefined) return '—';
+    return `${n} contact${n === 1 ? '' : 's'}`;
+  };
+
+  /**
+   * Deal count for a row, and why an empty result is shown as "—" not "0".
+   *
+   * `deals` has no account_id — only a free-text company_name — so a deal is
+   * matched to an account by name. Of 25 deals, 10 carry a name and 1 matches an
+   * account exactly. Printing "0 active" on the other 16 would assert those
+   * accounts have no deals, which is not something the data supports; "—" says
+   * we do not know. A real count is shown wherever a match exists.
+   */
+  const dealCountLabel = (account: EnhancedAccount): string => {
+    const n = account.relatedDeals?.length;
+    if (n === undefined || n === 0) return '—';
+    return `${n} active`;
+  };
+
+  const dealCountTitle = (account: EnhancedAccount): string => {
+    const n = account.relatedDeals?.length;
+    if (n === undefined) return 'Deals could not be loaded';
+    if (n === 0) return 'No deals could be matched to this account. Deals record a company name rather than a link to an account, so a deal naming this company differently will not appear here.';
+    return `${n} open deal${n === 1 ? '' : 's'} matched by company name`;
+  };
 
   const handleSearch = (term: string) => {
     setSearchTerm(term);
@@ -242,13 +278,13 @@ const AccountsPage: React.FC = () => {
             <Upload className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Import</span>
           </button>
-          <button
+          <Button
             onClick={() => setShowAddAccountForm(true)}
-            className="flex items-center px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            size="sm" className="md:px-4"
           >
             <Plus className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Add Account</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -275,8 +311,16 @@ const AccountsPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Active Deals</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.totalDeals}</p>
+              <p className="text-xs text-gray-600">Open Deals</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {dealStats ? kpis.totalDeals : '—'}
+              </p>
+              {/* Says "across all accounts" because deals carry no account_id
+                  and cannot be attributed to one — see dealStats. Without this
+                  the number reads as "deals belonging to these accounts". */}
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {dealStats ? 'Across all accounts' : 'Could not load deals'}
+              </p>
             </div>
             <div className="p-2 bg-green-100 rounded-lg">
               <Briefcase className="h-5 w-5 text-green-600" />
@@ -290,8 +334,13 @@ const AccountsPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">${(kpis.totalRevenue / 1000000).toFixed(1)}M</p>
+              <p className="text-xs text-gray-600">Open Pipeline</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {dealStats ? `$${(kpis.totalRevenue / 1_000_000).toFixed(2)}M` : '—'}
+              </p>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                {dealStats ? 'Excludes closed deals' : 'Could not load deals'}
+              </p>
             </div>
             <div className="p-2 bg-purple-100 rounded-lg">
               <DollarSign className="h-5 w-5 text-purple-600" />
@@ -299,17 +348,10 @@ const AccountsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Active Deals</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">23</p>
-            </div>
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <Target className="h-5 w-5 text-yellow-600" />
-            </div>
-          </div>
-        </div>
+        {/* A second "Active Deals" card lived here with the literal value 23,
+            beside the derived one above that read 0. It had no click handler and
+            no data source; its agreement with today's open-deal count was
+            coincidence. Removed — one card, one number, from the API. */}
 
         <div
           onClick={() => handleKPIClick('hrms')}
@@ -331,6 +373,8 @@ const AccountsPage: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Total Contacts</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.totalContacts}</p>
+              {/* Real: contacts.company_id is a foreign key, so this IS per-account. */}
+              <p className="text-[11px] text-gray-500 mt-0.5">Linked to these accounts</p>
             </div>
             <div className="p-2 bg-teal-100 rounded-lg">
               <Users className="h-5 w-5 text-teal-600" />
@@ -452,24 +496,38 @@ const AccountsPage: React.FC = () => {
               <option value="health">Health</option>
               <option value="recent">Recent</option>
             </select>
-            <div className="hidden lg:flex items-center border border-gray-300 rounded-lg">
+            {/* These three used to set `viewMode` and nothing else: the value was
+                read ONLY to style the buttons, never to choose a view, so the
+                table rendered whatever you clicked. List and Grid now gate the
+                render below.
+
+                Kanban is disabled rather than left as a third dead button —
+                there is no kanban view for accounts, and grouping them would need
+                a decision about what the columns are (status? industry? owner?)
+                that has not been made. */}
+            <div className="hidden lg:flex items-center border border-gray-300 rounded-lg" role="group" aria-label="View mode">
               <button
                 onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
                 className={`px-3 py-2 text-sm ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
               >
                 📋 List
               </button>
               <button
                 onClick={() => setViewMode('grid')}
+                aria-pressed={viewMode === 'grid'}
                 className={`px-3 py-2 text-sm border-l border-gray-300 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
               >
                 ⊞ Grid
               </button>
               <button
-                onClick={() => setViewMode('kanban')}
-                className={`px-3 py-2 text-sm border-l border-gray-300 ${viewMode === 'kanban' ? 'bg-blue-50 text-blue-600' : 'hover:bg-gray-50'}`}
+                type="button"
+                disabled
+                title="There is no kanban view for accounts yet"
+                className="px-3 py-2 text-sm border-l border-gray-300 text-gray-400 cursor-not-allowed flex items-center gap-1.5"
               >
                 ≡ Kanban
+                <NotAvailableBadge label="Soon" />
               </button>
             </div>
           </div>
@@ -524,8 +582,10 @@ const AccountsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Accounts Table - Desktop & Tablet */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden hidden md:block">
+      {/* Accounts Table - Desktop & Tablet. Hidden entirely in grid mode. */}
+      <div className={`bg-white rounded-lg border border-gray-200 overflow-hidden ${
+        viewMode === 'list' ? 'hidden md:block' : 'hidden'
+      }`}>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -588,22 +648,33 @@ const AccountsPage: React.FC = () => {
                       )}
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
-                      <div className="text-sm text-gray-900">{account.employeeCount || 0} employees</div>
+                      {/* Was `{account.employeeCount || 0} employees`, which
+                          printed "0 employees" on every row: employeeCount has
+                          no column, mapRowToAccount deliberately leaves it
+                          undefined, and `|| 0` turned that honest absence into
+                          a number. companies.size IS real and is what the size
+                          filter above already uses. */}
+                      <div className="text-sm text-gray-900">
+                        {account.accountSize
+                          ? `${account.accountSize} employees`
+                          : <span className="text-gray-400">Not specified</span>}
+                      </div>
                     </td>
                     <td className="px-4 py-4">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/crm/accounts/${account.id}#contacts`); }}
                         className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
                       >
-                        {account.relatedContacts?.length || 0} contact{(account.relatedContacts?.length || 0) !== 1 ? 's' : ''}
+                        {contactCountLabel(account)}
                       </button>
                     </td>
                     <td className="px-4 py-4">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate(`/crm/accounts/${account.id}#deals`); }}
+                        title={dealCountTitle(account)}
                         className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
                       >
-                        {account.relatedDeals?.length || 0} active
+                        {dealCountLabel(account)}
                       </button>
                     </td>
                     <td className="px-4 py-4 relative" onClick={(e) => e.stopPropagation()}>
@@ -839,13 +910,12 @@ const AccountsPage: React.FC = () => {
                               <Eye className="h-4 w-4 inline mr-1" />
                               View
                             </button>
-                            <button
+                            <Button
                               onClick={() => handleCreateDeal(account)}
-                              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                             >
                               <Plus className="h-4 w-4 inline mr-1" />
                               Create Deal
-                            </button>
+                            </Button>
                             <button
                               onClick={() => handleAddContact(account)}
                               className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -898,8 +968,15 @@ const AccountsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Card View */}
-      <div className="md:hidden space-y-4">
+      {/* Card view. In list mode this is the mobile fallback (the table takes
+          over at md and up). In grid mode it is THE view at every width, laid out
+          in responsive columns — the markup was already a card, it just had no
+          way to be chosen. */}
+      <div className={
+        viewMode === 'grid'
+          ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4'
+          : 'md:hidden space-y-4'
+      }>
         {displayedAccounts.map((account) => (
           <div
             key={account.id}
@@ -964,7 +1041,9 @@ const AccountsPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Employees</p>
-                  <p className="text-sm font-medium text-gray-900">{account.employeeCount || 0}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {account.accountSize ?? <span className="text-gray-400">Not specified</span>}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Contacts</p>
@@ -972,16 +1051,17 @@ const AccountsPage: React.FC = () => {
                     onClick={() => navigate(`/crm/accounts/${account.id}#contacts`)}
                     className="text-sm font-bold text-blue-600"
                   >
-                    {account.relatedContacts?.length || 0}
+                    {account.relatedContacts?.length ?? '—'}
                   </button>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600">Active Deals</p>
                   <button
                     onClick={() => navigate(`/crm/accounts/${account.id}#deals`)}
+                    title={dealCountTitle(account)}
                     className="text-sm font-bold text-blue-600"
                   >
-                    {account.relatedDeals?.length || 0}
+                    {dealCountLabel(account)}
                   </button>
                 </div>
               </div>
@@ -1005,13 +1085,13 @@ const AccountsPage: React.FC = () => {
 
               {/* Quick Actions */}
               <div className="flex items-center space-x-2 pt-2">
-                <button
+                <Button
                   onClick={() => navigate(`/crm/accounts/${account.id}`)}
-                  className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg active:bg-blue-700"
+                  size="sm" fullWidth className="active:bg-blue-700"
                 >
                   <Eye className="h-4 w-4 inline mr-1" />
                   View
-                </button>
+                </Button>
                 <button
                   onClick={() => handleCreateDeal(account)}
                   className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg active:bg-gray-50"
@@ -1074,12 +1154,12 @@ const AccountsPage: React.FC = () => {
             Showing {Math.min(displayCount, filteredAccounts.length)} of {filteredAccounts.length} accounts
           </div>
           {displayCount < filteredAccounts.length && (
-            <button
+            <Button
               onClick={handleLoadMore}
-              className="w-full px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium"
+              fullWidth
             >
               Load More...
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -1156,15 +1236,14 @@ const AccountsPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   navigate(`/crm/accounts/${selectedHRMSAccount.id}`);
                   setShowHRMSModal(false);
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 View Full Account
-              </button>
+              </Button>
             </div>
           </div>
         </div>

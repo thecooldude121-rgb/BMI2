@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Smartphone, Tablet, Monitor, Shield, Lock, Wifi, Battery, Signal,
-  CheckCircle, XCircle, AlertTriangle, Clock, MapPin, Download, Upload,
-  Settings, Eye, Edit, Trash2, RefreshCw, Search, Filter, Plus, X,
-  Power, Zap, Globe, Bell, Activity, BarChart, TrendingUp, Users,
-  Key, Database, FileText, Save, Play, Pause, RotateCcw, QrCode
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Activity, AlertTriangle, BarChart, Battery, Bell, CheckCircle, Clock, Database, Download, Edit, Eye, Filter, Globe, Info, Lock, MapPin, Monitor, Plus, QrCode, RefreshCw, Search, Settings, Shield, Signal, Smartphone, Tablet, Trash2, TrendingUp, Upload, Users, X, XCircle, Zap } from 'lucide-react';
 
 interface MobileDevice {
   id: string;
@@ -291,13 +286,12 @@ const MobileDeviceManagement: React.FC = () => {
               <p className="text-gray-600 mt-1">Manage mobile devices, policies, and security settings</p>
             </div>
           </div>
-          <button
+          <Button
             onClick={() => setShowEnrollModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span>Enroll Device</span>
-          </button>
+          </Button>
         </div>
 
         {/* Statistics */}
@@ -557,10 +551,10 @@ const MobileDeviceManagement: React.FC = () => {
                   <h2 className="text-xl font-bold text-gray-900 mb-2">Mobile Security Policies</h2>
                   <p className="text-gray-600">Configure security requirements for mobile devices</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Plus className="h-4 w-4" />
                   <span>Create Policy</span>
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -663,10 +657,10 @@ const MobileDeviceManagement: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Upload className="h-4 w-4" />
                   <span>Deploy Update</span>
-                </button>
+                </Button>
               </div>
 
               <div className="grid grid-cols-4 gap-4">
@@ -710,7 +704,7 @@ const MobileDeviceManagement: React.FC = () => {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Theme Color:</span>
                     <div className="flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-blue-600 rounded"></div>
+                      <div className="w-4 h-4 bg-brand-600 rounded"></div>
                       <span className="font-semibold text-gray-900">#2563eb</span>
                     </div>
                   </div>
@@ -828,7 +822,7 @@ const MobileDeviceManagement: React.FC = () => {
                       <span className="text-sm font-bold text-gray-900">50%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '50%' }} />
+                      <div className="bg-brand-600 h-2 rounded-full" style={{ width: '50%' }} />
                     </div>
                   </div>
                   <div>
@@ -853,7 +847,7 @@ const MobileDeviceManagement: React.FC = () => {
                       <span className="text-sm font-bold text-gray-900">25%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '25%' }} />
+                      <div className="bg-brand-600 h-2 rounded-full" style={{ width: '25%' }} />
                     </div>
                   </div>
                   <div>
@@ -978,9 +972,9 @@ const MobileDeviceManagement: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Button >
                 Email Instructions
-              </button>
+              </Button>
             </div>
           </div>
         </div>

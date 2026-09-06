@@ -1,34 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Video,
-  Phone,
-  Users,
-  Calendar,
-  Clock,
-  CheckCircle,
-  Sparkles,
-  Play,
-  Download,
-  Share2,
-  Edit,
-  MoreVertical,
-  FileText,
-  DollarSign,
-  Building2,
-  Mail,
-  PhoneCall,
-  ChevronRight,
-  Target,
-  TrendingUp,
-  AlertCircle,
-  Plus,
-  Trash2,
-  BarChart3,
-  X
-} from 'lucide-react';
+import { Video, Phone, Users, Calendar, CheckCircle, Sparkles, Play, Download, Share2, Edit, MoreVertical, FileText, DollarSign, Building2, Mail, ChevronRight, TrendingUp, Plus, Trash2, BarChart3, X } from 'lucide-react';
 import { sampleMeetings } from '../../utils/sampleMeetingsData';
-import { Meeting, MeetingActionItem } from '../../types/meeting';
+import { MeetingActionItem } from '../../types/meeting';
 import { useToast } from '../../contexts/ToastContext';
 
 export default function MeetingDetailPage() {
@@ -787,13 +762,12 @@ export default function MeetingDetailPage() {
 
           {/* Quick Actions */}
           <div className="flex items-center space-x-3">
-            <button
+            <Button
               onClick={handlePlayRecording}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center space-x-2 transition-colors"
             >
               <Play className="w-4 h-4" />
               <span>Play Recording</span>
-            </button>
+            </Button>
             <button
               onClick={handleViewTranscript}
               className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium flex items-center space-x-2 transition-colors"
@@ -1136,7 +1110,7 @@ export default function MeetingDetailPage() {
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-gray-600">00:00</span>
                     <div className="flex-1 h-2 bg-gray-200 rounded-full cursor-pointer">
-                      <div className="h-2 bg-blue-600 rounded-full" style={{ width: '35%' }} />
+                      <div className="h-2 bg-brand-600 rounded-full" style={{ width: '35%' }} />
                     </div>
                     <span className="text-sm text-gray-600">{meeting.duration}:00</span>
                   </div>
@@ -1193,7 +1167,7 @@ export default function MeetingDetailPage() {
                 {meeting.attendees.map((attendee) => (
                   <div key={attendee.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start space-x-3">
-                      <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                      <div className="w-12 h-12 bg-brand-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
                         {attendee.name.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div className="flex-1">
@@ -1233,12 +1207,12 @@ export default function MeetingDetailPage() {
                         </div>
                         {!attendee.isHost && (
                           <div className="mt-3 flex space-x-2">
-                            <button
+                            <Button
                               onClick={() => navigate(`/crm/contacts/${attendee.id}`)}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+                              size="sm" className="rounded"
                             >
                               View Contact
-                            </button>
+                            </Button>
                             <button
                               onClick={() => handleEmailAttendee(attendee)}
                               className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -1267,13 +1241,12 @@ export default function MeetingDetailPage() {
                   <FileText className="w-5 h-5 text-gray-600" />
                   <h2 className="text-xl font-bold text-gray-900">Meeting Notes</h2>
                 </div>
-                <button
+                <Button
                   onClick={() => setShowAddNoteModal(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center space-x-2 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Note</span>
-                </button>
+                </Button>
               </div>
 
               <div className="space-y-4">
@@ -1288,12 +1261,12 @@ export default function MeetingDetailPage() {
                           rows={3}
                         />
                         <div className="flex space-x-2">
-                          <button
+                          <Button
                             onClick={handleSaveEditNote}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 transition-colors"
+                            size="sm" className="rounded"
                           >
                             Save
-                          </button>
+                          </Button>
                           <button
                             onClick={handleCancelEditNote}
                             className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -1419,13 +1392,13 @@ export default function MeetingDetailPage() {
                         <div>Win Probability: 67%</div>
                       </div>
                     </div>
-                    <button
+                    <Button
                       onClick={() => navigate(`/crm/deals/${meeting.dealId}`)}
-                      className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-1"
+                      size="sm" fullWidth className="rounded"
                     >
                       <span>View Deal Details</span>
                       <ChevronRight className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -1442,13 +1415,13 @@ export default function MeetingDetailPage() {
                       <div>Size: 75 employees</div>
                       <div>Revenue: $12M annually</div>
                     </div>
-                    <button
+                    <Button
                       onClick={() => navigate(`/crm/accounts/${meeting.accountId}`)}
-                      className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-1"
+                      size="sm" fullWidth className="rounded"
                     >
                       <span>View Account Details</span>
                       <ChevronRight className="w-4 h-4" />
-                    </button>
+                    </Button>
                   </div>
                 )}
 
@@ -1472,13 +1445,13 @@ export default function MeetingDetailPage() {
                           <div>Engagement: 92% response rate</div>
                         </div>
                       </div>
-                      <button
+                      <Button
                         onClick={() => navigate(`/crm/contacts/${meeting.attendees.filter(a => !a.isHost)[0].id}`)}
-                        className="w-full px-3 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 flex items-center justify-center space-x-1"
+                        size="sm" fullWidth className="rounded"
                       >
                         <span>View Contact Details</span>
                         <ChevronRight className="w-4 h-4" />
-                      </button>
+                      </Button>
                     </>
                   )}
                 </div>
@@ -1729,7 +1702,7 @@ export default function MeetingDetailPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Title <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Title"
                   type="text"
                   value={editForm.title}
                   onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
@@ -1742,7 +1715,7 @@ export default function MeetingDetailPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Date <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Date"
                     type="date"
                     value={editForm.date}
                     onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
@@ -1753,7 +1726,7 @@ export default function MeetingDetailPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Time <span className="text-red-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Time"
                     type="time"
                     value={editForm.time}
                     onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
@@ -1764,7 +1737,7 @@ export default function MeetingDetailPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Duration</label>
-                <select
+                <select aria-label="Duration"
                   value={editForm.duration}
                   onChange={(e) => setEditForm({ ...editForm, duration: Number(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1806,7 +1779,7 @@ export default function MeetingDetailPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Link to Deal</label>
-                <select
+                <select aria-label="Link to Deal"
                   value={editForm.dealId}
                   onChange={(e) => setEditForm({ ...editForm, dealId: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1822,12 +1795,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveEdit}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1849,7 +1821,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Share with:</label>
-                <select
+                <select aria-label="Share with:"
                   multiple
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   size={3}
@@ -1909,7 +1881,7 @@ export default function MeetingDetailPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Message: (optional)</label>
-                <textarea
+                <textarea aria-label="Message: (optional)"
                   value={shareForm.message}
                   onChange={(e) => setShareForm({ ...shareForm, message: e.target.value })}
                   rows={3}
@@ -1928,12 +1900,11 @@ export default function MeetingDetailPage() {
                     value={`https://bmi.com/meetings/${meeting.id}`}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
                   />
-                  <button
+                  <Button
                     onClick={handleCopyLink}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                   >
                     📋 Copy
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1944,12 +1915,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleShare}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Share
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2020,7 +1990,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Task Title *</label>
-                <input
+                <input aria-label="Task Title"
                   type="text"
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
@@ -2030,7 +2000,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
+                <textarea aria-label="Description"
                   value={taskForm.description}
                   onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
                   rows={3}
@@ -2040,7 +2010,7 @@ export default function MeetingDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
-                  <input
+                  <input aria-label="Due Date"
                     type="date"
                     value={taskForm.dueDate}
                     onChange={(e) => setTaskForm({ ...taskForm, dueDate: e.target.value })}
@@ -2049,7 +2019,7 @@ export default function MeetingDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                  <select
+                  <select aria-label="Priority"
                     value={taskForm.priority}
                     onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2068,12 +2038,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveTask}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Create Task
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2141,12 +2110,11 @@ export default function MeetingDetailPage() {
               >
                 Review Individually
               </button>
-              <button
+              <Button
                 onClick={handleKeepAllChanges}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Keep All
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2201,12 +2169,11 @@ export default function MeetingDetailPage() {
               </div>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-end bg-gray-50">
-              <button
+              <Button
                 onClick={() => setShowSpeakingAnalysisModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2265,12 +2232,11 @@ export default function MeetingDetailPage() {
               </div>
             </div>
             <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-end bg-gray-50">
-              <button
+              <Button
                 onClick={() => setShowSentimentModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2292,7 +2258,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Playback Speed</label>
-                <select
+                <select aria-label="Playback Speed"
                   value={recordingSettings.playbackSpeed}
                   onChange={(e) => setRecordingSettings({ ...recordingSettings, playbackSpeed: Number(e.target.value) })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2308,7 +2274,7 @@ export default function MeetingDetailPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Quality</label>
-                <select
+                <select aria-label="Quality"
                   value={recordingSettings.quality}
                   onChange={(e) => setRecordingSettings({ ...recordingSettings, quality: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2351,12 +2317,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveRecordingSettings}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Settings
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2378,7 +2343,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">To:</label>
-                <input
+                <input aria-label="To:"
                   type="email"
                   value={selectedAttendee.email}
                   disabled
@@ -2387,7 +2352,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Subject:</label>
-                <input
+                <input aria-label="Subject:"
                   type="text"
                   placeholder="Follow-up from our meeting"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2395,7 +2360,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Message:</label>
-                <textarea
+                <textarea aria-label="Message:"
                   rows={8}
                   placeholder={`Hi ${selectedAttendee.name},\n\nThank you for taking the time to meet with us today...`}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2409,12 +2374,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSendEmail}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2436,7 +2400,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title:</label>
-                <input
+                <input aria-label="Meeting Title:"
                   type="text"
                   placeholder="Follow-up call"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2445,14 +2409,14 @@ export default function MeetingDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Date:</label>
-                  <input
+                  <input aria-label="Date:"
                     type="date"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Time:</label>
-                  <input
+                  <input aria-label="Time:"
                     type="time"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -2460,7 +2424,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Duration:</label>
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <select aria-label="Duration:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                   <option>30 minutes</option>
                   <option>45 minutes</option>
                   <option>60 minutes</option>
@@ -2468,7 +2432,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Notes:</label>
-                <textarea
+                <textarea aria-label="Notes:"
                   rows={3}
                   placeholder="Agenda items..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2482,12 +2446,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleScheduleMeeting}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Schedule Meeting
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2523,12 +2486,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleAddNote}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Save Note
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2576,7 +2538,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">To:</label>
-                <input
+                <input aria-label="To:"
                   type="text"
                   value={meeting.attendees.filter(a => !a.isHost).map(a => a.name).join(', ')}
                   disabled
@@ -2585,7 +2547,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Subject:</label>
-                <input
+                <input aria-label="Subject:"
                   type="text"
                   defaultValue={`Follow-up: ${meeting.title}`}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2593,7 +2555,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Message:</label>
-                <textarea
+                <textarea aria-label="Message:"
                   rows={8}
                   defaultValue={`Hi team,\n\nThank you for attending our meeting today. Here's a summary of what we discussed:\n\n${meeting.aiSummary?.summary}\n\nBest regards`}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2607,12 +2569,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSendEmailToAttendees}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2634,7 +2595,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Title:</label>
-                <input
+                <input aria-label="Meeting Title:"
                   type="text"
                   defaultValue={`Follow-up: ${meeting.title}`}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2642,7 +2603,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Attendees:</label>
-                <input
+                <input aria-label="Attendees:"
                   type="text"
                   defaultValue={meeting.attendees.map(a => a.name).join(', ')}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2651,14 +2612,14 @@ export default function MeetingDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Date:</label>
-                  <input
+                  <input aria-label="Date:"
                     type="date"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Time:</label>
-                  <input
+                  <input aria-label="Time:"
                     type="time"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -2666,7 +2627,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Linked Deal:</label>
-                <input
+                <input aria-label="Linked Deal:"
                   type="text"
                   defaultValue={meeting.dealTitle}
                   disabled
@@ -2681,12 +2642,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveFollowUp}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Schedule Meeting
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2708,7 +2668,7 @@ export default function MeetingDetailPage() {
             <div className="px-6 py-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Report:</label>
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <select aria-label="Select Report:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                   <option>Q1 2026 Sales Activity</option>
                   <option>Enterprise Deals Pipeline</option>
                   <option>Weekly Team Performance</option>
@@ -2744,12 +2704,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveToReport}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Add to Report
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2812,7 +2771,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Format:</label>
-                <select
+                <select aria-label="Format:"
                   value={exportOptions.format}
                   onChange={(e) => setExportOptions({ ...exportOptions, format: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2823,7 +2782,7 @@ export default function MeetingDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Template:</label>
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <select aria-label="Template:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                   <option>Professional</option>
                   <option>Executive</option>
                   <option>Internal</option>
@@ -2837,12 +2796,11 @@ export default function MeetingDetailPage() {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleConfirmExport}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
               >
                 Export
-              </button>
+              </Button>
             </div>
           </div>
         </div>

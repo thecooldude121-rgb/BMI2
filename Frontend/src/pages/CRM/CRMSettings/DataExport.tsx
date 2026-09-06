@@ -1,5 +1,6 @@
 import React from 'react';
-import { Download, FileText } from 'lucide-react';
+import { Button } from '../../../components/ui/Button';
+import { Download } from 'lucide-react';
 
 const DataExport: React.FC = () => {
   return (
@@ -22,17 +23,17 @@ const DataExport: React.FC = () => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Export Format</label>
-          <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <select aria-label="Export Format" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
             <option>CSV Format</option>
             <option>JSON Format</option>
             <option>Excel (XLSX)</option>
           </select>
         </div>
 
-        <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+        <Button size="lg">
           <Download className="h-4 w-4" />
           Request Export
-        </button>
+        </Button>
 
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <h4 className="text-sm font-semibold text-gray-900 mb-2">Recent Exports:</h4>

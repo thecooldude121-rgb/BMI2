@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Mail, Phone, Calendar, MessageSquare, FileText, Video, TrendingUp, Clock, User, Sparkles } from 'lucide-react';
+import { Activity, Mail, Phone, Calendar, FileText, Video, TrendingUp, Clock, User, Sparkles } from 'lucide-react';
 
 export interface ActivityItem {
   id: string;

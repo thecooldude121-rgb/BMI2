@@ -1,72 +1,21 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchDeals } from '../../utils/dealsApi';
+import { fetchDeals, updateDeal, transitionDealStage, bulkUpdateDeals } from '../../utils/dealsApi';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
-import {
-  formatDisplayDate,
-  formatRelativeTime,
-  formatCloseDate,
-  daysFromNow,
-  daysFromNowLabel,
-  isWithinDays,
-  parseDateMs,
-  normalizeDateField,
-} from '../../utils/dateUtils';
+import { formatRelativeTime, formatCloseDate, daysFromNow, isWithinDays, parseDateMs, normalizeDateField } from '../../utils/dateUtils';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { getStageChartColor } from '../../config/stageColors';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import {
-  Plus,
-  Search,
-  Filter,
-  Download,
-  Settings,
-  TrendingUp,
-  AlertTriangle,
-  Clock,
-  DollarSign,
-  Target,
-  Building2,
-  User,
-  Calendar,
-  Sparkles,
-  CheckCircle2,
-  XCircle,
-  BarChart3,
-  MoreVertical,
-  MoreHorizontal,
-  FileDown,
-  Upload,
-  Archive,
-  Columns,
-  LayoutList,
-  AlignJustify,
-  RotateCcw,
-  X as XIcon,
-  Eye,
-  ShieldAlert,
-  ChevronDown,
-  ArrowUpDown,
-  Check,
-  Bookmark,
-  Pencil,
-  Trash2,
-} from 'lucide-react';
+import { Plus, Search, Filter, Download, Settings, TrendingUp, AlertTriangle, Target, Building2, Calendar, CheckCircle2, XCircle, MoreVertical, MoreHorizontal, FileDown, Upload, Archive, Columns, LayoutList, AlignJustify, RotateCcw, X as XIcon, Eye, ShieldAlert, ChevronDown, ArrowUpDown, Check, Bookmark, Pencil, Trash2 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
 import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
 import DealSlideoutPanel from '../../components/Deal/DealSlideoutPanel';
-import {
-  SAVED_VIEWS,
-  findView,
-  getActiveFilterPills,
-  isAnyFilterActive,
-  type SavedView,
-  type UserSavedView,
-} from '../../utils/dealViews';
+import { SAVED_VIEWS, findView, getActiveFilterPills, type SavedView, type UserSavedView } from '../../utils/dealViews';
 import { type ColumnKey, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
 import type { CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from '../../utils/dealsColumns';
 import ManagerInspectionBar from '../../components/Deal/ManagerInspectionBar';
@@ -75,6 +24,10 @@ import {
   getInspectionBadge,
 } from '../../utils/inspectionSignals';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
+import {
+  fetchPipelines, defaultPipeline, stageTint, buildStageLookup,
+  type ApiPipeline,
+} from '../../utils/pipelinesApi';
 
 // ── localStorage helpers for user-created saved views ────────────────────────
 
@@ -170,14 +123,85 @@ const DealsKanbanPage: React.FC = () => {
   // API returns real data and the two datasets share IDs.
   const [fetchError, setFetchError] = useState(false);
 
-  const [stages, setStages] = useState<PipelineStage[]>([
-    { id: 'prospecting', name: 'Prospecting', color: 'bg-indigo-50', deals: [] },
-    { id: 'qualified',   name: 'Qualified',   color: 'bg-sky-50',    deals: [] },
-    { id: 'proposal',    name: 'Proposal',    color: 'bg-amber-50',  deals: [] },
-    { id: 'negotiation', name: 'Negotiation', color: 'bg-violet-50', deals: [] },
-    { id: 'closed-won',  name: 'Closed-Won',  color: 'bg-emerald-50',deals: [] },
-    { id: 'closed-lost', name: 'Closed-Lost', color: 'bg-red-50',    deals: [] },
-  ]);
+  /*
+   * PHASE B: THE COLUMNS COME FROM THE WORKSPACE, NOT FROM THIS FILE.
+   *
+   * They used to be a six-element literal right here, and that array was not
+   * merely inflexible — it silently DELETED DATA FROM THE BOARD. Deals were
+   * bucketed with `filter(d => d.stage === stage.id)`, so any deal whose stage
+   * was not one of these six matched no column and was dropped with no empty
+   * state, no warning and no count. Two live deals (in `renewal-quoted` and
+   * `partner-evaluation`) were invisible on the pipeline board for exactly that
+   * reason, on a screen whose entire purpose is showing every deal in the
+   * pipeline.
+   *
+   * Columns are now the active pipeline's stages, ordered by `position`, and
+   * `unplacedDeals` below catches anything that still matches no column so the
+   * failure can never be silent again.
+   */
+  /** Deals in this pipeline that match no column. Rendered, never discarded. */
+  const [unplacedDeals, setUnplacedDeals] = useState<any[]>([]);
+  /**
+   * The current column slugs, read by the fetch effect.
+   *
+   * A ref rather than a dependency: the fetch effect SETS `stages`, so
+   * depending on `stages` would re-run it on its own output and loop.
+   */
+  const stageSlugsRef = useRef<string[]>([]);
+
+  const [pipelines, setPipelines] = useState<ApiPipeline[]>([]);
+  const [activePipelineSlug, setActivePipelineSlug] = useState<string | null>(null);
+  const [pipelinesError, setPipelinesError] = useState<string | null>(null);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
+  const [stages, setStages] = useState<PipelineStage[]>([]);
+
+  /** Stage metadata for the data-quality engine — see DealsListView's note. */
+  const stageLookup = useMemo(() => buildStageLookup(pipelines), [pipelines]);
+
+  const activePipeline = useMemo(
+    () => pipelines.find(p => p.slug === activePipelineSlug) ?? null,
+    [pipelines, activePipelineSlug],
+  );
+
+  /*
+   * A PIPELINE SELECTOR IS PART OF THIS CUTOVER, NOT A NICE-TO-HAVE.
+   *
+   * Showing one pipeline's stages is right — seventeen columns across three
+   * pipelines is not a board. But without a way to reach the other pipelines,
+   * cutting over would have swapped one silent drop for a different one: the
+   * renewals and partnerships deals would still be unreachable, just for a new
+   * reason. The selector is what makes "one pipeline at a time" honest.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => {
+        if (cancelled) return;
+        setPipelines(list);
+        setPipelinesError(null);
+        // Only on first load: never yank the board out from under a user who
+        // has deliberately switched pipeline.
+        setActivePipelineSlug(prev => prev ?? defaultPipeline(list)?.slug ?? null);
+      })
+      .catch((e: Error) => { if (!cancelled) setPipelinesError(e.message); })
+      .finally(() => { if (!cancelled) setPipelinesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Columns follow the active pipeline. Deals are re-attached by the fetch
+  // effect below, which depends on the same slug.
+  useEffect(() => {
+    if (!activePipeline) return;
+    const cols = activePipeline.stages.map(st => ({
+      id: st.slug,
+      name: st.name,
+      color: stageTint(st),
+      deals: [] as DealCard[],
+    }));
+    stageSlugsRef.current = cols.map(c => c.id);
+    setStages(cols);
+    setUnplacedDeals([]);
+  }, [activePipeline]);
 
   // Fetch all deals from the backend and populate stages.
   // Re-runs on mount and whenever triggerRefetch() is called (explicit actions).
@@ -254,11 +278,32 @@ const DealsKanbanPage: React.FC = () => {
 
       if (!dedupedDeals.length) return;
 
+      /*
+       * ONLY THIS PIPELINE'S DEALS, and the filter is on pipeline_id rather than
+       * on "does its stage happen to match a column". A deal in the renewals
+       * pipeline whose stage is coincidentally named like a new-business one
+       * must not appear on the new-business board.
+       */
+      const forThisPipeline = activePipelineSlug
+        ? dedupedDeals.filter((d: any) => (d.pipeline_id ?? 'new-business') === activePipelineSlug)
+        : dedupedDeals;
+
+      /*
+       * THE DROP IS NOW VISIBLE. Anything in this pipeline that matches no
+       * column — a stage retired since the board loaded, or data that predates a
+       * configuration change — is counted and surfaced in the UI instead of
+       * vanishing. This is the specific failure the hardcoded array caused.
+       */
+      const columnSlugs = new Set(stageSlugsRef.current);
+      setUnplacedDeals(
+        forThisPipeline.filter((d: any) => !columnSlugs.has(d.stage)),
+      );
+
       setStages(prev => prev.map(stage => {
         // Build each stage's deal list and apply a final ID-dedup pass so the
         // board state invariant "every deal appears exactly once per stage" is
         // guaranteed at storage time, not just at render time.
-        const raw = dedupedDeals
+        const raw = forThisPipeline
           .filter((d: any) => d.stage === stage.id)
           .map((d: any) => ({
             id: d.id,
@@ -271,6 +316,8 @@ const DealsKanbanPage: React.FC = () => {
             closeDate: normalizeDateField(d.expected_close_date),
             stage: stage.id,
             aiScore: d.probability || 0,
+            // NULL kept, unlike aiScore above — see DealCard.probabilityRaw.
+            probabilityRaw: d.probability ?? null,
             contactName: d.contact_name || '',
             contactTitle: d.contact_title || '',
             owner: d.assigned_to || 'Unassigned',
@@ -316,48 +363,28 @@ const DealsKanbanPage: React.FC = () => {
               } catch { return 0; }
             })(),
             createdAt: d.created_at || '',
-            // Mock data — replace with backend values when stakeholder API is available
-            ...(() => {
-              const hash = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const bucket = hash % 10;
-              // Distribution: 0-3 (40%) strong, 4-6 (30%) fair, 7-8 (20%) weak, 9 (10%) very strong
-              if (bucket <= 3) return { stakeholderCount: 2, hasChampion: true,  lastMeetingDaysAgo: 8  };
-              if (bucket <= 6) return { stakeholderCount: 1, hasChampion: false, lastMeetingDaysAgo: 20 };
-              if (bucket <= 8) return { stakeholderCount: 0, hasChampion: false, lastMeetingDaysAgo: null };
-              return               { stakeholderCount: 3, hasChampion: true,  lastMeetingDaysAgo: 3  };
-            })(),
-            // Mock competitor data — replace with backend deal_competitors join table when available
-            ...(() => {
-              const hash2 = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const bucket2 = (hash2 * 7 + 3) % 20;
-              if (bucket2 <= 6)  return { primaryCompetitor: 'Salesforce',         secondaryCompetitors: ['HubSpot'] };
-              if (bucket2 <= 10) return { primaryCompetitor: 'HubSpot',            secondaryCompetitors: [] };
-              if (bucket2 <= 13) return { primaryCompetitor: 'Microsoft Dynamics', secondaryCompetitors: ['Oracle', 'SAP'] };
-              if (bucket2 <= 16) return { primaryCompetitor: 'Zoho',               secondaryCompetitors: ['Pipedrive'] };
-              return { primaryCompetitor: undefined, secondaryCompetitors: undefined };
-            })(),
-            // Some deals intentionally have missing data for pipeline hygiene demo purposes
-            ...(() => {
-              const h = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const b = (h * 11 + 7) % 25;
-              if (b === 0) return { owner: 'Unassigned', nextStep: '' };    // missing owner + next step
-              if (b === 1) return { closeDate: '' };                         // missing close date
-              if (b === 2) return { contactName: '', nextStep: '' };         // missing contact and next step
-              if (b === 3) return { closeDate: '2025-09-30' };              // overdue ghost
-              if (b === 4) return { owner: 'Unassigned' };                  // missing owner only
-              return {};
-            })(),
-            // Mock multi-currency — replace with backend currency field when available
-            ...(() => {
-              const hash3 = String(d.id).split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0);
-              const bucket3 = (hash3 * 3 + 5) % 20;
-              const usdValue = parseFloat(d.value) || 0;
-              if (bucket3 <= 7)  return {};  // ~40% USD (no override)
-              if (bucket3 <= 11) return { currency: 'EUR', amount: Math.round(usdValue * 0.92), baseAmountUsd: usdValue };  // ~20% EUR
-              if (bucket3 <= 14) return { currency: 'GBP', amount: Math.round(usdValue * 0.79), baseAmountUsd: usdValue };  // ~15% GBP
-              if (bucket3 <= 16) return { currency: 'INR', amount: Math.round(usdValue * 83.12), baseAmountUsd: usdValue }; // ~10% INR
-              return { currency: 'SGD', amount: Math.round(usdValue * 1.34), baseAmountUsd: usdValue };                     // ~15% SGD
-            })(),
+            // PHASE 0: four blocks of fabricated fields were removed from here.
+            // They derived values from `id.charCodeAt()` sums and spliced them
+            // onto real database rows, so every downstream feature — relationship
+            // risk, competitive intel, the data-quality drawer, the currency
+            // selector — was scoring invented data while looking live:
+            //
+            //   1. stakeholderCount / hasChampion / lastMeetingDaysAgo
+            //      → needs a deal_stakeholders table + activity join
+            //   2. primaryCompetitor / secondaryCompetitors
+            //      → needs a deal_competitors join table
+            //   3. a block that blanked owner/closeDate/contactName on ~20% of
+            //      REAL rows, labelled "for pipeline hygiene demo purposes".
+            //      This overwrote correct data and made the DQ drawer flag
+            //      healthy deals. Deleted outright — it has no replacement.
+            //   4. currency/amount/baseAmountUsd at hardcoded FX rates
+            //      → deals.currency and base_amount_usd already exist; read
+            //        those instead of inventing a rate.
+            //
+            // All four fields are optional in the Deal type and every consumer
+            // guards with `??` / truthiness, so these now render as "no data",
+            // which is the truth. Do not reintroduce placeholder values here:
+            // populate them from the API or leave them absent.
           }));
         // Hard invariant: deduplicate by id before committing to state.
         const seen = new Set<string>();
@@ -377,8 +404,11 @@ const DealsKanbanPage: React.FC = () => {
   // refetchKey is incremented by triggerRefetch() on explicit mutations.
   // contextDeals is intentionally excluded — its length fluctuates during
   // drag-and-drop optimistic updates and caused stale-fetch races.
+  // activePipelineSlug is a dependency because switching pipeline changes which
+  // deals belong on the board — without it the new columns would be populated
+  // from the previous pipeline's deals.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refetchKey]);
+  }, [refetchKey, activePipelineSlug]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -493,9 +523,18 @@ const DealsKanbanPage: React.FC = () => {
     const totalDeals = activeDeals.length;
     const totalValue = activeDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-    // Win rate uses per-stage arrays (already deduped within each stage by ingestion)
-    const wonDeals  = stages.find(s => s.id === 'closed-won')?.deals.length  || 0;
-    const lostDeals = stages.find(s => s.id === 'closed-lost')?.deals.length || 0;
+    // Win rate by STAGE TYPE, summed across every terminal column. Finding the
+    // single column literally named 'closed-won' meant the Renewals board's win
+    // rate was always null (no such column exists there) and the Partnerships
+    // board's too — the KPI read "—" on two of three pipelines and nobody could
+    // tell that from a workspace with too few closed deals to show a rate.
+    const columnMeta = (slug: string) => stageLookup(slug, activePipelineSlug);
+    const wonDeals = stages
+      .filter(s => columnMeta(s.id)?.stage_type === 'won')
+      .reduce((n, s) => n + s.deals.length, 0);
+    const lostDeals = stages
+      .filter(s => columnMeta(s.id)?.stage_type === 'lost')
+      .reduce((n, s) => n + s.deals.length, 0);
     const closedTotal = wonDeals + lostDeals;
     // Require ≥3 closed deals before showing a rate; below that a single win
     // produces 100 % which is statistically meaningless and erodes trust.
@@ -517,9 +556,10 @@ const DealsKanbanPage: React.FC = () => {
     const stalledDeals = activeDeals.filter(d => d.daysSinceContact >= 5).length;
 
     // Average sales cycle from closed-won deals that have both dates.
-    const wonWithDates = (stages.find(s => s.id === 'closed-won')?.deals || []).filter(
-      d => d.createdAt && d.closeDate
-    );
+    const wonWithDates = stages
+      .filter(s => columnMeta(s.id)?.stage_type === 'won')
+      .flatMap(s => s.deals)
+      .filter(d => d.createdAt && d.closeDate);
     const rawAvgCycle = wonWithDates.length > 0
       ? Math.round(wonWithDates.reduce((sum, d) => {
           const createdMs = parseDateMs(d.createdAt);
@@ -567,6 +607,27 @@ const DealsKanbanPage: React.FC = () => {
   // A soft coaching prompt is shown when a deal lands here without one.
   const STAGES_REQUIRING_NEXT_STEP: string[] = ['proposal', 'negotiation'];
 
+  /**
+   * PHASE 0: the deals board's write path is not wired to the API. Every handler
+   * below used to be a `console.log` while DealsListView fired success toasts off
+   * them — "N deals deleted", "Stage updated for N deals", "Owner updated".
+   * Because the deals themselves ARE loaded from the real API, the board looked
+   * live and the user had every reason to believe the write landed.
+   *
+   * Until Phase 2 wires these to PUT /deals/:id and a stage-transition endpoint,
+   * say plainly that the change is local. Never claim success here.
+   */
+  const notPersisted = (action: string) => {
+    setToast({
+      message: `${action} is not saved yet — the change is only on your screen and will be gone after a refresh.`,
+      type: 'info',
+    });
+    setTimeout(() => setToast(null), 6000);
+  };
+
+  // Was hardcoded to "Sarah Chen" while AuthContext was already imported.
+  const currentUserName = user?.name ?? 'Unknown user';
+
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
@@ -591,13 +652,18 @@ const DealsKanbanPage: React.FC = () => {
 
     // Both splices now operate on the copied deals arrays, never on state.
     const [movedDeal] = sourceStage.deals.splice(source.index, 1);
+    // PHASE 0: aiScore was jittered by `Math.floor(Math.random() * 10) - 3` on
+    // every drop, so a deal's score visibly changed because the user dragged its
+    // card. Moving a deal between stages should not alter its score at all —
+    // and when a real model exists, a recomputation belongs in the API response
+    // to the stage-transition call, not in a drag handler.
     const updatedDeal = {
       ...movedDeal,
-      stage:   destStage.id,
-      aiScore: Math.max(0, Math.min(100, movedDeal.aiScore + Math.floor(Math.random() * 10) - 3)),
+      stage: destStage.id,
     };
 
     destStage.deals.splice(destination.index, 0, updatedDeal);
+    // Optimistic: move the card immediately, then reconcile with the server.
     setStages(newStages);
 
     const isStageChange  = source.droppableId !== destination.droppableId;
@@ -606,15 +672,41 @@ const DealsKanbanPage: React.FC = () => {
       STAGES_REQUIRING_NEXT_STEP.includes(destStage.id) &&
       !updatedDeal.nextStep?.trim();
 
-    if (needsNextStep) {
-      setToast({
-        message: `"${updatedDeal.dealName}" moved to ${destStage.name} — add a next step to keep it on track`,
-        type: 'info',
-        actionLabel: 'Add now',
-        onAction: () => setSelectedDealId(updatedDeal.id),
-      });
-    } else {
-      setToast({ message: `Deal moved to ${destStage.name}`, type: 'success' });
+    // PHASE 2: the move is now persisted. Only a same-column reorder skips the
+    // call — card order within a stage is not stored server-side.
+    if (isStageChange) {
+      transitionDealStage(updatedDeal.id, destStage.id)
+        .then(({ data }) => {
+          // Adopt the server's probability: it comes from the pipeline stage's
+          // default, so the card should not keep the old stage's number.
+          if (data?.probability != null) {
+            setStages(prev => prev.map(s => ({
+              ...s,
+              deals: s.deals.map(d =>
+                d.id === updatedDeal.id ? { ...d, probability: data.probability } : d),
+            })));
+          }
+          if (needsNextStep) {
+            setToast({
+              message: `"${updatedDeal.dealName}" moved to ${destStage.name} — add a next step to keep it on track`,
+              type: 'info',
+              actionLabel: 'Add now',
+              onAction: () => setSelectedDealId(updatedDeal.id),
+            });
+          } else {
+            setToast({ message: `Deal moved to ${destStage.name}`, type: 'success' });
+          }
+        })
+        .catch((err: Error) => {
+          // Roll the card back to where it came from. Leaving it in the new
+          // column after a failed save is how a user ends up trusting a move
+          // that never happened.
+          setStages(stages);
+          setToast({
+            message: `Could not move "${updatedDeal.dealName}" — ${err.message}. The card has been put back.`,
+            type: 'error',
+          });
+        });
     }
 
     setTimeout(() => setToast(null), 5000);
@@ -1287,7 +1379,7 @@ const DealsKanbanPage: React.FC = () => {
     let errors = 0;
     let warnings = 0;
     stages.flatMap(s => s.deals).forEach(d => {
-      const dq = getDealDataQuality(d);
+      const dq = getDealDataQuality(d, stageLookup(d.stage, activePipelineSlug));
       if (dq.hasErrors) errors++;
       else if (dq.hasWarnings) warnings++;
     });
@@ -2002,6 +2094,103 @@ const DealsKanbanPage: React.FC = () => {
         </div>
       )}
 
+      {/* LOADING, not "no deals". The first render of this cutover showed a
+          completely blank board while the pipelines request was in flight, which
+          is indistinguishable from a pipeline that legitimately has no stages —
+          the same class of ambiguity as a failed fetch rendering an empty list.
+          Caught by screenshotting mid-load rather than by reasoning about it. */}
+      {pipelinesLoading && (
+        <div className="mx-6 mt-4 flex gap-4" aria-busy="true" aria-label="Loading pipeline stages">
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} className="flex-1 rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <div className="h-3 w-24 rounded bg-gray-200 animate-pulse" />
+              <div className="mt-3 h-16 rounded bg-gray-100 animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pipelinesError && (
+        <div className="mx-6 mt-4 flex items-center gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+          <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          {/* The server's own words. An empty board and a failed pipelines
+              request must not look alike — the first is a claim about the
+              workspace, the second about the request. */}
+          <span>Could not load your pipeline stages: {pipelinesError}</span>
+        </div>
+      )}
+
+      {!pipelinesLoading && !pipelinesError && pipelines.length === 0 && (
+        <div className="mx-6 mt-4 flex items-center gap-2.5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+          <span>
+            This workspace has no pipeline configured, so there are no stages to show.
+            A deal cannot be created until one exists.
+          </span>
+        </div>
+      )}
+
+      {/* PIPELINE SELECTOR. Only when there is a choice — a single-pipeline
+          workspace should not be shown a control with one option. */}
+      {pipelines.length > 1 && (
+        <div className="mx-6 mt-4 flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Pipeline</span>
+          <div className="flex items-center gap-1.5" role="tablist" aria-label="Pipeline">
+            {pipelines.map(p => {
+              const isActive = p.slug === activePipelineSlug;
+              return (
+                <button
+                  key={p.slug}
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActivePipelineSlug(p.slug)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {p.name}
+                  <span className={`ml-1.5 ${isActive ? 'text-white/70' : 'text-gray-400'}`}>
+                    {p.stages.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* DEALS THAT MATCH NO COLUMN. The hardcoded array dropped these silently;
+          the whole point of the cutover is that it cannot any more. */}
+      {unplacedDeals.length > 0 && (
+        <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <span>
+              <strong>{unplacedDeals.length}</strong>{' '}
+              {unplacedDeals.length === 1 ? 'deal is' : 'deals are'} in a stage this board has
+              no column for, so {unplacedDeals.length === 1 ? 'it is' : 'they are'} not shown
+              above. {unplacedDeals.length === 1 ? 'Its stage' : 'Their stages'} may have been
+              retired or renamed.
+            </span>
+          </div>
+          <ul className="mt-2 ml-6 space-y-1">
+            {unplacedDeals.map((d: any) => (
+              <li key={d.id}>
+                <button
+                  onClick={() => navigate(`/crm/deals/${d.id}`)}
+                  className="underline hover:no-underline"
+                >
+                  {d.name || d.title || d.id}
+                </button>
+                <span className="text-amber-700"> — stage “{d.stage ?? 'none'}”</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Inspection bar — sits just below the command bar when active */}
       {inspectionMode && (
         <ManagerInspectionBar
@@ -2023,20 +2212,74 @@ const DealsKanbanPage: React.FC = () => {
           totalPipelineDeals={stages.flatMap(s => s.deals).length}
           onDealClick={handleCardClick}
           onStageChange={(dealId, newStage) => {
-            console.log('Stage change:', dealId, newStage);
+            transitionDealStage(dealId, newStage)
+              .then(() => {
+                setToast({ message: `Stage updated to ${newStage}`, type: 'success' });
+                triggerRefetch();
+              })
+              .catch((err: Error) =>
+                setToast({ message: `Could not update stage — ${err.message}`, type: 'error' }));
           }}
           onBulkAction={(action, dealIds, payload) => {
-            console.log('[BulkAction]', action, dealIds, payload);
+            // 'export' is built client-side from data already loaded, so there
+            // is nothing to send.
+            if (action === 'export') return;
+            bulkUpdateDeals(action, dealIds, payload)
+              .then(result => {
+                setToast({
+                  // The server phrases the partial case itself ("2 of 3
+                  // updated; 1 not found"), so pass it straight through rather
+                  // than rounding it up to a clean success.
+                  message: result.message ?? `${result.affected} deal${result.affected === 1 ? '' : 's'} updated`,
+                  type: result.message ? 'info' : 'success',
+                });
+                triggerRefetch();
+              })
+              .catch((err: Error) =>
+                setToast({ message: `Bulk ${action} failed — ${err.message}`, type: 'error' }));
           }}
           availableOwners={Array.from(new Set(
             stages.flatMap(s => s.deals.map(d => d.owner)).filter(Boolean)
           ))}
           onFieldUpdate={async (dealId, field, value) => {
-            console.log('[FieldUpdate]', dealId, field, value);
+            // Only fields with a real column are saved. `primaryCompetitor` and
+            // `secondaryCompetitors` are also routed here by the list view, but
+            // there is no deal_competitors table — saving them would 500, so
+            // they say so instead of failing silently.
+            const COLUMN_FIELDS: Record<string, string> = {
+              value: 'value',
+              stage: 'stage',
+              probability: 'probability',
+              closeDate: 'expected_close_date',
+              owner: 'assigned_to',
+              nextStep: 'next_step',
+              contactName: 'contact_name',
+              company: 'company_name',
+            };
+            if (field === 'stage') {
+              // Stage always goes through the audited endpoint.
+              try {
+                await transitionDealStage(dealId, String(value));
+                setToast({ message: `Stage updated to ${value}`, type: 'success' });
+                triggerRefetch();
+              } catch (err: any) {
+                setToast({ message: `Could not update stage — ${err.message}`, type: 'error' });
+              }
+              return;
+            }
+            const column = COLUMN_FIELDS[field];
+            if (!column) { notPersisted(`Editing ${field}`); return; }
+            try {
+              await updateDeal(dealId, { [column]: value } as any);
+              setToast({ message: 'Saved', type: 'success' });
+              triggerRefetch();
+            } catch (err: any) {
+              setToast({ message: `Could not save — ${err.message}`, type: 'error' });
+            }
           }}
-          currentUser="Sarah Chen"
-          onAddNote={(dealId) => console.log('[onAddNote]', dealId)}
-          onScheduleFollowUp={(dealId) => console.log('[onScheduleFollowUp]', dealId)}
+          currentUser={currentUserName}
+          onAddNote={() => notPersisted('Adding a note')}
+          onScheduleFollowUp={() => notPersisted('Scheduling a follow-up')}
           visibleColumns={visibleColumns}
           setVisibleColumns={setVisibleColumns}
           columnOrder={columnOrder}
@@ -2265,7 +2508,7 @@ const DealsKanbanPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Task
                 </label>
-                <input
+                <input aria-label="Task"
                   type="text"
                   value={taskTitle}
                   onChange={(e) => setTaskTitle(e.target.value)}
@@ -2278,7 +2521,7 @@ const DealsKanbanPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Due Date
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Due Date" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Tomorrow</option>
                   <option>In 2 days</option>
                   <option>This week</option>
@@ -2290,7 +2533,7 @@ const DealsKanbanPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Assign to
                 </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Assign to" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Deal Owners</option>
                   <option>Me</option>
                   <option>My Team</option>
@@ -2305,17 +2548,16 @@ const DealsKanbanPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => {
                   const title = taskTitle.trim() || undefined;
                   console.log('Creating tasks for deals:', aiInsights.needAttention.map(d => d.id), { title });
                   setShowTaskModal(false);
                   setTaskTitle('');
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Create Tasks
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2364,16 +2606,15 @@ const DealsKanbanPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   navigate('/hrms');
                   setShowHRMSModal(false);
                   setSelectedHRMSDeal(null);
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 View HRMS Module
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2428,16 +2669,15 @@ const DealsKanbanPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   setShowActivityModal(false);
                   setSelectedActivityDeal(null);
                   navigate(`/crm/deals/${selectedActivityDeal.id}`);
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Log Activity
-              </button>
+              </Button>
             </div>
           </div>
         </div>

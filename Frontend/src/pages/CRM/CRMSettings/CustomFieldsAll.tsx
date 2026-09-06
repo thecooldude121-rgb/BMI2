@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Button } from '../../../components/ui/Button';
+import { Plus } from 'lucide-react';
 
 interface CustomField {
   id: string;
@@ -207,13 +208,13 @@ const CustomFieldsAll: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">LEADS (Module 2)</h3>
-            <button
+            <Button
               onClick={() => handleAddField('Leads')}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Field
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -227,13 +228,13 @@ const CustomFieldsAll: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">CONTACTS (Module 3)</h3>
-            <button
+            <Button
               onClick={() => handleAddField('Contacts')}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Field
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -247,13 +248,13 @@ const CustomFieldsAll: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">ACCOUNTS (Module 4)</h3>
-            <button
+            <Button
               onClick={() => handleAddField('Accounts')}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Field
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -267,13 +268,13 @@ const CustomFieldsAll: React.FC = () => {
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">DEALS (Module 5)</h3>
-            <button
+            <Button
               onClick={() => handleAddField('Deals')}
-              className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1"
+              size="sm" className="rounded"
             >
               <Plus className="h-4 w-4" />
               Add Field
-            </button>
+            </Button>
           </div>
 
           <div className="p-6">
@@ -295,7 +296,7 @@ const CustomFieldsAll: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Apply to:
                 </label>
-                <select
+                <select aria-label="Apply to:"
                   value={newFieldModule}
                   onChange={(e) => setNewFieldModule(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -312,7 +313,7 @@ const CustomFieldsAll: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Field Label:
                 </label>
-                <input
+                <input aria-label="Field Label:"
                   type="text"
                   value={newFieldLabel}
                   onChange={(e) => setNewFieldLabel(e.target.value)}
@@ -325,7 +326,7 @@ const CustomFieldsAll: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Field Type:
                 </label>
-                <select
+                <select aria-label="Field Type:"
                   value={newFieldType}
                   onChange={(e) => setNewFieldType(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -364,12 +365,12 @@ const CustomFieldsAll: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={handleCreateField}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  size="lg"
                 >
                   Create Field
-                </button>
+                </Button>
               </div>
             </div>
           </div>

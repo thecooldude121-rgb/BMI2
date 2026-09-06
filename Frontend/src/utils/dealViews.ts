@@ -26,7 +26,7 @@
  */
 
 import type { DealCard } from '../components/Deal/DealKanbanCard';
-import { isWithinDays } from './dateUtils';
+
 import type { ColumnKey, CloseDateFilter, ValueFilter, PipelineAgeFilter, HealthTierFilter } from './dealsColumns';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

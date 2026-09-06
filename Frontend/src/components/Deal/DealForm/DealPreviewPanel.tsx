@@ -1,9 +1,10 @@
 import React from 'react';
-import { Eye, Info } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { formatCurrency, convertToBaseCurrency } from '../../../utils/currencyUtils';
 import { formatDisplayDate, daysFromNowLabel } from '../../../utils/dateUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
-import { getPipeline, getPipelineStage, getStageProbability, DEFAULT_PIPELINE } from '../../../config/pipelines';
+import { usePipelines, useStageLookup } from '../../../hooks/useStageLookup';
+import { findPipeline, defaultPipeline } from '../../../utils/pipelinesApi';
 import { getDealType } from '../../../config/dealTypes';
 import { getForecastCategory, forecastChipClasses } from '../../../config/forecastCategories';
 import { getContactRole, roleChipClasses, StakeholderContact } from '../../../config/contactRoles';
@@ -32,19 +33,24 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
   const baseAmount = convertToBaseCurrency(amount, currency);
 
   // Resolve pipeline, stage, deal type, and forecast category from config
-  const pipeline = getPipeline(formData.pipelineId || '');
+// Stages come from the workspace via useStageLookup, not from the hardcoded
+// catalogue in config/pipelines.ts. A stage an admin adds is usable here
+// immediately; one they retire stops being described here. `?? 20` used to be
+// the fallback when a stage was unknown — a made-up probability presented as the
+// deal's — so an unresolvable stage now reads as "not set" instead.
+  const { pipelines } = usePipelines();
+  const { lookup: stageLookup } = useStageLookup();
+  const pipeline = findPipeline(pipelines, formData.pipelineId) ?? defaultPipeline(pipelines);
   const dealTypeObj = getDealType(formData.dealType || '');
   const forecastCategoryObj = getForecastCategory(formData.forecastCategory || '');
-  const stageObj = getPipelineStage(pipeline.id, formData.stage);
-  const stageIndex = pipeline.stages.findIndex(s => s.id === formData.stage);
+  const stageObj = stageLookup(formData.stage, pipeline?.slug ?? null);
+  const stageIndex = (pipeline?.stages ?? []).findIndex(s => s.slug === formData.stage);
   const stagePosition = stageIndex >= 0 ? stageIndex + 1 : 1;
 
-  const stageColorDot: Record<string, string> = {
-    gray: '🔵', blue: '🔵', amber: '🟠', purple: '🟣', green: '🟢', red: '🔴',
-  };
-  const stageEmoji = stageObj ? (stageColorDot[stageObj.color] ?? '📊') : '📊';
+  // The colour is stored hex now, not a Tailwind key, so the old key-based map
+  // no longer applies. A single neutral marker beats a wrong one.
+  const stageEmoji = '📊';
   const stageName = stageObj?.name ?? 'Unknown';
-
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
@@ -86,12 +92,12 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
               <span className="font-medium text-gray-900">
                 {stageName}
                 <span className="text-xs text-gray-400 font-normal ml-1">
-                  (Stage {stagePosition} of {pipeline.stages.length})
+                  (Stage {stagePosition} of {pipeline?.stages.length ?? 0})
                 </span>
               </span>
             </div>
             <div className="text-xs text-gray-400 pl-7">
-              {pipeline.name} pipeline
+              {pipeline?.name ?? '—'} pipeline
             </div>
           </div>
 
@@ -121,11 +127,11 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
 
           <div>
             {(() => {
-              const sp = getStageProbability(formData.pipelineId || DEFAULT_PIPELINE.id, formData.stage);
+              const sp = stageLookup(formData.stage, formData.pipelineId ?? null)?.probability ?? null;
               const aiProb = formData.probability ?? sp;
               const isOverride = winProbOverrideEnabled && winProbOverrideValue !== '';
               const displayProb = isOverride ? Number(winProbOverrideValue) : aiProb;
-              const isAI = !isOverride && aiProb > sp;
+              const isAI = !isOverride && sp !== null && aiProb > sp;
               return (
                 <>
                   <div className="flex items-center justify-between mb-2">

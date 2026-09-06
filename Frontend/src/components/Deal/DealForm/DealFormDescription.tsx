@@ -22,7 +22,7 @@ export const DealFormDescription: React.FC<DealFormDescriptionProps> = ({ formDa
       <div className="space-y-4 lg:space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Description/Notes:</label>
-          <textarea
+          <textarea aria-label="Description/Notes:"
             value={formData.description}
             onChange={(e) => onChange('description', e.target.value)}
             placeholder="Summarize customer needs, budget, timeline, and use case…"
@@ -33,7 +33,7 @@ export const DealFormDescription: React.FC<DealFormDescriptionProps> = ({ formDa
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Next Steps:</label>
-          <textarea
+          <textarea aria-label="Next Steps:"
             value={formData.nextSteps}
             onChange={(e) => onChange('nextSteps', e.target.value)}
             placeholder="e.g. Send proposal, schedule stakeholder demo, confirm procurement process…"

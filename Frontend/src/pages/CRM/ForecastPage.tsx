@@ -20,6 +20,8 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { outcomeOf, type StageLookup } from '../../utils/pipelinesApi';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ChevronLeft, ChevronRight, TrendingUp, DollarSign,
@@ -96,16 +98,40 @@ function getQuarterBounds(offset = 0): QuarterBounds {
   return { label: `Q${adjustedQ + 1} ${adjustedYear}`, start, end };
 }
 
-function inferCategory(deal: any): ForecastCategory | null {
+/**
+ * Which forecast bucket a deal belongs in.
+ *
+ * THIS IS THE ONE PLACE A WRONG STAGE CLASSIFICATION MOVES A REVENUE NUMBER, so
+ * it is worth being explicit about what was wrong. It compared the slug to the
+ * literals 'closed-won' and 'closed-lost', which is right only for the default
+ * pipeline:
+ *
+ *   - A WON Renewals deal (`renewal-won`) was not classified as closed. It fell
+ *     through to 'pipeline' and was forecast as revenue still to come — money
+ *     already booked, counted again as upside.
+ *   - A LOST deal (`renewal-lost`, `partner-inactive`) should be dropped
+ *     entirely, and instead landed in 'pipeline' too. Lost revenue was being
+ *     forecast as winnable.
+ *
+ * Outcome now comes from the workspace's own configuration. The two ordering
+ * heuristics below — negotiation is commit, proposal is best-case — stay as
+ * slug matches deliberately: they are a guess about where a deal sits in a
+ * funnel, not a fact about its outcome, and generalising them across arbitrary
+ * pipelines would be inventing a rule nobody stated. An explicit
+ * `forecast_category` on the deal overrides everything, as before.
+ */
+function inferCategory(deal: any, lookup: StageLookup): ForecastCategory | null {
   const explicit = (deal.forecast_category || '').toLowerCase().trim();
   if (explicit === 'commit')                                return 'commit';
   if (explicit === 'best case' || explicit === 'best-case') return 'best-case';
   if (explicit === 'pipeline')                              return 'pipeline';
   if (explicit === 'closed')                                return 'closed';
 
+  const outcome = outcomeOf(lookup)(deal);
+  if (outcome === 'won')  return 'closed';
+  if (outcome === 'lost') return null;
+
   const stage = (deal.stage || '').toLowerCase();
-  if (stage === 'closed-won')  return 'closed';
-  if (stage === 'closed-lost') return null;
   if (stage === 'negotiation') return 'commit';
   if (stage === 'proposal')    return 'best-case';
   return 'pipeline';
@@ -234,6 +260,7 @@ const DealRow: React.FC<{ deal: ForecastDeal; categoryTotal: number }> = ({ deal
 
 const ForecastPage: React.FC = () => {
   const navigate = useNavigate();
+  const { lookup: stageLookup } = useStageLookup();
   const [rawDeals, setRawDeals]               = useState<any[]>([]);
   const [loading, setLoading]                 = useState(true);
   const [refreshing, setRefreshing]           = useState(false);
@@ -319,7 +346,7 @@ const ForecastPage: React.FC = () => {
 
     return rawDeals
       .map((d: any): ForecastDeal | null => {
-        const category = inferCategory(d);
+        const category = inferCategory(d, stageLookup);
         if (!category) return null;
 
         // P0 fix: keep the full ISO string rather than splitting on 'T'.
@@ -363,7 +390,7 @@ const ForecastPage: React.FC = () => {
         }
         return closeMs >= quarter.start.getTime() && closeMs <= quarter.end.getTime();
       });
-  }, [rawDeals, quarter]);
+  }, [rawDeals, quarter, stageLookup]);
 
   const categorized = useMemo((): Record<ForecastCategory, ForecastDeal[]> => ({
     pipeline:    forecastDeals.filter(d => d.category === 'pipeline'),

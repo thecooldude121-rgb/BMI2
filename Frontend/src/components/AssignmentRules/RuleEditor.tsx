@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Button } from '../ui/Button';
 import type {
   AssignmentRule, RuleCondition, ConditionField, ConditionOp,
   BusinessHoursValue, FollowUpTaskConfig,
@@ -264,7 +265,7 @@ function ActionEditor({ rule, onChange }: { rule: AssignmentRule; onChange: (pat
       {action.mode === 'direct_user' && (
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Assign To</label>
-          <select value={action.userId ?? ''} onChange={e => onChange({ action: { ...action, userId: e.target.value } })}
+          <select aria-label="Assign To" value={action.userId ?? ''} onChange={e => onChange({ action: { ...action, userId: e.target.value } })}
             className="px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">— select user —</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
@@ -326,7 +327,7 @@ function FollowUpEditor({ config, onChange }: {
         <div className="grid grid-cols-2 gap-3 pl-6">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Task Type</label>
-            <select value={config.type} onChange={e => onChange({ ...config, type: e.target.value as any })}
+            <select aria-label="Task Type" value={config.type} onChange={e => onChange({ ...config, type: e.target.value as any })}
               className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="call">Call</option>
               <option value="email">Email</option>
@@ -335,13 +336,13 @@ function FollowUpEditor({ config, onChange }: {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Due In (hours)</label>
-            <input type="number" min={1} max={720} value={config.dueInHours}
+            <input aria-label="Due In (hours)" type="number" min={1} max={720} value={config.dueInHours}
               onChange={e => onChange({ ...config, dueInHours: Number(e.target.value) })}
               className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">Task Title</label>
-            <input value={config.title} onChange={e => onChange({ ...config, title: e.target.value })}
+            <input aria-label="Task Title" value={config.title} onChange={e => onChange({ ...config, title: e.target.value })}
               placeholder="e.g. Welcome call — executive referral"
               className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
@@ -426,13 +427,13 @@ export default function RuleEditor({ rule: initial, onSave, onCancel }: Props) {
       <div className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Rule Name <span className="text-red-500">*</span></label>
-          <input value={rule.name} onChange={e => patch({ name: e.target.value })}
+          <input aria-label="Rule Name" value={rule.name} onChange={e => patch({ name: e.target.value })}
             placeholder="e.g. Executive Referrals → Account Manager"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-          <input value={rule.description} onChange={e => patch({ description: e.target.value })}
+          <input aria-label="Description" value={rule.description} onChange={e => patch({ description: e.target.value })}
             placeholder="Optional — explain what this rule does"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
@@ -521,10 +522,10 @@ export default function RuleEditor({ rule: initial, onSave, onCancel }: Props) {
           className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
           Cancel
         </button>
-        <button onClick={handleSave}
-          className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+        <Button onClick={handleSave}
+          size="lg" className="font-semibold">
           Save Rule
-        </button>
+        </Button>
       </div>
     </div>
   );

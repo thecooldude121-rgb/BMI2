@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Building2, User, Eye, Search, Plus, X, AlertTriangle, Users, CheckCircle2 } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { User, Eye, Search, Plus, X, AlertTriangle, Users, CheckCircle2 } from 'lucide-react';
 import {
   CONTACT_ROLES,
   DEFAULT_CONTACT_ROLE,
@@ -210,13 +211,12 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
                   : 'border-gray-300 focus:ring-blue-500'
               }`}
             />
-            <button
+            <Button
               onClick={onSearchAccount}
-              className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center space-x-2"
             >
               <Search className="h-4 w-4" />
               <span>Link</span>
-            </button>
+            </Button>
           </div>
 
           {/* Duplicate account warning */}
@@ -323,10 +323,10 @@ export const DealFormAccountContacts: React.FC<DealFormAccountContactsProps> = (
                 <span className="font-medium text-gray-900">{selectedContact.email}</span>
               </div>
               <div className="flex items-center space-x-2 pt-2">
-                <button className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium transition-colors">
+                <Button size="sm">
                   <Eye className="h-3 w-3" />
                   <span>View</span>
-                </button>
+                </Button>
                 <button
                   onClick={() => {
                     onChange('primaryContactName', '');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Smartphone, Tablet, LogOut } from 'lucide-react';
+import { Monitor, Smartphone, LogOut } from 'lucide-react';
 
 const Sessions: React.FC = () => {
   const sessions = [

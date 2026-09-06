@@ -1,12 +1,13 @@
 import React from 'react';
-import { DollarSign, X, TrendingUp } from 'lucide-react';
+import { X, TrendingUp } from 'lucide-react';
+import type { AccountFormData, FundingRound } from '../../../pages/Accounts/AccountFormPage';
 
 interface FundingSectionProps {
   formData: any;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: keyof AccountFormData, value: any) => void;
   onAddFundingRound: () => void;
   onRemoveFundingRound: (id: string) => void;
-  onUpdateFundingRound: (id: string, field: string, value: any) => void;
+  onUpdateFundingRound: (id: string, field: keyof FundingRound, value: any) => void;
 }
 
 const FundingSection: React.FC<FundingSectionProps> = ({
@@ -63,7 +64,7 @@ const FundingSection: React.FC<FundingSectionProps> = ({
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         Round Name
                       </label>
-                      <input
+                      <input aria-label="Round Name"
                         type="text"
                         value={round.roundName}
                         onChange={(e) => onUpdateFundingRound(round.id, 'roundName', e.target.value)}
@@ -131,7 +132,7 @@ const FundingSection: React.FC<FundingSectionProps> = ({
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         Lead Investor
                       </label>
-                      <input
+                      <input aria-label="Lead Investor"
                         type="text"
                         value={round.leadInvestor}
                         onChange={(e) => onUpdateFundingRound(round.id, 'leadInvestor', e.target.value)}
@@ -144,7 +145,7 @@ const FundingSection: React.FC<FundingSectionProps> = ({
                       <label className="block text-xs font-medium text-gray-700 mb-1">
                         Other Investors
                       </label>
-                      <input
+                      <input aria-label="Other Investors"
                         type="text"
                         value={round.otherInvestors}
                         onChange={(e) => onUpdateFundingRound(round.id, 'otherInvestors', e.target.value)}

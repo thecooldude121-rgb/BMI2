@@ -1,40 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Edit3,
-  Trash2,
-  Phone,
-  Mail,
-  Calendar,
-  Star,
-  TrendingUp,
-  Activity,
-  MessageSquare,
-  FileText,
-  Clock,
-  User,
-  Building,
-  Tag,
-  Target,
-  Zap,
-  ChevronDown,
-  MoreHorizontal,
-  Linkedin,
-  Globe,
-  Users,
-  TrendingDown,
-  Plus,
-  Upload,
-  Send,
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle,
-  ExternalLink,
-  RefreshCw,
-  Bell,
-  X,
-} from 'lucide-react';
+import { Edit3, Trash2, Phone, Mail, Calendar, TrendingUp, Activity, MessageSquare, FileText, User, Building, Target, Zap, MoreHorizontal, Linkedin, Globe, Users, TrendingDown, Plus, Upload, AlertCircle, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, Bell, X } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
@@ -81,7 +48,7 @@ const leadAnnualRevenue = (lead: Lead) =>
 const LeadDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { updateLead, deleteLead, leads: allLeads } = useLeads();
+  const { updateLead, deleteLead, leads: allLeads, lastWriteErrorRef } = useLeads();
   const actions = useLeadActions(updateLead);
   const { can } = usePermissions();
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
@@ -159,12 +126,39 @@ const LeadDetailPage: React.FC = () => {
   ];
   const EARLY_STAGES = new Set(['new', 'assigned', 'enriching', 'attempting_contact']);
 
+  // The full lead lifecycle, restored. This was temporarily narrowed to
+  // new/qualified/lost because eight of eleven options returned HTTP 400 —
+  // leads_stage_check and VALID_STAGES only allowed the six-value pipeline
+  // vocabulary. Migration 025 widened both, so the menu offers the real lifecycle
+  // again. Kept as a named const rather than an inline array so this list and the
+  // backend's VALID_STAGES can be diffed against each other.
+  const STATUS_OPTIONS = [
+    'new', 'assigned', 'enriching', 'attempting_contact',
+    'engaged', 'qualified', 'sales_accepted',
+    'nurture', 'disqualified', 'converted', 'lost',
+  ] as const;
+
   const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
-    await actions.changeStatus(lead, newStatus as Lead['status']);
-    setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
+    // The write decides what is shown. This used to update local state and fire a
+    // "Status updated" toast regardless of the result, so picking a status the
+    // backend rejects (most of this dropdown — see below) left the badge showing a
+    // value Postgres never accepted, under a success toast. That is the exact
+    // pattern CLAUDE.md records from the account address form.
+    //
+    // NOTE: the dropdown offers the frontend's lead vocabulary (assigned,
+    // enriching, attempting_contact, engaged, sales_accepted, nurture) while the
+    // API validates against VALID_STAGES (new, contacted, qualified, proposal,
+    // won, lost). Most options therefore 400 today. That mismatch is a separate
+    // open item — see HANDOFF; this only stops it being reported as success.
+    const accepted = await actions.changeStatus(lead, newStatus as Lead['status']);
     setShowStatusDropdown(false);
     setPendingStatus(null);
+    if (!accepted) {
+      showToast(lastWriteErrorRef.current ?? 'Status change was rejected — nothing was saved.');
+      return;
+    }
+    setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
     showToast(`Status updated to ${newStatus}`);
   };
 
@@ -225,7 +219,6 @@ const LeadDetailPage: React.FC = () => {
 
   const handleConvert = () => setShowConvertModal(true);
 
-
   const handleTerminalConfirm = async (reason: string, notes: string) => {
     if (!lead || !terminalModalAction) return;
     const status = terminalModalAction;
@@ -241,8 +234,9 @@ const LeadDetailPage: React.FC = () => {
     setTerminalModalAction(null);
   };
 
+  // PHASE 0: this never read the file input — it only toasted success.
   const handleFileUpload = () => {
-    showToast('File uploaded successfully');
+    showToast('Attaching files to a lead is not available yet — nothing was uploaded');
     setShowFileUpload(false);
   };
 
@@ -275,12 +269,11 @@ const LeadDetailPage: React.FC = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Lead Not Found</h2>
           <p className="text-gray-600 mb-4">The lead you're looking for doesn't exist or was deleted.</p>
-          <button
+          <Button
             onClick={() => navigate('/crm/leads')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
             Back to Leads
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -332,12 +325,12 @@ const LeadDetailPage: React.FC = () => {
                   : `Skipping lifecycle steps to "${pendingStatus.replace(/_/g, ' ')}" — confirm this is intentional.`}
             </p>
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={() => void applyStatusChange(pendingStatus)}
-                className="flex-1 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700"
+                fullWidth className="font-semibold"
               >
                 Proceed anyway
-              </button>
+              </Button>
               <button
                 onClick={() => setPendingStatus(null)}
                 className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
@@ -441,11 +434,20 @@ const LeadDetailPage: React.FC = () => {
               </button>
               {showStatusDropdown && (
                 <div className="absolute top-full left-20 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
-                  {([
-                    'new', 'assigned', 'enriching', 'attempting_contact',
-                    'engaged', 'qualified', 'sales_accepted',
-                    'nurture', 'disqualified', 'converted', 'lost',
-                  ] as const).map(status => (
+                  {/* Restricted to the statuses the API actually accepts. This listed
+                      the full frontend lead vocabulary — assigned, enriching,
+                      attempting_contact, engaged, sales_accepted, nurture,
+                      disqualified, converted — while the backend validates against
+                      VALID_STAGES (new, contacted, qualified, proposal, won, lost).
+                      Eight of eleven options therefore returned HTTP 400 and changed
+                      nothing, which was silent until the error-swallowing sweep.
+
+                      Deliberately NOT fixed by widening the API vocabulary: that is a
+                      schema decision (a migration plus the stage CHECK constraint) and
+                      is recorded in HANDOFF as a decision the owner owes. Narrowing the
+                      menu is the honest interim — an option that cannot work should not
+                      be offered, the same rule as a dead view toggle. */}
+                  {STATUS_OPTIONS.map(status => (
                     <button
                       key={status}
                       onClick={() => handleStatusChange(status)}
@@ -468,13 +470,12 @@ const LeadDetailPage: React.FC = () => {
         {/* Quick Actions Bar */}
         <div className="flex items-center flex-wrap gap-2 pt-4 border-t border-gray-200">
           {/* Primary */}
-          <button
+          <Button
             onClick={() => openOutreach('email')}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
             <Mail className="h-4 w-4 mr-2" />
             Send email
-          </button>
+          </Button>
           {/* Secondary */}
           <button
             onClick={() => openOutreach('call')}
@@ -581,7 +582,9 @@ const LeadDetailPage: React.FC = () => {
           isOpen={showConvertModal}
           onClose={() => setShowConvertModal(false)}
           onUpdateLead={async (id, updates) => {
-            await updateLead(id, updates);
+            // Returned so the wizard can tell success from a rejected write.
+            const accepted = await updateLead(id, updates);
+            if (!accepted) return false;
             if (updates.status === 'converted') {
               const targetType =
                 updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
@@ -589,6 +592,7 @@ const LeadDetailPage: React.FC = () => {
                 : 'contact';
               actions.convert(lead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
             }
+            return true;
           }}
         />
       )}
@@ -866,13 +870,12 @@ const LeadDetailPage: React.FC = () => {
                 <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                 <p className="text-gray-600 mb-4">No notes or files yet.</p>
                 <div className="flex items-center justify-center space-x-3">
-                  <button
+                  <Button
                     onClick={() => openOutreach('note')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center space-x-2"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Add Note</span>
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setShowFileUpload(true)}
                     className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center space-x-2"
@@ -985,24 +988,24 @@ const LeadDetailPage: React.FC = () => {
                             )}
                             {index === 0 && (
                               <div className="mt-3">
-                                <button
+                                <Button
                                   onClick={() => openOutreach('email')}
-                                  className="w-full px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                                  size="sm" fullWidth className="rounded"
                                 >
                                   Compose Email
-                                </button>
+                                </Button>
                               </div>
                             )}
                             {index === 1 && lead.linkedin_url && (
-                              <button
+                              <Button
                                 onClick={() => window.open(
                                   lead.linkedin_url!.startsWith('http') ? lead.linkedin_url! : `https://${lead.linkedin_url}`,
                                   '_blank'
                                 )}
-                                className="mt-2 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 w-full"
+                                size="sm" fullWidth className="mt-2 rounded"
                               >
                                 Send via LinkedIn →
-                              </button>
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -1020,12 +1023,12 @@ const LeadDetailPage: React.FC = () => {
                           <p className="text-sm font-bold text-gray-900">Contact This Lead Today</p>
                           <p className="text-xs text-gray-600 mt-1">Reason: New lead — reach out within 24 hours for best response rate</p>
                           <div className="mt-3 flex space-x-2">
-                            <button
+                            <Button
                               onClick={() => openOutreach('email')}
-                              className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                              size="sm" fullWidth className="rounded"
                             >
                               Send Email
-                            </button>
+                            </Button>
                             <button
                               onClick={() => openOutreach('call')}
                               className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
@@ -1202,12 +1205,12 @@ const LeadDetailPage: React.FC = () => {
               <p className="text-gray-600 mb-2">Drag and drop your file here</p>
               <p className="text-sm text-gray-500 mb-4">or</p>
               <input type="file" id="fileInput" className="hidden" />
-              <label htmlFor="fileInput" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer inline-block">
+              <label htmlFor="fileInput" className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 cursor-pointer inline-block">
                 Choose File
               </label>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={handleFileUpload} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Upload</button>
+              <Button onClick={handleFileUpload} fullWidth>Upload</Button>
               <button onClick={() => setShowFileUpload(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
             </div>
           </div>
@@ -1222,7 +1225,7 @@ const LeadDetailPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Type</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <select aria-label="Reminder Type" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
                   <option>Follow up call</option>
                   <option>Send email</option>
                   <option>Check status</option>
@@ -1231,15 +1234,15 @@ const LeadDetailPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Date & Time</label>
-                <input type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                <input aria-label="Reminder Date & Time" type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea rows={3} placeholder="Reminder notes…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                <textarea aria-label="Notes" rows={3} placeholder="Reminder notes…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
-              <button onClick={handleSetReminder} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Set Reminder</button>
+              <Button onClick={handleSetReminder} fullWidth>Set Reminder</Button>
               <button onClick={() => setShowReminderForm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
             </div>
           </div>

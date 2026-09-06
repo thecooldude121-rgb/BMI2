@@ -1,4 +1,4 @@
-import React from 'react';
+
 import {
   CheckCircle2, Circle, Lightbulb, TrendingUp, Sliders, Globe,
   Users, Zap, UserCheck, Linkedin, Mail,

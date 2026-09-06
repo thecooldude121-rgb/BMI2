@@ -55,8 +55,10 @@ import {
   daysFromNow,
 } from '../../utils/dateUtils';
 import { resolveDealState, STATE_TOKENS } from '../../utils/dealState';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { outcomeOf } from '../../utils/pipelinesApi';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
-import { computeCommitteeCoverage, REQUIRED_ROLE_IDS } from '../../utils/dealCommittee';
+import { computeCommitteeCoverage } from '../../utils/dealCommittee';
 import { getContactRole, roleChipClasses, type StakeholderContact } from '../../config/contactRoles';
 import type { DealCard } from './DealKanbanCard';
 
@@ -79,6 +81,15 @@ interface PanelDeal {
   contactTitle: string;
   source: string;
   probability: number;
+  /**
+   * The stored probability with NULL preserved.
+   *
+   * Both `probability` and `aiScore` above collapse NULL to 0, which is right
+   * for display — a gauge must render something — and wrong for arithmetic,
+   * where "nobody has assessed this" and "this will not close" are different
+   * claims. See DealCard.probabilityRaw and design question 3.
+   */
+  probabilityRaw?: number | null;
   nextStep: string;
   nextStepDueDate: string;
   nextStepOwner: string;
@@ -207,8 +218,18 @@ function mapApiToPanelDeal(data: any): PanelDeal {
     tags,
     updatedAt:     data.updated_at || '',
     createdAt:     data.created_at || '',
-    // aiScore is stored as probability in the backend (0-100 win probability)
+    // aiScore is stored as probability in the backend (0-100 win probability).
+    // It DELIBERATELY still collapses NULL to 0: it is a display score, and a
+    // gauge has to render something. What must not collapse is the value any
+    // arithmetic uses — see probabilityRaw below and DealCard.probabilityRaw.
     aiScore:       Number(data.probability) || 0,
+    // Set here as well as in the Kanban mapping. It was missing from this one,
+    // which is harmless today because only DealsListView's weighted forecast
+    // reads it and its deals come from the board — but a mapping that populates
+    // one of a pair and not the other is exactly how the two drift apart.
+    probabilityRaw: data.probability === null || data.probability === undefined
+      ? null
+      : Number(data.probability),
     health,
     priority,
     daysSinceContact: Number(data.days_since_contact) || 0,
@@ -449,6 +470,18 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Stage configuration, for classifying this deal's outcome by configuration
+  // rather than by two hardcoded slugs (see DealKanbanCard).
+  //
+  // UP HERE, ABOVE `if (!dealId) return null`, AND THAT IS THE WHOLE POINT.
+  // It was originally placed next to its first use, which sits after that early
+  // return — so the hook ran on renders with a deal and not on renders without
+  // one, and React threw "Rendered more hooks than during the previous render"
+  // the moment a card was clicked. The panel is unmounted-by-null far more often
+  // than it is mounted, which is exactly why the mistake was invisible until
+  // something opened it.
+  const { lookup: stageLookup } = useStageLookup();
+
   // Which field is currently being edited — only one at a time
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -473,13 +506,38 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   const previousFocusRef = useRef<Element | null>(null);
 
   // ── Mount/unmount animation ──────────────────────────────────────────────
+  //
+  // TWO WAYS TO REACH THE OPEN STATE, AND THAT IS THE FIX, NOT BELT-AND-BRACES.
+  //
+  // requestAnimationFrame is here for a real reason: the panel mounts at
+  // `translate-x-full` and the browser has to PAINT that closed position before
+  // the open class is applied, or the CSS transition has nothing to animate
+  // from and the panel simply appears. That part is unchanged.
+  //
+  // What was wrong is that it was the ONLY way isVisible could become true.
+  // rAF callbacks do not run while the document is hidden — measured, not
+  // assumed: a probe in a background tab reported no callback in 1500ms. So a
+  // click in a tab that is not frontmost mounted the panel, fetched the deal
+  // (a real GET /deals/:id in the network log), moved nothing, and left the
+  // dialog parked at translate-x-full — `left: 1540` in a 1540px viewport,
+  // exactly one viewport-width off-screen. Present, functional, invisible, and
+  // silent: no error, no failed request, nothing to see in a screenshot.
+  //
+  // Worse than the pixels: the element carries role="dialog" aria-modal="true"
+  // the whole time, so assistive tech is told a modal is open while sighted
+  // users see nothing, and the focus effect below never runs either because it
+  // keys on isVisible.
+  //
+  // The timeout is the floor. When it wins there was no frame to animate from
+  // anyway, so nothing is lost by skipping the transition; when rAF wins first
+  // the later setState is a no-op on an unchanged value. Both are cancelled on
+  // cleanup so a fast A -> B card switch cannot leave a stale timer.
   useEffect(() => {
-    if (dealId) {
-      previousFocusRef.current = document.activeElement;
-      // requestAnimationFrame ensures the DOM has painted before we apply
-      // the visible class — otherwise the CSS transition never fires.
-      requestAnimationFrame(() => setIsVisible(true));
-    }
+    if (!dealId) return;
+    previousFocusRef.current = document.activeElement;
+    const raf = requestAnimationFrame(() => setIsVisible(true));
+    const timer = window.setTimeout(() => setIsVisible(true), 100);
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(timer); };
   }, [dealId]);
 
   // ── Focus close button when panel becomes visible ────────────────────────
@@ -626,12 +684,16 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     }
   };
 
-  // Don't render anything (not even a portal) when there's no deal selected
+  // Don't render anything (not even a portal) when there's no deal selected.
+  // Every hook this component calls must be ABOVE this line — see the
+  // useStageLookup call near the top of the component for what happens when one
+  // is not.
   if (!dealId) return null;
 
   // ── Compute state chip for the deal ──────────────────────────────────────
   const closeDaysLeft = deal ? daysFromNow(deal.closeDate) : null;
-  const isClosed      = deal ? ['closed-won', 'closed-lost'].includes(deal.stage) : false;
+  const outcome       = deal ? outcomeOf(stageLookup)(deal) : 'open';
+  const isClosed      = outcome !== 'open';
 
   // Build a minimal DealCard-compatible object so we can reuse resolveDealState
   const dealCardShape: DealCard | null = deal ? {
@@ -662,7 +724,7 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   } : null;
 
   const cardState = dealCardShape
-    ? resolveDealState(dealCardShape, closeDaysLeft, isClosed)
+    ? resolveDealState(dealCardShape, closeDaysLeft, outcome)
     : null;
   const stateTokens = cardState ? STATE_TOKENS[cardState.primary] : null;
   const healthExpl  = dealCardShape && !isClosed

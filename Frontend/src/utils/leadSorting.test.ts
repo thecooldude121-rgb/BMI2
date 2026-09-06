@@ -271,12 +271,27 @@ describe('priorityScore', () => {
 });
 
 describe('getSortDescription', () => {
-  it('returns a non-empty string for all 11 valid SortMode values', () => {
-    const allModes = SORT_OPTIONS.map(o => o.mode);
-    expect(allModes).toHaveLength(11);
-    for (const mode of allModes) {
-      const desc = getSortDescription(mode);
-      expect(desc.length).toBeGreaterThan(0);
+  // Previously asserted `toHaveLength(11)`. A twelfth sort mode was added and
+  // the hardcoded count went stale — the number was never the point. These
+  // assertions say what actually matters and do not need editing when a mode is
+  // added.
+  it('every SORT_OPTIONS entry has a non-empty description', () => {
+    expect(SORT_OPTIONS.length).toBeGreaterThan(0);
+    for (const { mode } of SORT_OPTIONS) {
+      expect(getSortDescription(mode).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('SORT_OPTIONS has no duplicate modes', () => {
+    const modes = SORT_OPTIONS.map(o => o.mode);
+    expect(new Set(modes).size).toBe(modes.length);
+  });
+
+  it('every entry carries a label and a known group', () => {
+    const groups = new Set(['smart', 'score', 'time', 'pipeline']);
+    for (const o of SORT_OPTIONS) {
+      expect(o.label.length).toBeGreaterThan(0);
+      expect(groups.has(o.group)).toBe(true);
     }
   });
 });
