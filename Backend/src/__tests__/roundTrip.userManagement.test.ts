@@ -350,6 +350,41 @@ describe('User management — round trip', () => {
       }
     });
 
+    it('GET /invites serves the role options, and a MANAGER is not offered admin', async () => {
+      // The invite form's picker is populated from this and nothing else. The
+      // rule it renders is the one createInvite enforces — same
+      // rolesAssignableBy — so an option that would be refused is never shown.
+      const manager = await addUserWithRole(ws, 'manager');
+      const res = await request(app).get('/api/v1/invites').set(auth(manager));
+
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.assignable_roles).not.toContain('admin');
+      expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr']);
+
+      // Every role the list DOES offer must actually be invitable, or the
+      // picker is lying in the other direction.
+      for (const role of res.body.assignable_roles) {
+        const created = await request(app).post('/api/v1/invites').set(auth(manager))
+          .send({ email: `served.${role}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role });
+        expect(created.status, `${role}: ${JSON.stringify(created.body)}`).toBe(201);
+      }
+    });
+
+    it('GET /invites gives an ADMIN the full list, INCLUDING hr', async () => {
+      // hr is the case that had silently drifted: the deleted client-side
+      // invitableRolesFor() listed sales/manager/admin only, so the form could
+      // not invite an HR user even though the server has always allowed it.
+      const res = await request(app).get('/api/v1/invites').set(auth(ws));
+      expect(res.status).toBe(200);
+      expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr', 'admin']);
+      expect(res.body.assignable_roles).toContain('hr');
+
+      const created = await request(app).post('/api/v1/invites').set(auth(ws))
+        .send({ email: `hr.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role: 'hr' });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      expect(created.body.invite.role).toBe('hr');
+    });
+
     it('an ADMIN may still invite an admin — the rule is "not above your own"', async () => {
       const res = await request(app).post('/api/v1/invites').set(auth(ws))
         .send({ email: `adm.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role: 'admin' });

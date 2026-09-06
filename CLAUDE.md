@@ -515,12 +515,26 @@ inline, verbatim**, because the last-admin guard's message is the only part that
 to do instead; and the **sign-out consequence is stated before confirming**, phrased for
 yourself when the target is you.
 
-#### TRACKED FOLLOW-UP — the invite form still uses the mirrored list
-`inviteMember`'s picker is still populated by `invitableRolesFor()`, the drifted client-side
-copy described above. It should read `assignable_roles` from the roster like the role picker
-now does, after which `invitableRolesFor` and `INVITABLE_ROLES` can both be deleted. Left
-alone deliberately: it is a change to the invite flow, not the role flow, and folding it in
-would have put two unrelated behaviours in one checkpoint.
+#### DONE — the invite form reads a served list too, and the mirror is deleted
+`GET /invites` now carries `assignable_roles`, from the same `rolesAssignableBy` that
+`POST /invites` enforces with. No gate is needed there, unlike `GET /users`: the route is
+already `requireRole('admin','manager')`, so everyone who reaches it may grant something.
+
+**`invitableRolesFor()` and `INVITABLE_ROLES` are gone**, along with
+`utils/invitableRoles.test.ts` — a test of deleted code tests nothing, and what it protected
+(a manager is not offered `admin`) is now covered against the real server in
+`roundTrip.userManagement.test.ts` and against the real component in
+`TeamManagement.test.tsx`.
+
+**What the mirror had actually cost, confirmed rather than hypothesised:** it listed
+sales/manager/admin and omitted `hr`, so the invite form could not invite an HR user at all
+even though the server has always accepted it. Nothing failed and nothing was logged — the
+option simply was not there. That is the whole argument for serving a rule instead of
+copying it, in one concrete bug.
+
+**No client-side copy of the assignable-role rule remains anywhere in the frontend.** Both
+pickers read a served `assignable_roles`: `fetchInvites` for the invite form, `fetchRoster`
+for the role picker.
 
 ### The live workspace has an admin again
 It had four `sales` and one `manager` and **zero admins**, so the stage-configuration screen

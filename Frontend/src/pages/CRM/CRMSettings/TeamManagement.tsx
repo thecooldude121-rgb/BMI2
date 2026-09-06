@@ -4,7 +4,7 @@ import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, Us
 import { getRoleDisplayName, getStatusBadgeClass, getStatusIcon } from '../../../utils/teamManagementMockData';
 import {
   fetchRoster, deactivateMember, reactivateMember, inviteMember, changeMemberRole,
-  fetchPendingInvites, formatLastLogin, invitableRolesFor, ApiError,
+  fetchInvites, formatLastLogin, ApiError,
   type WorkspaceMember, type PendingInvite, type InviteResult,
 } from '../../../utils/usersApi';
 import { NotAvailable } from '../../../components/common/NotAvailable';
@@ -56,6 +56,13 @@ const TeamManagement: React.FC = () => {
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [teamMembersState, setTeamMembersState] = useState<WorkspaceMember[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[] | null>(null);
+  /**
+   * Roles this caller may INVITE someone as — served by GET /invites, computed
+   * by the same `rolesAssignableBy` that POST /invites enforces with. There is
+   * no client-side copy of this rule any more; `invitableRolesFor()` was one
+   * and it had already drifted out of step (it omitted `hr`).
+   */
+  const [invitableRoles, setInvitableRoles] = useState<string[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -87,11 +94,19 @@ const TeamManagement: React.FC = () => {
         fetchRoster(true),
         // Invites are admin/manager only. A 403 resolves to null rather than
         // throwing, so a sales user still sees the roster.
-        fetchPendingInvites().catch(() => null),
+        fetchInvites().catch(() => null),
       ]);
       setTeamMembersState(roster.members);
       setAssignableRoles(roster.assignableRoles);
-      setPendingInvites(invites);
+      setPendingInvites(invites?.pending ?? null);
+      setInvitableRoles(invites?.assignableRoles ?? []);
+      // Keep the picker's selection inside the served list. Left alone, the
+      // initial 'sales' could sit in state while the select showed something
+      // else — a submit that sends a role the user never saw chosen.
+      setInviteRole(prev =>
+        (invites?.assignableRoles ?? []).includes(prev)
+          ? prev
+          : (invites?.assignableRoles ?? [])[0] ?? '');
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not load the team');
     } finally {
@@ -351,7 +366,11 @@ const TeamManagement: React.FC = () => {
       setInviteResult(result);
       setInviteEmail('');
       // Refresh the pending list so the new invite appears without a reload.
-      setPendingInvites(await fetchPendingInvites().catch(() => null));
+      // The served role list comes back with it, so a role the caller may no
+      // longer grant stops being offered without a page reload either.
+      const refreshed = await fetchInvites().catch(() => null);
+      setPendingInvites(refreshed?.pending ?? null);
+      if (refreshed) setInvitableRoles(refreshed.assignableRoles);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Could not create the invite';
       setActionError(message);
@@ -499,15 +518,22 @@ const TeamManagement: React.FC = () => {
                 onChange={(e) => setInviteRole(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {/* Only the roles THIS user may grant. A manager offered
-                    "Admin" would be offered an option the server answers with a
-                    403 — see invitableRolesFor. */}
-                {invitableRolesFor(user?.role).map((r) => (
-                  <option key={r} value={r}>{getRoleDisplayName(r as Parameters<typeof getRoleDisplayName>[0])}</option>
+                {/* SERVED, not derived. Only the roles THIS caller may grant,
+                    computed by the server's rolesAssignableBy — the same rule
+                    POST /invites enforces with, so an option that would be
+                    answered 403 is never rendered. The local mirror this
+                    replaced had drifted and was missing `hr` entirely. */}
+                {invitableRoles.map((r) => (
+                  <option key={r} value={r}>{roleLabel(r)}</option>
                 ))}
               </select>
             </div>
-            <Button onClick={() => void handleInvite()} disabled={inviting || !inviteEmail.trim()}>
+            {/* No served roles means the server would refuse an invite from
+                this caller, so Send is not offered as though it might work. */}
+            <Button
+              onClick={() => void handleInvite()}
+              disabled={inviting || !inviteEmail.trim() || invitableRoles.length === 0}
+            >
               <Mail className="h-4 w-4" />
               {inviting ? 'Creating…' : 'Send invite'}
             </Button>

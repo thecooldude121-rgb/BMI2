@@ -3,7 +3,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
-import { ASSIGNABLE_ROLES, canAssign } from '../utils/roles';
+import { ASSIGNABLE_ROLES, canAssign, rolesAssignableBy } from '../utils/roles';
 import { getEmailService } from '../services/email';
 
 /**
@@ -200,7 +200,29 @@ export const listInvites = async (req: AuthRequest, res: Response, next: NextFun
         LIMIT 200`,
       [workspaceId],
     );
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rowCount,
+      // THE INVITE FORM'S ROLE OPTIONS TRAVEL WITH THE INVITES.
+      //
+      // Same source as GET /users' `assignable_roles` — `rolesAssignableBy` in
+      // utils/roles, which is also what createInvite below enforces with via
+      // `canAssign`. The picker is therefore populated by the very rule that
+      // would refuse it, so a manager is never offered `admin` rather than
+      // being offered it and answered 403.
+      //
+      // NO GATE NEEDED HERE, unlike GET /users: this route is already
+      // requireRole('admin','manager'), so anyone who reaches this line may
+      // grant something. GET /users is deliberately ungated because assignment
+      // pickers need the roster, which is why it has to check separately.
+      //
+      // This replaces `invitableRolesFor()` in the frontend, a hand-written
+      // copy of the same rule that had already drifted: it omitted `hr`, which
+      // ASSIGNABLE_ROLES has always included, so the invite form silently could
+      // not invite an HR user. No client-side mirror of this rule remains.
+      assignable_roles: rolesAssignableBy(String(req.user?.role ?? '')),
+    });
   } catch (error) { next(error); }
 };
 

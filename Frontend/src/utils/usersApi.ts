@@ -254,32 +254,19 @@ export async function reactivateMember(id: string): Promise<WorkspaceMember> {
   return toMember(row);
 }
 
-/** Roles an invite may assign. Mirrors ASSIGNABLE_ROLES in invitesController. */
-const ALL_INVITABLE_ROLES = ['sales', 'manager', 'admin'] as const;
-export type InvitableRole = (typeof ALL_INVITABLE_ROLES)[number];
-
-/**
- * The roles a given inviter may hand out — never one above their own.
+/*
+ * `invitableRolesFor()` and `INVITABLE_ROLES` USED TO LIVE HERE, AND ARE GONE.
  *
- * The server is the control (`INVITABLE_BY` in invitesController, which answers
- * 403); this exists so a manager is not offered an option that will be refused.
- * Offering it and then explaining the refusal is a worse experience than not
- * offering it, and keeping the two in step is the point of deriving both from
- * the same rule rather than hardcoding two lists.
+ * They were a client-side copy of the server's `rolesAssignableBy` — and the
+ * copy had drifted: it listed sales/manager/admin and omitted `hr`, which
+ * ASSIGNABLE_ROLES has always included, so the invite form silently could not
+ * invite an HR user. Nothing failed and nothing was logged; the option simply
+ * was not there.
  *
- * An unknown role gets the narrowest set rather than the widest — the safe
- * direction when the caller's role is not one we recognise.
+ * Both role pickers now read a served `assignable_roles` — `fetchInvites` above
+ * for the invite form, `fetchRoster` for the role picker — so no mirror of this
+ * rule remains anywhere in the frontend.
  */
-export function invitableRolesFor(inviterRole: string | undefined): readonly InvitableRole[] {
-  switch ((inviterRole ?? '').toLowerCase()) {
-    case 'admin':   return ALL_INVITABLE_ROLES;
-    case 'manager': return ['sales', 'manager'];
-    default:        return [];
-  }
-}
-
-/** @deprecated Use invitableRolesFor(role) — a manager may not invite an admin. */
-export const INVITABLE_ROLES = ALL_INVITABLE_ROLES;
 
 export interface InviteResult {
   invite: { id: string; email: string; role: string; expires_at: string };
@@ -313,21 +300,44 @@ export interface PendingInvite {
   created_at: string;
 }
 
+export interface InviteList {
+  pending: PendingInvite[];
+  /**
+   * The roles THIS caller may invite someone as, straight from the server's
+   * `rolesAssignableBy` — the same rule `POST /invites` enforces with. The
+   * invite form's picker is populated from this and nothing else.
+   *
+   * This replaced `invitableRolesFor()`, a hand-written copy of the rule that
+   * lived here and had ALREADY DRIFTED: it listed sales/manager/admin and
+   * omitted `hr`, which the server has always accepted, so the form could not
+   * invite an HR user at all. That is the concrete cost of mirroring a rule
+   * instead of asking for it.
+   */
+  assignableRoles: string[];
+}
+
 /**
- * Outstanding invites. Admin/manager only — a sales user gets 403, which is not
- * an error worth surfacing on this screen, so the caller treats it as "cannot
- * see invites" rather than "loading failed". Returns null in that case so the
- * UI can distinguish "none outstanding" from "not permitted to know".
+ * Outstanding invites, and the roles this caller may hand out.
+ *
+ * Admin/manager only — a sales user gets 403, which is not an error worth
+ * surfacing on this screen, so the caller treats it as "cannot see invites"
+ * rather than "loading failed". Returns null in that case so the UI can
+ * distinguish "none outstanding" from "not permitted to know".
  */
-export async function fetchPendingInvites(): Promise<PendingInvite[] | null> {
+export async function fetchInvites(): Promise<InviteList | null> {
   const res = await fetch(`${API_BASE}/invites`, { headers: getAuthHeaders() });
   if (res.status === 403) return null;
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.message || `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(json?.message || `Request failed (${res.status})`, res.status);
   const rows = (json.data ?? json.invites ?? []) as PendingInvite[];
-  // Only invites still awaiting acceptance are "pending".
-  return rows.filter((r) => !(r as unknown as { accepted_at?: string }).accepted_at
-    && !(r as unknown as { revoked_at?: string }).revoked_at);
+  return {
+    // Only invites still awaiting acceptance are "pending".
+    pending: rows.filter((r) => !(r as unknown as { accepted_at?: string }).accepted_at
+      && !(r as unknown as { revoked_at?: string }).revoked_at),
+    // Absent means none granted. Defaulting to a full list would offer options
+    // the server refuses — the failure this whole change exists to remove.
+    assignableRoles: (json.assignable_roles ?? []) as string[],
+  };
 }
 
 /** "3 Sep 2026, 14:05", or the honest absence of a login. */

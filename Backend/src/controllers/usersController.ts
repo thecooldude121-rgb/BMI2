@@ -28,10 +28,13 @@ import {
  * roster) while the role change is not.
  *
  * WHY THE SERVER AND NOT A MIRROR IN THE CLIENT. `invitableRolesFor()` in
- * `usersApi.ts` is that mirror, written for the invite form, and it has already
- * drifted: it lists sales/manager/admin and omits `hr`, which the server's
- * ASSIGNABLE_ROLES has always included. Two lists that must agree are two lists
- * that will disagree — so this one is served, not copied.
+ * `usersApi.ts` was that mirror, written for the invite form, and it HAD
+ * drifted: it listed sales/manager/admin and omitted `hr`, which the server's
+ * ASSIGNABLE_ROLES has always included, so the invite form silently could not
+ * invite an HR user. Two lists that must agree are two lists that will
+ * disagree. It is now deleted — `GET /invites` serves the invite form's options
+ * the same way this endpoint serves the role picker's, and no copy of this rule
+ * remains in the frontend.
  *
  * THE DEFAULT IS DELIBERATELY UNCHANGED. Every existing caller — owner pickers,
  * assignment dropdowns — wants active people only, and quietly widening this

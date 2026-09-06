@@ -60,6 +60,8 @@ function mockServer(overrides: Partial<{
    */
   assignableRoles: string[];
   invites: unknown;
+  /** What GET /invites reports this caller may invite someone AS. */
+  invitableRoles: string[];
   onPost: (url: string, body: unknown) => Response;
   onPatch: (url: string, body: unknown) => Response;
 }> = {}) {
@@ -76,7 +78,16 @@ function mockServer(overrides: Partial<{
       return overrides.onPatch(url, init?.body ? JSON.parse(init.body as string) : undefined);
     }
     if (method === 'GET' && url.includes('/invites')) {
-      return { ok: true, status: 200, json: async () => ({ success: true, data: overrides.invites ?? [] }) } as Response;
+      return { ok: true, status: 200, json: async () => ({
+        success: true,
+        data: overrides.invites ?? [],
+        // GET /invites carries the invite form's role options — see
+        // `Backend/src/__tests__/roundTrip.userManagement.test.ts`,
+        // "GET /invites serves the role options…". There is no client-side
+        // fallback: an absent field means an empty picker, deliberately, so
+        // these fixtures must send what the server sends.
+        assignable_roles: overrides.invitableRoles ?? ['sales', 'manager', 'hr', 'admin'],
+      }) } as Response;
     }
     if (overrides.onPost) return overrides.onPost(url, init?.body ? JSON.parse(init.body as string) : undefined);
     return { ok: true, status: 200, json: async () => ({ success: true, data: {} }) } as Response;
@@ -543,5 +554,79 @@ describe('TeamManagement — the role picker', () => {
     await screen.findByText('Priya Nair');
 
     expect(screen.queryAllByRole('button', { name: /^Change role for/ })).toHaveLength(0);
+  });
+});
+
+/**
+ * ── The invite form's role options ─────────────────────────────────────────
+ *
+ * These replace `src/utils/invitableRoles.test.ts`, which tested a client-side
+ * copy of the server's rule. The copy is deleted, so testing it would be
+ * testing nothing; what matters now is that the form renders the SERVED list
+ * and only that. The server half is pinned in
+ * `Backend/src/__tests__/roundTrip.userManagement.test.ts`.
+ */
+describe('TeamManagement — the invite role picker', () => {
+  const openInvite = async () => {
+    await screen.findByText('Priya Nair');
+    await userEvent.click(screen.getByRole('button', { name: /invite a member/i }));
+    return screen.findByLabelText('Role');
+  };
+  const optionsOf = (select: HTMLElement) =>
+    within(select).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
+
+  it('offers HR — the option the deleted client-side mirror had silently dropped', async () => {
+    // invitableRolesFor() listed sales/manager/admin. The server's
+    // ASSIGNABLE_ROLES has always included hr, so the form could not invite an
+    // HR user and nothing anywhere said so. This is that regression, pinned.
+    mockServer({ invitableRoles: ['sales', 'manager', 'hr', 'admin'] });
+    render(<TeamManagement />);
+
+    expect(optionsOf(await openInvite())).toEqual(['sales', 'manager', 'hr', 'admin']);
+  });
+
+  it('never offers a MANAGER the admin role — the list is the server\'s', async () => {
+    mockServer({ invitableRoles: ['sales', 'manager', 'hr'] });
+    render(<TeamManagement />);
+
+    const options = optionsOf(await openInvite());
+    expect(options).not.toContain('admin');
+    expect(options).toEqual(['sales', 'manager', 'hr']);
+  });
+
+  it('sends a role that was actually offered, not a hardcoded default', async () => {
+    // The old code initialised inviteRole to 'sales' regardless of what the
+    // picker showed, so a caller whose served list did not start with 'sales'
+    // could submit a role they never saw selected.
+    let sent: unknown = null;
+    mockServer({
+      invitableRoles: ['manager', 'hr'],
+      onPost: (_url, body) => { sent = body; return {
+        ok: true, status: 201,
+        json: async () => ({ success: true, invite: { id: 'i1', email: 'x@y.z', role: 'manager', expires_at: '' }, email_sent: true }),
+      } as Response; },
+    });
+    render(<TeamManagement />);
+
+    const select = await openInvite();
+    expect((select as HTMLSelectElement).value).toBe('manager');   // first served role, not 'sales'
+
+    await userEvent.type(screen.getByLabelText('Email address'), 'new@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send invite/i }));
+
+    await waitFor(() => expect(sent).toEqual({ email: 'new@example.com', role: 'manager' }));
+  });
+
+  it('offers nothing and will not send when the server grants this caller no roles', async () => {
+    mockServer({ invitableRoles: [] });
+    render(<TeamManagement />);
+
+    const select = await openInvite();
+    // queryAllByRole, not getAllByRole: an empty select has no options at all
+    // and getAll throws rather than returning [].
+    expect(within(select).queryAllByRole('option')).toEqual([]);
+    await userEvent.type(screen.getByLabelText('Email address'), 'new@example.com');
+    // Not offered as though it might work — the server would refuse it.
+    expect(screen.getByRole('button', { name: /send invite/i })).toBeDisabled();
   });
 });
