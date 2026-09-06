@@ -21,6 +21,34 @@ export interface DuplicateCandidate {
   risk:      DuplicateRisk;
 }
 
+/**
+ * The minimum a record needs for duplicate detection. Everything below operates
+ * on this, not on `Lead`.
+ *
+ * WHY: the four signals only ever read an id, an email, a phone, a company and
+ * a name. Leads were simply the first entity to need them. Contacts have the
+ * same duplicate problem and had a "detector" that compared the email against
+ * the literal string 'john@acme.com', so it fired for exactly one address and
+ * silently passed everything else. Rather than write a second engine, the real
+ * one is now shared — this is the same machinery, with the same tests behind it.
+ */
+export interface DuplicateSubject {
+  id:         string;
+  email?:     string;
+  phone?:     string;
+  company?:   string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+/** A candidate keyed by plain `id`, for entities that are not leads. */
+export interface DuplicateMatch {
+  id:      string;
+  signals: DuplicateSignal[];
+  risk:    DuplicateRisk;
+}
+
 // ── Levenshtein distance (inline, no external library) ─────────────────────
 
 function levenshtein(a: string, b: string): number {
@@ -57,22 +85,27 @@ function normPhone(p: string | undefined): string {
   return (p ?? '').replace(/\D/g, '');
 }
 
-function emailDomain(email: string | undefined): string {
+/**
+ * Canonical email-domain extraction. Exported because leadFilterEngine and
+ * leadSorting both need it — leadSorting was hand-rolling
+ * `email?.split('@')[1]`, which differs on case and on an email with no '@'.
+ */
+export function emailDomain(email: string | undefined): string {
   if (!email) return '';
   const at = email.indexOf('@');
   return at >= 0 ? email.slice(at + 1).toLowerCase() : '';
 }
 
-function leadFullName(lead: Lead): string {
+function subjectFullName(s: DuplicateSubject): string {
   return (
-    lead.full_name?.trim() ||
-    [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim()
+    s.full_name?.trim() ||
+    [s.first_name, s.last_name].filter(Boolean).join(' ').trim()
   );
 }
 
 // ── Core detection ─────────────────────────────────────────────────────────
 
-function detectSignals(lead: Lead, candidate: Lead): DuplicateSignal[] {
+function detectSignals(lead: DuplicateSubject, candidate: DuplicateSubject): DuplicateSignal[] {
   const signals: DuplicateSignal[] = [];
 
   // Signal 1 — exact email
@@ -99,8 +132,8 @@ function detectSignals(lead: Lead, candidate: Lead): DuplicateSignal[] {
   }
 
   // Signal 4 — name + company similarity
-  const name1 = leadFullName(lead);
-  const name2 = leadFullName(candidate);
+  const name1 = subjectFullName(lead);
+  const name2 = subjectFullName(candidate);
   const co1   = (lead.company ?? '').toLowerCase().trim();
   const co2   = (candidate.company ?? '').toLowerCase().trim();
 
@@ -115,13 +148,33 @@ function detectSignals(lead: Lead, candidate: Lead): DuplicateSignal[] {
       signals.push({
         type:     'name_company',
         strength: combined,
-        reason:   `Similar name (${nameStr}) + company (${coStr ?? 'unknown'})`,
+        // coStr is non-null inside this branch; it never read 'unknown'.
+        reason:   `Similar name (${nameStr}) + company (${coStr})`,
       });
     } else {
+      // TWO DIFFERENT ABSENCES, and they mean opposite things to a human
+      // deciding whether these are one person:
+      //   - companies compared and found dissimilar is evidence AGAINST a
+      //     duplicate;
+      //   - a company missing on either side is no evidence at all.
+      // Both used to render "no company to compare", which reported the first
+      // as the second. Seen on the contact detail page: Alice Johnson
+      // (TechCorp) against Liam Johnson (FoodChain) read "Similar name
+      // (medium), no company to compare" while both companies were present and
+      // had just been compared.
+      //
+      // Only the sentence was wrong, so `strength` is deliberately unchanged —
+      // whether dissimilar companies should also LOWER the score is a separate
+      // question about risk semantics, and answering it here would silently
+      // move every lead's duplicate risk too.
+      const bothHaveCompany = Boolean(co1 && co2);
+      const shown = (v: string | undefined) => (v ?? '').trim();
       signals.push({
         type:     'name_company',
         strength: nameStr === 'exact' ? 'high' : 'medium',
-        reason:   `Similar name (${nameStr}), no company to compare`,
+        reason:   bothHaveCompany
+          ? `Similar name (${nameStr}), but different companies (${shown(lead.company)} vs ${shown(candidate.company)})`
+          : `Similar name (${nameStr}), no company to compare`,
       });
     }
   }
@@ -159,23 +212,50 @@ function signalRisk(signals: DuplicateSignal[]): DuplicateRisk {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** Find all leads in `pool` that are potential duplicates of `lead`. Excludes `lead` itself. */
-export function findDuplicates(lead: Lead, pool: Lead[]): DuplicateCandidate[] {
-  const results: DuplicateCandidate[] = [];
+const RISK_ORDER: Record<DuplicateRisk, number> = { high: 0, medium: 1, low: 2 };
+
+/**
+ * Find every record in `pool` that is a potential duplicate of `subject`.
+ * Excludes `subject` itself (by id). Highest risk first.
+ *
+ * Entity-agnostic — see DuplicateSubject. `findDuplicates` below is the Lead
+ * flavour and keeps its own return shape; nothing about lead behaviour changed.
+ *
+ * COST: O(pool) comparisons, each running Levenshtein over the name pair. That
+ * is fine for the few hundred records a form has loaded and is NOT fine to call
+ * per-keystroke over ten thousand — debounce it, as the callers do.
+ */
+export function findDuplicateMatches(
+  subject: DuplicateSubject,
+  pool: DuplicateSubject[],
+): DuplicateMatch[] {
+  const results: DuplicateMatch[] = [];
   for (const candidate of pool) {
-    if (candidate.id === lead.id) continue;
-    if (candidate.status === 'disqualified' || candidate.status === 'merged' as string) continue;
-    const signals = detectSignals(lead, candidate);
+    if (candidate.id === subject.id) continue;
+    const signals = detectSignals(subject, candidate);
     if (signals.length === 0) continue;
-    results.push({ leadId: candidate.id, signals, risk: signalRisk(signals) });
+    results.push({ id: candidate.id, signals, risk: signalRisk(signals) });
   }
-  // Sort: high first, then medium, then low
-  const ORDER: Record<DuplicateRisk, number> = { high: 0, medium: 1, low: 2 };
-  return results.sort((a, b) => ORDER[a.risk] - ORDER[b.risk]);
+  return results.sort((a, b) => RISK_ORDER[a.risk] - RISK_ORDER[b.risk]);
 }
 
-/** Collapse a candidate list to the overall worst risk level for a single lead. */
-export function computeRisk(candidates: DuplicateCandidate[]): DuplicateRisk {
+/** Find all leads in `pool` that are potential duplicates of `lead`. Excludes `lead` itself. */
+export function findDuplicates(lead: Lead, pool: Lead[]): DuplicateCandidate[] {
+  // Disqualified and merged leads are not duplicate candidates — a lead already
+  // ruled out must not keep resurfacing. That rule is lead-specific, which is
+  // why it lives here and not in findDuplicateMatches.
+  const live = pool.filter(
+    c => c.status !== 'disqualified' && c.status !== ('merged' as string),
+  );
+  return findDuplicateMatches(lead, live).map(m => ({
+    leadId:  m.id,
+    signals: m.signals,
+    risk:    m.risk,
+  }));
+}
+
+/** Collapse a candidate list to the overall worst risk level for a single record. */
+export function computeRisk(candidates: { risk: DuplicateRisk }[]): DuplicateRisk {
   if (candidates.some(c => c.risk === 'high'))   return 'high';
   if (candidates.some(c => c.risk === 'medium')) return 'medium';
   if (candidates.length > 0)                     return 'low';

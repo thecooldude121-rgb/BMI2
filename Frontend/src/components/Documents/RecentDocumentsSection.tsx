@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import {
   FileText, Image as ImageIcon, FileSpreadsheet, Video, File, Presentation,
   Eye, Download, ChevronUp, ChevronDown, ChevronRight, Briefcase, Building2,
@@ -239,13 +240,12 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
                 Documents you view will appear here for quick access.
                 Start by browsing the document library below.
               </p>
-              <button
+              <Button
                 onClick={onViewAll}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Browse Documents
                 <ChevronRight className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

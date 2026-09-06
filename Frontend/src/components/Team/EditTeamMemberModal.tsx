@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, AlertTriangle, Eye, Shield, Check } from 'lucide-react';
 
 interface TeamMember {
@@ -230,7 +231,7 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Full Name <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Full Name"
                   type="text"
                   value={formData.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
@@ -247,7 +248,7 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Email Address <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Email Address"
                   type="email"
                   value={formData.email}
                   disabled
@@ -262,7 +263,7 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone Number
                 </label>
-                <input
+                <input aria-label="Phone Number"
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => handleInputChange('phone', e.target.value)}
@@ -375,7 +376,7 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Department
                 </label>
-                <select
+                <select aria-label="Department"
                   value={formData.department}
                   onChange={(e) => handleInputChange('department', e.target.value)}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -398,7 +399,7 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <p className="text-xs text-gray-500 mb-2">
                   Current: {member.manager}
                 </p>
-                <select
+                <select aria-label="Reports To (Manager)"
                   value={formData.manager}
                   onChange={(e) => handleInputChange('manager', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -416,7 +417,7 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Team
                 </label>
-                <select
+                <select aria-label="Team"
                   value={formData.team}
                   onChange={(e) => handleInputChange('team', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -564,12 +565,12 @@ const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             onClick={handleSave}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            size="lg"
           >
             Save Changes
-          </button>
+          </Button>
         </div>
       </div>
     </div>

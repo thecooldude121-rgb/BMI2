@@ -1,3 +1,4 @@
+import { isWonWith, isLostWith, type StageLookup } from './pipelinesApi';
 export interface LeadPersona {
   id: string;
   name: string;
@@ -89,7 +90,7 @@ class AIEngine {
     return Math.min(100, Math.max(0, score));
   }
 
-  generateRecommendations(leads: any[], deals: any[], tasks: any[]): AIRecommendation[] {
+  generateRecommendations(leads: any[], deals: any[], tasks: any[], lookup: StageLookup): AIRecommendation[] {
     const recommendations: AIRecommendation[] = [];
 
     // High-priority leads to follow up
@@ -113,7 +114,10 @@ class AIEngine {
     }
 
     // Persona-based lead generation
-    const wonDeals = deals.filter(deal => deal.stage === 'closed-won');
+    // Outcome by configuration, not by the literal 'closed-won' — which is
+    // only the default pipeline's win stage, so Renewals and Partnerships wins
+    // were invisible to every recommendation built on this.
+    const wonDeals = deals.filter(isWonWith(lookup));
     if (wonDeals.length > 0) {
       recommendations.push({
         type: 'persona_match',
@@ -207,9 +211,9 @@ class AIEngine {
     return similarity / factors;
   }
 
-  predictDealOutcome(deal: any, historicalDeals: any[]): { probability: number; timeToClose: number; recommendations: string[] } {
-    const similarDeals = historicalDeals.filter(d => 
-      d.stage === 'closed-won' || d.stage === 'closed-lost'
+  predictDealOutcome(deal: any, historicalDeals: any[], lookup: StageLookup): { probability: number; timeToClose: number; recommendations: string[] } {
+    const similarDeals = historicalDeals.filter(
+      d => isWonWith(lookup)(d) || isLostWith(lookup)(d),
     );
 
     const avgCloseTime = similarDeals.reduce((sum, d) => {
@@ -217,7 +221,7 @@ class AIEngine {
       return sum + daysDiff;
     }, 0) / similarDeals.length;
 
-    const winRate = similarDeals.filter(d => d.stage === 'closed-won').length / similarDeals.length;
+    const winRate = similarDeals.filter(isWonWith(lookup)).length / similarDeals.length;
 
     let adjustedProbability = deal.probability / 100;
     

@@ -5,18 +5,30 @@ interface StatCardProps {
   title: string;
   value: string;
   icon: LucideIcon;
-  change: string;
-  changeType: 'positive' | 'negative' | 'neutral';
+  /**
+   * Period-over-period change. OPTIONAL, and omitted by every current caller.
+   *
+   * The dashboard used to pass literals — "+12%", "+8%", "+15%", "+5%" — under
+   * a fixed "from last month" caption. Nothing computed them and nothing could:
+   * a comparison needs a second query against the previous period, which no
+   * endpoint offers. The whole row is now dropped when this is absent, rather
+   * than showing a reassuring number that means nothing.
+   */
+  change?: string;
+  changeType?: 'positive' | 'negative' | 'neutral';
   color: 'blue' | 'green' | 'yellow' | 'purple' | 'red';
+  /** Shown under the value — for stating what the number counts. */
+  caption?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ 
-  title, 
-  value, 
-  icon: Icon, 
-  change, 
-  changeType, 
-  color 
+const StatCard: React.FC<StatCardProps> = ({
+  title,
+  value,
+  icon: Icon,
+  change,
+  changeType = 'neutral',
+  color,
+  caption,
 }) => {
   const colorClasses = {
     blue: 'bg-blue-500 text-blue-100',
@@ -43,12 +55,14 @@ const StatCard: React.FC<StatCardProps> = ({
           <p className="text-2xl font-bold text-gray-900">{value}</p>
         </div>
       </div>
-      <div className="mt-4">
-        <span className={`text-sm font-medium ${changeClasses[changeType]}`}>
-          {change}
-        </span>
-        <span className="text-sm text-gray-500 ml-1">from last month</span>
-      </div>
+      {change ? (
+        <div className="mt-4">
+          <span className={`text-sm font-medium ${changeClasses[changeType]}`}>{change}</span>
+          <span className="text-sm text-gray-500 ml-1">from last month</span>
+        </div>
+      ) : (
+        caption && <p className="mt-4 text-sm text-gray-500">{caption}</p>
+      )}
     </div>
   );
 };

@@ -18,18 +18,41 @@ function mapStatus(status: string): LeadStatus {
   return status as LeadStatus;
 }
 
+/**
+ * Maps a lead's status onto a marketing lifecycle stage.
+ *
+ * THE ALIASES BELOW ARE STILL REQUIRED. Migration 025 widened leads_stage_check to
+ * hold the full lifecycle, but it deliberately did NOT rewrite existing rows: 38
+ * leads still legitimately hold 'contacted', 'proposal' and 'won', which remain
+ * valid stages. So both halves of the vocabulary are live data, not legacy, and a
+ * switch that handles only the newer names still drops every existing row through
+ * to `default` — which is what once reported real leads as a plain 'lead' and
+ * understated how far along they were.
+ *
+ * The 'nurturing' and 'unqualified' arms are different: those were values in the
+ * `status` column, and 025 moved the single 'nurturing' row to stage='nurture'.
+ * They are kept as a safety net for any database not yet migrated, and can be
+ * dropped once 025 is confirmed applied everywhere.
+ */
 function mapLifecycleStage(status: string): LifecycleStage {
   switch (status) {
     case 'new':
     case 'assigned':           return 'lead';
     case 'enriching':
     case 'attempting_contact':
+    case 'contacted':          // legacy alias for attempting_contact
+    case 'working':            // legacy alias for attempting_contact
     case 'engaged':            return 'mql';
     case 'qualified':
     case 'sales_accepted':     return 'sql';
-    case 'converted':          return 'customer';
-    case 'nurture':            return 'subscriber';
+    case 'converted':
+    case 'won':                // legacy: leads_stage_check still allows 'won'
+                               return 'customer';
+    case 'nurture':
+    case 'nurturing':          // legacy alias for nurture
+                               return 'subscriber';
     case 'disqualified':
+    case 'unqualified':        // legacy alias for disqualified
     case 'lost':               return 'lead';
     default:                   return 'lead';
   }

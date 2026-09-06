@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, Pin, Trash2, Edit2, Check, AlertTriangle } from 'lucide-react';
 import type { LeadView } from '../../types/lead';
 
@@ -113,7 +114,7 @@ const ViewForm: React.FC<ViewFormProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-1">
             View name <span className="text-red-500">*</span>
           </label>
-          <input
+          <input aria-label="View name"
             type="text"
             value={name}
             onChange={e => { setName(e.target.value); setError(''); }}
@@ -193,13 +194,13 @@ const ViewForm: React.FC<ViewFormProps> = ({
           >
             Cancel
           </button>
-          <button
+          <Button
             type="submit"
             disabled={saving}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
+            fullWidth className="disabled:opacity-60"
           >
             {saving ? 'Saving…' : confirmLabel}
-          </button>
+          </Button>
         </div>
       </form>
     </>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X } from 'lucide-react';
 
 interface ContactFormProps {
@@ -49,7 +50,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Full Name *
               </label>
-              <input
+              <input aria-label="Full Name"
                 type="text"
                 required
                 value={formData.name}
@@ -63,7 +64,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Company *
               </label>
-              <input
+              <input aria-label="Company"
                 type="text"
                 required
                 value={formData.company}
@@ -79,7 +80,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Position
               </label>
-              <input
+              <input aria-label="Position"
                 type="text"
                 value={formData.position}
                 onChange={(e) => setFormData({ ...formData, position: e.target.value })}
@@ -92,7 +93,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Source
               </label>
-              <select
+              <select aria-label="Source"
                 value={formData.source}
                 onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -110,7 +111,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email *
               </label>
-              <input
+              <input aria-label="Email"
                 type="email"
                 required
                 value={formData.email}
@@ -124,7 +125,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Phone
               </label>
-              <input
+              <input aria-label="Phone"
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -138,7 +139,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Status
             </label>
-            <select
+            <select aria-label="Status"
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -156,12 +157,11 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, init
             >
               Cancel
             </button>
-            <button
+            <Button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
               {initialData ? 'Update Contact' : 'Create Contact'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

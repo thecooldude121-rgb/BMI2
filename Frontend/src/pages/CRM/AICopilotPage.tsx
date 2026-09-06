@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ExternalLink, Calendar, Mail, FileText, CheckSquare, Download, TrendingUp, AlertTriangle, Target, Shield, DollarSign } from 'lucide-react';
+import { Calendar, CheckSquare, DollarSign, Download, ExternalLink, FileText, Lightbulb, Mail, Shield, Target, TrendingUp } from 'lucide-react';
 import ConversationSidebar from '../../components/AI/ConversationSidebar';
 import EnhancedChatInterface from '../../components/AI/EnhancedChatInterface';
 

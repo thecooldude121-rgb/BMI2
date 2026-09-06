@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, MoreVertical, Trash2, Edit2, Pin, Download } from 'lucide-react';
+import { Plus, X, Trash2, Edit2, Pin, Download } from 'lucide-react';
 
 interface Conversation {
   id: string;

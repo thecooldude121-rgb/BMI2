@@ -9,7 +9,7 @@ import type {
   ActivitySignal,
   ConfidenceLevel,
 } from '../../utils/leadScoring/scoreExplainer';
-import { FEEDBACK_META, type FeedbackType } from '../../utils/leadScoring/scoreFeedback';
+import { type FeedbackType } from '../../utils/leadScoring/scoreFeedback';
 import ScoreFeedbackControls from './ScoreFeedbackControls';
 import type { NBAResult, NBAPriority } from '../../utils/leadNBA/engine';
 

@@ -37,6 +37,15 @@ function naTrack(): SLATrack {
   return { severity: 'na', ageHours: null, limitHours: null, pct: null, resolvedAt: null, escalate: false };
 }
 
+// Source strings arrive from several intake paths with inconsistent casing and
+// whitespace. Match the same way getPlaybook() does so both agree on the source.
+function lookupThreshold(thresholds: Record<string, number>, source: string | undefined): number | undefined {
+  if (!source) return undefined;
+  const normalised = source.trim().toLowerCase();
+  const key = Object.keys(thresholds).find(k => k.trim().toLowerCase() === normalised);
+  return key === undefined ? undefined : thresholds[key];
+}
+
 // ── Track evaluators ──────────────────────────────────────────────────────────
 
 function computeFirstResponse(lead: Lead, now: Date, cfg: SLAConfig): SLATrack {
@@ -50,7 +59,7 @@ function computeFirstResponse(lead: Lead, now: Date, cfg: SLAConfig): SLATrack {
   // Only applies to new leads that haven't been contacted
   if (lead.status !== 'new') return naTrack();
 
-  const limitHours = cfg.firstResponse.thresholds[lead.source ?? ''] ?? cfg.firstResponse.defaultHours;
+  const limitHours = lookupThreshold(cfg.firstResponse.thresholds, lead.source) ?? cfg.firstResponse.defaultHours;
   const ageHours = (now.getTime() - new Date(lead.created_at).getTime()) / 3_600_000;
   const pct = ageHours / limitHours;
   const escalate = ageHours >= limitHours * cfg.escalation.multiplier;

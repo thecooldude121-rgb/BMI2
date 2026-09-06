@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, TrendingUp, UserX, ArrowDownRight } from 'lucide-react';
 import type { Lead } from '../../types/lead';

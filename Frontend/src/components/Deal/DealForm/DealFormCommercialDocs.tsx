@@ -94,7 +94,7 @@ export const DealFormCommercialDocs: React.FC<DealFormCommercialDocsProps> = ({ 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Discovery Date</label>
-            <input
+            <input aria-label="Discovery Date"
               type="date"
               value={formData.discoveryDate || ''}
               onChange={e => onChange('discoveryDate', e.target.value)}
@@ -105,7 +105,7 @@ export const DealFormCommercialDocs: React.FC<DealFormCommercialDocsProps> = ({ 
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Source / Lead ID</label>
-            <input
+            <input aria-label="Source / Lead ID"
               type="text"
               value={formData.source || ''}
               onChange={e => onChange('source', e.target.value)}

@@ -1,460 +1,336 @@
-import React, { useState, useEffect } from 'react';
-import { User, Upload, Save, Edit2, CheckCircle, AlertCircle, X, Eye, EyeOff } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Button } from '../../../components/ui/Button';
+import { AlertCircle, Edit2, Save, User } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { useToast } from '../../../contexts/ToastContext';
-import { supabase } from '../../../lib/supabase';
-import FormModal from '../../../components/common/FormModal';
+import {
+  fetchMyProfile,
+  updateMyProfile,
+  MyProfile,
+  ProfileUpdate,
+} from '../../../utils/profileApi';
+import { formatLastLogin, toMember } from '../../../utils/usersApi';
+
+/**
+ * Your account — now the real row, from GET /auth/me.
+ *
+ * WHAT WAS HERE. A <NotAvailable> banner over a page of placeholder text. The
+ * name was "Alex Rodriguez", the phone "+1 (555) 123-4567", the location "San
+ * Francisco, CA", the last login "Dec 13, 2024 at 9:45 AM" — none of it this
+ * user's, and only the email came from the session. The four write handlers had
+ * called `supabase.auth.updateUser()`, a service this product does not use, and
+ * were left disabled because no endpoint existed to call instead. Both endpoints
+ * exist now (commit c0afb00), so the banner is gone and the page reads and
+ * writes the database.
+ *
+ * FIELD-BY-FIELD DISPOSITION of the twelve the old page displayed:
+ *   WIRED, EDITABLE (3): first name, last name, email — the only three
+ *     `PATCH /auth/me` accepts.
+ *   WIRED, READ-ONLY (4): role, department, member since (created_at), last
+ *     login (last_login_at). All real columns; none is settable by any endpoint
+ *     this user can reach, so none is offered as a control. Role especially:
+ *     the server refuses a role sent to PATCH /auth/me, which is the point.
+ *   REMOVED, NO COLUMN (5): phone, job title, location, per-user timezone,
+ *     language. TEAM_FIELDS_FOLLOWUP.md records phone and job_title as the two
+ *     most likely to be worth adding; until they are, a control for them would
+ *     be a save that returns 200 and stores nothing.
+ *
+ * ALSO REMOVED, and each for its own reason rather than as a batch:
+ *   - The "Verified" badge beside the email. There is no email verification in
+ *     this product — no confirmation step, no column, no transport (invites
+ *     render to the log). Asserting an address is verified was a claim about a
+ *     security property that does not exist.
+ *   - The Change Email modal, whose text promised "We'll send a verification
+ *     link". Nothing would have been sent. Email is edited inline with the rest
+ *     of the profile, which is what the endpoint actually does.
+ *   - Email visibility (Public / Private radios). No column, no enforcement
+ *     anywhere; a privacy control that does not control anything is worse than
+ *     its absence.
+ *   - The avatar modal. `handleSaveAvatarColor` showed "Avatar color updated"
+ *     and persisted nothing — a fake success. There is an `avatar_url` column
+ *     but no upload endpoint and no colour column. The initials block stays; it
+ *     is derived from the real name and id, the same derivation the team roster
+ *     uses, and carries no information that is not already true.
+ *   - The CHANGE PASSWORD section. It was a second copy of the form that lives
+ *     under Account -> Password, which is the one now wired to
+ *     POST /auth/change-password. Two password forms is one too many, and the
+ *     duplicate is the one without a home in the nav.
+ */
+
+/** Capitalised for display only. The API's value is lowercase and stays so. */
+const roleLabel = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
+
+const memberSince = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Unknown';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
 const ProfileSettings: React.FC = () => {
-  const { user } = useAuth();
-  const { showToast } = useToast();
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
-  const [showChangeEmailModal, setShowChangeEmailModal] = useState(false);
-  const [showChangeAvatarModal, setShowChangeAvatarModal] = useState(false);
-  const [selectedAvatarColor, setSelectedAvatarColor] = useState('#667eea');
+  const { adoptUser } = useAuth();
 
-  const [profileData, setProfileData] = useState({
-    fullName: 'Alex Rodriguez',
-    firstName: 'Alex',
-    lastName: 'Rodriguez',
-    email: user?.email || 'alex.rodriguez@bmi.com',
-    phone: '+1 (555) 123-4567',
-    jobTitle: 'Sales Representative',
-    department: 'Sales',
-    location: 'San Francisco, CA',
-    timezone: 'PST (UTC-8)',
-    language: 'English (US)',
-    memberSince: 'Oct 1, 2024',
-    lastLogin: 'Dec 13, 2024 at 9:45 AM'
-  });
+  const [profile, setProfile] = useState<MyProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [editFormData, setEditFormData] = useState({
-    firstName: 'Alex',
-    lastName: 'Rodriguez',
-    email: user?.email || 'alex.rodriguez@bmi.com',
-    phone: '+1 (555) 123-4567',
-    jobTitle: 'Sales Representative',
-    department: 'Sales',
-    location: 'San Francisco, CA',
-    timezone: 'America/Los_Angeles',
-    language: 'en-US'
-  });
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState({ first_name: '', last_name: '', email: '' });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
+  /** Adopt a row the server returned: it is the record, the form is not. */
+  const adopt = useCallback((row: MyProfile) => {
+    setProfile(row);
+    setForm({ first_name: row.first_name, last_name: row.last_name, email: row.email });
+  }, []);
 
-  const [changeEmailData, setChangeEmailData] = useState({
-    newEmail: '',
-    password: ''
-  });
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyProfile()
+      .then(row => { if (!cancelled) adopt(row); })
+      .catch((e: Error) => {
+        // An error state, NOT an empty form. A blank profile that looks like a
+        // real one is how a failed load gets mistaken for an empty account.
+        if (!cancelled) setLoadError(e.message);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [adopt]);
 
-  const [emailVisibility, setEmailVisibility] = useState<'public' | 'private'>('private');
-
-  const avatarColors = [
-    { name: 'Blue', value: '#667eea' },
-    { name: 'Purple', value: '#8b5cf6' },
-    { name: 'Green', value: '#10b981' },
-    { name: 'Orange', value: '#f59e0b' },
-    { name: 'Red', value: '#dc2626' }
-  ];
-
-  const calculatePasswordStrength = (password: string) => {
-    let strength = 0;
-    if (password.length >= 8) strength += 2;
-    if (password.length >= 12) strength += 1;
-    if (/[A-Z]/.test(password)) strength += 2;
-    if (/[a-z]/.test(password)) strength += 2;
-    if (/[0-9]/.test(password)) strength += 2;
-    if (/[^A-Za-z0-9]/.test(password)) strength += 1;
-    return strength;
+  const startEditing = () => {
+    if (!profile) return;
+    setForm({ first_name: profile.first_name, last_name: profile.last_name, email: profile.email });
+    setSaveError(null);
+    setSaved(false);
+    setIsEditing(true);
   };
 
-  const getPasswordStrengthLabel = (strength: number) => {
-    if (strength <= 3) return { label: 'Weak', color: 'bg-red-500', width: '30%' };
-    if (strength <= 6) return { label: 'Medium', color: 'bg-yellow-500', width: '60%' };
-    return { label: 'Strong', color: 'bg-green-500', width: '100%' };
+  const cancelEditing = () => {
+    if (profile) setForm({ first_name: profile.first_name, last_name: profile.last_name, email: profile.email });
+    setSaveError(null);
+    setIsEditing(false);
   };
 
-  const passwordStrength = calculatePasswordStrength(passwordData.newPassword);
-  const strengthInfo = getPasswordStrengthLabel(passwordStrength);
+  const handleSave = async () => {
+    if (!profile) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
 
-  const passwordRequirements = [
-    { label: 'At least 8 characters', met: passwordData.newPassword.length >= 8 },
-    { label: 'Contains uppercase letter', met: /[A-Z]/.test(passwordData.newPassword) },
-    { label: 'Contains lowercase letter', met: /[a-z]/.test(passwordData.newPassword) },
-    { label: 'Contains number (recommended)', met: /[0-9]/.test(passwordData.newPassword), recommended: true },
-    { label: 'Contains special character (!@#$%)', met: /[^A-Za-z0-9]/.test(passwordData.newPassword), recommended: false }
-  ];
+    // ONLY THE CHANGED FIELDS. Resending an unchanged email would make every
+    // save a candidate for the UNIQUE(tenant_id, email) 409 for no reason, and
+    // resending an unchanged name risks clobbering it with whatever this form
+    // happened to be holding.
+    const updates: ProfileUpdate = {};
+    if (form.first_name !== profile.first_name) updates.first_name = form.first_name;
+    if (form.last_name !== profile.last_name) updates.last_name = form.last_name;
+    if (form.email !== profile.email) updates.email = form.email;
 
-  const handleSaveProfile = async () => {
-    if (!user) return;
+    if (!Object.keys(updates).length) {
+      // The server refuses an empty body with a 400. Saying so here is more
+      // useful than round-tripping to be told.
+      setSaving(false);
+      setIsEditing(false);
+      return;
+    }
 
-    setIsSavingProfile(true);
     try {
-      // Update user metadata in Supabase
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          first_name: editFormData.firstName,
-          last_name: editFormData.lastName,
-          phone: editFormData.phone,
-          job_title: editFormData.jobTitle,
-          department: editFormData.department,
-          location: editFormData.location,
-          timezone: editFormData.timezone,
-          language: editFormData.language
-        }
-      });
-
-      if (error) throw error;
-
-      // Update local state
-      setProfileData({
-        ...profileData,
-        firstName: editFormData.firstName,
-        lastName: editFormData.lastName,
-        fullName: `${editFormData.firstName} ${editFormData.lastName}`,
-        phone: editFormData.phone,
-        jobTitle: editFormData.jobTitle,
-        department: editFormData.department,
-        location: editFormData.location
-      });
-
-      setIsEditingProfile(false);
-      showToast('Profile updated successfully', 'success');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      showToast('Failed to update profile', 'error');
+      const row = await updateMyProfile(updates);
+      // Render the SERVER's row, not the typed one — a value the server trims or
+      // normalises must not silently diverge from what is stored.
+      adopt(row);
+      // The top bar reads AuthContext, not this page. Without this the header
+      // keeps showing the old name until a reload.
+      adoptUser(row);
+      setIsEditing(false);
+      setSaved(true);
+    } catch (e) {
+      // The server's own words: "Someone in this workspace already uses that
+      // email address", "first_name cannot be blank".
+      setSaveError((e as Error).message);
     } finally {
-      setIsSavingProfile(false);
+      setSaving(false);
     }
   };
 
-  const handleUpdatePassword = async () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword) {
-      showToast('Please fill in all password fields', 'error');
-      return;
-    }
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Account Settings</h2>
+        <p className="mt-6 text-sm text-gray-500">Loading your profile…</p>
+      </div>
+    );
+  }
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showToast('Passwords do not match', 'error');
-      return;
-    }
+  if (loadError || !profile) {
+    return (
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">Account Settings</h2>
+        <div role="alert" className="mt-6 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+          <div>
+            <p className="font-medium text-red-900">Could not load your profile</p>
+            <p className="mt-1 text-sm text-red-800">{loadError ?? 'No profile was returned.'}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-    if (passwordData.newPassword.length < 8) {
-      showToast('Password must be at least 8 characters', 'error');
-      return;
-    }
-
-    setIsUpdatingPassword(true);
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      });
-
-      if (error) throw error;
-
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      showToast('Password updated successfully. All other sessions have been logged out.', 'success');
-    } catch (error) {
-      console.error('Error updating password:', error);
-      showToast('Failed to update password. Please check your current password.', 'error');
-    } finally {
-      setIsUpdatingPassword(false);
-    }
-  };
-
-  const handleChangeEmail = async () => {
-    if (!changeEmailData.newEmail || !changeEmailData.password) {
-      showToast('Please fill in all fields', 'error');
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(changeEmailData.newEmail)) {
-      showToast('Please enter a valid email address', 'error');
-      return;
-    }
-
-    try {
-      const { error } = await supabase.auth.updateUser({
-        email: changeEmailData.newEmail
-      });
-
-      if (error) throw error;
-
-      showToast(`Verification email sent to ${changeEmailData.newEmail}`, 'success');
-      setShowChangeEmailModal(false);
-      setChangeEmailData({ newEmail: '', password: '' });
-    } catch (error) {
-      console.error('Error changing email:', error);
-      showToast('Failed to change email', 'error');
-    }
-  };
-
-  const handleSaveAvatarColor = () => {
-    showToast('Avatar color updated', 'success');
-    setShowChangeAvatarModal(false);
-  };
-
-  const handleSaveEmailVisibility = async () => {
-    try {
-      if (user) {
-        const { error } = await supabase.auth.updateUser({
-          data: {
-            email_visibility: emailVisibility
-          }
-        });
-
-        if (error) throw error;
-
-        showToast(`Email visibility set to ${emailVisibility}`, 'success');
-      }
-    } catch (error) {
-      console.error('Error updating email visibility:', error);
-      showToast('Failed to update email visibility', 'error');
-    }
-  };
+  const member = toMember(profile);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Account Settings</h2>
-          <p className="text-sm text-gray-600 mt-1">Manage your personal information and security</p>
-        </div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">Account Settings</h2>
+        <p className="mt-1 text-sm text-gray-600">Your name and email address, as stored in this workspace</p>
       </div>
 
       <div className="space-y-6">
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+        <div className="overflow-hidden rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4">
+            <h3 className="flex items-center gap-2 font-semibold text-gray-900">
               <User className="h-5 w-5" />
               PROFILE INFORMATION
             </h3>
-            {!isEditingProfile && (
-              <button
-                onClick={() => setIsEditingProfile(true)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-              >
+            {!isEditing && (
+              <Button onClick={startEditing}>
                 <Edit2 className="h-4 w-4" />
                 Edit Profile
-              </button>
+              </Button>
             )}
           </div>
 
           <div className="p-6">
-            {!isEditingProfile ? (
+            {saved && !isEditing && (
+              <div role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                Profile saved.
+              </div>
+            )}
+
+            {!isEditing ? (
               <div className="space-y-4">
                 <div className="flex items-start gap-6">
-                  <div className="h-20 w-20 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-2xl font-semibold flex-shrink-0">
-                    AR
+                  <div
+                    className={`flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${member.avatarColor} text-2xl font-semibold text-white`}
+                  >
+                    {member.initials}
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-lg font-semibold text-gray-900">{profileData.fullName}</h4>
-                    <p className="text-sm text-gray-600">{profileData.jobTitle}</p>
-                    <p className="text-sm text-gray-600">{profileData.email}</p>
-                    <p className="text-sm text-gray-600">{profileData.phone}</p>
+                    <h4 className="text-lg font-semibold text-gray-900">{member.name}</h4>
+                    <p className="text-sm text-gray-600">{profile.email}</p>
+                    <p className="text-sm text-gray-600">{roleLabel(profile.role)}</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-8 gap-y-3 pt-4 border-t border-gray-200">
+                <div className="grid grid-cols-2 gap-x-8 gap-y-3 border-t border-gray-200 pt-4">
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Full Name</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.fullName}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">First Name</div>
+                    <div className="mt-1 text-sm text-gray-900">{profile.first_name}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Email</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.email}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">Last Name</div>
+                    <div className="mt-1 text-sm text-gray-900">{profile.last_name}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Phone</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.phone}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">Email</div>
+                    <div className="mt-1 text-sm text-gray-900">{profile.email}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Job Title</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.jobTitle}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">Role</div>
+                    {/* Read-only on purpose: PATCH /auth/me refuses a role, so a
+                        control here would be an offer to escalate that the
+                        server would decline. An admin changes it in Team. */}
+                    <div className="mt-1 text-sm text-gray-900">
+                      {roleLabel(profile.role)}
+                      <span className="ml-2 text-xs text-gray-500">set by an admin</span>
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Department</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.department}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">Department</div>
+                    <div className="mt-1 text-sm text-gray-900">
+                      {profile.department || <span className="text-gray-500">Not set</span>}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Location</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.location}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">Member Since</div>
+                    <div className="mt-1 text-sm text-gray-900">{memberSince(profile.created_at)}</div>
                   </div>
                   <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Timezone</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.timezone}</div>
+                    <div className="text-xs font-medium uppercase text-gray-500">Last Login</div>
+                    <div className="mt-1 text-sm text-gray-900">{formatLastLogin(profile.last_login_at)}</div>
                   </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Language</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.language}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Member Since</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.memberSince}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">Last Login</div>
-                    <div className="text-sm text-gray-900 mt-1">{profileData.lastLogin}</div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-gray-200 flex gap-3">
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
-                    <Edit2 className="h-4 w-4" />
-                    Edit Profile
-                  </button>
-                  <button
-                    onClick={() => setShowChangeAvatarModal(true)}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Change Avatar
-                  </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="flex items-center gap-6">
-                  <div className="h-20 w-20 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-2xl font-semibold flex-shrink-0">
-                    AR
+                {saveError && (
+                  <div role="alert" className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                    <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+                    <p className="text-sm text-red-800">{saveError}</p>
                   </div>
-                  <div>
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
-                      <Upload className="h-4 w-4" />
-                      Upload Photo
-                    </button>
-                    <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF (max. 2MB)</p>
-                  </div>
-                </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                    <label htmlFor="profile-first-name" className="mb-2 block text-sm font-medium text-gray-700">
+                      First Name
+                    </label>
                     <input
+                      id="profile-first-name"
                       type="text"
-                      value={editFormData.firstName}
-                      onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={form.first_name}
+                      maxLength={50}
+                      onChange={e => setForm({ ...form, first_name: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                    <label htmlFor="profile-last-name" className="mb-2 block text-sm font-medium text-gray-700">
+                      Last Name
+                    </label>
                     <input
+                      id="profile-last-name"
                       type="text"
-                      value={editFormData.lastName}
-                      onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={form.last_name}
+                      maxLength={50}
+                      onChange={e => setForm({ ...form, last_name: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
-                    <input
-                      type="email"
-                      value={editFormData.email}
-                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                    <input
-                      type="tel"
-                      value={editFormData.phone}
-                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Job Title</label>
-                    <input
-                      type="text"
-                      value={editFormData.jobTitle}
-                      onChange={(e) => setEditFormData({ ...editFormData, jobTitle: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                    <select
-                      value={editFormData.department}
-                      onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option>Sales</option>
-                      <option>Marketing</option>
-                      <option>Support</option>
-                      <option>Management</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                    <input
-                      type="text"
-                      value={editFormData.location}
-                      onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
-                    <select
-                      value={editFormData.timezone}
-                      onChange={(e) => setEditFormData({ ...editFormData, timezone: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="America/New_York">Eastern Time (ET)</option>
-                      <option value="America/Chicago">Central Time (CT)</option>
-                      <option value="America/Denver">Mountain Time (MT)</option>
-                      <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                      <option value="Europe/London">London (GMT)</option>
-                    </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
-                  <select
-                    value={editFormData.language}
-                    onChange={(e) => setEditFormData({ ...editFormData, language: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="en-US">English (US)</option>
-                    <option value="es-ES">Spanish</option>
-                    <option value="fr-FR">French</option>
-                    <option value="de-DE">German</option>
-                  </select>
+                  <label htmlFor="profile-email" className="mb-2 block text-sm font-medium text-gray-700">
+                    Email Address
+                  </label>
+                  <input
+                    id="profile-email"
+                    type="email"
+                    value={form.email}
+                    maxLength={150}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                  />
+                  {/* Stated because it is surprising, and because the old modal
+                      claimed the opposite. There is no confirmation step: the
+                      address changes on save, and it is the address you sign in
+                      with from that moment. */}
+                  <p className="mt-2 text-xs text-gray-500">
+                    Changing this changes the address you sign in with, immediately. There is no
+                    confirmation email — this workspace cannot send one yet.
+                  </p>
                 </div>
 
-                <div className="pt-4 border-t border-gray-200 flex gap-3">
-                  <button
-                    onClick={handleSaveProfile}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
+                <div className="flex gap-3 border-t border-gray-200 pt-4">
+                  <Button onClick={handleSave} size="lg" disabled={saving}>
                     <Save className="h-4 w-4" />
-                    Save Changes
-                  </button>
+                    {saving ? 'Saving…' : 'Save Changes'}
+                  </Button>
                   <button
-                    onClick={() => setIsEditingProfile(false)}
-                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    onClick={cancelEditing}
+                    disabled={saving}
+                    className="rounded-lg border border-gray-300 px-6 py-2 text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -463,317 +339,7 @@ const ProfileSettings: React.FC = () => {
             )}
           </div>
         </div>
-
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">CHANGE PASSWORD</h3>
-          </div>
-
-          <div className="p-6 space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-              <div className="relative">
-                <input
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter current password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-              <div className="relative">
-                <input
-                  type={showNewPassword ? 'text' : 'password'}
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter new password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-              {passwordData.newPassword && (
-                <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                    <span>Password strength:</span>
-                    <span className="font-medium">{strengthInfo.label}</span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${strengthInfo.color} transition-all duration-300`}
-                      style={{ width: strengthInfo.width }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Confirm new password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            {passwordData.newPassword && (
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Password Requirements:</h4>
-                <div className="space-y-2">
-                  {passwordRequirements.map((req, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      {req.met ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : req.recommended ? (
-                        <AlertCircle className="h-4 w-4 text-yellow-500" />
-                      ) : (
-                        <X className="h-4 w-4 text-red-500" />
-                      )}
-                      <span className={`text-sm ${req.met ? 'text-green-700' : req.recommended ? 'text-yellow-700' : 'text-red-700'}`}>
-                        {req.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="pt-4 border-t border-gray-200 flex gap-3">
-              <button
-                onClick={handleUpdatePassword}
-                disabled={!passwordData.currentPassword || !passwordData.newPassword || passwordData.newPassword !== passwordData.confirmPassword || isUpdatingPassword}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUpdatingPassword ? 'Updating...' : 'Update Password'}
-              </button>
-              <button
-                onClick={() => setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <h3 className="font-semibold text-gray-900">EMAIL PREFERENCES</h3>
-          </div>
-
-          <div className="p-6 space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Primary Email</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="email"
-                  value={profileData.email}
-                  disabled
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                />
-                <span className="flex items-center gap-1 text-sm text-green-600 font-medium">
-                  <CheckCircle className="h-4 w-4" />
-                  Verified
-                </span>
-              </div>
-              <button
-                onClick={() => setShowChangeEmailModal(true)}
-                className="mt-2 text-sm text-blue-600 hover:text-blue-700"
-              >
-                Change Email
-              </button>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Email Visibility</label>
-              <div className="space-y-3">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="emailVisibility"
-                    checked={emailVisibility === 'public'}
-                    onChange={() => setEmailVisibility('public')}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Public (visible to all team members)</div>
-                    <div className="text-xs text-gray-500">Your email will be visible to everyone in your organization</div>
-                  </div>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="emailVisibility"
-                    checked={emailVisibility === 'private'}
-                    onChange={() => setEmailVisibility('private')}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Private (only visible to admins)</div>
-                    <div className="text-xs text-gray-500">Your email will only be visible to system administrators</div>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-gray-200">
-              <button
-                onClick={handleSaveEmailVisibility}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-              >
-                <Save className="h-4 w-4" />
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
-
-      {/* Change Email Modal */}
-      <FormModal
-        isOpen={showChangeEmailModal}
-        title="Change Email Address"
-        onClose={() => {
-          setShowChangeEmailModal(false);
-          setChangeEmailData({ newEmail: '', password: '' });
-        }}
-        onSubmit={handleChangeEmail}
-        submitLabel="Change Email"
-        maxWidth="md"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Current Email:
-            </label>
-            <div className="text-sm text-gray-600 flex items-center gap-2">
-              {profileData.email}
-              <span className="text-green-600 flex items-center gap-1">
-                <CheckCircle className="h-4 w-4" />
-                Verified
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              New Email:
-            </label>
-            <input
-              type="email"
-              value={changeEmailData.newEmail}
-              onChange={(e) => setChangeEmailData({ ...changeEmailData, newEmail: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="new.email@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password (for verification):
-            </label>
-            <input
-              type="password"
-              value={changeEmailData.password}
-              onChange={(e) => setChangeEmailData({ ...changeEmailData, password: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-yellow-800">
-                You'll need to verify your new email address. We'll send a verification link.
-              </div>
-            </div>
-          </div>
-        </div>
-      </FormModal>
-
-      {/* Change Avatar Modal */}
-      <FormModal
-        isOpen={showChangeAvatarModal}
-        title="Change Avatar"
-        onClose={() => setShowChangeAvatarModal(false)}
-        onSubmit={handleSaveAvatarColor}
-        submitLabel="Save"
-        maxWidth="sm"
-      >
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Current Avatar:
-            </label>
-            <div
-              className="h-20 w-20 rounded-lg flex items-center justify-center text-white text-2xl font-semibold"
-              style={{ backgroundColor: selectedAvatarColor }}
-            >
-              AR
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Upload New Photo
-            </label>
-            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-              Choose File
-            </button>
-            <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF (max. 2MB)</p>
-          </div>
-
-          <div className="border-t border-gray-200 pt-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Or Choose Initials Color:
-            </label>
-            <div className="grid grid-cols-5 gap-3">
-              {avatarColors.map((color) => (
-                <button
-                  key={color.value}
-                  onClick={() => setSelectedAvatarColor(color.value)}
-                  className={`h-12 w-12 rounded-lg transition-all ${
-                    selectedAvatarColor === color.value
-                      ? 'ring-2 ring-offset-2 ring-blue-500 scale-110'
-                      : 'hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: color.value }}
-                  title={color.name}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </FormModal>
     </div>
   );
 };

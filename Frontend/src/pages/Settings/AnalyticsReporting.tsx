@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
-import {
-  BarChart, LineChart, PieChart, TrendingUp, Target, Users, DollarSign,
-  Activity, Download, Upload, Plus, Settings, Eye, Edit, Trash2, Copy,
-  Share2, Filter, Search, Calendar, RefreshCw, Play, Save, X, Zap,
-  AlertCircle, CheckCircle, Clock, Globe, MapPin, Smartphone, Code
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { BarChart, LineChart, PieChart, TrendingUp, Target, Download, Upload, Plus, Eye, Edit, Copy, Share2, Play, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Dashboard {
   id: string;
@@ -204,10 +200,10 @@ const AnalyticsReporting: React.FC = () => {
               <Upload className="h-4 w-4" />
               <span>Import</span>
             </button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+            <Button >
               <Plus className="h-4 w-4" />
               <span>Create Dashboard</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -384,10 +380,10 @@ const AnalyticsReporting: React.FC = () => {
                   <h2 className="text-xl font-bold text-gray-900 mb-2">Automated Reports</h2>
                   <p className="text-gray-600">Schedule and distribute custom reports</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Plus className="h-4 w-4" />
                   <span>Create Report</span>
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -457,7 +453,7 @@ const AnalyticsReporting: React.FC = () => {
             <div className="space-y-4">
               <div className="border border-blue-200 rounded-lg p-6 bg-blue-50">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="w-12 h-12 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1">
@@ -559,10 +555,10 @@ const AnalyticsReporting: React.FC = () => {
                   <h2 className="text-xl font-bold text-gray-900 mb-2">Key Performance Indicators</h2>
                   <p className="text-gray-600">Track and monitor critical business metrics</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2">
+                <Button >
                   <Plus className="h-4 w-4" />
                   <span>Create KPI</span>
-                </button>
+                </Button>
               </div>
             </div>
 

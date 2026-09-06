@@ -1,25 +1,8 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import ImportWizard from '../../components/Leads/ImportWizard';
-import {
-  Upload,
-  Check,
-  Settings,
-  Calendar,
-  TrendingUp,
-  Zap,
-  Download,
-  ExternalLink,
-  Clock,
-  Users,
-  AlertCircle,
-  FileText,
-  Link as LinkIcon,
-  X,
-  ArrowLeft,
-  Loader2,
-  ChevronRight
-} from 'lucide-react';
+import { Upload, Check, Settings, Calendar, TrendingUp, Zap, Download, AlertCircle, X, ArrowLeft, Loader2 } from 'lucide-react';
 
 interface Integration {
   id: string;
@@ -49,7 +32,6 @@ interface ImportHistory {
   failed: number;
   duplicates?: number;
 }
-
 
 const ImportLeadsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -205,7 +187,7 @@ const ImportLeadsPage: React.FC = () => {
   const handleConfirmDisconnect = () => {
     setShowDisconnectModal(false);
     setTimeout(() => {
-      alert(`${selectedIntegration?.name} has been disconnected. Auto-sync has been stopped.`);
+      alert(`Disconnecting ${selectedIntegration?.name} is not available yet — nothing was disconnected and no sync was stopped.`);
     }, 100);
   };
 
@@ -219,7 +201,10 @@ const ImportLeadsPage: React.FC = () => {
           clearInterval(interval);
           setImporting(false);
           setImportSuccess(true);
-          setImportedCount(25);
+          // PHASE 0: was setImportedCount(25) — a literal, reported as
+          // "Successfully imported 25 new leads" for any integration. Nothing
+          // is fetched or created; there is no integration backend at all.
+          setImportedCount(0);
           return 100;
         }
         return prev + 10;
@@ -235,14 +220,14 @@ const ImportLeadsPage: React.FC = () => {
   const handleSaveConfig = () => {
     setShowConfigModal(false);
     setTimeout(() => {
-      alert('✅ Configuration saved successfully!');
+      alert('Saving integration configuration is not available yet — nothing was saved.');
     }, 100);
   };
 
   const handleCompleteConnection = () => {
     setShowConnectModal(false);
     setTimeout(() => {
-      alert(`✅ ${selectedIntegration?.name} connected successfully! You can now start importing leads.`);
+      alert(`Connecting ${selectedIntegration?.name} is not available yet — there is no OAuth flow behind this, so nothing was connected.`);
     }, 100);
   };
 
@@ -383,13 +368,13 @@ const ImportLeadsPage: React.FC = () => {
                 <div className="flex gap-2">
                   {integration.status === 'connected' ? (
                     <>
-                      <button
+                      <Button
                         onClick={() => handleImportNow(integration)}
-                        className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                        fullWidth
                       >
                         <Upload className="h-4 w-4 mr-2" />
                         Import Now
-                      </button>
+                      </Button>
                       <button
                         onClick={() => handleConfigure(integration)}
                         className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
@@ -404,12 +389,12 @@ const ImportLeadsPage: React.FC = () => {
                       </button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnect(integration)}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                      fullWidth
                     >
                       Connect {integration.name}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -479,12 +464,11 @@ const ImportLeadsPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center space-x-2 ml-4">
-                    <button
+                    <Button
                       onClick={() => handleViewTheseLeads(item)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       View These Leads
-                    </button>
+                    </Button>
                     <button
                       onClick={() => handleViewDetails(item)}
                       className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
@@ -521,13 +505,13 @@ const ImportLeadsPage: React.FC = () => {
                 <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Upload CSV File</h3>
                 <p className="text-sm text-gray-600 mb-4">Click to open the guided import wizard</p>
-                <button
+                <Button
                   onClick={e => { e.stopPropagation(); setWizardOpen(true); }}
-                  className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                  size="xl"
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Start CSV Import
-                </button>
+                </Button>
               </div>
 
               <div className="mt-6 flex items-center justify-center">
@@ -644,7 +628,7 @@ const ImportLeadsPage: React.FC = () => {
                   <div className="mb-6">
                     <div className="w-full bg-gray-200 rounded-full h-3">
                       <div
-                        className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                        className="bg-brand-600 h-3 rounded-full transition-all duration-300"
                         style={{ width: `${importProgress}%` }}
                       />
                     </div>
@@ -660,12 +644,12 @@ const ImportLeadsPage: React.FC = () => {
                     >
                       Cancel
                     </button>
-                    <button
+                    <Button
                       onClick={handleStartImport}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                      fullWidth
                     >
                       Start Import
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>
@@ -675,11 +659,16 @@ const ImportLeadsPage: React.FC = () => {
                   <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                     <Check className="h-8 w-8 text-green-600" />
                   </div>
+                  {/* PHASE 0: said "Import Complete! Successfully imported 25 new
+                      leads" off a fake progress bar. There is no integration
+                      backend, so nothing was fetched or created. The working CSV
+                      importer on this page is the separate ImportWizard below. */}
                   <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    Import Complete!
+                    Nothing was imported
                   </h3>
                   <p className="text-gray-600 mb-4">
-                    Successfully imported <span className="font-bold text-green-600">{importedCount} new leads</span> from {selectedIntegration?.name}
+                    Importing from {selectedIntegration?.name} is not available yet — this screen
+                    cannot connect to it. To load leads from a file, use <span className="font-semibold">Import from CSV</span> instead.
                   </p>
                 </div>
 
@@ -690,12 +679,12 @@ const ImportLeadsPage: React.FC = () => {
                   >
                     Close
                   </button>
-                  <button
+                  <Button
                     onClick={handleImportComplete}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    fullWidth
                   >
                     View Imported Leads
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -724,7 +713,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-assign to
                 </label>
-                <select
+                <select aria-label="Auto-assign to"
                   value={configForm.assignedTo}
                   onChange={(e) => setConfigForm({...configForm, assignedTo: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -740,7 +729,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Default Lead Status
                 </label>
-                <select
+                <select aria-label="Default Lead Status"
                   value={configForm.defaultStatus}
                   onChange={(e) => setConfigForm({...configForm, defaultStatus: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -756,7 +745,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tags (comma-separated)
                 </label>
-                <input
+                <input aria-label="Tags (comma-separated)"
                   type="text"
                   value={configForm.tags}
                   onChange={(e) => setConfigForm({...configForm, tags: e.target.value})}
@@ -769,7 +758,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-sync Frequency
                 </label>
-                <select
+                <select aria-label="Auto-sync Frequency"
                   value={configForm.syncFrequency}
                   onChange={(e) => setConfigForm({...configForm, syncFrequency: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -795,7 +784,7 @@ const ImportLeadsPage: React.FC = () => {
                     onChange={(e) => setConfigForm({...configForm, aiScoring: e.target.checked})}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                 </label>
               </div>
             </div>
@@ -807,12 +796,12 @@ const ImportLeadsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveConfig}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Save Settings
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -876,7 +865,7 @@ const ImportLeadsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   API Key
                 </label>
-                <input
+                <input aria-label="API Key"
                   type="password"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your API key"
@@ -894,12 +883,12 @@ const ImportLeadsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCompleteConnection}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Connect
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -967,15 +956,15 @@ const ImportLeadsPage: React.FC = () => {
               >
                 Close
               </button>
-              <button
+              <Button
                 onClick={() => {
                   setShowImportDetailsModal(false);
                   handleViewTheseLeads(selectedImport);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 View These Leads
-              </button>
+              </Button>
             </div>
           </div>
         </div>

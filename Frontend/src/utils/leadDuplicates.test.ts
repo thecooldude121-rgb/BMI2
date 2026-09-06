@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findDuplicates, computeRisk, buildDomainSet } from './leadDuplicates';
+import { findDuplicates, findDuplicateMatches, computeRisk, buildDomainSet } from './leadDuplicates';
 import { makeLead } from '../__tests__/fixtures/leadFixtures';
 
 // ── findDuplicates ─────────────────────────────────────────────────────────────
@@ -84,6 +84,57 @@ describe('findDuplicates', () => {
     expect(result).toHaveLength(1);
     expect(result[0].risk).toBe('high');
     expect(result[0].signals[0].type).toBe('name_company');
+  });
+
+  // ── The name_company reason string ─────────────────────────────────────────
+  // Regression tests for a false negative found on the contact detail page:
+  // two people with similar names at DIFFERENT companies were reported as
+  // "no company to compare", i.e. as if the comparison had not happened.
+
+  it('similar name at dissimilar companies says the companies differ, and names them', () => {
+    // The real pair that surfaced this: CT001 Alice Johnson at TechCorp
+    // against CT016 Liam Johnson at FoodChain.
+    const lead  = makeLead({ id: 'a', email: 'alice.johnson@techcorp.com',  first_name: 'Alice', last_name: 'Johnson', company: 'TechCorp Solutions' });
+    const other = makeLead({ id: 'b', email: 'liam.johnson@foodchain.com', first_name: 'Liam',  last_name: 'Johnson', company: 'FoodChain Ltd' });
+    const result = findDuplicates(lead, [lead, other]);
+    expect(result).toHaveLength(1);
+    const signal = result[0].signals.find(s => s.type === 'name_company');
+    expect(signal).toBeDefined();
+    expect(signal!.reason).toContain('different companies');
+    expect(signal!.reason).toContain('TechCorp Solutions');
+    expect(signal!.reason).toContain('FoodChain Ltd');
+    expect(signal!.reason).not.toContain('no company to compare');
+  });
+
+  it('similar name with a company missing on one side still says there is nothing to compare', () => {
+    const lead  = makeLead({ id: 'a', email: 'alice.smith@corp.com', first_name: 'Alice', last_name: 'Smith', company: 'Acme' });
+    const other = makeLead({ id: 'b', email: 'alic.smith@beta.com',  first_name: 'Alic',  last_name: 'Smith', company: '' });
+    const result = findDuplicates(lead, [lead, other]);
+    expect(result).toHaveLength(1);
+    const signal = result[0].signals.find(s => s.type === 'name_company');
+    expect(signal!.reason).toContain('no company to compare');
+    expect(signal!.reason).not.toContain('different companies');
+  });
+
+  it('similar name at similar companies reports the company strength, never "unknown"', () => {
+    const lead  = makeLead({ id: 'a', email: 'a@one.com', first_name: 'Alice', last_name: 'Smith', company: 'Acme Corp' });
+    const other = makeLead({ id: 'b', email: 'b@two.com', first_name: 'Alice', last_name: 'Smith', company: 'Acme Corp' });
+    const result = findDuplicates(lead, [lead, other]);
+    const signal = result[0].signals.find(s => s.type === 'name_company');
+    expect(signal!.reason).toBe('Similar name (exact) + company (exact)');
+    expect(signal!.reason).not.toContain('unknown');
+  });
+
+  it('the wording fix does not move strength or risk', () => {
+    // Same pair as the pre-existing 'domain + fuzzy name match -> medium risk'
+    // case, asserted here on the signal rather than the aggregate: dissimilar
+    // companies keep strength 'medium' for a high name similarity, exactly as
+    // before. Only the sentence changed.
+    const lead  = makeLead({ id: 'a', email: 'alice@corp.com', first_name: 'Alice', last_name: 'Smith', company: 'Acme' });
+    const other = makeLead({ id: 'b', email: 'alic@corp.com',  first_name: 'Alic',  last_name: 'Smith', company: 'Beta' });
+    const result = findDuplicates(lead, [lead, other]);
+    expect(result[0].risk).toBe('medium');
+    expect(result[0].signals.find(s => s.type === 'name_company')!.strength).toBe('medium');
   });
 
   it('excludes self (same id)', () => {
@@ -172,5 +223,86 @@ describe('buildDomainSet', () => {
   it('returns empty set for leads without email', () => {
     const leads = [makeLead({ id: 'a', email: undefined }), makeLead({ id: 'b' })];
     expect(buildDomainSet(leads).size).toBe(0);
+  });
+});
+
+// ── Generic subject support (contacts) ──────────────────────────────────────
+
+describe('findDuplicateMatches — entity-agnostic detection', () => {
+  /**
+   * Contacts previously had a "duplicate detector" that compared the email
+   * against the literal string 'john@acme.com'. These cover the real engine
+   * running over contact-shaped records instead.
+   */
+  const pool = [
+    { id: 'CT001', email: 'ada@acme.com',      phone: '555-111-2222', company: 'Acme Corp',   full_name: 'Ada Lovelace' },
+    { id: 'CT002', email: 'grace@hopper.io',   phone: '555-333-4444', company: 'Hopper Labs', full_name: 'Grace Hopper' },
+    { id: 'CT003', email: 'ada.l@acme.com',    phone: '',             company: 'Acme Corp',   full_name: 'Ada Lovelace' },
+  ];
+
+  it('flags an exact email match as high risk', () => {
+    const m = findDuplicateMatches({ id: 'new', email: 'ada@acme.com' }, pool);
+    expect(m[0].id).toBe('CT001');
+    expect(m[0].risk).toBe('high');
+    expect(m[0].signals[0].type).toBe('email');
+  });
+
+  it('flags the same person at the same company under a different address', () => {
+    // Exactly the case the literal-string check could never catch.
+    const m = findDuplicateMatches(
+      { id: 'new', email: 'ada.lovelace@acme.com', company: 'Acme Corp', first_name: 'Ada', last_name: 'Lovelace' },
+      pool,
+    );
+    const ids = m.map(c => c.id);
+    expect(ids).toContain('CT001');
+    expect(ids).toContain('CT003');
+    expect(computeRisk(m)).toBe('high');
+  });
+
+  it('does not match a record against itself, so editing is not a duplicate', () => {
+    // Edit mode passes the contact's own id and the pool contains that row.
+    const m = findDuplicateMatches(
+      { id: 'CT001', email: 'ada@acme.com', company: 'Acme Corp', full_name: 'Ada Lovelace' },
+      pool,
+    );
+    expect(m.every(c => c.id !== 'CT001')).toBe(true);
+  });
+
+  it('returns nothing for a genuinely new contact', () => {
+    const m = findDuplicateMatches(
+      { id: 'new', email: 'someone@elsewhere.test', company: 'Elsewhere', first_name: 'Someone', last_name: 'New' },
+      pool,
+    );
+    expect(m).toEqual([]);
+  });
+
+  it('reports a shared company domain without calling it a duplicate on its own', () => {
+    const m = findDuplicateMatches({ id: 'new', email: 'bob@acme.com' }, pool);
+    expect(m.length).toBeGreaterThan(0);
+    expect(m.every(c => c.risk !== 'high')).toBe(true);
+    expect(m[0].signals.some(s => s.type === 'domain')).toBe(true);
+  });
+
+  it('ignores a shared free-mail domain', () => {
+    // Two unrelated people on gmail are not related.
+    const gmail = [{ id: 'CT100', email: 'x@gmail.com', full_name: 'Someone Else' }];
+    expect(findDuplicateMatches({ id: 'new', email: 'y@gmail.com' }, gmail)).toEqual([]);
+  });
+
+  it('matches on phone even when the formatting differs', () => {
+    const m = findDuplicateMatches({ id: 'new', phone: '(555) 111 2222' }, pool);
+    expect(m[0].id).toBe('CT001');
+    expect(m[0].risk).toBe('high');
+  });
+
+  it('sorts the highest risk first', () => {
+    const m = findDuplicateMatches(
+      { id: 'new', email: 'ada@acme.com', company: 'Acme Corp', full_name: 'Ada Lovelace' },
+      pool,
+    );
+    const order = { high: 0, medium: 1, low: 2 } as const;
+    for (let i = 1; i < m.length; i++) {
+      expect(order[m[i - 1].risk]).toBeLessThanOrEqual(order[m[i].risk]);
+    }
   });
 });

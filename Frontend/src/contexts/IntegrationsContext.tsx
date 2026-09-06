@@ -51,239 +51,25 @@ export const IntegrationsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchIntegrations();
   }, []);
 
+  // PHASE 2: there is no integrations backend. This used to synthesise the whole
+  // subsystem in place: two connectors reported status 'connected' (Apollo.io and
+  // an email provider) while wired to nothing, a catalogue of "available"
+  // connectors, and an APICredentials object carrying a literal
+  // sk_live_... key plus a webhook URL. Those were rendered into inputs with
+  // copy-to-clipboard buttons, so the fake secret could be carried out of the app
+  // into a config file or a ticket, where it is indistinguishable from a real
+  // leaked key. All three setters ran inside the try unconditionally, so the catch
+  // never had anything to catch.
+  //
+  // Empty until a real endpoint exists. IntegrationsHub guards its panels on
+  // length and its credentials block on apiCredentials being non-null, so an
+  // honest empty state renders instead of a specimen.
   const fetchIntegrations = async () => {
     setIsLoading(true);
-    try {
-      const mockConnected: ConnectedIntegration[] = [
-        {
-          id: '1',
-          type: 'lead_generation',
-          name: 'LEAD GENERATION CONNECTOR',
-          icon: '🎯',
-          status: 'connected',
-          currentProvider: {
-            id: 'apollo',
-            name: 'Apollo.io',
-            authType: 'rest_api',
-          },
-          supportedProviders: [
-            { id: 'apollo', name: 'Apollo.io', authType: 'rest_api' },
-            { id: 'zoominfo', name: 'ZoomInfo', authType: 'rest_api' },
-            { id: 'lusha', name: 'Lusha', authType: 'rest_api' },
-            { id: 'custom', name: 'Custom API', authType: 'api_key' },
-          ],
-          authType: 'rest_api',
-          sync: {
-            lastSyncAt: new Date(Date.now() - 2 * 60 * 1000),
-            syncCount: 1850,
-            syncStatus: 'success',
-          },
-          stats: [
-            { label: '1,850 leads imported', value: '' },
-          ],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: '2',
-          type: 'email',
-          name: 'EMAIL CONNECTOR',
-          icon: '📧',
-          status: 'connected',
-          currentProvider: {
-            id: 'gmail',
-            name: 'Gmail',
-            authType: 'oauth2',
-          },
-          supportedProviders: [
-            { id: 'gmail', name: 'Gmail', authType: 'oauth2' },
-            { id: 'outlook', name: 'Outlook', authType: 'oauth2' },
-            { id: 'yahoo', name: 'Yahoo', authType: 'oauth2' },
-            { id: 'custom', name: 'IMAP/SMTP', authType: 'imap_smtp' },
-          ],
-          authType: 'oauth2',
-          sync: {
-            lastSyncAt: new Date(Date.now() - 30 * 1000),
-            syncCount: 320,
-            syncStatus: 'success',
-          },
-          stats: [
-            { label: '320 emails today', value: '' },
-          ],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: '3',
-          type: 'calendar',
-          name: 'CALENDAR CONNECTOR',
-          icon: '📅',
-          status: 'connected',
-          currentProvider: {
-            id: 'google-calendar',
-            name: 'Google Calendar',
-            authType: 'oauth',
-          },
-          supportedProviders: [
-            { id: 'google-calendar', name: 'Google Calendar', authType: 'oauth' },
-            { id: 'outlook-calendar', name: 'Outlook Calendar', authType: 'oauth' },
-            { id: 'custom', name: 'CalDAV', authType: 'caldav' },
-          ],
-          authType: 'oauth',
-          sync: {
-            lastSyncAt: new Date(Date.now() - 5 * 60 * 1000),
-            syncCount: 156,
-            syncStatus: 'success',
-          },
-          stats: [
-            { label: '156 meetings synced', value: '' },
-          ],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: '4',
-          type: 'communication',
-          name: 'COMMUNICATION CONNECTOR',
-          icon: '💬',
-          status: 'connected',
-          currentProvider: {
-            id: 'slack',
-            name: 'Slack',
-            authType: 'webhook',
-          },
-          supportedProviders: [
-            { id: 'slack', name: 'Slack', authType: 'webhook' },
-            { id: 'teams', name: 'Microsoft Teams', authType: 'webhook' },
-            { id: 'discord', name: 'Discord', authType: 'webhook' },
-            { id: 'custom', name: 'Custom Webhook', authType: 'webhook' },
-          ],
-          authType: 'webhook',
-          sync: {
-            lastSyncAt: new Date(Date.now() - 1 * 60 * 1000),
-            syncCount: 89,
-            syncStatus: 'success',
-          },
-          stats: [
-            { label: '89 notifications sent', value: '' },
-          ],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: '5',
-          type: 'video_meeting',
-          name: 'VIDEO MEETING CONNECTOR',
-          icon: '📞',
-          status: 'connected',
-          currentProvider: {
-            id: 'zoom',
-            name: 'Zoom',
-            authType: 'oauth2',
-          },
-          supportedProviders: [
-            { id: 'zoom', name: 'Zoom', authType: 'oauth2' },
-            { id: 'google-meet', name: 'Google Meet', authType: 'oauth2' },
-            { id: 'teams-meeting', name: 'Microsoft Teams', authType: 'oauth2' },
-            { id: 'custom', name: 'Custom Meeting API', authType: 'api_key' },
-          ],
-          authType: 'oauth2',
-          sync: {
-            lastSyncAt: new Date(Date.now() - 10 * 60 * 1000),
-            syncCount: 35,
-            syncStatus: 'success',
-          },
-          stats: [
-            { label: '35 meetings today', value: '' },
-          ],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ];
-
-      const mockAvailable: AvailableIntegration[] = [
-        {
-          id: 'hrms',
-          type: 'hrms',
-          name: 'HRMS CONNECTOR',
-          icon: '🏢',
-          status: 'available',
-          isPremium: true,
-          description: 'Auto-generate warm B2B leads from recruitment database',
-          supportedTools: ['BambooHR', 'Workday', 'ADP, Greenhouse', 'Your custom HRMS via API/Webhook'],
-          benefits: [
-            '33% higher close rate vs cold leads',
-            'Auto-generate warm B2B leads from recruitment database',
-          ],
-        },
-        {
-          id: 'payment',
-          type: 'payment',
-          name: 'PAYMENT CONNECTOR',
-          icon: '💰',
-          status: 'available',
-          description: 'Track payments and invoices in CRM',
-          supportedTools: ['Stripe', 'PayPal, Square', 'Any payment API'],
-          benefits: [
-            'Track payments and invoices in CRM',
-            'Auto-update deal when payment made',
-          ],
-        },
-        {
-          id: 'e_signature',
-          type: 'e_signature',
-          name: 'E-SIGNATURE CONNECTOR',
-          icon: '📝',
-          status: 'available',
-          description: 'Send contracts for signature and track completion',
-          supportedTools: ['DocuSign', 'Adobe Sign', 'PandaDoc', 'Custom API'],
-          benefits: [
-            'Send contracts for signature and track completion',
-            'Auto-update deal stage',
-          ],
-        },
-        {
-          id: 'storage',
-          type: 'storage',
-          name: 'STORAGE CONNECTOR',
-          icon: '🗄️',
-          status: 'available',
-          description: 'Store documents and files automatically',
-          supportedTools: ['Google Drive', 'Dropbox', 'OneDrive, Box', 'Custom storage API'],
-          benefits: [
-            'Store documents and files automatically',
-            'Auto-attach to deals and contacts',
-          ],
-        },
-        {
-          id: 'analytics',
-          type: 'analytics',
-          name: 'ANALYTICS CONNECTOR',
-          icon: '📊',
-          status: 'available',
-          description: 'Track website visits and conversions',
-          supportedTools: ['Google Analytics', 'Mixpanel', 'Custom analytics'],
-          benefits: [
-            'Track website visits and conversions',
-            'Link analytics data to leads/deals',
-          ],
-        },
-      ];
-
-      const mockApiCredentials: APICredentials = {
-        apiKey: 'sk_live_abc123456789defghijklmnopqrstuvwxyz',
-        webhookUrl: 'https://api.bmi-crm.com/webhooks/user_alex123',
-        createdAt: new Date(),
-      };
-
-      setConnectedIntegrations(mockConnected);
-      setAvailableIntegrations(mockAvailable);
-      setApiCredentials(mockApiCredentials);
-    } catch (error) {
-      console.error('IntegrationsContext: Failed to load integrations:', error);
-    } finally {
-      setIsLoading(false);
-    }
+    setConnectedIntegrations([]);
+    setAvailableIntegrations([]);
+    setApiCredentials(null);
+    setIsLoading(false);
   };
 
   const connectIntegration = async (integration: AvailableIntegration, config: Record<string, any>) => {
@@ -362,20 +148,25 @@ export const IntegrationsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     );
   };
 
-  const generateApiKey = async () => {
-    const newApiKey = `sk_live_${Math.random().toString(36).substring(2)}`;
-    const newWebhookUrl = `https://api.bmi-crm.com/webhooks/user_${Math.random().toString(36).substring(2, 8)}`;
-
-    setApiCredentials({
-      apiKey: newApiKey,
-      webhookUrl: newWebhookUrl,
-      createdAt: new Date(),
-    });
+  // These minted a credential client-side — an "sk_live_" prefix concatenated with
+  // Math.random().toString(36) — and set it as the user's live API key. A key issued by the browser is not a
+  // key: nothing server-side would ever accept it, and a user who copied it out of
+  // the "regenerate" flow would be carrying a plausible-looking secret that
+  // authenticates nothing. Issuing credentials is a server responsibility and no
+  // endpoint exists, so this throws rather than fabricating. It is unreachable
+  // from the UI today: IntegrationsHub renders the credentials block, including
+  // the regenerate control, only when `apiCredentials` is non-null, and it stays
+  // null above.
+  const notImplemented = () => {
+    throw new Error(
+      'API credentials are issued by the backend, and no endpoint exists yet. ' +
+      'Refusing to generate a key client-side — see FABRICATED_DATA_AUDIT.md (F22).'
+    );
   };
 
-  const refreshApiKey = async () => {
-    await generateApiKey();
-  };
+  const generateApiKey = async () => notImplemented();
+
+  const refreshApiKey = async () => notImplemented();
 
   return (
     <IntegrationsContext.Provider

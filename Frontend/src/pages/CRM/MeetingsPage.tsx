@@ -1,35 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import {
-  Calendar,
-  Plus,
-  MoreVertical,
-  Video,
-  Phone,
-  Users,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  Zap,
-  BarChart3,
-  Target,
-  Search,
-  Filter,
-  Download,
-  List,
-  Play,
-  FileText,
-  MapPin,
-  Building2,
-  DollarSign,
-  Sparkles,
-  AlertCircle,
-  ChevronRight,
-  Edit,
-  Trash2,
-  Share2,
-  X
-} from 'lucide-react';
+import { Calendar, Plus, MoreVertical, Video, Phone, Users, Clock, CheckCircle, Zap, BarChart3, Target, Search, Download, List, Play, FileText, MapPin, Building2, DollarSign, Sparkles, ChevronRight, Edit, Trash2, Share2, X } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { sampleMeetings, meetingStats, aiInsights } from '../../utils/sampleMeetingsData';
 import { Meeting, MeetingFilters } from '../../types/meeting';
@@ -603,7 +575,7 @@ END:VCALENDAR`;
             </>
           ) : isUpcoming ? (
             <>
-              <button
+              <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   if (meeting.type === 'in-person') {
@@ -612,10 +584,10 @@ END:VCALENDAR`;
                     handleJoinMeeting(meeting);
                   }
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 {meeting.type === 'in-person' ? 'View Details' : 'Join Early'}
-              </button>
+              </Button>
               {meeting.prepNotes && meeting.prepNotes.length > 0 && (
                 <button
                   onClick={(e) => {
@@ -671,15 +643,15 @@ END:VCALENDAR`;
             </>
           ) : (
             <>
-              <button
+              <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/crm/meetings/${meeting.id}`);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 View Details
-              </button>
+              </Button>
               {meeting.hasRecording && (
                 <button
                   onClick={(e) => {
@@ -727,13 +699,13 @@ END:VCALENDAR`;
             <p className="text-gray-600">Manage your meetings and AI-powered insights</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={() => setModals({ ...modals, scheduleMeeting: true })}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+              size="lg"
             >
               <Plus className="h-5 w-5" />
               Schedule Meeting
-            </button>
+            </Button>
             <div className="relative">
               <button
                 onClick={() => setModals({ ...modals, moreOptions: !modals.moreOptions })}
@@ -871,7 +843,7 @@ END:VCALENDAR`;
           <div className="grid grid-cols-4 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
-              <select
+              <select aria-label="Time Range"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.timeRange}
                 onChange={(e) => setFilters({ ...filters, timeRange: e.target.value as any })}
@@ -885,7 +857,7 @@ END:VCALENDAR`;
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
+              <select aria-label="Status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.status}
                 onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
@@ -898,7 +870,7 @@ END:VCALENDAR`;
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-              <select
+              <select aria-label="Type"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.type}
                 onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
@@ -911,7 +883,7 @@ END:VCALENDAR`;
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">AI Status</label>
-              <select
+              <select aria-label="AI Status"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={filters.aiStatus}
                 onChange={(e) => setFilters({ ...filters, aiStatus: e.target.value as any })}
@@ -985,12 +957,12 @@ END:VCALENDAR`;
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Try adjusting your filters or search terms
                   </p>
-                  <button
+                  <Button
                     onClick={clearAllFilters}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    size="xl"
                   >
                     Clear All Filters
-                  </button>
+                  </Button>
                 </>
               ) : sampleMeetings.length === 0 ? (
                 <>
@@ -998,13 +970,13 @@ END:VCALENDAR`;
                   <p className="text-gray-600 mb-6 max-w-md mx-auto">
                     Schedule your first meeting to get started with AI-powered meeting intelligence
                   </p>
-                  <button
+                  <Button
                     onClick={() => setModals({ ...modals, scheduleMeeting: true })}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium inline-flex items-center gap-2"
+                    size="xl"
                   >
                     <Plus className="h-5 w-5" />
                     Schedule Meeting
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>

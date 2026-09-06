@@ -7,16 +7,23 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:migrate": "ts-node src/config/migrate.ts"
+    "db:migrate": "ts-node src/config/runMigrations.ts",
+    "db:seed:users": "ts-node src/scripts/seedUsers.ts",
+    "test": "vitest run",
+    "test:isolation": "DB_NAME=bmi_crm_iso_test NODE_ENV=test vitest run",
+    "test:isolation:setup": "dropdb --if-exists bmi_crm_iso_test && createdb bmi_crm_iso_test && DB_NAME=bmi_crm_iso_test npm run db:migrate"
   },
   "dependencies": {
+    "@types/multer": "^2.2.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.6.2",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "multer": "^2.2.0",
     "pg": "^8.12.0",
     "uuid": "^10.0.0"
   },
@@ -28,8 +35,11 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^20.14.0",
     "@types/pg": "^8.11.6",
+    "@types/supertest": "^7.2.1",
     "@types/uuid": "^10.0.0",
+    "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.11"
   }
 }

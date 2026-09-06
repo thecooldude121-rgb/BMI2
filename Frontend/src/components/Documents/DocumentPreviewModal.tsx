@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../ui/Button';
 import { X, Download, Share2, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 
 interface RecentDocument {
@@ -188,13 +189,12 @@ const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
               <Share2 className="w-4 h-4" />
               Share
             </button>
-            <button
+            <Button
               onClick={() => onViewDetails(doc)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
             >
               View Full Details
               <ChevronRight className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
 

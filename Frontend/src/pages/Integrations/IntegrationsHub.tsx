@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { useIntegrations } from '../../contexts/IntegrationsContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -19,36 +20,10 @@ import { ConnectedIntegration, AvailableIntegration, IntegrationType } from '../
 type FilterStatus = 'all' | 'connected' | 'available';
 
 export const IntegrationsHub: React.FC = () => {
-  console.log('IntegrationsHub: Component rendering');
-
-  let contextData;
-  try {
-    contextData = useIntegrations();
-    console.log('IntegrationsHub: Context data loaded', {
-      hasConnected: !!contextData.connectedIntegrations,
-      hasAvailable: !!contextData.availableIntegrations,
-      isLoading: contextData.isLoading
-    });
-  } catch (error) {
-    console.error('IntegrationsHub: Context error', error);
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Integrations</h1>
-          <p className="text-gray-600 mb-4">
-            {error instanceof Error ? error.message : 'An unknown error occurred'}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Reload Page
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // No try/catch around useIntegrations(): catching a hook throw and returning
+  // early leaves React's hook list truncated, which corrupts every later render
+  // rather than recovering from anything. The route-level ErrorBoundary renders
+  // the failure UI instead.
   const {
     connectedIntegrations,
     availableIntegrations,
@@ -61,7 +36,7 @@ export const IntegrationsHub: React.FC = () => {
     configureIntegration,
     switchProvider,
     refreshApiKey,
-  } = contextData;
+  } = useIntegrations();
 
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -205,12 +180,11 @@ export const IntegrationsHub: React.FC = () => {
           <p className="text-gray-600 mb-4">
             Unable to load integrations data. Please try again.
           </p>
-          <button
+          <Button
             onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Reload Page
-          </button>
+          </Button>
         </div>
       </div>
     );

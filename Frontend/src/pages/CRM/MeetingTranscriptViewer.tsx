@@ -1,31 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Search,
-  Download,
-  Share2,
-  Highlighter,
-  Copy,
-  ChevronDown,
-  DollarSign,
-  Calendar,
-  Plug,
-  Users,
-  CheckCircle,
-  Clock,
-  TrendingUp,
-  AlertCircle,
-  Sparkles,
-  FileText,
-  X,
-  BarChart3
-} from 'lucide-react';
+import { ArrowLeft, Search, Download, Share2, Highlighter, Copy, DollarSign, Calendar, Plug, Users, CheckCircle, TrendingUp, Sparkles, FileText } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useToast } from '../../contexts/ToastContext';
 import DownloadTranscriptModal, { DownloadOptions } from '../../components/Meeting/DownloadTranscriptModal';
 import ShareTranscriptModal, { ShareOptions } from '../../components/Meeting/ShareTranscriptModal';
-import { AIDetectionModal, SentimentModal, SpeakerTooltip } from '../../components/Meeting/TranscriptDetailModals';
+import { AIDetectionModal, SentimentModal } from '../../components/Meeting/TranscriptDetailModals';
 import TextSelectionMenu from '../../components/Meeting/TextSelectionMenu';
 import { acmeCorpTranscript, TranscriptSegment } from '../../utils/meetingTranscriptMockData';
 
@@ -423,7 +403,7 @@ export default function MeetingTranscriptViewer() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Speaker:</label>
-              <select
+              <select aria-label="Speaker:"
                 value={filterSpeaker}
                 onChange={(e) => setFilterSpeaker(e.target.value as any)}
                 className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -436,7 +416,7 @@ export default function MeetingTranscriptViewer() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Jump to:</label>
-              <select
+              <select aria-label="Jump to:"
                 onChange={(e) => {
                   const moment = keyMoments.find(m => m.id === e.target.value);
                   if (moment) {

@@ -1,47 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import {
-  BarChart3,
-  TrendingUp,
-  Users,
-  DollarSign,
-  Calendar,
-  Target,
-  Activity,
-  Phone,
-  Mail,
-  FileText,
-  Download,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Star,
-  Clock,
-  Award,
-  Building2,
-  UserCheck,
-  PhoneCall,
-  AlertCircle,
-  Eye,
-  Share2,
-  Settings,
-  MoreVertical,
-  Plus,
-  Search,
-  Filter,
-  RefreshCw,
-  PieChart,
-  TrendingDown,
-  Zap,
-  CheckCircle,
-  Home,
-  Sparkles,
-  Edit,
-} from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Sparkles, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { isWonWith, isLostWith, isOpenWith } from '../../utils/pipelinesApi';
 
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
+  // Same hook the two dashboards read, so /crm/reports cannot drift from them.
+  const { leads, deals, contacts, loading: dataLoading, error: dataError, reload } = useDashboardData();
   const [selectedTimeframe, setSelectedTimeframe] = useState('month');
   const [selectedOwner, setSelectedOwner] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -206,12 +175,65 @@ const ReportsPage: React.FC = () => {
     setSelectedCategory('all');
   };
 
-  // Initial loading simulation
+  /**
+   * Live figures for the four headline cards and the conversion funnel.
+   *
+   * WHAT WAS HERE: four hardcoded strings — "$847,000", "23 Deals", "$2.4M",
+   * "68%" — each with an invented growth sub-label ("+12% vs last month",
+   * "89% of quota ✅ On track") and a fixed Unicode sparkline that drew a rising
+   * trend regardless of data. Real values were $55,000 / 1 / $1.56M / 50%. The
+   * $2.4M was the same fabricated pipeline figure the CRM dashboard carried.
+   */
+  const { lookup } = useStageLookup();
+
+  const stats = useMemo(() => {
+    // The win rate below divides won by (won + lost). Classifying by the
+    // literal 'closed-won' meant a Renewals or Partnerships win landed in
+    // NEITHER bucket — it was counted as open — so the reported win rate was
+    // computed over the default pipeline alone while being labelled as the
+    // workspace's.
+    const won = deals.filter(isWonWith(lookup));
+    const lost = deals.filter(isLostWith(lookup));
+    const open = deals.filter(isOpenWith(lookup));
+    const decided = won.length + lost.length;
+    return {
+      revenueWon: won.reduce((sum, d) => sum + dealValue(d), 0),
+      dealsWon: won.length,
+      dealsLost: lost.length,
+      openPipeline: open.reduce((sum, d) => sum + dealValue(d), 0),
+      openCount: open.length,
+      // Won as a share of DECIDED deals, not of all deals. Dividing by every
+      // deal gives a "win rate" that can only rise as open deals are added.
+      winRate: decided > 0 ? Math.round((won.length / decided) * 100) : null,
+      decided,
+    };
+  }, [lookup, deals]);
+
+  const money = (n: number): string =>
+    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
+    : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
+    : `$${n.toLocaleString()}`;
+
+  /** Lead-stage counts for the conversion funnel. */
+  const funnel = useMemo(() => {
+    const byStatus = (v: string) => leads.filter(l => l.status === v).length;
+    return {
+      leads: leads.length,
+      contacts: contacts.length,
+      qualified: byStatus('qualified'),
+      won: byStatus('won'),
+      lost: byStatus('lost'),
+    };
+  }, [leads, contacts]);
+
+  // The skeleton below now tracks the REAL fetch. It used to be
+  //   setTimeout(() => setIsLoading(false), 2000)
+  // — a two-second animation that then revealed hardcoded numbers, which is
+  // what made them look freshly queried. `isLoading` is kept because other
+  // parts of the page read it; it follows the hook now.
   React.useEffect(() => {
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
-  }, []);
+    setIsLoading(dataLoading);
+  }, [dataLoading]);
 
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -304,13 +326,12 @@ const ReportsPage: React.FC = () => {
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
-              <button
+              <Button
                 onClick={handleNavigateToCustomReportBuilder}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Custom Report</span>
-              </button>
+              </Button>
               <div className="relative hidden md:block">
                 <button
                   onClick={() => setShowMoreMenu(!showMoreMenu)}
@@ -374,7 +395,7 @@ const ReportsPage: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select
+                <select aria-label="Date Range:"
                   value={selectedTimeframe}
                   onChange={(e) => setSelectedTimeframe(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -391,7 +412,7 @@ const ReportsPage: React.FC = () => {
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select
+                <select aria-label="Owner:"
                   value={selectedOwner}
                   onChange={(e) => setSelectedOwner(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -408,7 +429,7 @@ const ReportsPage: React.FC = () => {
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select
+                <select aria-label="Category:"
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -459,7 +480,7 @@ const ReportsPage: React.FC = () => {
             <div className="mt-2 bg-white rounded-lg border border-gray-200 p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select
+                <select aria-label="Date Range:"
                   value={selectedTimeframe}
                   onChange={(e) => setSelectedTimeframe(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -476,7 +497,7 @@ const ReportsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select
+                <select aria-label="Owner:"
                   value={selectedOwner}
                   onChange={(e) => setSelectedOwner(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -490,7 +511,7 @@ const ReportsPage: React.FC = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select
+                <select aria-label="Category:"
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -524,6 +545,24 @@ const ReportsPage: React.FC = () => {
           )}
         </div>
 
+        {/* A failed request must not render as $0 / 0 deals. The hook reports
+            which part failed; without this the cards would silently show zeros,
+            which is the same untruth as the literals they replaced. */}
+        {dataError && (
+          <div
+            className="mb-6 flex items-start justify-between gap-4 rounded-lg border border-yellow-300 bg-yellow-50 p-4"
+            role="alert"
+          >
+            <p className="text-sm text-yellow-900">{dataError}</p>
+            <button
+              onClick={reload}
+              className="shrink-0 text-sm font-semibold text-yellow-900 underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Quick Stats */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
@@ -537,46 +576,52 @@ const ReportsPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          {/* Sub-labels are factual captions, not deltas. The old ones ("+12% vs
+              last month ⬆️", "+8% growth", "+5 points") were invented: a
+              period-over-period figure needs a second query against the previous
+              period and no endpoint offers one. Same decision as the dashboard
+              trend badges in 12/n. */}
           <QuickStatCard
             icon={<DollarSign className="w-6 h-6 text-green-600" />}
-            label="REVENUE"
-            value="$847,000"
-            change="+12% vs last month ⬆️"
-            sparkline="━━━▁▃▄▃▅▆▇▄▆▅"
-            changeColor="text-green-600"
+            label="REVENUE WON"
+            value={money(stats.revenueWon)}
+            change={`From ${stats.dealsWon} closed-won ${stats.dealsWon === 1 ? 'deal' : 'deals'}`}
+            changeColor="text-gray-600"
             bgColor="bg-green-50"
             reportName="Sales Overview"
             onView={handleViewReport}
           />
+          {/* Was "89% of quota ✅ On track". The quotas table has ZERO rows and
+              this page queries it nowhere, so attainment cannot be computed. */}
           <QuickStatCard
             icon={<Target className="w-6 h-6 text-blue-600" />}
             label="DEALS WON"
-            value="23 Deals"
-            change="89% of quota ✅ On track"
-            sparkline="▂▂▃▃▅▅▆▆▆█"
-            changeColor="text-green-600"
+            value={`${stats.dealsWon} ${stats.dealsWon === 1 ? 'Deal' : 'Deals'}`}
+            change={stats.decided > 0 ? `${stats.dealsLost} lost · quota not tracked` : 'No deals closed yet'}
+            changeColor="text-gray-600"
             bgColor="bg-blue-50"
             reportName="Quota Attainment"
             onView={handleViewReport}
           />
           <QuickStatCard
             icon={<TrendingUp className="w-6 h-6 text-purple-600" />}
-            label="PIPELINE"
-            value="$2.4M"
-            change="+8% growth ⬆️"
-            sparkline="▁▁▃▃▄▄▆▆▆▇▇█"
-            changeColor="text-green-600"
+            label="OPEN PIPELINE"
+            value={money(stats.openPipeline)}
+            change={`${stats.openCount} open ${stats.openCount === 1 ? 'deal' : 'deals'}, excludes closed`}
+            changeColor="text-gray-600"
             bgColor="bg-purple-50"
             reportName="Pipeline Health"
             onView={handleViewReport}
           />
+          {/* Won / decided, not won / all deals — see the note on `stats`. */}
           <QuickStatCard
             icon={<Award className="w-6 h-6 text-orange-600" />}
             label="WIN RATE"
-            value="68%"
-            change="+5 points ⬆️"
-            sparkline="▃▃▅▅▆▆▆▆▇▇"
-            changeColor="text-green-600"
+            value={stats.winRate === null ? '—' : `${stats.winRate}%`}
+            change={stats.decided > 0
+              ? `${stats.dealsWon} won of ${stats.decided} decided`
+              : 'No decided deals yet'}
+            changeColor="text-gray-600"
             bgColor="bg-orange-50"
             reportName="Win/Loss Analysis"
             onView={handleViewReport}
@@ -1062,18 +1107,31 @@ const ReportsPage: React.FC = () => {
           {expandedSections.leads && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
+                {/* Was the literals 156 / 147 / 78 / 23 / 15%. "Contacts: 147"
+                    was the same fabricated number the CRM dashboard and the
+                    contacts list carried. Now the live counts, from the hook the
+                    dashboards read.
+
+                    "Conversion" is won / DECIDED leads, and reads "—" until at
+                    least one lead is decided: dividing by all leads gives a rate
+                    that can only climb as open leads are added. */}
                 <ReportCard
                   title="Lead Conversion Funnel"
                   icon="🔄"
                   metrics={[
-                    { label: 'Leads: 156', value: '' },
-                    { label: 'Contacts: 147', value: '' },
-                    { label: 'Deals: 78', value: '' },
-                    { label: 'Won: 23', value: '' },
-                    { label: 'Conversion: 15%', value: '' },
+                    { label: `Leads: ${funnel.leads}`, value: '' },
+                    { label: `Contacts: ${funnel.contacts}`, value: '' },
+                    { label: `Qualified: ${funnel.qualified}`, value: '' },
+                    { label: `Won: ${funnel.won}`, value: '' },
+                    { label: `Lost: ${funnel.lost}`, value: '' },
+                    {
+                      label: (funnel.won + funnel.lost) > 0
+                        ? `Conversion: ${Math.round((funnel.won / (funnel.won + funnel.lost)) * 100)}%`
+                        : 'Conversion: —',
+                      value: '',
+                    },
                   ]}
-                  updated="10m"
-                  sparkline="████▇▅▂"
+                  updated={dataLoading ? 'loading' : 'live'}
                   onView={handleViewReport}
                   onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
                   onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
@@ -1677,7 +1735,7 @@ const ReportsPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Frequency" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option>Daily</option>
                     <option>Weekly</option>
                     <option>Monthly</option>
@@ -1685,7 +1743,7 @@ const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Recipients</label>
-                  <input
+                  <input aria-label="Recipients"
                     type="text"
                     placeholder="Enter email addresses..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1699,7 +1757,7 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Scheduling ${selectedReport}`);
                     setShowScheduleModal(false);
@@ -1713,10 +1771,10 @@ const ReportsPage: React.FC = () => {
                     setShowSuccessToast(true);
                     setTimeout(() => setShowSuccessToast(false), 5000);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Schedule
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1730,7 +1788,7 @@ const ReportsPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Share with</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Share with" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option>Entire Team</option>
                     <option>Sales Team</option>
                     <option>Specific Users...</option>
@@ -1738,7 +1796,7 @@ const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Permission</label>
-                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Permission" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                     <option>View Only</option>
                     <option>Can Edit</option>
                   </select>
@@ -1751,7 +1809,7 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Sharing ${selectedReport}`);
                     setShowShareModal(false);
@@ -1762,10 +1820,10 @@ const ReportsPage: React.FC = () => {
                     setShowSuccessToast(true);
                     setTimeout(() => setShowSuccessToast(false), 3000);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Share
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1806,7 +1864,7 @@ const ReportsPage: React.FC = () => {
               <p className="text-sm text-gray-600 mb-4">Current name: <span className="font-medium">{selectedReport}</span></p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">New Name</label>
-                <input
+                <input aria-label="New Name"
                   type="text"
                   defaultValue={selectedReport || ''}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1819,15 +1877,15 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Renaming ${selectedReport}`);
                     setShowRenameModal(false);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Rename
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1841,7 +1899,7 @@ const ReportsPage: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
-                  <input
+                  <input aria-label="To"
                     type="email"
                     placeholder="Enter email addresses..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1849,7 +1907,7 @@ const ReportsPage: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Message (optional)</label>
-                  <textarea
+                  <textarea aria-label="Message (optional)"
                     rows={3}
                     placeholder="Add a message..."
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -1863,15 +1921,15 @@ const ReportsPage: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
+                <Button
                   onClick={() => {
                     console.log(`Emailing ${selectedReport}`);
                     setShowEmailModal(false);
                   }}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  fullWidth
                 >
                   Send
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1917,13 +1975,13 @@ const EmptyState: React.FC<EmptyStateProps> = ({
       <div className="text-6xl mb-4">{icon}</div>
       <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
       <p className="text-sm text-gray-600 mb-6 text-center max-w-md">{description}</p>
-      <button
+      <Button
         onClick={onAction}
-        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2 transition-all"
+        size="xl"
       >
         <Plus className="w-5 h-5" />
         {actionLabel}
-      </button>
+      </Button>
     </div>
   );
 };
@@ -2022,11 +2080,16 @@ interface QuickStatCardProps {
   label: string;
   value: string;
   change: string;
-  sparkline: string;
   changeColor: string;
   bgColor: string;
   reportName: string;
   onView: (reportName: string) => void;
+  /**
+   * OPTIONAL and no longer passed by the four headline cards. They used fixed
+   * Unicode strings like "━━━▁▃▄▃▅▆▇▄▆▅" that drew a rising trend whatever the
+   * data was. Nothing produces a real series for these yet.
+   */
+  sparkline?: string;
 }
 
 const QuickStatCard: React.FC<QuickStatCardProps> = ({

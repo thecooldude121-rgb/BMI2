@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Building2, Users, Phone, MessageSquare, CheckCircle, ExternalLink, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, Send, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
+import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Building2, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
 import { TeamEmailComposerModal } from '../../components/Team/TeamEmailComposerModal';
@@ -789,12 +790,12 @@ export default function TeamMemberDetailPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-8">
         <div className="bg-white rounded-xl shadow-lg p-12 max-w-md text-center">
           <h2 className="text-2xl font-bold text-slate-800 mb-4">Member Not Found</h2>
-          <button
+          <Button
             onClick={() => navigate('/team')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            size="lg"
           >
             Back to Team
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1457,12 +1458,12 @@ export default function TeamMemberDetailPage() {
           <p className="text-slate-600 mb-6">
             Team member profiles are not available for Support role. Contact your administrator for access.
           </p>
-          <button
+          <Button
             onClick={() => navigate('/team')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            size="lg"
           >
             Back to Team
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1540,7 +1541,7 @@ export default function TeamMemberDetailPage() {
         <div className="bg-white rounded-xl shadow-sm p-8 mb-6">
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-start gap-6">
-              <div className="w-24 h-24 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
+              <div className="w-24 h-24 bg-brand-600 rounded-xl flex items-center justify-center flex-shrink-0">
                 <span className="text-3xl font-bold text-white">{member.initials}</span>
               </div>
               <div>
@@ -1594,13 +1595,12 @@ export default function TeamMemberDetailPage() {
 
           <div className="flex gap-3">
             {canScheduleMeetings && (
-              <button
+              <Button
                 onClick={handleSchedule1on1}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <Calendar className="w-4 h-4" />
                 Schedule 1-on-1
-              </button>
+              </Button>
             )}
             <button
               onClick={handleViewCalendar}
@@ -2471,13 +2471,12 @@ export default function TeamMemberDetailPage() {
                 Coaching Notes (3 Total, Showing All)
               </h2>
               {canAddNotes && (
-                <button
+                <Button
                   onClick={() => setAddNoteOpen(!addNoteOpen)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                 >
                   <Plus className="w-4 h-4" />
                   Add Note
-                </button>
+                </Button>
               )}
             </div>
 
@@ -2518,7 +2517,7 @@ export default function TeamMemberDetailPage() {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Note Content</label>
-                    <textarea
+                    <textarea aria-label="Note Content"
                       className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows={5}
                       placeholder="Enter detailed coaching note..."
@@ -2526,7 +2525,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Focus Areas (comma separated)</label>
-                    <input
+                    <input aria-label="Focus Areas (comma separated)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., Scale HRMS strategy, Mentor team, Improve qualification"
@@ -2534,7 +2533,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Development Goals (comma separated)</label>
-                    <input
+                    <input aria-label="Development Goals (comma separated)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., Complete certification, Document playbook"
@@ -2542,7 +2541,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Performance Rating</label>
-                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select aria-label="Performance Rating" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option>Exceeding Expectations</option>
                       <option>Exceeds Expectations</option>
                       <option>Meets Expectations</option>
@@ -2551,7 +2550,7 @@ export default function TeamMemberDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Achievement (optional)</label>
-                    <input
+                    <input aria-label="Achievement (optional)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Notable achievements or milestones"
@@ -2559,12 +2558,11 @@ export default function TeamMemberDetailPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4">
-                  <button
+                  <Button
                     onClick={saveNote}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                   >
                     Save Note
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setAddNoteOpen(false)}
                     className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
@@ -2727,15 +2725,15 @@ export default function TeamMemberDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Date</label>
-                <input type="date" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Date" type="date" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Time</label>
-                <input type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Time" type="time" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Duration</label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Duration" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>30 minutes</option>
                   <option>1 hour</option>
                   <option>2 hours</option>
@@ -2743,16 +2741,16 @@ export default function TeamMemberDetailPage() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Meeting Topic</label>
-                <input type="text" placeholder="e.g., Q4 Performance Review" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Meeting Topic" type="text" placeholder="e.g., Q4 Performance Review" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Location / Link</label>
-                <input type="text" placeholder="Office or Zoom link" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Location / Link" type="text" placeholder="Office or Zoom link" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={saveSchedule} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <Button onClick={saveSchedule} fullWidth>
                   Schedule Meeting
-                </button>
+                </Button>
                 <button onClick={() => setScheduleModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
                   Cancel
                 </button>
@@ -2784,10 +2782,10 @@ export default function TeamMemberDetailPage() {
               </button>
             </div>
             <div className="space-y-3">
-              <button onClick={() => { setContactModalOpen(false); handleSendEmail(selectedContact); }} className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-3">
+              <Button onClick={() => { setContactModalOpen(false); handleSendEmail(selectedContact); }} fullWidth>
                 <Mail className="w-5 h-5" />
                 Send Email
-              </button>
+              </Button>
               <button onClick={() => { setContactModalOpen(false); handleSchedule1on1(); }} className="w-full px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium flex items-center gap-3">
                 <Calendar className="w-5 h-5" />
                 Schedule Call
@@ -2846,9 +2844,9 @@ export default function TeamMemberDetailPage() {
                 <p className="text-sm text-slate-700 leading-relaxed">{selectedHrmsLead.context}</p>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setHrmsModalOpen(false); handleViewDeal(selectedHrmsLead.id, selectedHrmsLead.company); }} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <Button onClick={() => { setHrmsModalOpen(false); handleViewDeal(selectedHrmsLead.id, selectedHrmsLead.company); }} fullWidth>
                   View Full Deal
-                </button>
+                </Button>
                 <button onClick={() => setHrmsModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
                   Close
                 </button>
@@ -2871,19 +2869,19 @@ export default function TeamMemberDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Note Content</label>
-                <textarea rows={6} defaultValue={selectedNote.content} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                <textarea aria-label="Note Content" rows={6} defaultValue={selectedNote.content} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Focus Areas (comma separated)</label>
-                <input type="text" defaultValue={selectedNote.focusAreas.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Focus Areas (comma separated)" type="text" defaultValue={selectedNote.focusAreas.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Development Goals (comma separated)</label>
-                <input type="text" defaultValue={selectedNote.developmentGoals?.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input aria-label="Development Goals (comma separated)" type="text" defaultValue={selectedNote.developmentGoals?.join(', ')} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">Performance Rating</label>
-                <select defaultValue={selectedNote.performanceRating} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <select aria-label="Performance Rating" defaultValue={selectedNote.performanceRating} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Exceeding Expectations</option>
                   <option>Exceeds Expectations</option>
                   <option>Meets Expectations</option>
@@ -2891,9 +2889,9 @@ export default function TeamMemberDetailPage() {
                 </select>
               </div>
               <div className="flex gap-3 mt-6">
-                <button onClick={updateNote} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <Button onClick={updateNote} fullWidth>
                   Update Note
-                </button>
+                </Button>
                 <button onClick={() => setEditNoteModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
                   Cancel
                 </button>
@@ -2998,7 +2996,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Team Member
                 </label>
-                <input
+                <input aria-label="Team Member"
                   type="text"
                   value={member.directReports?.find(r => r.id === selectedReportId)?.name || ''}
                   disabled
@@ -3009,7 +3007,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Meeting Date & Time
                 </label>
-                <input
+                <input aria-label="Meeting Date & Time"
                   type="datetime-local"
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -3018,7 +3016,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Meeting Type
                 </label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Meeting Type" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option>Performance Review</option>
                   <option>Career Development</option>
                   <option>Goal Setting</option>
@@ -3030,7 +3028,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Agenda Items
                 </label>
-                <textarea
+                <textarea aria-label="Agenda Items"
                   rows={4}
                   placeholder="List topics to discuss..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3038,15 +3036,15 @@ export default function TeamMemberDetailPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={() => {
                   showToast('1-on-1 scheduled successfully', 'success');
                   setOneOnOneModalOpen(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Schedule 1-on-1
-              </button>
+              </Button>
               <button
                 onClick={() => setOneOnOneModalOpen(false)}
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
@@ -3076,7 +3074,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Document
                 </label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Document" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option>Q4 Performance Review.pdf</option>
                   <option>Sales Playbook 2026.pdf</option>
                   <option>Product Training Guide.pdf</option>
@@ -3087,7 +3085,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Share with
                 </label>
-                <input
+                <input aria-label="Share with"
                   type="text"
                   defaultValue={member.email}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3097,7 +3095,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Message (Optional)
                 </label>
-                <textarea
+                <textarea aria-label="Message (Optional)"
                   rows={3}
                   placeholder="Add a message..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3111,15 +3109,15 @@ export default function TeamMemberDetailPage() {
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-slate-200">
-              <button
+              <Button
                 onClick={() => {
                   showToast('Document shared successfully', 'success');
                   setShareDocModalOpen(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Share Document
-              </button>
+              </Button>
               <button
                 onClick={() => setShareDocModalOpen(false)}
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
@@ -3149,7 +3147,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Task Title
                 </label>
-                <input
+                <input aria-label="Task Title"
                   type="text"
                   placeholder="e.g., Follow up with customer..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3159,7 +3157,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Assign To
                 </label>
-                <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <select aria-label="Assign To" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                   <option>{member.name}</option>
                   <option>Myself</option>
                   <option>Other team member...</option>
@@ -3170,7 +3168,7 @@ export default function TeamMemberDetailPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Due Date
                   </label>
-                  <input
+                  <input aria-label="Due Date"
                     type="date"
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
@@ -3179,7 +3177,7 @@ export default function TeamMemberDetailPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Priority
                   </label>
-                  <select className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <select aria-label="Priority" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                     <option>High</option>
                     <option>Medium</option>
                     <option>Low</option>
@@ -3190,7 +3188,7 @@ export default function TeamMemberDetailPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Description
                 </label>
-                <textarea
+                <textarea aria-label="Description"
                   rows={4}
                   placeholder="Task details..."
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -3198,15 +3196,15 @@ export default function TeamMemberDetailPage() {
               </div>
             </div>
             <div className="flex gap-3 p-6 border-t border-slate-200">
-              <button
+              <Button
                 onClick={() => {
                   showToast('Task created successfully', 'success');
                   setAddTaskModalOpen(false);
                 }}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Create Task
-              </button>
+              </Button>
               <button
                 onClick={() => setAddTaskModalOpen(false)}
                 className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"

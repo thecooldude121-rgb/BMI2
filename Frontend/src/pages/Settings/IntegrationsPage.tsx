@@ -1,11 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Cloud, Check, X, AlertCircle, RefreshCw, Settings, Plus,
-  ArrowLeft, Zap, Link as LinkIcon, Clock, Activity, TrendingUp,
-  Database, Play, Pause, ChevronRight
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
+import { Cloud, Check, X, AlertCircle, RefreshCw, Settings, Plus, ArrowLeft, Link as LinkIcon, Clock, Activity, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { CRMIntegration, CRMProvider, IntegrationStatus, SyncFrequency } from '../../types/workflowAutomation';
+import type { CRMIntegration, CRMProvider, IntegrationStatus } from '../../types/workflowAutomation';
 
 const IntegrationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -267,13 +264,13 @@ const IntegrationsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleOAuthConnect}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                fullWidth className="font-semibold"
               >
                 <LinkIcon className="h-4 w-4 inline mr-2" />
                 Connect Now
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -338,7 +335,7 @@ const IntegrationsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Sync Frequency
                     </label>
-                    <select
+                    <select aria-label="Sync Frequency"
                       value={selectedIntegration.sync_frequency}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -354,7 +351,7 @@ const IntegrationsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Sync Direction
                     </label>
-                    <select
+                    <select aria-label="Sync Direction"
                       value={selectedIntegration.sync_direction}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -368,7 +365,7 @@ const IntegrationsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Conflict Resolution
                     </label>
-                    <select
+                    <select aria-label="Conflict Resolution"
                       value={selectedIntegration.conflict_resolution}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -382,10 +379,10 @@ const IntegrationsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center space-x-3">
-                <button className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                <Button fullWidth className="font-semibold">
                   <RefreshCw className="h-4 w-4 inline mr-2" />
                   Sync Now
-                </button>
+                </Button>
                 <button className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
                   <Settings className="h-5 w-5" />
                 </button>

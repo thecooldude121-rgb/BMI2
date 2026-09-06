@@ -3,7 +3,7 @@ import { Sparkles, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { formatCurrencyCompact, convertToBaseCurrency } from '../../../utils/currencyUtils';
 import { formatDisplayDate } from '../../../utils/dateUtils';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
-import { getStageProbability, DEFAULT_PIPELINE } from '../../../config/pipelines';
+import { useStageLookup } from '../../../hooks/useStageLookup';
 import { getContactRole } from '../../../config/contactRoles';
 
 interface AIInsightsPanelProps {
@@ -24,10 +24,21 @@ export const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({
   // Normalise to USD for threshold comparisons so sweet-spot logic works across all currencies
   const amountUSD = isNaN(rawAmount) ? 0 : convertToBaseCurrency(rawAmount, currency);
 
-  const stageProbability = getStageProbability(formData.pipelineId || DEFAULT_PIPELINE.id, formData.stage);
-  const primaryProbability = formData.probability ?? stageProbability;
-  // 'ai' when signals have pushed the score above the stage baseline; 'stage' otherwise
-  const probSource: 'ai' | 'stage' = primaryProbability > stageProbability ? 'ai' : 'stage';
+// Stages come from the workspace via useStageLookup, not from the hardcoded
+// catalogue in config/pipelines.ts. A stage an admin adds is usable here
+// immediately; one they retire stops being described here. `?? 20` used to be
+// the fallback when a stage was unknown — a made-up probability presented as the
+// deal's — so an unresolvable stage now reads as "not set" instead.
+  const { lookup: stageLookup } = useStageLookup();
+  const stageProbability =
+    stageLookup(formData.stage, formData.pipelineId ?? null)?.probability ?? null;
+  const primaryProbability = formData.probability ?? stageProbability ?? 0;
+  // 'ai' when signals have pushed the score above the stage baseline; 'stage'
+  // otherwise. With no stage baseline there is nothing to have risen above, so
+  // the source is the stage — claiming "AI" would attribute the number to a
+  // comparison that never happened.
+  const probSource: 'ai' | 'stage' =
+    stageProbability !== null && primaryProbability > stageProbability ? 'ai' : 'stage';
 
   const calculateFactors = () => {
     const factors: { type: string; text: string; impact: number; detail: string }[] = [];

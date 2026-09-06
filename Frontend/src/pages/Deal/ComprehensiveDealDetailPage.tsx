@@ -1,25 +1,28 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getDeal, updateDeal, createDeal } from '../../utils/dealsApi';
+import {
+  getDeal, updateDeal, createDeal,
+  transitionDealStage, fetchDealStageHistory,
+} from '../../utils/dealsApi';
+import { buildStageSpans, type DealStageSpan } from '../../utils/dealStageHistory';
+import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
+import { documentsService, type Document as DocumentRecord } from '../../services/documentsService';
 import { formatDisplayDate, daysFromNow } from '../../utils/dateUtils';
 import { calculateDealHealthScore } from '../../utils/dealHealthScore';
 import { DealHealthScorePanel } from '../../components/Deal/DealForm/DealHealthScorePanel';
-import { ChevronRight, X, Keyboard, MoreVertical } from 'lucide-react';
+import { X, Keyboard, MoreVertical } from 'lucide-react';
 import { DealHeroSection } from '../../components/Deal/DealHeroSection';
-import { AIDealIntelligence } from '../../components/Deal/AIDealIntelligence';
 import { DealDetailsPanel } from '../../components/Deal/DealDetailsPanel';
-import { DealAccountContacts } from '../../components/Deal/DealAccountContacts';
+import DealStakeholdersSection, { type DealStakeholder } from '../../components/Deal/DealStakeholdersSection';
+import DealStageHistory from '../../components/Deal/DealStageHistory';
+import { findContactRole } from '../../config/contactRoles';
 import { BuyingCommitteeMap } from '../../components/Deal/BuyingCommitteeMap';
 import { DealActivityTimeline } from '../../components/Deal/DealActivityTimeline';
 import { DealNotesFiles } from '../../components/Deal/DealNotesFiles';
-import { DealDataAttribution } from '../../components/Deal/DealDataAttribution';
-import { DealRightSidebar } from '../../components/Deal/DealRightSidebar';
 import {
   StageChangeModal,
   UpdateAmountModal,
-  AIBestTimeModal,
-  FindCEOModal,
-  AddContactModal,
   EmailComposerModal,
   CallLogModal,
   MeetingSchedulerModal,
@@ -29,13 +32,49 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import type { DealValueHistoryEntry } from '../../types/dealManagement';
-import { computeMomentum } from '../../utils/dealMomentum';
-import type { MomentumInput } from '../../utils/dealMomentum';
+// computeMomentum / MomentumInput imports removed in Phase 0 — the engine is
+// sound but had no real inputs. Re-import them when actual activity data exists
+// to feed it (see the note beside `momentumResult` below).
 import type { RevenueSchedule } from '../../components/Deal/RevenueTimeline';
+import {
+  fetchPipelines, findPipeline, defaultPipeline, terminalStage, stageIndex,
+  type ApiPipeline,
+} from '../../utils/pipelinesApi';
+
+/**
+ * The stage ladder, in pipeline order.
+ *
+ * Hoisted to module scope because three places need it: the fetch mapping, the
+ * "move to next stage" affordance, and the keyboard shortcut. It used to exist
+ * only inside the fetch effect, which is why the Move Stage modal hardcoded
+ * "Proposal -> Negotiation" — the ladder was not in scope where it was needed.
+ *
+ * These are the slugs stored in deals.stage. pipeline_stages holds display
+ * names ('Closed Won') and the two vocabularies have never been reconciled;
+ * the server normalises across them when it resolves a probability. See
+ * migration 014's header for why that mapping is a separate piece of work.
+ */
+/*
+ * STAGE_LADDER lived here and STAGE_MAP lived inside the fetch effect below —
+ * two of the five hardcoded copies of "every pipeline has these same six
+ * stages" that this page and its hero carried between them. Both are gone; the
+ * deal's own pipeline comes from GET /pipelines.
+ *
+ * What they got wrong was not hypothetical. STAGE_MAP had no entry for
+ * `renewal-quoted`, so a Renewals deal fell through to its default of
+ * `{ number: 1 }` and the page rendered "Stage 1 of 6" with Prospecting
+ * highlighted — a stage that does not exist in that deal's pipeline.
+ */
 
 const TABS = [
   { id: 'overview',    label: 'Overview' },
-  { id: 'ai-insights', label: 'AI Insights' },
+  // 'AI Insights' was here. Its two panels were fed entirely by hardcoded
+  // objects — an invented win probability and score breakdown, three
+  // fabricated "similar deals", a predicted value range, churn and upsell
+  // figures, and a data-sources panel claiming Clearbit and LinkedIn were
+  // syncing. Phase-2 AI is out of scope per CLAUDE.md and the whole tab was
+  // invented, so it is removed rather than labelled: a PREVIEW badge is for a
+  // panel sitting among real ones, not for a tab with nothing real in it.
   { id: 'people',      label: 'People' },
   { id: 'timeline',    label: 'Timeline' },
   { id: 'files-notes', label: 'Files & Notes' },
@@ -50,9 +89,6 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
 
   const [showStageChange, setShowStageChange] = useState(false);
   const [showUpdateAmount, setShowUpdateAmount] = useState(false);
-  const [showBestTime, setShowBestTime] = useState(false);
-  const [showFindCEO, setShowFindCEO] = useState(false);
-  const [showAddContact, setShowAddContact] = useState(false);
   const [showEmailComposer, setShowEmailComposer] = useState(false);
   const [showCallLog, setShowCallLog] = useState(false);
   const [showMeetingScheduler, setShowMeetingScheduler] = useState(false);
@@ -60,14 +96,24 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const [showTopMoreActions, setShowTopMoreActions] = useState(false);
   const [showDuplicateDeal, setShowDuplicateDeal] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
-  const [preSelectedContactRole, setPreSelectedContactRole] = useState('');
-  const [expandedBattleCard, setExpandedBattleCard] = useState<string | null>(null);
+  // Only read now. handleViewBattleCard used to set it from the AI panel's
+  // "View Battle Card" action; DealDetailsPanel expands cards on its own.
+  const [expandedBattleCard] = useState<string | null>(null);
   const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
   const [activeTab, setActiveTab] = useState<string>('overview');
-  const isAdmin = true; // hardcoded until role-based access is wired
+  // Was `true`, unconditionally, which showed admin-only fields on the Deal
+  // Info panel to every user. RBAC is enforced at the API per CLAUDE.md; this
+  // only governs what the panel renders.
+  const isAdmin = user?.role === 'Admin';
   const battleCardRef      = useRef<HTMLDivElement>(null);
   const revenueTimelineRef = useRef<HTMLDivElement>(null);
   const heroRef            = useRef<HTMLDivElement>(null);
+  // The 'E' shortcut needs the current primary stakeholder's address, but its
+  // listener is bound once. A ref keeps the handler stable while still reading
+  // a live value — and it starts empty rather than at a placeholder address,
+  // so pressing E before a deal loads opens an empty composer instead of
+  // addressing a stranger.
+  const primaryStakeholderEmailRef = useRef<string>('');
 
   const [emailDetails, setEmailDetails] = useState({ to: '', subject: '', body: '' });
   const [loading, setLoading] = useState(true);
@@ -94,6 +140,17 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     accountName: '',
     accountSize: '',
     accountIndustry: '',
+    // Resolved from the joined companies row (migration 027). Empty when the
+    // deal is not linked to an account, which is the majority case today.
+    companyId: '',
+    companyResolvedName: '',
+    companyIndustry: '',
+    companyWebsite: '',
+    companyDomain: '',
+    companySize: '',
+    companyCity: '',
+    companyState: '',
+    companyCountry: '',
     contactName: '',
     contactTitle: '',
     source: '',
@@ -113,6 +170,8 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     description: '',
     dealType: '',
     stakeholders: [] as any[],
+    competitors: [] as any[],
+    daysSinceContact: 0,
     dealValueHistory: [] as DealValueHistoryEntry[],
     salesDriveFolder: '',
     agreementUrl: '',
@@ -134,19 +193,13 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   useEffect(() => {
     if (!id) { setLoading(false); return; }
 
-    const STAGE_MAP: Record<string, { name: string; number: number }> = {
-      prospecting:  { name: 'Prospecting', number: 1 },
-      qualified:    { name: 'Qualified',   number: 2 },
-      proposal:     { name: 'Proposal',    number: 3 },
-      negotiation:  { name: 'Negotiation', number: 4 },
-      'closed-won': { name: 'Closed Won',  number: 5 },
-      'closed-lost':{ name: 'Closed Lost', number: 6 },
-    };
-
     getDeal(id)
       .then(({ data }) => {
         const stage = data.stage || 'prospecting';
-        const stageInfo = STAGE_MAP[stage] ?? { name: stage.charAt(0).toUpperCase() + stage.slice(1), number: 1 };
+        // Name and number are DERIVED from the pipeline below, not looked up
+        // here — this effect runs before the pipelines resolve. Seeded from the
+        // slug so the page has something honest to show for one frame.
+        const stageInfo = { name: stage.charAt(0).toUpperCase() + stage.slice(1), number: 1 };
         const closeDateIso: string = data.expected_close_date ?? '';
         const daysAway = daysFromNow(closeDateIso);
         const createdIso: string = data.created_at ?? '';
@@ -169,6 +222,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           currency: data.currency || 'USD',
           base_amount_usd: Number(data.base_amount_usd) || 0,
           stage,
+          pipelineId: data.pipeline_id || 'new-business',
           stageName: stageInfo.name,
           stageNumber: stageInfo.number,
           totalStages: 6,
@@ -186,6 +240,15 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           createdDate: formatDisplayDate(createdIso.split('T')[0]),
           accountSize: '',
           accountIndustry: data.account_industry || '',
+          companyId: data.company_id || '',
+          companyResolvedName: data.company_name_resolved || '',
+          companyIndustry: data.company_industry || '',
+          companyWebsite: data.company_website || '',
+          companyDomain: data.company_domain || '',
+          companySize: data.company_size || '',
+          companyCity: data.company_city || '',
+          companyState: data.company_state || '',
+          companyCountry: data.company_country || '',
           contactName: data.contact_name || '',
           contactTitle: data.contact_title || '',
           source: data.source || '',
@@ -205,6 +268,10 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           description: data.description || '',
           dealType: data.deal_type || '',
           stakeholders: Array.isArray(data.stakeholders) ? data.stakeholders : [],
+          competitors: Array.isArray(data.competitors) ? data.competitors : [],
+          // Computed server-side from deals.updated_at. Replaces the literal 5
+          // that was passed to the hero and the timeline.
+          daysSinceContact: Number(data.days_since_contact) || 0,
           dealValueHistory: Array.isArray(data.value_history) ? data.value_history : [],
           salesDriveFolder: data.sales_drive_folder || '',
           agreementUrl: data.agreement_url || '',
@@ -248,26 +315,20 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
   const healthResult = useMemo(() => calculateDealHealthScore(healthFormData), [healthFormData]);
 
   // Compute days in current stage from stageChangedAt if available; undefined triggers component fallback
-  const timeInStage: number | undefined = (deal as any).stageChangedAt
-    ? Math.floor((Date.now() - new Date((deal as any).stageChangedAt).getTime()) / 86400000)
-    : deal.daysInStage > 0
-    ? deal.daysInStage
-    : undefined;
 
-  // Demo Accelerating — replace these values to show Decelerating:
-  // responseTimesHours:[12,24,48], daysSinceLastTwoWay:6, newStakeholdersLast14Days:0,
-  // stageDaysVsBenchmark:5, stageBenchmark:12, activitiesLast7Days:1, activitiesPrior7Days:4
-  const momentumInput: MomentumInput = {
-    responseTimesHours:       [48, 24, 12],
-    daysSinceLastTwoWay:      2,
-    newStakeholdersLast14Days: 1,
-    stageDaysVsBenchmark:     -3,
-    stageBenchmark:           12,
-    activitiesLast7Days:      4,
-    activitiesPrior7Days:     2,
-  };
-
-  const momentumResult = useMemo(() => computeMomentum(momentumInput), []);
+  // PHASE 0: the momentum badge was computed from a hardcoded demo fixture —
+  // the block here was literally commented "Demo Accelerating — replace these
+  // values to show Decelerating". Every deal in the product therefore displayed
+  // the same invented momentum, and it was written back to the database (see
+  // the removed effect below).
+  //
+  // `computeMomentum` itself is sound; it has no real inputs. To restore this,
+  // feed it from actual data: response times from the email/activity log,
+  // daysSinceLastTwoWay from the last inbound activity, stakeholder counts from
+  // a deal_stakeholders table, and stage benchmarks from historical stage
+  // durations. Until those exist, the badge is hidden rather than faked —
+  // DealHeroSection guards on `momentumResult &&`, so undefined omits it.
+  const momentumResult = undefined;
 
   // Revenue schedule seed data — branched by deal ID
   // TODO: replace with API field once revenueSchedule is persisted in the DB
@@ -305,11 +366,17 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     setActiveTab('overview');
   };
 
-  // Silently persist computed momentum_score to the DB
-  useEffect(() => {
-    if (!id) return;
-    updateDeal(id, { momentum_score: momentumResult.level }).catch(() => {});
-  }, [id, momentumResult.level]);
+  // PHASE 0: removed an effect that silently persisted the demo-derived
+  // momentum level to the database on every page view:
+  //
+  //     updateDeal(id, { momentum_score: momentumResult.level }).catch(() => {});
+  //
+  // Three separate problems. It wrote fabricated data to real records; it fired
+  // a PUT on every view of every deal; and because `momentum_score` is not a
+  // column in the live schema, the request 500'd every time — swallowed by the
+  // empty catch, so nobody ever saw it fail. Any future write belongs in an
+  // explicit user action or a server-side computation, never an unconditional
+  // effect with a silenced error handler.
 
   // Global keyboard shortcuts — fires when focus is NOT in an input/textarea/select
   useEffect(() => {
@@ -319,7 +386,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       switch (e.key.toLowerCase()) {
         case 'e':
-          handleSendEmail('john@acme.com', 'Following up on proposal', '');
+          handleSendEmail(primaryStakeholderEmailRef.current, '', '');
           break;
         case 'c':
           setShowCallLog(true);
@@ -352,459 +419,355 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     window.scrollTo({ top: heroBottom, behavior: 'instant' });
   };
 
-  const aiIntelligenceData = {
-    winProbability: deal.probability || 67,
-    winProbAI: deal.winProbAI || deal.probability || 67,
-    winProbConfidence: 78,
-    winProbOverrideReason: deal.winProbOverrideReason || '',
-    healthScore: healthResult.score,
-    scoreBreakdown: [
-      { category: 'Engagement',  score: 88, stars: 4 },
-      { category: 'Deal Fit',    score: 85, stars: 4 },
-      { category: 'Progression', score: 72, stars: 4 },
-      { category: 'Urgency',     score: 65, stars: 3 },
-    ],
-    insights: {
-      positive: [
-        { type: 'positive' as const, text: 'Deal size matches typical wins ($45-55K)', impact: '+15%' },
-        { type: 'positive' as const, text: 'Stage progression on track (8 days in Proposal)', impact: '+12%' },
-        { type: 'positive' as const, text: 'High engagement from contact (92% response rate)', impact: '+20%' },
-        { type: 'positive' as const, text: 'Decision maker involved (VP level)', impact: '+10%' }
-      ],
-      warnings: [
-        { type: 'warning' as const, text: 'Competitor mentioned (Salesforce)', impact: '-8%' },
-        { type: 'warning' as const, text: 'No activity in 5 days', impact: '-12%' }
-      ]
-    },
-    nextActions: [
-      {
-        priority: 'high' as const,
-        title: 'Follow up today',
-        reason: '5 days since last contact (deal at risk)',
-        suggestion: 'Hi John, following up on proposal',
-        actions: ['Send Email', 'Schedule Call']
-      },
-      {
-        priority: 'medium' as const,
-        title: 'Send ROI case study by Nov 20',
-        reason: 'John mentioned "need proof" in meeting',
-        suggestion: 'SaaS ROI case study - Success rate: 73%',
-        actions: ['Send Case Study', 'Schedule']
-      },
-      {
-        priority: 'medium' as const,
-        title: 'Schedule demo for stakeholders',
-        reason: 'Deal stuck in Proposal for 8 days',
-        suggestion: 'Attendees: John Smith, CEO (TBD)',
-        actions: ['Schedule Meeting', 'AI Find Best Time']
-      },
-      {
-        priority: 'low' as const,
-        title: 'Address Salesforce comparison',
-        reason: 'Competitor mentioned 3x in conversations',
-        suggestion: 'Talking points: Integration, pricing, support',
-        actions: ['View Battle Card', 'Create Task'],
-        competitor: 'Salesforce'
-      },
-      {
-        priority: 'low' as const,
-        title: 'Request CEO introduction',
-        reason: 'Final approval needed (CEO sign-off)',
-        suggestion: 'Can you introduce me to your CEO?',
-        actions: ['Draft Email', 'Create Task']
-      }
-    ],
-    historicalData: 'Historical data: Similar deals have 72% win rate'
-  };
+  /**
+   * ── WHAT USED TO BE HERE, AND WHY IT IS GONE ─────────────────────────────
+   *
+   * Nine hardcoded objects sat between this comment and `handleMoreAction`,
+   * every one of them identical for every deal anyone opened:
+   *
+   *   aiIntelligenceData  invented win probability, a four-category score
+   *                       breakdown, "+20% high engagement (92% response
+   *                       rate)", "Competitor mentioned (Salesforce)", and
+   *                       four next-best-actions naming a contact who does
+   *                       not exist.
+   *   stageHistory        an invented audit trail with per-stage benchmarks.
+   *                       -> now GET /deals/:id/stage-history (migration 014).
+   *   accountData         "Acme Corp", $12M revenue, Series B, $8M raised,
+   *                       45% YoY growth, a tech stack and a competitor list.
+   *                       -> the real company row, joined on deals.company_id
+   *                       (migration 027). The enrichment fields are DELETED,
+   *                       not re-sourced: there is no enrichment provider and
+   *                       enrichment is out of phase.
+   *   contacts            "John Smith, VP Sales, Champion, john@acme.com"
+   *                       with an engagement sparkline and a response rate.
+   *                       -> deals.stakeholders, a real jsonb column this page
+   *                       was ALREADY fetching into state and then ignoring.
+   *   hrmsConnection      a recruited-employee story. HRMS is a separate
+   *                       platform across the SSO boundary and `employees`
+   *                       has no tenant_id, so nothing here may join it.
+   *   activities          an invented timeline with AI meeting summaries,
+   *                       sentiment scores and extracted action items.
+   *                       -> GET /activities?deal_id=.
+   *   notes               two authored notes with @mentions.
+   *                       -> activities of type 'note' on this deal.
+   *   files               four PDFs with versions, sizes and a share link.
+   *                       -> GET /documents for module 'deals'.
+   *   sidebarData         the entire AI Insights right rail: deal score 78,
+   *                       win probability 67%, "$48K - $52K predicted range",
+   *                       three similar deals with similarity percentages,
+   *                       churn risk, upsell potential, and a data-sources
+   *                       panel claiming Clearbit and LinkedIn were syncing.
+   *
+   * The AI Insights tab is deleted rather than labelled. Phase-2 AI is out of
+   * scope per CLAUDE.md ("omit these rather than half-building them"), and
+   * unlike the dashboard panels that carry a PREVIEW badge, there was nothing
+   * real beside it to give a label context — the tab was invented end to end.
+   *
+   * DealHealthScorePanel stays. calculateDealHealthScore is a deterministic
+   * function over real deal fields, not a model output.
+   */
 
-  const stageHistory = [
-    { name: 'Prospecting', days: 5,  startDate: 'Nov 15', endDate: 'Nov 20', status: 'completed' as const, benchmark: 7 },
-    { name: 'Qualified',   days: 12, startDate: 'Nov 20', endDate: 'Dec 2',  status: 'completed' as const, benchmark: 10 },
-    { name: 'Proposal',    days: 8,  startDate: 'Dec 2',  endDate: '',        status: 'current'   as const, benchmark: 12 },
-    { name: 'Negotiation', days: 0,  startDate: '',        endDate: '',        status: 'pending'   as const, benchmark: 12, benchmarkMin: 10, benchmarkMax: 15 },
-    { name: 'Closed-Won',  days: 0,  startDate: '',        endDate: '',        status: 'pending'   as const, benchmark: 5,  benchmarkMin: 3,  benchmarkMax: 7  },
-  ];
+  // ── Stage history — the audit trail, from deal_stage_history ──────────────
+  const [stageSpans, setStageSpans] = useState<DealStageSpan[]>([]);
+  const [stageHistoryError, setStageHistoryError] = useState<string | null>(null);
+  const [stageHistoryLoading, setStageHistoryLoading] = useState(true);
 
-  const accountData = {
-    name: 'Acme Corp',
-    industry: 'SaaS, Project Management',
-    size: '75 employees',
-    revenue: '$12M annually',
-    location: 'San Francisco, CA',
-    website: 'www.acmecorp.com',
-    fundingRound: 'Series B',
-    fundingAmount: '$8M',
-    fundingDate: 'Sep 2024',
-    growthRate: '45% YoY',
-    hiringTrend: '+15 employees (Q3 2024)',
-    techStack: ['AWS', 'Salesforce', 'Slack', 'HubSpot'],
-    competitors: ['Salesforce', 'HubSpot']
-  };
+  const loadStageHistory = useCallback(() => {
+    if (!id) { setStageHistoryLoading(false); return; }
+    setStageHistoryLoading(true);
+    fetchDealStageHistory(id)
+      .then(entries => { setStageSpans(buildStageSpans(entries)); setStageHistoryError(null); })
+      .catch(e => setStageHistoryError(e?.message ?? 'Could not load stage history'))
+      .finally(() => setStageHistoryLoading(false));
+  }, [id]);
 
-  const contacts = [
-    {
-      id: '1',
-      name: 'John Smith',
-      title: 'VP Sales',
-      role: 'Champion' as const,
-      email: 'john@acme.com',
-      phone: '+1 555-0123',
-      lastContact: 'Dec 2',
-      daysAgo: 5,
-      engagement: '92% response rate',
-      status: 'active' as const,
-      // newest-first: 4h, 6h, 12h, 18h — Warming ↑ (avg(4,6)=5 vs avg(12,18)=15, ratio 0.33 < 0.8)
-      // silence alert fires: daysAgo=5 ≥ 5 AND avg(4,6,12,18)=10h < 48h
-      engagementDots: [4, 6, 12, 18] as (number | null)[],
-      engagementBreakdown: {
-        emailsSent: 8,
-        emailsOpened: 7,
-        emailsReplied: 6,
-        callsMade: 3,
-        callsAnswered: 2,
-        meetingsScheduled: 2,
-        meetingsAttended: 2,
-      },
-    },
-    {
-      id: '2',
-      name: 'CEO Name - TBD',
-      title: 'CEO',
-      role: 'Decision Maker' as const,
-      status: 'pending' as const,
-    },
-  ];
+  useEffect(() => { loadStageHistory(); }, [loadStageHistory]);
 
-  // Toggle between true/false to demonstrate both HRMS connection states
-  const hrmsConnection = {
-    hasHistory: true, // Set to true to show HRMS integration value
-    opportunity: 'Consider recruiting from them',
-    recruitedEmployee: {
-      name: 'Sarah Lee',
-      title: 'CFO',
-      hiredDate: 'Nov 2024',
-      status: 'Currently employed'
-    }
-  };
+  // ── Timeline and notes — both are `activities` rows on this deal ──────────
+  // One request. A note IS an activity with type 'note' (the activities_type_
+  // check allows it), so splitting them into two fetches would ask the same
+  // endpoint the same question twice.
+  const [dealActivities, setDealActivities] = useState<ActivityRecord[]>([]);
+  const [activitiesError, setActivitiesError] = useState<string | null>(null);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
-  const activities = [
-    {
-      id: '1',
-      type: 'email' as const,
-      date: 'Dec 2, 2025',
-      time: '2:30 PM',
-      title: 'Email Sent: Proposal Follow-up',
-      to: 'John Smith',
-      description: 'Subject: "Acme Corp Proposal - Next Steps"',
-      status: '✅ Opened (Dec 2, 4:45 PM)',
-      engagement: '3 opens, 6 mins read time',
-      user: 'Alex Rodriguez',
-      contactId: '1',
-      isoDate: '2026-06-04',
-    },
-    {
-      id: '2',
-      type: 'stage_change' as const,
-      date: 'Dec 2, 2025',
-      time: '2:30 PM',
-      title: 'Stage Changed: Qualified → Proposal',
-      user: 'Alex Rodriguez',
-      contactId: null,
-      isoDate: '2026-06-04',
-    },
-    {
-      id: '3',
-      type: 'meeting' as const,
-      date: 'Nov 28, 2025',
-      time: '2:00 PM',
-      title: 'Meeting: Acme Corp Product Demo',
-      description: 'Duration: 45 minutes\nLocation: Zoom (Recording available)\nAttendees: John Smith (Acme), Alex Rodriguez (Us)',
-      hasRecording: true,
-      hasTranscript: true,
-      contactId: '1',
-      isoDate: '2026-05-21',
-      aiSummary: {
-        keyPoints: [
-          'Budget confirmed at $50K',
-          'Timeline: Q1 2026 implementation',
-          'Main concerns: Integration with Salesforce',
-          'Competitor mentioned: Salesforce',
-          'Need CEO approval for final decision'
-        ],
-        sentiment: {
-          type: 'positive' as const,
-          confidence: 82,
-          notes: [
-            'Excited about automation features',
-            'Some hesitation about switching from SF'
-          ]
-        },
-        actionItems: [
-          { task: 'Send proposal (You)', owner: 'You', status: 'completed' as const },
-          { task: 'Address integration (You)', owner: 'You', status: 'completed' as const },
-          { task: 'CEO approval (John)', owner: 'John', status: 'pending' as const },
-          { task: 'Technical demo (You)', owner: 'You', status: 'pending' as const, dueDate: 'Dec 10' }
-        ],
-        talkingPoints: [
-          'Salesforce integration capabilities',
-          'ROI calculation (show 240% ROI)',
-          'Customer success stories (SaaS)'
-        ],
-        crmUpdates: [
-          'Deal stage: Qualified → Proposal ✅',
-          'Deal amount: $50K confirmed ✅',
-          'Close date: March 15, 2026 ✅',
-          '4 tasks created automatically ✅',
-          'Competitor noted: Salesforce ✅'
-        ]
-      }
-    },
-    {
-      id: '4',
-      type: 'email' as const,
-      date: 'Nov 25, 2025',
-      time: '3:15 PM',
-      title: 'Email Sent: Meeting Confirmation',
-      description: 'Subject: "Demo scheduled for Nov 28"',
-      status: '✅ Opened (Nov 25, 4:20 PM)',
-      user: 'Alex Rodriguez',
-      contactId: '1',
-      isoDate: '2026-05-14',
-    },
-    {
-      id: '5',
-      type: 'call' as const,
-      date: 'Nov 20, 2025',
-      time: '10:30 AM',
-      title: 'Call: Discovery Call',
-      description: 'Duration: 25 minutes\nNotes: "Interested in automation features. Current pain: Manual data entry. Budget: $50K confirmed."',
-      user: 'Alex Rodriguez',
-      contactId: '1',
-      isoDate: '2026-04-29',
-    },
-    {
-      id: '6',
-      type: 'stage_change' as const,
-      date: 'Nov 20, 2025',
-      time: '10:30 AM',
-      title: 'Stage Changed: Prospecting → Qualified',
-      user: 'Alex Rodriguez',
-      contactId: null,
-      isoDate: '2026-04-22',
-    },
-    {
-      id: '7',
-      type: 'deal_created' as const,
-      date: 'Nov 15, 2025',
-      time: '9:00 AM',
-      title: 'Deal Created',
-      description: 'Created by: Alex Rodriguez\nSource: Converted from Lead (John Smith)\nInitial Value: $50,000\nInitial Stage: Prospecting\nAI Enrichment: +8 data points added',
-      user: 'Alex Rodriguez',
-      contactId: null,
-      isoDate: '2026-04-15',
-    },
-    // Additional activities to make heatmap patterns meaningful
-    {
-      id: '8',
-      type: 'email' as const,
-      date: 'Nov 30, 2025',
-      time: '11:00 AM',
-      title: 'Email Sent: ROI Case Study',
-      to: 'John Smith',
-      description: 'Subject: "SaaS ROI Case Study — 240% avg. return"',
-      status: '✅ Opened (Nov 30, 2:15 PM)',
-      user: 'Alex Rodriguez',
-      contactId: '1',
-      isoDate: '2026-05-28',
-    },
-    {
-      id: '9',
-      type: 'email' as const,
-      date: 'Dec 1, 2025',
-      time: '10:00 AM',
-      title: 'Email Sent: CEO Introduction Request',
-      to: 'John Smith',
-      description: 'Subject: "Introduction to your CEO for final approval discussion"',
-      user: 'Alex Rodriguez',
-      contactId: '2',
-      isoDate: '2026-06-01',
-    },
-    {
-      id: '10',
-      type: 'call' as const,
-      date: 'Nov 22, 2025',
-      time: '2:00 PM',
-      title: 'Call: Post-Demo Follow-up',
-      description: 'Duration: 15 minutes\nNotes: "John confirmed interest. Waiting on CEO calendar."',
-      user: 'Alex Rodriguez',
-      contactId: '1',
-      isoDate: '2026-05-07',
-    },
-  ];
+  const loadActivities = useCallback(() => {
+    if (!id) { setActivitiesLoading(false); return; }
+    setActivitiesLoading(true);
+    fetchActivities({ deal_id: id, limit: 200 })
+      .then(rows => { setDealActivities(rows); setActivitiesError(null); })
+      .catch(e => setActivitiesError(e?.message ?? 'Could not load activity'))
+      .finally(() => setActivitiesLoading(false));
+  }, [id]);
 
-  const notes = [
-    {
-      id: '1',
-      date: 'Dec 2, 2025',
-      author: 'Alex Rodriguez',
-      tags: ['Competitor', 'Stakeholder'],
-      content: 'John seems interested but needs CEO approval.\n- Need to position against **Salesforce** more aggressively — this is their incumbent\n- Focus on **integration capabilities** first, then pricing\n- *Budget confirmed at $50K* — no flexibility issue\n@Alex to prep competitive battle card by EOW',
-    },
-    {
-      id: '2',
-      date: 'Nov 28, 2025',
-      author: 'Alex Rodriguez',
-      tags: ['Stakeholder', 'Follow-up'],
-      content: 'Demo went *very well*. **John Smith** is our champion but CEO is the final DM.\n- Must get intro to CEO ASAP — deal cannot progress without it\n- Q1 2026 implementation deadline is firm on their side\n@Alex to send intro request email to John by end of this week',
-    },
-  ];
+  useEffect(() => { loadActivities(); }, [loadActivities]);
 
-  const files = [
-    {
-      id: 'f1',
-      name: 'Proposal_Acme_v2.pdf',
-      size: '2.3 MB',
-      date: 'Dec 2',
-      uploadedBy: 'Alex Rodriguez',
-      version: 2,
+  const timelineActivities = useMemo(
+    () => dealActivities.filter(a => a.type !== 'note'),
+    [dealActivities],
+  );
+  const dealNotes = useMemo(
+    () => dealActivities.filter(a => a.type === 'note'),
+    [dealActivities],
+  );
+
+  // ── Files — documents attached to this deal ───────────────────────────────
+  const [dealDocuments, setDealDocuments] = useState<DocumentRecord[]>([]);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentsLoading, setDocumentsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) { setDocumentsLoading(false); return; }
+    let cancelled = false;
+    setDocumentsLoading(true);
+    documentsService.loadDocuments({ entity_type: 'deals', entity_id: id, limit: 100 })
+      .then(({ data }) => { if (!cancelled) { setDealDocuments(data); setDocumentsError(null); } })
+      .catch(e => { if (!cancelled) setDocumentsError(e?.message ?? 'Could not load files'); })
+      .finally(() => { if (!cancelled) setDocumentsLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  /**
+   * ── Stakeholders — the buying committee, from deals.stakeholders ──────────
+   *
+   * This is real, persisted data that the page was already loading. `deal`
+   * state has carried `stakeholders` from the API response since this view was
+   * written; it rendered a hardcoded array of two people beside it.
+   *
+   * Five of twenty-five deals are populated today. The roles are the same
+   * vocabulary as config/contactRoles.ts and contacts.buying_role
+   * (migration 026), so the deal committee and the account team agree.
+   *
+   * Note what is NOT derived here: engagement percentages, response rates,
+   * "last contact N days ago" and the sparkline the old array carried. There
+   * is no email or call tracking in this product, so every one of those was
+   * invented. A stakeholder shows a name, a title and a role — what is stored.
+   */
+  const stakeholders = useMemo(() => {
+    const raw = Array.isArray(deal.stakeholders) ? deal.stakeholders : [];
+    return raw
+      .filter((s: any) => s && (s.name || s.title))
+      .map((s: any, idx: number) => ({
+        id: String(s.id ?? `stakeholder-${idx}`),
+        name: String(s.name ?? '').trim(),
+        title: s.title ? String(s.title) : '',
+        email: s.email ? String(s.email) : '',
+        // The stored role id ('decision-maker'), or null when the deal form
+        // saved a stakeholder without one. Null must stay null — a default
+        // would assert a position on the committee that nobody chose.
+        role: s.role ? String(s.role) : null,
+        isPrimary: Boolean(s.isPrimary),
+      }));
+  }, [deal.stakeholders]);
+
+  /**
+   * ── Account — the joined company row ──────────────────────────────────────
+   *
+   * getDealById joins companies on deals.company_id with a matching tenant_id
+   * and projects company_* fields. When the deal is not linked to an account
+   * (22 of 25 rows), every field here is empty and the People tab says so
+   * rather than falling back to the free-text company_name as though it were a
+   * resolved account.
+   *
+   * `companyName` still falls back to the free-text column, because for an
+   * unlinked deal that string is the only record of who the deal is with — but
+   * it is labelled in the UI as unlinked, so it cannot be mistaken for a
+   * relationship that would let you click through.
+   */
+  /**
+   * The stage this deal would advance to. Null at the end of the ladder and on
+   * a closed deal — Closed Won has no "next", and offering one is how a modal
+   * ends up claiming a move it cannot make.
+   */
+  /*
+   * THE DEAL'S OWN PIPELINE. Everything stage-shaped on this page derives from
+   * it: the display name, the "Stage N of M" counter, the strip in the hero,
+   * which stage "next" means, and which stage "won" and "lost" mean.
+   */
+  const [pipelines, setPipelines] = useState<ApiPipeline[]>([]);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPipelines()
+      .then(list => { if (!cancelled) { setPipelines(list); setPipelineError(null); } })
+      .catch((e: Error) => { if (!cancelled) setPipelineError(e.message); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const dealPipeline = useMemo(
+    () => findPipeline(pipelines, deal.pipelineId) ?? defaultPipeline(pipelines),
+    [pipelines, deal.pipelineId],
+  );
+
+  /** Ordered stages of this deal's pipeline. Empty until they load. */
+  const pipelineStages = useMemo(() => dealPipeline?.stages ?? [], [dealPipeline]);
+
+  /**
+   * Name and position, resolved against the pipeline rather than a constant.
+   *
+   * A stage the pipeline does not list — one retired since the deal last moved —
+   * yields a null index, and the page shows the slug rather than pretending the
+   * deal is in stage 1. That specific wrong answer is what the old STAGE_MAP
+   * default produced for every Renewals and Partnerships deal.
+   */
+  const resolvedStage = useMemo(() => {
+    const st = pipelineStages.find(s => s.slug === deal.stage) ?? null;
+    return {
+      name: st?.name ?? deal.stageName ?? deal.stage,
+      number: stageIndex(dealPipeline, deal.stage) ?? 0,
+      total: pipelineStages.length,
+      stage: st,
+    };
+  }, [pipelineStages, dealPipeline, deal.stage, deal.stageName]);
+
+  const nextStage = useMemo(() => {
+    const idx = pipelineStages.findIndex(st => st.slug === deal.stage);
+    if (idx < 0) return null;
+    const candidate = pipelineStages[idx + 1];
+    // No "next" past the end, and never into a LOST stage — advancing a deal
+    // should not be able to mean losing it. Detected by stage_type rather than
+    // by the literal 'closed-lost', which was only ever right for one pipeline.
+    if (!candidate || candidate.stage_type === 'lost' || candidate.archived_at) return null;
+    return { key: candidate.slug, name: candidate.name, number: idx + 2 };
+  }, [pipelineStages, deal.stage]);
+
+  /**
+   * Days in the current stage.
+   *
+   * This read `deal.stageChangedAt`, a field the API does not return, then fell
+   * back to `deal.daysInStage`, which the fetch mapping hardcodes to 0 — so it
+   * was always undefined, and the hero's velocity strip supplied its own
+   * fallback of 8. Both halves were invented.
+   *
+   * It now comes from the current span of the real stage history: the deal
+   * entered its present stage at that transition's changed_at, so the elapsed
+   * time is a measurement rather than an estimate. Undefined when the deal has
+   * no recorded transition, which is honest — nothing knows when it arrived.
+   */
+  const timeInStage: number | undefined = useMemo(() => {
+    const current = stageSpans.find(sp => sp.status === 'current');
+    return current && current.startedAt ? current.days : undefined;
+  }, [stageSpans]);
+
+  const primaryStakeholder = useMemo(
+    () => stakeholders.find((st: DealStakeholder) => st.isPrimary) ?? stakeholders[0] ?? null,
+    [stakeholders],
+  );
+
+  /**
+   * Committee nodes for BuyingCommitteeMap, which keys on display labels
+   * ('Decision Maker') while the stored values are ids ('decision-maker').
+   *
+   * A stakeholder with no stored role is EXCLUDED rather than placed on a
+   * default node. The map's whole purpose is showing which seats are empty, so
+   * putting an unassigned person into one would fill a gap that is really open
+   * — the same mistake as defaulting a role, expressed as a diagram.
+   *
+   * No `daysAgo` is passed. The map colours a node green/amber/red by days
+   * since contact and falls back to red without it, which reads as "cold" when
+   * the truth is "not tracked". Better a uniform unknown than a colour that
+   * asserts a state; the node still shows the seat is filled.
+   */
+  const committeeContacts = useMemo(
+    () => stakeholders
+      .map((st: DealStakeholder) => {
+        const cfg = findContactRole(st.role);
+        return cfg ? { id: st.id, name: st.name, role: cfg.label } : null;
+      })
+      .filter((c: { id: string; name: string; role: string } | null): c is { id: string; name: string; role: string } => c !== null),
+    [stakeholders],
+  );
+
+  /** deals.competitors is a real jsonb column written by the deal form. */
+  const dealCompetitors = useMemo(() => {
+    const raw = Array.isArray(deal.competitors) ? deal.competitors : [];
+    return raw
+      .map((c: any) => (typeof c === 'string' ? c : c?.name))
+      .filter((n: unknown): n is string => typeof n === 'string' && n.trim().length > 0);
+  }, [deal.competitors]);
+
+  /** Real activities mapped to the timeline component's display shape. */
+  const timelineEntries = useMemo(
+    () => timelineActivities.map(a => {
+      const whenIso = a.completed_at ?? a.scheduled_at ?? a.created_at ?? '';
+      const when = whenIso ? new Date(whenIso) : null;
+      return {
+        id: a.id,
+        // The component's union has no 'task'/'demo'/'proposal' member; those
+        // map to 'note' so they still appear rather than being dropped.
+        type: (['email', 'call', 'meeting', 'note'].includes(a.type ?? '')
+          ? a.type
+          : 'note') as 'email' | 'call' | 'meeting' | 'note',
+        // Full instant: these are TIMESTAMPTZ, see the note in DealStageHistory.
+        date: when ? formatDisplayDate(whenIso) : '',
+        time: when ? when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '',
+        title: a.subject || '(no subject)',
+        description: a.description ?? undefined,
+        user: a.assigned_to ?? undefined,
+        isoDate: whenIso,
+        // No aiSummary, engagement, hasRecording or hasTranscript: the invented
+        // timeline carried meeting summaries with sentiment confidence scores
+        // and extracted action items. Nothing produces them.
+      };
+    }),
+    [timelineActivities],
+  );
+
+  /** Notes are activities of type 'note'. */
+  const noteEntries = useMemo(
+    () => dealNotes.map(a => ({
+      id: a.id,
+      date: formatDisplayDate(a.completed_at ?? a.created_at ?? ''),
+      author: a.assigned_to ?? 'Unknown',
+      content: a.description || a.subject || '',
+      // The old notes carried ['Competitor', 'Stakeholder'] tags. Activities
+      // have no tag column, so no tags rather than invented ones.
+      tags: [] as string[],
+    })),
+    [dealNotes],
+  );
+
+  /**
+   * Documents attached to this deal.
+   *
+   * The invented list had versions, supersession chains, "shared with buyer"
+   * flags, share links and buyer-opened timestamps. `documents` stores a
+   * version integer and nothing about sharing — documentsService.shareDocument
+   * is explicitly unimplemented because there is no document_shares table — so
+   * every row reports isSharedWithBuyer false and no link, which is true.
+   */
+  const fileEntries = useMemo(
+    () => dealDocuments.map(d => ({
+      id: d.id,
+      name: d.name,
+      size: d.file_size ? `${(d.file_size / 1024 / 1024).toFixed(1)} MB` : '—',
+      date: formatDisplayDate(d.created_at ?? ''),
+      uploadedBy: d.owner_name || '—',
+      version: d.version ?? 1,
       isLatest: true,
       isSuperseded: false,
-      baseId: 'proposal-acme',
-      isSharedWithBuyer: true,
-      buyerOpenedAt: 'Dec 5, 2025',
-      shareLink: 'https://bmi.app/share/abc123',
-    },
-    {
-      id: 'f1-v1',
-      name: 'Proposal_Acme_v1.pdf',
-      size: '2.1 MB',
-      date: 'Nov 28',
-      uploadedBy: 'Alex Rodriguez',
-      version: 1,
-      isLatest: false,
-      isSuperseded: true,
-      baseId: 'proposal-acme',
+      baseId: d.id,
       isSharedWithBuyer: false,
-    },
-    {
-      id: 'f2',
-      name: 'ROI_Case_Study_SaaS.pdf',
-      size: '1.8 MB',
-      date: 'Nov 28',
-      uploadedBy: 'Alex Rodriguez',
-      version: 1,
-      isLatest: true,
-      isSuperseded: false,
-      baseId: 'roi-case-study',
-      isSharedWithBuyer: false,
-    },
-    {
-      id: 'f3',
-      name: 'Integration_Guide.pdf',
-      size: '950 KB',
-      date: 'Dec 2',
-      uploadedBy: 'Sarah Lee',
-      version: 1,
-      isLatest: true,
-      isSuperseded: false,
-      baseId: 'integration-guide',
-      isSharedWithBuyer: false,
-    },
-  ];
+    })),
+    [dealDocuments],
+  );
 
-  const sidebarData = {
-    dealScore: {
-      overall: 78,
-      breakdown: [
-        { category: 'Engagement', score: 88, stars: 5 },
-        { category: 'Deal Fit', score: 85, stars: 5 },
-        { category: 'Progression', score: 72, stars: 4 },
-        { category: 'Urgency', score: 65, stars: 3 }
-      ],
-      factors: [
-        { text: 'High contact engagement', impact: 20 },
-        { text: 'Budget confirmed', impact: 15 },
-        { text: 'Decision maker involved', impact: 10 },
-        { text: 'On-track stage progression', impact: 8 },
-        { text: 'Stalled 5 days', impact: -12 },
-        { text: 'Competitor risk', impact: -8 }
-      ]
-    },
-    predictive: {
-      winProbability: 67,
-      expectedCloseDate: 'March 12, 2026',
-      closeDateConfidence: 78,
-      daysEarlier: 3,
-      dealSizeConfidence: 85,
-      predictedRange: '$48K - $52K range',
-      currentAmount: 50000,
-      riskLevel: 'medium' as const,
-      primaryRisk: 'Competitor (Salesforce)',
-      mitigation: 'Address in next meeting',
-      churnRisk: 12,
-      churnReason: 'Strong fit, high engagement',
-      upsellOpportunity: 'medium' as const,
-      upsellPotential: '+$25K (Premium features)',
-      upsellTiming: 'After 6 months',
-      recommendation: 'Focus on competitive differentiation and securing CEO meeting to increase win probability from 67% to 82%.'
-    },
-    similarDeals: [
-      {
-        id: 'deal-2',
-        name: 'TechStart Inc - Growth Plan',
-        similarity: 89,
-        status: 'Negotiation',
-        amount: 42000,
-        winProbability: 85
-      },
-      {
-        id: 'deal-3',
-        name: 'StartCo - Basic Package',
-        similarity: 82,
-        status: 'Closed-Won',
-        amount: 28000,
-        timeline: '38 days (fast!)'
-      },
-      {
-        id: 'deal-4',
-        name: 'BigCo - Platform',
-        similarity: 78,
-        status: 'Proposal',
-        challenge: 'Competitor risk'
-      }
-    ],
-    similarInsights: {
-      avgCloseTime: 42,
-      currentDays: 32,
-      avgDealSize: '$45K',
-      currentDealSize: '$50K',
-      commonObjection: 'Integration complexity',
-      successFactor: 'Strong ROI demonstration',
-      winStrategy: 'Focus on ease of migration'
-    },
-    metrics: {
-      dealAge: 32,
-      timeInStage: 8,
-      avgStageDuration: 12,
-      daysToClose: 45,
-      meetings: 1,
-      emailsSent: 3,
-      emailsOpened: 3,
-      calls: 1,
-      lastActivityDays: 5,
-      responseRate: 92,
-      avgResponseTime: '2 hours',
-      quarterlyForecast: 50000,
-      weightedValue: 33500,
-      quotaContribution: 4.2
-    },
-    dataSources: {
-      createdFrom: ['Lead Gen (Apollo.io)', 'Lead: John Smith (Converted Nov 15)', 'Contact: John Smith', 'Account: Acme Corp'],
-      enrichedFrom: ['Clearbit (Company data)', 'LinkedIn (Contact profile)', 'Salesforce (Tech stack)'],
-      lastEnriched: '2 days ago',
-      accuracy: 94
-    }
-  };
+  useEffect(() => {
+    primaryStakeholderEmailRef.current = primaryStakeholder?.email ?? '';
+  }, [primaryStakeholder]);
+
+  const account = useMemo(() => ({
+    id: deal.companyId || '',
+    linked: Boolean(deal.companyId),
+    name: deal.companyResolvedName || deal.companyName || '',
+    industry: deal.companyIndustry || deal.accountIndustry || '',
+    website: deal.companyWebsite || '',
+    domain: deal.companyDomain || '',
+    size: deal.companySize || '',
+    location: [deal.companyCity, deal.companyState, deal.companyCountry]
+      .filter(Boolean).join(', '),
+  }), [deal]);
 
   const handleMoreAction = async (action: string) => {
     switch (action) {
@@ -821,13 +784,34 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         setShowStageChange(true);
         break;
       case 'mark-won': {
+        /*
+         * TWO BUGS FIXED HERE, both invisible while every pipeline had the same
+         * six stages.
+         *
+         * 1. It wrote the literal 'closed-won'. A Renewals deal's won stage is
+         *    `renewal-won`, so this sent a stage that does not exist in that
+         *    deal's pipeline. Before Phase A that was written silently; after
+         *    it, the server refuses with a 400 and the user saw only "Failed to
+         *    update deal stage".
+         * 2. It used updateDeal() — a plain field write — so marking a deal won
+         *    recorded NO deal_stage_history row, despite this file's own comment
+         *    on applyStageTransition saying a move must. The audit trail was
+         *    missing exactly the transition that matters most.
+         */
+        const won = terminalStage(dealPipeline, 'won');
+        if (!won) {
+          showToast(
+            `"${dealPipeline?.name ?? 'This pipeline'}" has no Won stage configured, so this deal cannot be marked won.`,
+            'error',
+          );
+          break;
+        }
         const confirmed = window.confirm(
-          `Mark "${deal.dealName}" as WON?\n\nThis will move it to Closed Won stage.`
+          `Mark "${deal.dealName}" as WON?\n\nThis will move it to the ${won.name} stage.`
         );
         if (confirmed) {
           try {
-            if (id) await updateDeal(id, { stage: 'closed-won' });
-            setDeal((prev: any) => ({ ...prev, stage: 'closed-won', stageName: 'Closed Won' }));
+            await applyStageTransition(stageIndex(dealPipeline, won.slug) ?? 0, won.name, won.slug);
             showToast('🎉 Deal marked as Won!', 'success');
           } catch {
             showToast('Failed to update deal stage.', 'error');
@@ -836,13 +820,20 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         break;
       }
       case 'mark-lost': {
+        const lost = terminalStage(dealPipeline, 'lost');
+        if (!lost) {
+          showToast(
+            `"${dealPipeline?.name ?? 'This pipeline'}" has no Lost stage configured, so this deal cannot be marked lost.`,
+            'error',
+          );
+          break;
+        }
         const confirmed = window.confirm(
-          `Mark "${deal.dealName}" as LOST?\n\nThis action will move the deal to Closed Lost.`
+          `Mark "${deal.dealName}" as LOST?\n\nThis action will move the deal to the ${lost.name} stage.`
         );
         if (confirmed) {
           try {
-            if (id) await updateDeal(id, { stage: 'closed-lost' });
-            setDeal((prev: any) => ({ ...prev, stage: 'closed-lost', stageName: 'Closed Lost' }));
+            await applyStageTransition(stageIndex(dealPipeline, lost.slug) ?? 0, lost.name, lost.slug);
             showToast('Deal marked as Lost.', 'info');
           } catch {
             showToast('Failed to update deal stage.', 'error');
@@ -868,8 +859,9 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     }
   };
 
-  const handleMarkWon  = () => handleMoreAction('mark-won');
-  const handleMarkLost = () => handleMoreAction('mark-lost');
+  // handleMarkWon / handleMarkLost were bound to props on the AI panel that no
+  // longer exists. 'mark-won' and 'mark-lost' remain reachable through
+  // MoreOptionsDropdown -> handleMoreAction, which is the real write path.
 
   const handleDuplicateDeal = async (newName: string) => {
     if (!id) return;
@@ -958,24 +950,48 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     }
   };
 
-  const handleStageChange = () => {
-    showToast('Deal moved to Negotiation stage', 'success');
-  };
-
-  const handleStageSelect = async (stageNum: number, stageName: string, stageKey: string) => {
+  /**
+   * Moving a deal writes an audit row, and that is why this goes to
+   * POST /deals/:id/stage-transition rather than PUT /deals/:id.
+   *
+   * THIS IS WHY deal_stage_history WAS EMPTY. Both handlers here used to
+   * bypass it. `handleStageSelect` called updateDeal() — a plain field update
+   * that moves the deal and records nothing — and `handleStageChange`, behind
+   * the Move Stage modal, called neither: it fired
+   * showToast('Deal moved to Negotiation stage', 'success') and performed no
+   * write at all, always naming Negotiation regardless of the deal's stage.
+   * The endpoint, the transaction and the table have all existed since
+   * migration 014; nothing called them, so the audit trail this page claims to
+   * show had no rows to show and the page filled the gap with an invented one.
+   *
+   * The transition endpoint also derives the probability from the pipeline
+   * stage default, so it is deliberately NOT sent here — passing one would be
+   * recorded as a human override of a number the user never chose.
+   */
+  const applyStageTransition = async (stageNum: number, stageName: string, stageKey: string) => {
     if (!id) return;
-    const prevStage = deal.stage;
-    const prevStageName = deal.stageName;
-    const prevStageNumber = deal.stageNumber;
-    setDeal((prev: any) => ({ ...prev, stage: stageKey, stageName, stageNumber: stageNum }));
+    if (stageKey === deal.stage) return;
+
+    const prev = { stage: deal.stage, stageName: deal.stageName, stageNumber: deal.stageNumber };
+    setDeal((d: any) => ({ ...d, stage: stageKey, stageName, stageNumber: stageNum }));
     try {
-      await updateDeal(id, { stage: stageKey });
+      const { data } = await transitionDealStage(id, stageKey);
+      // Take the probability back from the server rather than guessing it —
+      // it comes from the pipeline stage, which the client does not know.
+      if (data && data.probability != null) {
+        setDeal((d: any) => ({ ...d, probability: Number(data.probability) }));
+      }
       showToast(`Stage updated to ${stageName}`, 'success');
-    } catch {
-      setDeal((prev: any) => ({ ...prev, stage: prevStage, stageName: prevStageName, stageNumber: prevStageNumber }));
-      showToast('Failed to update stage', 'error');
+      // The move just wrote a history row; re-read so the audit trail on the
+      // Deal Info tab reflects it without a page refresh.
+      loadStageHistory();
+    } catch (e: any) {
+      setDeal((d: any) => ({ ...d, ...prev }));
+      showToast(e?.message ?? 'Failed to update stage', 'error');
     }
   };
+
+  const handleStageSelect = applyStageTransition;
 
   const handleUpdateAmount = async (newAmount: number, reason: string) => {
     if (!id) return;
@@ -1012,42 +1028,37 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
     setShowEmailComposer(true);
   };
 
-  const handleScheduleMeeting = (details: any) => {
+  const handleScheduleMeeting = () => {
     showToast('Meeting scheduled successfully', 'success');
   };
 
-  const handleAddCEO = (contact: any) => {
-    showToast(`${contact.name} added to deal contacts`, 'success');
-  };
+  // handleViewBattleCard was passed to AIDealIntelligence. DealDetailsPanel
+  // owns battle-card expansion itself through expandedBattleCard, which is
+  // still wired below.
 
-  const handleAddContact = (contactId: string, role: string) => {
-    showToast(`Contact added as ${role}`, 'success');
-  };
-
-  const handleViewBattleCard = (competitor: string) => {
-    setExpandedBattleCard(competitor.toLowerCase());
-    setActiveTab('overview');
-  };
-
+  /**
+   * Was: navigate(`/crm/accounts/${accountData.name.toLowerCase()
+   *                 .replace(/\s+/g, '-')}`)
+   * which built '/crm/accounts/acme-corp' from the hardcoded account name.
+   * Account ids are 'C001', so that route resolved to nothing on every deal —
+   * the account page's "Account not found" state. It now uses the real
+   * company_id, and is only reachable when the deal is linked.
+   */
   const handleViewAccount = () => {
-    navigate(`/crm/accounts/${accountData.name.toLowerCase().replace(/\s+/g, '-')}`);
+    if (!deal.companyId) return;
+    navigate(`/crm/accounts/${deal.companyId}`);
   };
 
-  const handleAddToHRMS = () => {
-    showToast('✅ Added to HRMS recruitment targets', 'success');
-    setTimeout(() => {
-      navigate('/hrms');
-    }, 1500);
-  };
-
-  const handleRequestIntro = () => {
-    setEmailDetails({
-      to: 'john@acme.com',
-      subject: 'Introduction to CEO',
-      body: 'Hi John,\n\nWould you be able to introduce me to your CEO for final approval discussion?\n\nBest regards,'
-    });
-    setShowEmailComposer(true);
-  };
+  /*
+   * handleAddCEO, handleAddContact, handleAddToHRMS and handleRequestIntro were
+   * removed with the components that called them:
+   *   - handleAddCEO / handleAddContact fired a success toast and added
+   *     nothing; stakeholders are edited on the deal form, which persists.
+   *   - handleAddToHRMS claimed "Added to HRMS recruitment targets" and
+   *     navigated to /hrms. HRMS is a separate platform across the SSO
+   *     boundary and nothing was written.
+   *   - handleRequestIntro pre-filled an email to john@acme.com.
+   */
 
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-gray-500">
@@ -1079,11 +1090,11 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
             <h1 className="text-lg font-semibold text-gray-900 truncate">{deal.dealName}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {deal.stage === 'closed-won' ? (
+            {resolvedStage.stage?.stage_type === 'won' ? (
               <span className="text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 rounded px-2.5 py-1 flex-shrink-0">
                 ✓ WON
               </span>
-            ) : deal.stage === 'closed-lost' ? (
+            ) : resolvedStage.stage?.stage_type === 'lost' ? (
               <span className="text-xs font-bold text-red-700 bg-red-100 border border-red-200 rounded px-2.5 py-1 flex-shrink-0">
                 ✗ LOST
               </span>
@@ -1114,10 +1125,23 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       {/* Hero Section */}
       <div ref={heroRef}>
       <DealHeroSection
-        deal={{ ...deal, aiScore: healthResult.score, aiHealth: healthResult.label }}
+        // stageName / stageNumber / totalStages are OVERRIDDEN with the values
+        // resolved against the deal's own pipeline. The ones on `deal` are seeded
+        // from the slug by the fetch effect, which runs before the pipelines
+        // arrive; rendering those would show "Stage 1 of 6" for one frame on
+        // every deal and permanently on any deal outside new-business.
+        deal={{
+          ...deal,
+          aiScore: healthResult.score,
+          aiHealth: healthResult.label,
+          stageName: resolvedStage.name,
+          stageNumber: resolvedStage.number,
+          totalStages: resolvedStage.total,
+        }}
+        stages={pipelineStages}
         onEdit={() => navigate(`/crm/deals/${id}/edit`)}
         onMoreAction={handleMoreAction}
-        onEmail={() => handleSendEmail('john@acme.com', 'Following up on proposal', '')}
+        onEmail={() => handleSendEmail(primaryStakeholder?.email ?? '', '', '')}
         onCall={() => setShowCallLog(true)}
         onMeeting={() => setShowMeetingScheduler(true)}
         onProposal={() => showToast('Proposal creator coming soon', 'info')}
@@ -1126,28 +1150,19 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         onAssignOwner={handleAssignOwner}
         onSaveAmount={(amount) => handleUpdateAmount(amount, '')}
         onSaveCloseDate={handleSaveCloseDate}
-        onShowShortcuts={() => setShowShortcuts(true)}
+        // onShowShortcuts removed: DealHeroSection declared the prop and never
+        // read it, so this was passing a callback into nothing. The '?' key
+        // still opens the modal through this page's own keydown listener.
         momentumResult={momentumResult}
         revenueSchedule={activeRevenueSchedule}
         onViewRevenue={handleViewRevenue}
-        priorityAction={(() => {
-          const actions = aiIntelligenceData.nextActions;
-          const top =
-            actions.find(a => a.priority === 'high') ??
-            actions.find(a => a.priority === 'medium') ??
-            null;
-          if (!top || top.priority === 'low') return null;
-          return {
-            priority: top.priority as 'high' | 'medium',
-            title: top.title,
-            reason: top.reason,
-            ctas: top.actions,
-            totalCount: actions.length,
-          };
-        })()}
-        onViewAllActions={() => handleTabClick('ai-insights')}
-        healthScoreFactors={aiIntelligenceData.scoreBreakdown}
-        daysSinceContact={5}
+        // priorityAction, onViewAllActions and healthScoreFactors are gone with
+        // aiIntelligenceData: the "next best action" they surfaced was one of
+        // four hardcoded suggestions ("Follow up today - 5 days since last
+        // contact") shown on every deal, and the score factors were four fixed
+        // category scores. daysSinceContact was the literal 5; it is now the
+        // real days_since_contact the API computes from deals.updated_at.
+        daysSinceContact={deal.daysSinceContact}
         timeInStage={timeInStage}
         onStageSelect={handleStageSelect}
       />
@@ -1164,13 +1179,15 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
           'closed-lost': '#EF4444',
         };
         const activeColor = STAGE_TAB_COLOR[deal.stage] || '#3B82F6';
-        const hasDecisionMaker = contacts.some((c: any) => c.role === 'Decision Maker' && c.status !== 'pending');
+        // The orange dot flags a committee gap: no stakeholder on this deal
+        // holds a senior buying role. Real now — it reads stored roles, where
+        // it used to test a hardcoded array in which the answer never changed.
+        const hasSeniorBuyer = stakeholders.some((st: DealStakeholder) => findContactRole(st.role)?.isSeniorBuyer);
         const tabCounts: Record<string, number | null> = {
           'overview':    null,
-          'ai-insights': null,
-          'people':      contacts.length,
-          'timeline':    activities.length,
-          'files-notes': notes.length,
+          'people':      stakeholders.length,
+          'timeline':    timelineActivities.length,
+          'files-notes': dealNotes.length + dealDocuments.length,
           'deal-info':   null,
         };
         return (
@@ -1179,7 +1196,7 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
               {TABS.map(tab => {
                 const isActive = activeTab === tab.id;
                 const count = tabCounts[tab.id];
-                const showOrangeDot = tab.id === 'people' && !hasDecisionMaker;
+                const showOrangeDot = tab.id === 'people' && !hasSeniorBuyer;
                 return (
                   <button
                     key={tab.id}
@@ -1215,199 +1232,228 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         {activeTab === 'overview' && (
           <div className="space-y-0">
 
-            {/* Section A — Contact Spotlight */}
+            {/* Section A — Primary stakeholder */}
             {(() => {
-              const contact = contacts[0];
-              if (!contact) return (
-                <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-4 mb-4 text-center text-sm text-gray-400">
-                  No contacts linked yet —{' '}
-                  <button className="text-blue-600 underline ml-1" onClick={() => handleTabClick('people')}>Add Contact</button>
+              // Was the first element of a hardcoded two-person array: "John
+              // Smith, VP Sales, Champion, john@acme.com", with a "Last
+              // contact: 5d ago" badge and a phone number, on every deal.
+              // Now the stakeholder the deal form marked primary, or the first
+              // one recorded. No last-contact badge: nothing tracks it.
+              if (!primaryStakeholder) return (
+                <div className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-4 mb-4 text-center text-sm text-gray-500">
+                  No stakeholders recorded on this deal —{' '}
+                  <button className="text-indigo-600 underline ml-1" onClick={() => handleTabClick('people')}>
+                    add one
+                  </button>
                 </div>
               );
-              const initials = contact.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
-              const daysAgo = contact.daysAgo ?? null;
+              const c = primaryStakeholder;
+              const initials = c.name.split(/\s+/).filter(Boolean)
+                .map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+              const roleCfg = findContactRole(c.role);
               return (
                 <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
                     {initials}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-gray-900 text-sm">{contact.name}</span>
-                      {contact.title && <span className="text-xs text-gray-500">{contact.title}</span>}
-                      {contact.role && (
-                        <span className="text-xs bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 font-medium capitalize">
-                          {contact.role}
-                        </span>
-                      )}
-                      {daysAgo !== null && (
-                        <span className={`text-xs font-medium ${daysAgo <= 3 ? 'text-green-600' : daysAgo <= 7 ? 'text-amber-600' : 'text-red-600'}`}>
-                          · Last contact: {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`}
-                        </span>
-                      )}
+                      <span className="font-semibold text-gray-900 text-sm">{c.name || 'Unnamed'}</span>
+                      {c.title && <span className="text-xs text-gray-500">{c.title}</span>}
+                      {roleCfg
+                        ? <span className="text-xs bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 font-medium">{roleCfg.label}</span>
+                        : <span className="text-xs border border-dashed border-gray-300 text-gray-400 rounded px-1.5 py-0.5 font-medium">No role set</span>}
                     </div>
-                    <div className="flex items-center gap-3 mt-1 flex-wrap text-xs text-gray-500">
-                      {contact.email && <span>✉ {contact.email}</span>}
-                      {contact.phone && <span>📞 {contact.phone}</span>}
-                    </div>
+                    {c.email && (
+                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                        <span>{c.email}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <button onClick={() => handleSendEmail(contact.email || '', '', '')}
-                      className="text-xs bg-blue-600 text-white rounded px-3 py-1.5 hover:bg-blue-700 font-medium transition-colors">
-                      Email
-                    </button>
-                    <button onClick={() => setShowCallLog(true)}
-                      className="text-xs bg-green-600 text-white rounded px-3 py-1.5 hover:bg-green-700 font-medium transition-colors">
-                      Call
-                    </button>
+                    {c.email && (
+                      <Button onClick={() => handleSendEmail(c.email, '', '')} size="sm" className="rounded">
+                        Email
+                      </Button>
+                    )}
                     <button onClick={() => handleTabClick('people')}
                       className="text-xs border border-gray-300 text-gray-600 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors">
-                      View Profile →
+                      All stakeholders →
                     </button>
                   </div>
                 </div>
               );
             })()}
 
-            {/* Section B — Activity Summary Strip */}
+            {/* Section B — Activity summary */}
             {(() => {
-              const emailCount   = activities.filter((a: any) => a.type === 'email').length;
-              const callCount    = activities.filter((a: any) => a.type === 'call').length;
-              const meetingCount = activities.filter((a: any) => a.type === 'meeting').length;
-              const sorted = [...activities].sort((a: any, b: any) =>
-                new Date(b.isoDate || b.date || 0).getTime() - new Date(a.isoDate || a.date || 0).getTime()
-              );
-              const lastIso = sorted[0]?.isoDate;
-              const daysSince = lastIso
-                ? Math.floor((Date.now() - new Date(lastIso).getTime()) / (1000 * 60 * 60 * 24))
+              // The counts were real arithmetic over an invented array, so they
+              // were consistent and wrong. They now count real activities on
+              // this deal. "Response rate: 92%" is deleted outright — it read a
+              // number out of a hardcoded string and there is no email tracking
+              // to compute one from.
+              if (activitiesLoading) {
+                return <div className="h-10 bg-gray-50 rounded-lg border border-gray-200 mb-4 animate-pulse" />;
+              }
+              if (activitiesError) {
+                return (
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-xs text-red-700">
+                    Could not load activity for this deal: {activitiesError}
+                  </div>
+                );
+              }
+              if (timelineActivities.length === 0) {
+                return (
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 mb-4 text-xs text-gray-500">
+                    No activity has been logged against this deal yet.
+                  </div>
+                );
+              }
+              const count = (t: string) => timelineActivities.filter(a => a.type === t).length;
+              const times = timelineActivities
+                .map(a => Date.parse(a.completed_at ?? a.scheduled_at ?? a.created_at ?? ''))
+                .filter(Number.isFinite);
+              const daysSince = times.length
+                ? Math.floor((Date.now() - Math.max(...times)) / 86_400_000)
                 : null;
-              const responseRate = contacts[0]?.engagement?.match(/\d+/)?.[0] ?? '92';
               return (
                 <div className="bg-gray-50 rounded-lg border border-gray-200 px-4 py-3 mb-4 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-gray-600 items-center">
                   {daysSince !== null && (
                     <span className="flex items-center gap-1">
-                      📅 Last activity: <strong className={daysSince <= 3 ? 'text-green-600' : daysSince <= 7 ? 'text-amber-600' : 'text-red-600'}>
+                      Last activity:{' '}
+                      <strong className={daysSince <= 3 ? 'text-green-600' : daysSince <= 7 ? 'text-amber-600' : 'text-red-600'}>
                         {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince}d ago`}
                       </strong>
                     </span>
                   )}
-                  <span>✉ <strong className="text-gray-800">{emailCount}</strong> emails</span>
-                  <span>📞 <strong className="text-gray-800">{callCount}</strong> calls</span>
-                  <span>🤝 <strong className="text-gray-800">{meetingCount}</strong> meetings</span>
-                  <span>📊 Response rate: <strong className="text-green-600">{responseRate}%</strong></span>
+                  <span><strong className="text-gray-800">{count('email')}</strong> emails</span>
+                  <span><strong className="text-gray-800">{count('call')}</strong> calls</span>
+                  <span><strong className="text-gray-800">{count('meeting')}</strong> meetings</span>
                 </div>
               );
             })()}
 
-            {/* Section C — Top 3 Next Best Actions */}
-            <AIDealIntelligence
-              {...aiIntelligenceData}
-              showOnlyNextBestActions
-              maxActions={3}
-              stageNumber={deal.stageNumber || 1}
-              onSendEmail={handleSendEmail}
-              onScheduleCall={() => setShowCallLog(true)}
-              onScheduleMeeting={() => setShowMeetingScheduler(true)}
-              onFindBestTime={() => setShowBestTime(true)}
-              onViewBattleCard={handleViewBattleCard}
-            />
+            {/* Section C was <AIDealIntelligence showOnlyNextBestActions>, three
+                hardcoded "next best actions" identical on every deal. Removed
+                with the rest of aiIntelligenceData — see the note above.
+
+                DealHealthScorePanel moved here from the deleted AI Insights
+                tab. It is kept because it is NOT a model output:
+                calculateDealHealthScore is a deterministic function over
+                fields on this deal, and it says so in its own subtitle. */}
+            <div className="max-w-xl">
+              <DealHealthScorePanel
+                formData={healthFormData}
+                subtitle="Based on current deal completeness"
+              />
+            </div>
           </div>
         )}
 
         {/* ── Deal Info (full field panel) ── */}
         {activeTab === 'deal-info' && (
-          <DealDetailsPanel
-            deal={deal}
-            stageHistory={stageHistory}
-            competitors={accountData.competitors}
-            expandedBattleCard={expandedBattleCard}
-            isAdmin={isAdmin}
-            battleCardRef={battleCardRef}
-            revenueSchedule={activeRevenueSchedule}
-            onSaveRevenueSchedule={(s) => setSavedRevenueSchedule(s)}
-            revenueTimelineRef={revenueTimelineRef}
-            onDealUpdated={(updates) => setDeal((prev: any) => ({ ...prev, ...updates }))}
-          />
+          <>
+            {/* Surfaced above the panel rather than swallowed: a failed history
+                read must not look like a deal that has never moved. */}
+            {stageHistoryError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-xs text-red-700">
+                Could not load the stage history: {stageHistoryError}
+              </div>
+            )}
+            <DealStageHistory spans={stageSpans} loading={stageHistoryLoading} />
+            <div className="h-6" />
+            <DealDetailsPanel
+              deal={deal}
+              // competitors came from accountData.competitors - a two-element
+              // literal ['Salesforce','HubSpot'] on every deal.
+              // deals.competitors is a real jsonb column the form writes.
+              competitors={dealCompetitors}
+              expandedBattleCard={expandedBattleCard}
+              isAdmin={isAdmin}
+              battleCardRef={battleCardRef}
+              revenueSchedule={activeRevenueSchedule}
+              onSaveRevenueSchedule={(sched) => setSavedRevenueSchedule(sched)}
+              revenueTimelineRef={revenueTimelineRef}
+              onDealUpdated={(updates) => setDeal((prev: any) => ({ ...prev, ...updates }))}
+            />
+          </>
         )}
 
-        {/* ── AI Insights — two-column with right sidebar ── */}
-        {activeTab === 'ai-insights' && (
-          <div className="flex items-start gap-6">
-            <div className="flex-1 min-w-0">
-              <AIDealIntelligence
-                {...aiIntelligenceData}
-                winProbAI={aiIntelligenceData.winProbAI}
-                winProbOverrideReason={aiIntelligenceData.winProbOverrideReason}
-                stageNumber={deal.stageNumber || 1}
-                onSendEmail={handleSendEmail}
-                onScheduleCall={() => setShowCallLog(true)}
-                onScheduleMeeting={() => setShowMeetingScheduler(true)}
-                onFindBestTime={() => setShowBestTime(true)}
-                onViewBattleCard={handleViewBattleCard}
-              />
-            </div>
-            <div className="w-[380px] shrink-0 sticky top-20 max-h-[calc(100vh-80px)] overflow-y-auto scrollbar-none space-y-3">
-              <DealHealthScorePanel formData={healthFormData} subtitle="Based on current deal completeness" />
-              <DealRightSidebar {...sidebarData} />
-            </div>
-          </div>
-        )}
+        {/* The 'AI Insights' tab rendered here. See the note beside TABS. */}
 
         {/* ── People ── */}
         {activeTab === 'people' && (
           <div className="space-y-6">
-            <DealAccountContacts
-              account={accountData}
-              contacts={contacts}
-              hrmsConnection={hrmsConnection}
-              dataQuality={{ accuracy: sidebarData.dataSources.accuracy, lastEnriched: sidebarData.dataSources.lastEnriched }}
+            <DealStakeholdersSection
+              account={account}
+              stakeholders={stakeholders}
               onViewAccount={handleViewAccount}
-              onAddToHRMS={handleAddToHRMS}
-              onFindCEO={() => setShowFindCEO(true)}
-              onRequestIntro={handleRequestIntro}
-              onAddContact={(role) => {
-                setPreSelectedContactRole(role || '');
-                setShowAddContact(true);
-              }}
+              onAddStakeholder={() => navigate(`/crm/deals/${id}/edit`)}
               onEmail={handleSendEmail}
-              onCall={() => setShowCallLog(true)}
             />
             <BuyingCommitteeMap
-              contacts={contacts}
-              onAddContact={(role) => {
-                setPreSelectedContactRole(role || '');
-                setShowAddContact(true);
-              }}
+              contacts={committeeContacts}
+              onAddContact={() => navigate(`/crm/deals/${id}/edit`)}
             />
           </div>
         )}
 
         {/* ── Timeline ── */}
         {activeTab === 'timeline' && (
-          <DealActivityTimeline
-            activities={activities}
-            daysSinceLastContact={5}
-            contacts={contacts.map(c => ({ id: c.id, name: c.name }))}
-          />
+          activitiesError ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+              Could not load this deal&rsquo;s activity: {activitiesError}
+            </div>
+          ) : (
+            <DealActivityTimeline
+              activities={timelineEntries}
+              loading={activitiesLoading}
+              // Was the literal 5. Now the API's days_since_contact, computed
+              // from deals.updated_at.
+              daysSinceLastContact={deal.daysSinceContact}
+              contacts={stakeholders.map((st: DealStakeholder) => ({ id: st.id, name: st.name }))}
+            />
+          )
         )}
 
         {/* ── Files & Notes ── */}
         {activeTab === 'files-notes' && (
           <div className="space-y-6">
-            <DealNotesFiles notes={notes} files={files} />
-            <DealDataAttribution dataSources={sidebarData.dataSources} />
+            {(activitiesError || documentsError) && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                {activitiesError && <div>Could not load notes: {activitiesError}</div>}
+                {documentsError && <div>Could not load files: {documentsError}</div>}
+              </div>
+            )}
+            <DealNotesFiles
+              notes={noteEntries}
+              files={fileEntries}
+              loading={activitiesLoading || documentsLoading}
+            />
+            {/* <DealDataAttribution> rendered here, listing "Lead Gen
+                (Apollo.io)", "Clearbit (Company data)", "LinkedIn (Contact
+                profile)" and "Salesforce (Tech stack)" as the sources this deal
+                was enriched from, with "last enriched 2 days ago" and "94%
+                accuracy". None of those integrations exists. Removed. */}
           </div>
         )}
 
       </div>
 
       {/* Modals */}
+      {/* Current and next stage were the literals "Proposal" and "Negotiation",
+          shown on every deal whatever stage it was actually in, above a confirm
+          button that wrote nothing. Both now come from the deal. */}
       <StageChangeModal
-        isOpen={showStageChange}
+        isOpen={showStageChange && nextStage !== null}
         onClose={() => setShowStageChange(false)}
-        currentStage="Proposal"
-        nextStage="Negotiation"
-        onConfirm={handleStageChange}
+        currentStage={deal.stageName}
+        nextStage={nextStage?.name ?? ''}
+        onConfirm={() => {
+          if (!nextStage) return;
+          setShowStageChange(false);
+          applyStageTransition(nextStage.number, nextStage.name, nextStage.key);
+        }}
       />
 
       <UpdateAmountModal
@@ -1428,28 +1474,19 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
         isLoading={isDuplicating}
       />
 
-      <AIBestTimeModal
-        isOpen={showBestTime}
-        onClose={() => setShowBestTime(false)}
-        contactName="John Smith"
-        onSelectTime={(time) => {
-          showToast(`Meeting time selected: ${time}`, 'success');
-          setShowMeetingScheduler(true);
-        }}
-      />
+      {/*
+        Three modals were removed here rather than rewired:
 
-      <FindCEOModal
-        isOpen={showFindCEO}
-        onClose={() => setShowFindCEO(false)}
-        onAddContact={handleAddCEO}
-      />
-
-      <AddContactModal
-        isOpen={showAddContact}
-        onClose={() => { setShowAddContact(false); setPreSelectedContactRole(''); }}
-        onAddContact={handleAddContact}
-        preSelectedRole={preSelectedContactRole || undefined}
-      />
+          AIBestTimeModal  suggested "best times to reach John Smith" from
+                           nothing — a Phase-2 AI feature with no engagement
+                           data behind it and a hardcoded contact name.
+          FindCEOModal     offered to look up a company's CEO. That is contact
+                           enrichment; no provider is configured.
+          AddContactModal  reported "Contact added as Champion" and added
+                           nothing. Stakeholders are edited on the deal form,
+                           which persists them to deals.stakeholders, so the
+                           People tab links there instead.
+      */}
 
       <EmailComposerModal
         isOpen={showEmailComposer}
@@ -1462,13 +1499,17 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       <CallLogModal
         isOpen={showCallLog}
         onClose={() => setShowCallLog(false)}
-        contactName="John Smith"
+        contactName={primaryStakeholder?.name ?? ''}
       />
 
       <MeetingSchedulerModal
         isOpen={showMeetingScheduler}
         onClose={() => setShowMeetingScheduler(false)}
-        attendees={['John Smith', 'Alex Rodriguez']}
+        // Was ['John Smith', 'Alex Rodriguez'] on every deal.
+        attendees={[
+          ...(primaryStakeholder?.name ? [primaryStakeholder.name] : []),
+          ...(user?.name ? [user.name] : []),
+        ]}
         onSchedule={handleScheduleMeeting}
       />
 

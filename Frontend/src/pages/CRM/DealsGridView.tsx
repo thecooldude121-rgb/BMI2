@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { formatDisplayDate, formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
+import { Button } from '../../components/ui/Button';
+import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-import {
-  Filter, Download, Settings, BarChart3, ChevronDown,
-  Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal,
-  CheckCircle2, AlertTriangle, TrendingUp, Clock, Target, X, Edit, Copy, Trash2,
-  FileText
-} from 'lucide-react';
+import { useStageLookup } from '../../hooks/useStageLookup';
+import { isWonWith, isLostWith } from '../../utils/pipelinesApi';
+import { Download, Settings, BarChart3, Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, FileText } from 'lucide-react';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
@@ -48,6 +46,7 @@ interface DealsGridViewProps {
 
 const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onStageChange }) => {
   const navigate = useNavigate();
+  const { lookup: gridStageLookup } = useStageLookup();
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [selectedCloseDate, setSelectedCloseDate] = useState<string>('all');
@@ -103,16 +102,27 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   const formatDate = formatCloseDate; // formatCloseDate returns "No close date" for missing values
   const getDaysAway = daysFromNow;
 
-
   const getStageName = (stageId: string) => {
     const stage = stages.find(s => s.id === stageId);
     return stage ? stage.name : stageId;
   };
 
+  /*
+   * "Stage 3 of 6" from the REAL columns, which since Phase B slice 1 are the
+   * workspace's own stages.
+   *
+   * This used a hardcoded six-slug array and `indexOf`, so any stage outside
+   * new-business scored -1 and the card rendered "STAGE 0 OF 6" — a visible
+   * wrong value on the two live Renewals and Partnerships deals, not a latent
+   * one. `stages` is already in scope and already correct; nothing needed to be
+   * threaded in.
+   */
   const getStageProgress = (stageId: string) => {
-    const stageOrder = ['prospecting', 'qualified', 'proposal', 'negotiation', 'closed-won', 'closed-lost'];
-    const currentIndex = stageOrder.indexOf(stageId);
-    return `Stage ${currentIndex + 1} of ${stageOrder.length}`;
+    const currentIndex = stages.findIndex(s => s.id === stageId);
+    // Unknown stage: say so rather than counting from a position it does not
+    // have. A stage retired since the board loaded lands here.
+    if (currentIndex === -1) return `Stage — of ${stages.length}`;
+    return `Stage ${currentIndex + 1} of ${stages.length}`;
   };
 
   // Coerce Grid Deal → DealCard shape for explainDealHealth.
@@ -257,7 +267,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Stage:</label>
-            <select
+            <select aria-label="Stage:"
               value={selectedStage}
               onChange={(e) => setSelectedStage(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -271,7 +281,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Owner:</label>
-            <select
+            <select aria-label="Owner:"
               value={selectedOwner}
               onChange={(e) => setSelectedOwner(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -285,7 +295,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Close Date:</label>
-            <select
+            <select aria-label="Close Date:"
               value={selectedCloseDate}
               onChange={(e) => setSelectedCloseDate(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -299,7 +309,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Value:</label>
-            <select
+            <select aria-label="Value:"
               value={selectedValue}
               onChange={(e) => setSelectedValue(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -314,7 +324,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1 block">Source:</label>
-            <select
+            <select aria-label="Source:"
               value={selectedSource}
               onChange={(e) => setSelectedSource(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -354,7 +364,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No deals found</h3>
             <p className="text-sm text-gray-600 mb-6">Try adjusting your filters or search criteria</p>
-            <button
+            <Button
               onClick={() => {
                 setSelectedStage('all');
                 setSelectedOwner('all');
@@ -362,10 +372,9 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 setSelectedValue('all');
                 setSelectedSource('all');
               }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Clear Filters
-            </button>
+            </Button>
           </div>
         ) : (
           <>
@@ -374,8 +383,11 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               const stageColor = getStageStyle(deal.stage);
               const daysAway = getDaysAway(deal.closeDate);
               const isStalled = deal.daysSinceContact >= 7;
-              const isWon = deal.stage === 'closed-won';
-              const isLost = deal.stage === 'closed-lost';
+              // Outcome by configuration. These two literals are the default
+              // pipeline's, so a Renewals or Partnerships close showed neither
+              // the won border nor the lost dimming — it rendered as live.
+              const isWon = isWonWith(gridStageLookup)(deal);
+              const isLost = isLostWith(gridStageLookup)(deal);
 
               return (
                 <div
@@ -613,13 +625,13 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
 
                 {/* Action Buttons */}
                 <div className="space-y-2">
-                  <button
+                  <Button
                     onClick={(e) => { e.stopPropagation(); setShowEmailModal(deal); }}
-                    className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                    size="sm" fullWidth
                   >
                     <Mail className="h-4 w-4" />
                     <span>Email</span>
-                  </button>
+                  </Button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCallModal(deal); }}
                     className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
@@ -724,12 +736,12 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
             {/* Load More / Status */}
             <div className="mt-8 text-center">
               {displayedDeals.length < filteredDeals.length ? (
-                <button
+                <Button
                   onClick={loadMore}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                  size="xl"
                 >
                   Load More ({filteredDeals.length - displayedDeals.length} remaining)
-                </button>
+                </Button>
               ) : (
                 <p className="text-sm text-gray-600">
                   Showing all {displayedDeals.length} deals
@@ -825,7 +837,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                  <input
+                  <input aria-label="To"
                     type="email"
                     defaultValue={showEmailModal.contactName}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -833,7 +845,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                  <input
+                  <input aria-label="Subject"
                     type="text"
                     defaultValue={`Re: ${showEmailModal.dealName}`}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -841,7 +853,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                  <textarea
+                  <textarea aria-label="Message"
                     rows={8}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Type your message..."
@@ -856,12 +868,11 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => setShowEmailModal(null)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Email
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -878,7 +889,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                  <input
+                  <input aria-label="Contact"
                     type="text"
                     defaultValue={showCallModal.contactName}
                     disabled
@@ -887,7 +898,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Call Duration</label>
-                  <input
+                  <input aria-label="Call Duration"
                     type="text"
                     placeholder="e.g., 15 minutes"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -895,7 +906,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Call Notes</label>
-                  <textarea
+                  <textarea aria-label="Call Notes"
                     rows={5}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="What was discussed..."
@@ -903,7 +914,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Outcome" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option>Successful</option>
                     <option>No Answer</option>
                     <option>Left Voicemail</option>
@@ -997,7 +1008,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Proposal Template</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <select aria-label="Proposal Template" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option>Enterprise Solution Proposal</option>
                     <option>Standard Package Proposal</option>
                     <option>Custom Integration Proposal</option>
@@ -1006,7 +1017,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Send To</label>
-                  <input
+                  <input aria-label="Send To"
                     type="email"
                     defaultValue={showProposalModal.contactName}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1014,7 +1025,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                  <input
+                  <input aria-label="Subject"
                     type="text"
                     defaultValue={`Proposal for ${showProposalModal.dealName}`}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1022,7 +1033,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                  <textarea
+                  <textarea aria-label="Message"
                     rows={6}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Add a personalized message..."
@@ -1045,12 +1056,11 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={() => setShowProposalModal(null)}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 Send Proposal
-              </button>
+              </Button>
             </div>
           </div>
         </div>

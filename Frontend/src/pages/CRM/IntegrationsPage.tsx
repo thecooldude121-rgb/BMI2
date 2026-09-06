@@ -1,14 +1,7 @@
 import React, { useState } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import {
-  Check,
-  Settings,
-  Zap,
-  Link as LinkIcon,
-  X,
-  ArrowLeft,
-  AlertCircle
-} from 'lucide-react';
+import { Check, Link as LinkIcon, X, ArrowLeft, AlertCircle } from 'lucide-react';
 
 interface Integration {
   id: string;
@@ -168,7 +161,7 @@ const IntegrationsPage: React.FC = () => {
   const handleConfirmDisconnect = () => {
     setShowDisconnectModal(false);
     setTimeout(() => {
-      alert(`${selectedIntegration?.name} has been disconnected. Auto-sync has been stopped.`);
+      alert(`Disconnecting ${selectedIntegration?.name} is not available yet — nothing was disconnected and no sync was stopped.`);
     }, 100);
   };
 
@@ -182,7 +175,7 @@ const IntegrationsPage: React.FC = () => {
   const handleCompleteConnection = () => {
     setShowConnectModal(false);
     setTimeout(() => {
-      alert(`${selectedIntegration?.name} connected successfully! You can now start importing leads.`);
+      alert(`Connecting ${selectedIntegration?.name} is not available yet — there is no OAuth flow behind this, so nothing was connected.`);
     }, 100);
   };
 
@@ -278,21 +271,21 @@ const IntegrationsPage: React.FC = () => {
                       >
                         Configure
                       </button>
-                      <button
+                      <Button
                         onClick={() => navigate(`/crm/leads?source=${integration.id}`)}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                        fullWidth
                       >
                         View Leads
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnect(integration)}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                      fullWidth
                     >
                       <LinkIcon className="h-4 w-4 mr-2" />
                       Connect {integration.name}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -367,13 +360,13 @@ const IntegrationsPage: React.FC = () => {
                       </button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       onClick={() => handleConnect(integration)}
-                      className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                      fullWidth
                     >
                       <LinkIcon className="h-4 w-4 mr-2" />
                       Connect {integration.name}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -404,7 +397,7 @@ const IntegrationsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-assign to
                 </label>
-                <select
+                <select aria-label="Auto-assign to"
                   value={configForm.assignedTo}
                   onChange={(e) => setConfigForm({...configForm, assignedTo: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -420,7 +413,7 @@ const IntegrationsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Default Lead Status
                 </label>
-                <select
+                <select aria-label="Default Lead Status"
                   value={configForm.defaultStatus}
                   onChange={(e) => setConfigForm({...configForm, defaultStatus: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -436,7 +429,7 @@ const IntegrationsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tags (comma-separated)
                 </label>
-                <input
+                <input aria-label="Tags (comma-separated)"
                   type="text"
                   value={configForm.tags}
                   onChange={(e) => setConfigForm({...configForm, tags: e.target.value})}
@@ -449,7 +442,7 @@ const IntegrationsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Auto-sync Frequency
                 </label>
-                <select
+                <select aria-label="Auto-sync Frequency"
                   value={configForm.syncFrequency}
                   onChange={(e) => setConfigForm({...configForm, syncFrequency: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -475,7 +468,7 @@ const IntegrationsPage: React.FC = () => {
                     onChange={(e) => setConfigForm({...configForm, aiScoring: e.target.checked})}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                 </label>
               </div>
             </div>
@@ -487,12 +480,12 @@ const IntegrationsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleSaveConfig}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Save Settings
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -556,7 +549,7 @@ const IntegrationsPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   API Key
                 </label>
-                <input
+                <input aria-label="API Key"
                   type="password"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your API key"
@@ -574,12 +567,12 @@ const IntegrationsPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={handleCompleteConnection}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                fullWidth
               >
                 Connect
-              </button>
+              </Button>
             </div>
           </div>
         </div>

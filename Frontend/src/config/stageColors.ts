@@ -74,23 +74,68 @@ const FALLBACK: StageColorEntry = {
   columnBg: 'bg-gray-50',
 };
 
-/** Full entry for a stage ID, with gray fallback for unknown stages. */
-export function getStageColors(stageId: string): StageColorEntry {
-  return STAGE_COLORS[stageId] ?? FALLBACK;
+/**
+ * Terminal-outcome entries, used when a workspace stage is won/lost but is not
+ * one of the six slugs this file was written around.
+ *
+ * WHY THIS MATTERS. The gray FALLBACK above is graceful but it silently DROPS
+ * the design system's own rule — "no active stage uses green or red; those are
+ * reserved for terminal outcomes". A Renewals deal in `renewal-won` and a
+ * Partnerships deal in `partner-inactive` both rendered gray, so a win and a
+ * loss looked identical to each other and to an ordinary open stage. The colour
+ * carried meaning and the fallback threw it away.
+ */
+const WON_ENTRY: StageColorEntry = STAGE_COLORS['closed-won'];
+const LOST_ENTRY: StageColorEntry = STAGE_COLORS['closed-lost'];
+
+/**
+ * Full entry for a stage.
+ *
+ * `meta` is the stage as the workspace configured it. Given one, this honours
+ * the stored colour and, failing that, the stage's TYPE — so an outcome always
+ * reads as an outcome. Without it the behaviour is exactly as before, which
+ * keeps every existing caller correct while they are cut over one at a time.
+ */
+export function getStageColors(
+  stageId: string,
+  meta?: { color?: string | null; stage_type?: 'open' | 'won' | 'lost' } | null,
+): StageColorEntry {
+  const known = STAGE_COLORS[stageId];
+  if (known) return known;
+
+  if (meta?.stage_type === 'won') return WON_ENTRY;
+  if (meta?.stage_type === 'lost') return LOST_ENTRY;
+
+  // An open stage with a colour the workspace chose. Only `bg`/`text` can carry
+  // an arbitrary hex — the Tailwind class strings are compiled at build time and
+  // cannot be interpolated, so those stay neutral rather than silently
+  // rendering nothing. Design open question 4 (a fixed palette) is the real fix.
+  if (meta?.color) return { ...FALLBACK, bg: meta.color, text: '#ffffff' };
+
+  return FALLBACK;
 }
 
 /** `{ bg, text }` for inline-style solid badges. */
-export function getStageStyle(stageId: string): { bg: string; text: string } {
-  const { bg, text } = getStageColors(stageId);
+export function getStageStyle(
+  stageId: string,
+  meta?: Parameters<typeof getStageColors>[1],
+): { bg: string; text: string } {
+  const { bg, text } = getStageColors(stageId, meta);
   return { bg, text };
 }
 
 /** Tailwind class string for soft/outlined badge variants. */
-export function getStageTailwindClasses(stageId: string): string {
-  return getStageColors(stageId).tailwind;
+export function getStageTailwindClasses(
+  stageId: string,
+  meta?: Parameters<typeof getStageColors>[1],
+): string {
+  return getStageColors(stageId, meta).tailwind;
 }
 
 /** Hex color for chart/graph series. Same as `bg`. */
-export function getStageChartColor(stageId: string): string {
-  return getStageColors(stageId).bg;
+export function getStageChartColor(
+  stageId: string,
+  meta?: Parameters<typeof getStageColors>[1],
+): string {
+  return getStageColors(stageId, meta).bg;
 }

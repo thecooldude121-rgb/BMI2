@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 interface Toast {
@@ -8,9 +8,20 @@ interface Toast {
   duration?: number;
 }
 
+type ToastType = Toast['type'];
+
+const TOAST_TYPES: readonly string[] = ['success', 'error', 'warning', 'info'];
+const isToastType = (v: unknown): v is ToastType =>
+  typeof v === 'string' && TOAST_TYPES.includes(v);
+
 interface ToastContextType {
-  showToast: (type: Toast['type'], message: string, duration?: number) => void;
-  addToast: (message: string, type: Toast['type'], duration?: number) => void;
+  /**
+   * Accepts EITHER argument order — see the note on `showToast` below.
+   * Both params are typed loosely on purpose so existing call sites compile;
+   * the runtime normalises them.
+   */
+  showToast: (a: string, b?: string, duration?: number) => void;
+  addToast: (message: string, type: ToastType, duration?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -25,9 +36,46 @@ export const useToast = () => {
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Two toasts fired in the same millisecond previously shared an id, which
+  // duplicated React keys and let one removal drop both.
+  const idCounter = useRef(0);
 
-  const showToast = useCallback((type: Toast['type'], message: string, duration = 3000) => {
-    const id = Date.now().toString();
+  /**
+   * PHASE 0 COMPATIBILITY SHIM — accepts both argument orders.
+   *
+   * This context shipped two functions with the same two string params in
+   * OPPOSITE orders: showToast(type, message) and addToast(message, type).
+   * Because both are strings, TypeScript's only defence was the type union, and
+   * 198 call sites across 21 files call showToast(message, type). Every one of
+   * them rendered `message = 'success'` — users were shown a toast that
+   * literally said "success" instead of "Deal deleted". 78 sites use the
+   * declared order and worked correctly.
+   *
+   * Normalising here fixes all 198 immediately with no call-site churn. The
+   * proper fix is to settle on ONE signature and codemod the minority — that
+   * belongs with the design-system work in Phase 3, at which point this shim
+   * and the duplicate `addToast` should both be deleted.
+   *
+   * Disambiguation rule: treat an argument as the type only if it is one of the
+   * four literals AND the other argument is not. When both look like types
+   * (vanishingly rare), the declared (type, message) order wins.
+   */
+  const showToast = useCallback((a: string, b?: string, duration = 3000) => {
+    let type: ToastType;
+    let message: string;
+
+    if (isToastType(a) && !isToastType(b)) {
+      type = a;                    // declared order: (type, message)
+      message = b ?? '';
+    } else if (isToastType(b)) {
+      type = b;                    // swapped order: (message, type)
+      message = a;
+    } else {
+      type = 'info';               // neither is a valid type — show the text we have
+      message = a;
+    }
+
+    const id = `${Date.now()}-${idCounter.current++}`;
     const newToast: Toast = { id, type, message, duration };
 
     setToasts(prev => [...prev, newToast]);
@@ -39,7 +87,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  const addToast = useCallback((message: string, type: Toast['type'], duration = 3000) => {
+  const addToast = useCallback((message: string, type: ToastType, duration = 3000) => {
     showToast(type, message, duration);
   }, [showToast]);
 

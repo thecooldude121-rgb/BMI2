@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '../../components/ui/Button';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  ChevronRight, Save, Play, X, BarChart3, Table2, PieChart,
-  LineChart, TrendingUp, Lightbulb, Copy, GripVertical, Plus,
-  Sparkles, ChevronDown, AlertTriangle
-} from 'lucide-react';
+import { ChevronRight, X, BarChart3, Table2, PieChart, LineChart, TrendingUp, Copy, GripVertical, Plus, Sparkles, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 
 interface ReportField {
@@ -1061,13 +1058,13 @@ export default function CustomReportBuilder() {
             >
               {isSaving && !isRunning ? '⏳ Saving...' : '💾 Save as Draft'}
             </button>
-            <button
+            <Button
               onClick={handleSaveAndRun}
               disabled={isSaving || isRunning}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              className="whitespace-nowrap"
             >
               {isRunning ? '⏳ Running...' : isEditMode ? '▶️ Update & Run' : '▶️ Save & Run'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -1087,7 +1084,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Report Name: *
                     </label>
-                    <input
+                    <input aria-label="Report Name:"
                       type="text"
                       value={config.name}
                       onChange={(e) => {
@@ -1115,7 +1112,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Description: (optional)
                     </label>
-                    <textarea
+                    <textarea aria-label="Description: (optional)"
                       value={config.description}
                       onChange={(e) => {
                         setConfig({ ...config, description: e.target.value });
@@ -1140,7 +1137,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Category:
                     </label>
-                    <select
+                    <select aria-label="Category:"
                       value={config.category}
                       onChange={(e) => setConfig({ ...config, category: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1515,7 +1512,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Group By:
                     </label>
-                    <select
+                    <select aria-label="Group By:"
                       value={config.groupBy}
                       onChange={(e) => setConfig({ ...config, groupBy: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -1540,7 +1537,7 @@ export default function CustomReportBuilder() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Field</label>
-                        <select
+                        <select aria-label="Field"
                           value={config.sortBy}
                           onChange={(e) => setConfig({ ...config, sortBy: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -1554,7 +1551,7 @@ export default function CustomReportBuilder() {
                       </div>
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">Order</label>
-                        <select
+                        <select aria-label="Order"
                           value={config.sortDirection}
                           onChange={(e) => setConfig({ ...config, sortDirection: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -1608,7 +1605,7 @@ export default function CustomReportBuilder() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Custom Formula: <span className="text-gray-500 font-normal text-xs">(Optional - Advanced users)</span>
                     </label>
-                    <input
+                    <input aria-label="Custom Formula: (Optional - Advanced users)"
                       type="text"
                       value={customFormula}
                       onChange={(e) => handleCustomFormulaChange(e.target.value)}
@@ -1734,7 +1731,7 @@ export default function CustomReportBuilder() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">
                               Frequency:
                             </label>
-                            <select
+                            <select aria-label="Frequency:"
                               value={emailFrequency}
                               onChange={(e) => setEmailFrequency(e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
@@ -1815,7 +1812,7 @@ export default function CustomReportBuilder() {
 
                   <div className="mb-6">
                     <div className="w-full bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                      <div className="bg-blue-600 h-6 rounded-full flex items-center justify-end pr-3" style={{ width: '78%' }}>
+                      <div className="bg-brand-600 h-6 rounded-full flex items-center justify-end pr-3" style={{ width: '78%' }}>
                         <span className="text-xs font-semibold text-white">78% of goal</span>
                       </div>
                     </div>
@@ -1990,14 +1987,14 @@ export default function CustomReportBuilder() {
           >
             {isSaving && !isRunning ? '⏳' : '💾 Draft'}
           </button>
-          <button
+          <Button
             onClick={handleSaveAndRun}
             disabled={isSaving || isRunning}
             title={isEditMode ? 'Update & Run Report (Ctrl/Cmd + Enter)' : 'Save & Run Report (Ctrl/Cmd + Enter)'}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="whitespace-nowrap"
           >
             {isRunning ? '⏳' : isEditMode ? '▶️ Update' : '▶️ Run'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -2023,7 +2020,7 @@ export default function CustomReportBuilder() {
             <div className="w-full mt-2">
               <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                  className="bg-brand-600 h-2 rounded-full transition-all duration-300 ease-out"
                   style={{ width: `${loadingProgress}%` }}
                 ></div>
               </div>

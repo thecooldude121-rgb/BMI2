@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Phone, Video, MapPin, Calendar, Clock, Link as LinkIcon } from 'lucide-react';
 
 interface ScheduleCallModalProps {
@@ -44,18 +45,20 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
   const [scheduling, setScheduling] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
 
-  if (!isOpen) return null;
-
-  const firstName = memberName.split(' ')[0];
-
-  // Set default date to tomorrow
+  // Set default date to tomorrow. Must stay above the `isOpen` early return —
+  // a hook below it changes the hook count when the modal opens, which makes
+  // React throw "Rendered more hooks than during the previous render".
   React.useEffect(() => {
     if (isOpen && !date) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setDate(tomorrow.toISOString().split('T')[0]);
     }
-  }, [isOpen]);
+  }, [isOpen, date]);
+
+  if (!isOpen) return null;
+
+  const firstName = memberName.split(' ')[0];
 
   const handleGenerateZoomLink = async () => {
     setGeneratingLink(true);
@@ -159,7 +162,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
               <Calendar className="w-4 h-4 mr-1.5 text-slate-500" />
               Date
             </label>
-            <input
+            <input aria-label="Date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -278,7 +281,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
           {callType === 'phone' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
-              <input
+              <input aria-label="Phone Number"
                 type="tel"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
@@ -334,7 +337,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Subject
             </label>
-            <input
+            <input aria-label="Subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
@@ -348,7 +351,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Notes (optional)
             </label>
-            <textarea
+            <textarea aria-label="Notes (optional)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Agenda items to discuss..."
@@ -400,10 +403,10 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleSchedule}
               disabled={scheduling || !date || !time || !subject.trim()}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              size="lg" className="disabled:bg-slate-300"
             >
               {scheduling ? (
                 <>
@@ -416,7 +419,7 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
                   <span className="ml-2">Schedule Call</span>
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

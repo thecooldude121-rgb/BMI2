@@ -1,22 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MoreVertical, Edit, Trash2, UserPlus, Briefcase, Tag, Archive } from 'lucide-react';
+import { NotAvailableBadge } from '../common/NotAvailable';
 
 interface ContactActionMenuProps {
-  contactId: string;
   onEdit: () => void;
   onDelete: () => void;
   onAssign: () => void;
-  onAddToDeal: () => void;
   onAddTag: () => void;
   onMarkInactive: () => void;
 }
 
+/**
+ * "Add to deal" has no onAddToDeal prop any more. Linking a contact to a deal
+ * needs a deal picker writing deals.contact_id, and neither exists — the item
+ * used to alert "Add to deal functionality - opens deal selector". It stays
+ * visible, disabled and labelled, so the capability is still discoverable
+ * without the menu claiming it works.
+ */
+
 const ContactActionMenu: React.FC<ContactActionMenuProps> = ({
-  contactId,
   onEdit,
   onDelete,
   onAssign,
-  onAddToDeal,
   onAddTag,
   onMarkInactive
 }) => {
@@ -42,10 +47,14 @@ const ContactActionMenu: React.FC<ContactActionMenuProps> = ({
   return (
     <div className="relative" ref={menuRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="Contact actions"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
         className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
       >
-        <MoreVertical className="h-5 w-5 text-gray-600" />
+        <MoreVertical className="h-5 w-5 text-gray-600" aria-hidden="true" />
       </button>
 
       {isOpen && (
@@ -67,11 +76,14 @@ const ContactActionMenu: React.FC<ContactActionMenuProps> = ({
           </button>
 
           <button
-            onClick={() => handleAction(onAddToDeal)}
-            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+            type="button"
+            disabled
+            title="Linking a contact to a deal is not available yet"
+            className="w-full px-4 py-2 text-left text-sm text-gray-400 cursor-not-allowed flex items-center space-x-2"
           >
             <Briefcase className="h-4 w-4" />
             <span>Add to deal</span>
+            <NotAvailableBadge label="Soon" className="ml-auto" />
           </button>
 
           <button

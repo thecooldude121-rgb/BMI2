@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Button } from '../ui/Button';
 import type { AssignmentResult } from '../../utils/assignmentRules/types';
-import { COMPANY_SIZE_OPTIONS, SOURCE_OPTIONS, WEEKDAY_LABELS } from '../../utils/assignmentRules/types';
+import { COMPANY_SIZE_OPTIONS, SOURCE_OPTIONS } from '../../utils/assignmentRules/types';
 import { evaluateAssignmentRules } from '../../utils/assignmentRules/evaluationEngine';
 import { getRules } from '../../utils/assignmentRules/rulesStore';
 import { getTerritories } from '../../utils/assignmentRules/territoryStore';
-import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
 
 interface MockLead {
   source: string;
@@ -147,7 +147,7 @@ export default function SimulationPanel() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Lead Source</label>
-            <select value={lead.source} onChange={e => set('source', e.target.value)}
+            <select aria-label="Lead Source" value={lead.source} onChange={e => set('source', e.target.value)}
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">— none —</option>
               {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -166,14 +166,14 @@ export default function SimulationPanel() {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Position / Title</label>
-            <input value={lead.position} onChange={e => set('position', e.target.value)}
+            <input aria-label="Position / Title" value={lead.position} onChange={e => set('position', e.target.value)}
               placeholder="e.g. VP of Sales"
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Company Size</label>
-            <select value={lead.company_size} onChange={e => set('company_size', e.target.value)}
+            <select aria-label="Company Size" value={lead.company_size} onChange={e => set('company_size', e.target.value)}
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">— none —</option>
               {COMPANY_SIZE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -182,14 +182,14 @@ export default function SimulationPanel() {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
-            <input value={lead.country} onChange={e => set('country', e.target.value)}
+            <input aria-label="Country" value={lead.country} onChange={e => set('country', e.target.value)}
               placeholder="e.g. India"
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">City</label>
-            <input value={lead.city} onChange={e => set('city', e.target.value)}
+            <input aria-label="City" value={lead.city} onChange={e => set('city', e.target.value)}
               placeholder="e.g. Mumbai"
               className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
@@ -197,7 +197,7 @@ export default function SimulationPanel() {
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Tags (comma-separated)</label>
-          <input value={lead.tags} onChange={e => set('tags', e.target.value)}
+          <input aria-label="Tags (comma-separated)" value={lead.tags} onChange={e => set('tags', e.target.value)}
             placeholder="enterprise, vip"
             className="w-full px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
@@ -206,15 +206,15 @@ export default function SimulationPanel() {
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Simulate Time <span className="text-gray-400">(leave blank for now)</span>
           </label>
-          <input type="datetime-local" value={simTime} onChange={e => { setSimTime(e.target.value); setResult(null); }}
+          <input aria-label="Simulate Time (leave blank for now)" type="datetime-local" value={simTime} onChange={e => { setSimTime(e.target.value); setResult(null); }}
             className="px-2.5 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div className="flex gap-3 pt-1">
-          <button onClick={runSim}
-            className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+          <Button onClick={runSim}
+            size="lg" className="font-semibold">
             Run Simulation
-          </button>
+          </Button>
           <button onClick={reset}
             className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
             Reset

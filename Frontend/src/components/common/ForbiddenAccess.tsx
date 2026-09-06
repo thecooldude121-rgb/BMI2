@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui/Button';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,7 +13,7 @@ interface ForbiddenAccessProps {
 const ForbiddenAccess: React.FC<ForbiddenAccessProps> = ({
   message = "Team Management settings are only accessible to Admin users. Contact your system administrator for access.",
   title = "403 - Access Forbidden",
-  returnPath = "/settings",
+  returnPath = "/crm/settings",
   returnLabel = "Return to Settings"
 }) => {
   const navigate = useNavigate();
@@ -39,13 +40,13 @@ const ForbiddenAccess: React.FC<ForbiddenAccessProps> = ({
           </p>
 
           {/* Action Button */}
-          <button
+          <Button
             onClick={() => navigate(returnPath)}
-            className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+            size="xl" fullWidth
           >
             <ArrowLeft className="h-5 w-5" />
             {returnLabel}
-          </button>
+          </Button>
 
           {/* Additional Info */}
           <div className="mt-6 pt-6 border-t border-gray-200">

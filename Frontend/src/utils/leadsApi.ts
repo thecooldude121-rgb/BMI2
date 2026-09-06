@@ -62,7 +62,11 @@ export function mapRowToLead(row: any): Lead {
     company:    row.company    || undefined,
     position:   row.position   || undefined,
     industry:   row.industry   || undefined,
-    stage:      row.stage      || 'new',
+    // `stage` deliberately not set. The DB column IS called stage, but the
+    // frontend Lead type calls it `status` — mapped a few lines below — and
+    // nothing reads `lead.stage`. Setting both put an off-type property on every
+    // lead and was the only type error in this file. (Lead.state, which does
+    // exist, is the geographic state; unrelated despite the near-miss name.)
     score:      row.score      ?? 0,
     source:     row.source     || 'manual',
     owner_id:   row.owner_id   || '',
@@ -98,20 +102,27 @@ export function mapRowToLead(row: any): Lead {
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 
+/**
+ * THROWS on failure, deliberately. It used to `return []` for both a non-ok
+ * response and a thrown fetch, which meant an expired token or a 500 rendered
+ * as "0 leads" — indistinguishable from an empty pipeline, and the more
+ * alarming of the two readings is the one the user does not get shown.
+ *
+ * Both call sites were already written for a throw: LeadContext.fetchLeads has
+ * a catch that sets its error state (dead code until now), and
+ * useDashboardData treats a rejection as "leads unavailable" rather than zero.
+ */
 export async function fetchLeadsFromAPI(filters?: LeadFilters): Promise<Lead[]> {
-  try {
-    const params = new URLSearchParams();
-    if (filters?.search)   params.set('search', filters.search);
-    if (filters?.owner_id?.length) params.set('owner_id', filters.owner_id[0]);
+  const params = new URLSearchParams();
+  if (filters?.search) params.set('search', filters.search);
+  if (filters?.owner_id?.length) params.set('owner_id', filters.owner_id[0]);
+  if (filters?.limit) params.set('limit', String(filters.limit));
 
-    const url = `${API_BASE}/leads${params.toString() ? '?' + params : ''}`;
-    const res  = await fetch(url, { headers: getAuthHeaders() });
-    if (!res.ok) return [];
-    const json = await res.json();
-    return (json.success ? json.data : []).map(mapRowToLead);
-  } catch {
-    return [];
-  }
+  const url = `${API_BASE}/leads${params.toString() ? '?' + params : ''}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(`Failed to load leads (HTTP ${res.status})`);
+  const json = await res.json();
+  return (json.success ? json.data : []).map(mapRowToLead);
 }
 
 export async function fetchLeadByIdFromAPI(id: string): Promise<Lead | null> {
@@ -125,37 +136,63 @@ export async function fetchLeadByIdFromAPI(id: string): Promise<Lead | null> {
   return json.success ? mapRowToLead(json.data) : null;
 }
 
+/**
+ * Mirrors updateLeadViaAPI's status -> stage translation. Without it, creating a
+ * lead from the Add Lead form could never succeed: the page sends `status: 'new'`
+ * (the frontend Lead.status field carries the STAGE vocabulary), the DB column
+ * `leads.status` is the separate lifecycle flag `active|inactive|nurturing`, and
+ * the controller validated the former against the latter — HTTP 400,
+ * "status must be one of: active, inactive, nurturing", on every attempt.
+ *
+ * The asymmetry was the whole bug: updateLeadViaAPI has always done this mapping
+ * and createLeadViaAPI never did, so editing a lead worked and creating one did
+ * not. Invisible until the error-swallowing sweep, because the 400 was caught and
+ * returned as null.
+ */
 export async function createLeadViaAPI(lead: Partial<Lead>): Promise<Lead | null> {
+  const payload: Record<string, any> = { ...lead };
+  if ('status' in payload) {
+    payload.stage = payload.status;
+    delete payload.status;
+  }
   const res = await fetch(`${API_BASE}/leads`, {
     method:  'POST',
     headers: getAuthHeaders(),
-    body:    JSON.stringify(lead),
+    body:    JSON.stringify(payload),
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to create lead');
   return mapRowToLead(json.data);
 }
 
-export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Promise<Lead | null> {
-  try {
-    // Translate frontend field names → DB column names (status → stage)
-    const payload: Record<string, any> = { ...updates };
-    if ('status' in payload) {
-      payload.stage = payload.status;
-      delete payload.status;
-    }
-    const res = await fetch(`${API_BASE}/leads/${id}`, {
-      method:  'PUT',
-      headers: getAuthHeaders(),
-      body:    JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.message || 'Failed to update lead');
-    return mapRowToLead(json.data);
-  } catch (err: any) {
-    console.error('[leadsApi] updateLead:', err.message);
-    return null;
+/**
+ * Throws on a rejected write. It used to catch, console.error and return null,
+ * which is how the lead-conversion wizard came to show a success screen for a
+ * write that never happened: the server returned 400, the message went to the
+ * console, the caller saw a falsy value it was not checking, and the UI advanced.
+ * A silent null is indistinguishable from "nothing to update" at the call site.
+ *
+ * Callers that only need success/failure keep using LeadContext.updateLead, which
+ * still returns a boolean; it catches this and also records the message on
+ * `lastWriteError` so a caller can show what actually went wrong.
+ */
+export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Promise<Lead> {
+  // Translate frontend field names → DB column names (status → stage)
+  const payload: Record<string, any> = { ...updates };
+  if ('status' in payload) {
+    payload.stage = payload.status;
+    delete payload.status;
   }
+  const res = await fetch(`${API_BASE}/leads/${id}`, {
+    method:  'PUT',
+    headers: getAuthHeaders(),
+    body:    JSON.stringify(payload),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json.message || `Failed to update lead (HTTP ${res.status})`);
+  }
+  return mapRowToLead(json.data);
 }
 
 export async function deleteLeadViaAPI(id: string): Promise<boolean> {

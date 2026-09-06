@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Button } from '../ui/Button';
 import { X, Play, Pause, SkipBack, SkipForward, Volume2, Settings, Maximize2, Download, Share2 } from 'lucide-react';
 
 interface RecordingPlayerModalProps {
@@ -73,11 +74,11 @@ export default function RecordingPlayerModal({ isOpen, onClose, meeting }: Recor
           <div className="space-y-3">
             <div className="relative h-2 bg-gray-200 rounded-full cursor-pointer">
               <div
-                className="absolute inset-y-0 left-0 bg-blue-600 rounded-full transition-all"
+                className="absolute inset-y-0 left-0 bg-brand-600 rounded-full transition-all"
                 style={{ width: `${progress}%` }}
               />
               <div
-                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-blue-600 rounded-full shadow-lg transition-all"
+                className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-600 rounded-full shadow-lg transition-all"
                 style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
               />
             </div>
@@ -87,16 +88,16 @@ export default function RecordingPlayerModal({ isOpen, onClose, meeting }: Recor
                 <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                   <SkipBack className="h-5 w-5 text-gray-700" />
                 </button>
-                <button
+                <Button
                   onClick={() => setIsPlaying(!isPlaying)}
-                  className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors"
+                  className="p-3 rounded-full"
                 >
                   {isPlaying ? (
                     <Pause className="h-6 w-6" />
                   ) : (
                     <Play className="h-6 w-6 ml-0.5" />
                   )}
-                </button>
+                </Button>
                 <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                   <SkipForward className="h-5 w-5 text-gray-700" />
                 </button>
@@ -132,7 +133,7 @@ export default function RecordingPlayerModal({ isOpen, onClose, meeting }: Recor
                   </span>
                   <span className="flex-1 text-sm text-gray-700">{moment.label}</span>
                   {moment.isKey && (
-                    <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-brand-600 text-white px-2 py-0.5 rounded-full">
                       Key
                     </span>
                   )}

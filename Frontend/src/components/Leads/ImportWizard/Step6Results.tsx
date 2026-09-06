@@ -1,5 +1,6 @@
-import React from 'react';
+
 import { CheckCircle, XCircle, GitMerge, AlertTriangle, Zap, ExternalLink, RefreshCw } from 'lucide-react';
+import { Button } from '../../ui/Button';
 import { useNavigate } from 'react-router-dom';
 import type { ImportProgress, ImportResult } from './types';
 
@@ -32,7 +33,7 @@ export default function Step6Results({ progress, result, onClose, onImportAnothe
           <div className="space-y-3">
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
               <div
-                className="h-3 bg-blue-600 rounded-full transition-all duration-150"
+                className="h-3 bg-brand-600 rounded-full transition-all duration-150"
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -148,12 +149,12 @@ export default function Step6Results({ progress, result, onClose, onImportAnothe
               <RefreshCw className="h-4 w-4" />
               Import another file
             </button>
-            <button
+            <Button
               onClick={onClose}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+              fullWidth className="rounded-xl font-semibold"
             >
               Done — view leads
-            </button>
+            </Button>
           </div>
         </>
       ) : null}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '../ui/Button';
 import {
   FileText, Upload, Edit, Trash2, Plus, Download, Eye, X,
   Search, Sparkles, ChevronDown, ChevronUp, Copy,
@@ -48,6 +49,8 @@ export interface FileData {
 }
 
 interface DealNotesFilesProps {
+  /** True while notes or files are still loading — see DealActivityTimeline. */
+  loading?: boolean;
   notes: Array<{ id: string; date: string; author: string; content: string; tags?: string[] }>;
   files: FileData[];
 }
@@ -184,7 +187,7 @@ const AI_SUMMARY =
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) => {
+export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files, loading }) => {
   const { showToast } = useToast();
 
   // ── Notes state ──────────────────────────────────────────────────────────────
@@ -327,7 +330,7 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
       baseId: baseId ?? newId,
       isSharedWithBuyer: false,
     }]);
-    showToast('success', `${name} uploaded successfully!`);
+    showToast('warning', `${name} was NOT uploaded — attaching files to a deal is not available yet.`);
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -415,7 +418,7 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
             </span>
           </div>
           <div className="flex items-center gap-2 mt-2">
-            <button onClick={() => handleSaveEdit(note.id)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">Save</button>
+            <Button onClick={() => handleSaveEdit(note.id)} size="sm">Save</Button>
             <button onClick={() => { setEditingNoteId(null); setEditText(''); }} className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors">Cancel</button>
           </div>
         </>
@@ -442,7 +445,7 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
                     v{file.version}
                   </span>
                   {file.version > 1 && file.isLatest && (
-                    <span className="text-[10px] font-bold bg-blue-600 text-white px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-bold bg-brand-600 text-white px-1.5 py-0.5 rounded">
                       Latest
                     </span>
                   )}
@@ -450,13 +453,13 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
               </div>
               {/* Action buttons */}
               <div className="flex items-center gap-1 flex-shrink-0">
-                <button
+                <Button
                   onClick={() => handleSendToBuyer(file.id)}
-                  className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-md text-[11px] font-semibold hover:bg-blue-700 transition-colors whitespace-nowrap"
+                  size="sm" className="rounded-md text-[11px] font-semibold whitespace-nowrap"
                 >
                   <Link2 className="h-3 w-3" />
                   {file.shareLink ? 'Resend' : 'Send to Buyer'}
-                </button>
+                </Button>
                 <button onClick={() => showToast('info', `Previewing ${file.name}...`)} className="p-1.5 hover:bg-gray-100 rounded transition-colors">
                   <Eye className="h-3.5 w-3.5 text-gray-500" />
                 </button>
@@ -558,6 +561,17 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
   );
 
   // ── Return ────────────────────────────────────────────────────────────────────
+  // See DealActivityTimeline: an in-flight fetch must not render as "No files
+  // attached yet."
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm space-y-3">
+        <div className="h-5 w-32 bg-gray-100 rounded animate-pulse" />
+        {[0, 1].map(i => <div key={i} className="h-16 bg-gray-50 rounded animate-pulse" />)}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6 shadow-sm">
       <div className="flex items-center space-x-2 mb-6">
@@ -581,10 +595,10 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
               }
               AI Summarise
             </button>
-            <button onClick={() => setShowAddNote(v => !v)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+            <Button onClick={() => setShowAddNote(v => !v)} size="sm">
               <Plus className="h-4 w-4" />
               Add Note
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -658,7 +672,7 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
               <span className={`absolute bottom-2 right-2 text-xs pointer-events-none ${charCountCx(noteText.length)}`}>{noteText.length}/2000</span>
             </div>
             <div className="flex items-center gap-2 mt-3">
-              <button onClick={handleSaveNote} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">Save Note</button>
+              <Button onClick={handleSaveNote} >Save Note</Button>
               <button onClick={() => { setShowAddNote(false); setNoteText(''); setNewNoteTags([]); }} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors">Cancel</button>
             </div>
           </div>
@@ -738,13 +752,13 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-gray-900">Files</h3>
-          <button
+          <Button
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            size="sm"
           >
             <Upload className="h-4 w-4" />
             Upload File
-          </button>
+          </Button>
           <input ref={fileInputRef} type="file" className="hidden"
             accept=".pdf,.xlsx,.xls,.pptx,.ppt,.docx,.doc"
             onChange={handleFileInputChange}
@@ -814,9 +828,9 @@ export const DealNotesFiles: React.FC<DealNotesFilesProps> = ({ notes, files }) 
               </ul>
             </div>
             <div className="flex gap-3">
-              <button onClick={handleConfirmVersion} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+              <Button onClick={handleConfirmVersion} fullWidth>
                 Yes, add as v{pendingUpload.matchedFile.version + 1}
-              </button>
+              </Button>
               <button onClick={handleRejectVersion} className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors">
                 Upload as new file
               </button>

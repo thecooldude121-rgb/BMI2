@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
-import { Shield, Smartphone } from 'lucide-react';
+import React from 'react';
+import { Shield } from 'lucide-react';
+import { NotAvailable } from '../../../components/common/NotAvailable';
 
+/**
+ * PHASE 0 REWRITE — "Enable Two-Factor Authentication" previously just called
+ * setEnabled(true), which rendered a green "2FA Enabled — Your account is
+ * protected with two-factor authentication" panel. There was no enrolment, no
+ * shared secret, no QR code and no recovery codes: the user was told their
+ * account was protected when nothing had changed. Restore this page alongside a
+ * real enrolment endpoint.
+ */
 const TwoFactorAuth: React.FC = () => {
-  const [enabled, setEnabled] = useState(false);
-
   return (
     <div>
       <div className="mb-6">
@@ -13,36 +20,20 @@ const TwoFactorAuth: React.FC = () => {
 
       <div className="space-y-6">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 flex items-start gap-4">
-          <Shield className="h-6 w-6 text-blue-600 flex-shrink-0 mt-1" />
+          <Shield className="h-6 w-6 text-blue-600 flex-shrink-0 mt-1" aria-hidden="true" />
           <div>
-            <h3 className="font-semibold text-blue-900 mb-2">Why Enable 2FA?</h3>
+            <h3 className="font-semibold text-blue-900 mb-2">Why 2FA matters</h3>
             <p className="text-sm text-blue-800">
-              Two-factor authentication adds an extra layer of security by requiring a code from your phone in addition to your password.
+              Two-factor authentication requires a code from your phone in addition to your
+              password, so a stolen password alone is not enough to sign in.
             </p>
           </div>
         </div>
 
-        {enabled ? (
-          <div className="space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Smartphone className="h-5 w-5 text-green-600" />
-                <span className="font-semibold text-green-900">2FA Enabled</span>
-              </div>
-              <p className="text-sm text-green-800">Your account is protected with two-factor authentication</p>
-            </div>
-            <button className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-              Disable 2FA
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setEnabled(true)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Enable Two-Factor Authentication
-          </button>
-        )}
+        <NotAvailable
+          feature="Two-factor authentication"
+          detail="Enrolment is not built yet — there is no authenticator secret, QR code, or recovery-code storage. Your account is currently protected by your password alone."
+        />
       </div>
     </div>
   );

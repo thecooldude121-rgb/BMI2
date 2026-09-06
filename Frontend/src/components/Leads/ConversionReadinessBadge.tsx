@@ -1,4 +1,4 @@
-import React from 'react';
+
 import type { ConversionReadinessState } from '../../utils/conversionReadiness';
 
 // ── Color tokens per state ────────────────────────────────────────────────────

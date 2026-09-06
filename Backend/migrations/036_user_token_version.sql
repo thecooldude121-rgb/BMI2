@@ -1,0 +1,43 @@
+-- Migration 036: make session state live, by versioning tokens.
+--
+-- WHY. `middleware/auth.ts:protect` verified a JWT's signature and expiry and
+-- nothing else — it never read the account. So every fact the API acted on
+-- (role, whether the account existed, whether it was active) was a snapshot
+-- taken at login and trusted for JWT_EXPIRES_IN, currently SEVEN DAYS. Three
+-- separately-recorded findings were that one cause:
+--
+--   * a demoted admin kept admin-level access for up to 7 days
+--   * a DEACTIVATED user kept full API access for up to 7 days
+--   * a password change did not revoke any other session
+--
+-- The middle one is the one that mattered: deactivation shipped as a real
+-- control through the API and could be ignored by its subject for a week.
+--
+-- WHAT. One integer on `users`. The token carries the version it was minted
+-- with; `protect` compares it against the row and refuses a mismatch. Anything
+-- that should end existing sessions increments it.
+--
+--   deactivate           -> bump the TARGET only
+--   change password      -> bump the caller, and reissue their own token
+--   role change          -> bump the target (no API path does this yet)
+--   reactivate           -> no bump; there is no live session to revoke
+--
+-- DEFAULT 0 IS THE ROLLOUT PLAN, not an arbitrary starting value. Tokens issued
+-- before this ships carry no `token_version` claim, and both obvious readings
+-- are bad: treating an absent claim as valid leaves every pre-deploy token
+-- bypassing revocation for the full 7 days, and treating it as invalid signs
+-- every user out on deploy. Because every existing row is 0, an absent claim
+-- can be READ as 0 and compared — so those tokens keep working, while any
+-- actual revocation moves the row to >= 1 and refuses them on the next request.
+-- No global logout, and no bypass for anyone actually revoked.
+--
+-- That fallback is dead once 7 days have passed since deploy and SHOULD BE
+-- REMOVED THEN. `authController` already carries the same shape for the
+-- tenant_id -> workspace_id claim rename, with the same "drop it once none are
+-- in flight" note; a permanent "absent means 0" is a permanent hole if the
+-- default ever changes.
+--
+-- No index: it is only ever read by primary key, alongside the row it lives on.
+-- No backfill: the default makes every existing row valid immediately.
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;

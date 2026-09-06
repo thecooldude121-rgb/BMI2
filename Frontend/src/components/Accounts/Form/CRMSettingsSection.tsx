@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Settings, Tag, X, Users } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { Settings, Tag, X } from 'lucide-react';
+import type { AccountFormData } from '../../../pages/Accounts/AccountFormPage';
 
 interface CRMSettingsSectionProps {
   formData: any;
-  onChange: (field: string, value: any) => void;
+  onChange: (field: keyof AccountFormData, value: any) => void;
   onAddTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
 }
@@ -39,7 +41,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Infrastructure
             </label>
-            <input
+            <input aria-label="Infrastructure"
               type="text"
               value={formData.infrastructure}
               onChange={(e) => onChange('infrastructure', e.target.value)}
@@ -53,7 +55,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               CRM & Sales Tools
             </label>
-            <input
+            <input aria-label="CRM & Sales Tools"
               type="text"
               value={formData.crmTools}
               onChange={(e) => onChange('crmTools', e.target.value)}
@@ -71,7 +73,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Development Tools
             </label>
-            <input
+            <input aria-label="Development Tools"
               type="text"
               value={formData.devTools}
               onChange={(e) => onChange('devTools', e.target.value)}
@@ -94,7 +96,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Account Owner <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Account Owner"
               value={formData.accountOwner}
               onChange={(e) => onChange('accountOwner', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -110,7 +112,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Account Status <span className="text-red-500">*</span>
             </label>
-            <select
+            <select aria-label="Account Status"
               value={formData.accountStatus}
               onChange={(e) => onChange('accountStatus', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -126,7 +128,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Priority
             </label>
-            <select
+            <select aria-label="Priority"
               value={formData.priority}
               onChange={(e) => onChange('priority', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -170,12 +172,11 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 placeholder="Add tag"
               />
-              <button
+              <Button
                 onClick={handleAddTag}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
                 <Tag className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
 
             <div>
@@ -199,7 +200,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Account Source
             </label>
-            <select
+            <select aria-label="Account Source"
               value={formData.accountSource}
               onChange={(e) => onChange('accountSource', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
@@ -245,7 +246,7 @@ const CRMSettingsSection: React.FC<CRMSettingsSectionProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Internal Notes
             </label>
-            <textarea
+            <textarea aria-label="Internal Notes"
               value={formData.notes}
               onChange={(e) => onChange('notes', e.target.value)}
               rows={4}

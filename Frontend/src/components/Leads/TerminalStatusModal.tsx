@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, XCircle, AlertTriangle } from 'lucide-react';
 import type { TerminalAction } from '../../utils/leadReasons';
 import { getReasonsForAction } from '../../utils/leadReasons';

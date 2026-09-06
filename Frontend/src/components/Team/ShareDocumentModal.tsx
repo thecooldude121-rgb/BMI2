@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Button } from '../ui/Button';
 import { X, Upload, FileText, File, Image, FileSpreadsheet, Presentation, CheckCircle } from 'lucide-react';
 
 interface ShareDocumentModalProps {
@@ -268,12 +269,11 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
                     <p className="text-sm text-slate-600 mb-2">
                       Drag and drop your file here, or
                     </p>
-                    <button
+                    <Button
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
                     >
                       Choose File
-                    </button>
+                    </Button>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -296,7 +296,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Document Title
               </label>
-              <input
+              <input aria-label="Document Title"
                 type="text"
                 value={documentTitle}
                 onChange={(e) => setDocumentTitle(e.target.value)}
@@ -311,7 +311,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Message (optional)
             </label>
-            <textarea
+            <textarea aria-label="Message (optional)"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder={`Hi ${firstName}, here's the document we discussed...`}
@@ -360,7 +360,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
           {/* Expires */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Expires</label>
-            <select
+            <select aria-label="Expires"
               value={expires}
               onChange={(e) => setExpires(e.target.value as typeof expires)}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -386,10 +386,10 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleShare}
               disabled={sharing || !isValid}
-              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+              size="lg" className="disabled:bg-slate-300"
             >
               {sharing ? (
                 <>
@@ -402,7 +402,7 @@ export const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
                   Share Document
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

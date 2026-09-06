@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Bell, Plus, Trash2, Edit, ArrowLeft, MessageSquare, Mail,
-  Webhook, Check, X, Activity, TrendingUp, Clock, Zap
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Bell, Plus, Trash2, Edit, ArrowLeft, Check, X, Activity, TrendingUp, Clock, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { NotificationConfiguration, NotificationChannel } from '../../types/workflowAutomation';
 
@@ -292,7 +290,7 @@ const NotificationsManagementPage: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Notification Name
                 </label>
-                <input
+                <input aria-label="Notification Name"
                   type="text"
                   placeholder="e.g., High-Intent Lead Alerts"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -376,10 +374,10 @@ const NotificationsManagementPage: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+              <Button fullWidth className="font-semibold">
                 <Zap className="h-4 w-4 inline mr-2" />
                 Create Notification
-              </button>
+              </Button>
             </div>
           </div>
         </div>

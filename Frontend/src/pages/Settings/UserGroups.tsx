@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Users, Plus, Edit, Trash2, Search, Filter, ChevronRight, ChevronDown,
-  Building, GitBranch, Globe, Award, Shield, Calendar, TrendingUp, Activity,
-  Settings, Copy, Download, Upload, RefreshCw, CheckCircle, AlertCircle,
-  Eye, UserPlus, UserMinus, Target, BarChart, Layers, Share2, Bell, X
-} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
+import { Users, Plus, Edit, Search, ChevronRight, ChevronDown, Building, GitBranch, Globe, Award, Shield, TrendingUp, UserPlus, UserMinus, Target, BarChart, Layers, X } from 'lucide-react';
 
 interface UserGroup {
   id: string;
@@ -359,16 +355,15 @@ const UserGroups: React.FC = () => {
               <p className="text-gray-600 mt-1">Manage team organization, hierarchy, and collaboration</p>
             </div>
           </div>
-          <button
+          <Button
             onClick={() => {
               setSelectedGroup(null);
               setShowGroupModal(true);
             }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span>Create Group</span>
-          </button>
+          </Button>
         </div>
 
         {/* Statistics */}
@@ -646,7 +641,7 @@ const UserGroups: React.FC = () => {
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
-                            className="bg-blue-600 h-2 rounded-full"
+                            className="bg-brand-600 h-2 rounded-full"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -740,9 +735,9 @@ const UserGroups: React.FC = () => {
               >
                 Cancel
               </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Button >
                 {selectedGroup ? 'Update' : 'Create'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

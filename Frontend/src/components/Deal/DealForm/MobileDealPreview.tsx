@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatCurrency } from '../../../utils/currencyUtils';
 import { daysFromNowLabel } from '../../../utils/dateUtils';
-import { getPipelineStage, DEFAULT_PIPELINE } from '../../../config/pipelines';
+import { useStageLookup } from '../../../hooks/useStageLookup';
 import { BASE_CURRENCY_CODE } from '../../../config/currencies';
 import { getDealType } from '../../../config/dealTypes';
 import { getContactRole, roleChipClasses, hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
@@ -17,6 +17,12 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
   winProbOverrideEnabled,
   winProbOverrideValue,
 }) => {
+  // Above the early return: a hook after it runs on some renders and not others,
+  // which React rejects with "Rendered more hooks than during the previous
+  // render" the first time the form goes from empty to filled. Same mistake was
+  // made in DealSlideoutPanel; see the note there.
+  const { lookup: stageLookup } = useStageLookup();
+
   const hasAnyData = formData.dealName || formData.dealValue || formData.stage;
   if (!hasAnyData) return null;
 
@@ -24,8 +30,12 @@ export const MobileDealPreview: React.FC<MobileDealPreviewProps> = ({
   const rawAmount = parseFloat((formData.dealValue || '0').toString().replace(/,/g, ''));
   const amount = isNaN(rawAmount) ? 0 : rawAmount;
 
-  const pipelineId = formData.pipelineId || DEFAULT_PIPELINE.id;
-  const stageObj = getPipelineStage(pipelineId, formData.stage);
+// Stages come from the workspace via useStageLookup, not from the hardcoded
+// catalogue in config/pipelines.ts. A stage an admin adds is usable here
+// immediately; one they retire stops being described here. `?? 20` used to be
+// the fallback when a stage was unknown — a made-up probability presented as the
+// deal's — so an unresolvable stage now reads as "not set" instead.
+  const stageObj = stageLookup(formData.stage, formData.pipelineId ?? null);
   const dealTypeObj = getDealType(formData.dealType || '');
 
   const effectiveProb = winProbOverrideEnabled && winProbOverrideValue !== ''

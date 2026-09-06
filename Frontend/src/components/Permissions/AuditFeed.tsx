@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Clock, User, Shield, Edit, Trash2, Plus, CheckCircle, XCircle,
-  MessageSquare, AtSign, Filter, Download, RefreshCw, Search, ChevronDown
-} from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { Button } from '../ui/Button';
+import { AtSign, CheckCircle, Clock, Download, Edit, MessageSquare, Plus, RefreshCw, Search, Shield, Trash2, X, XCircle } from 'lucide-react';
 
 interface AuditEntry {
   id: string;
@@ -54,102 +51,42 @@ export const AuditFeed: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [newComment, setNewComment] = useState('');
-  const [selectedEntityId, setSelectedEntityId] = useState<string>('');
 
   useEffect(() => {
     loadAuditData();
   }, []);
 
+  /*
+   * TODO: reference only, backend removed.
+   *
+   * These functions read and wrote the Supabase tables
+   * `permission_audit_log`, `permission_comments` and
+   * `permission_approval_workflows`. There is no Supabase in this architecture
+   * (CLAUDE.md) and no equivalent tables on our Postgres schema. The markup is
+   * kept for visual reference until the Settings module is rebuilt against our
+   * own API.
+   *
+   * Reads resolve empty. Writes do not push into local state: a comment that
+   * appeared in the feed and vanished on reload would be a fake success.
+   */
   const loadAuditData = async () => {
-    setLoading(true);
-    try {
-      const [auditResult, commentsResult, approvalsResult] = await Promise.all([
-        supabase.from('permission_audit_log').select('*').order('timestamp', { ascending: false }).limit(50),
-        supabase.from('permission_comments').select('*').order('created_at', { ascending: false }),
-        supabase.from('permission_approval_workflows').select('*').order('requested_at', { ascending: false })
-      ]);
-
-      if (auditResult.data) {
-        const enrichedAudit = auditResult.data.map((entry: any) => ({
-          ...entry,
-          actor_name: `User ${entry.actor_id.slice(0, 8)}`
-        }));
-        setAuditEntries(enrichedAudit);
-      }
-
-      if (commentsResult.data) {
-        const enrichedComments = commentsResult.data.map((comment: any) => ({
-          ...comment,
-          author_name: `User ${comment.author_id.slice(0, 8)}`
-        }));
-        setComments(enrichedComments);
-      }
-
-      if (approvalsResult.data) {
-        const enrichedApprovals = approvalsResult.data.map((approval: any) => ({
-          ...approval,
-          requester_name: `User ${approval.requester_id.slice(0, 8)}`,
-          reviewer_name: approval.reviewer_id ? `User ${approval.reviewer_id.slice(0, 8)}` : undefined
-        }));
-        setApprovals(enrichedApprovals);
-      }
-    } catch (error) {
-      console.error('Error loading audit data:', error);
-    } finally {
-      setLoading(false);
-    }
+    setAuditEntries([]);
+    setComments([]);
+    setApprovals([]);
+    setLoading(false);
   };
 
   const addComment = async () => {
-    if (!newComment.trim()) return;
-
-    try {
-      const mentions = newComment.match(/@\w+/g) || [];
-
-      const { data, error } = await supabase
-        .from('permission_comments')
-        .insert([{
-          entity_type: 'role',
-          entity_id: selectedEntityId || 'default',
-          comment_text: newComment,
-          mentions: mentions.map(m => m.slice(1)),
-          author_id: 'current-user-id'
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setComments([{ ...data, author_name: 'You' }, ...comments]);
-      setNewComment('');
-      setShowCommentModal(false);
-    } catch (error) {
-      console.error('Error adding comment:', error);
-    }
+    // Not persisted anywhere; the draft is cleared but no comment is added.
+    setNewComment('');
   };
 
-  const handleApproval = async (approvalId: string, status: 'approved' | 'rejected', notes: string) => {
-    try {
-      const { error } = await supabase
-        .from('permission_approval_workflows')
-        .update({
-          status,
-          reviewer_id: 'current-user-id',
-          review_notes: notes,
-          reviewed_at: new Date().toISOString()
-        })
-        .eq('id', approvalId);
-
-      if (error) throw error;
-
-      setApprovals(approvals.map(a =>
-        a.id === approvalId
-          ? { ...a, status, review_notes: notes, reviewed_at: new Date().toISOString(), reviewer_name: 'You' }
-          : a
-      ));
-    } catch (error) {
-      console.error('Error updating approval:', error);
-    }
+  const handleApproval = async (
+    _approvalId: string,
+    _status: 'approved' | 'rejected',
+    _notes: string,
+  ) => {
+    // Not persisted anywhere; no approval state changes.
   };
 
   const getActionIcon = (actionType: string) => {
@@ -493,13 +430,13 @@ export const AuditFeed: React.FC = () => {
               >
                 Cancel
               </button>
-              <button
+              <Button
                 onClick={addComment}
                 disabled={!newComment.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="disabled:bg-gray-300"
               >
                 Post Comment
-              </button>
+              </Button>
             </div>
           </div>
         </div>

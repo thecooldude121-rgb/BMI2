@@ -18,11 +18,12 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   if (pathname.startsWith('/crm/meetings'))      return { parent: 'CRM', label: 'Meetings' };
   if (pathname.startsWith('/crm/calls'))         return { parent: 'CRM', label: 'Calls' };
   if (pathname.startsWith('/crm/reports'))       return { parent: 'CRM', label: 'Reports' };
+  // Before the generic /crm line, or Settings would read as plain "CRM".
+  if (pathname.startsWith('/crm/settings'))      return { parent: 'CRM', label: 'Settings' };
   if (pathname.startsWith('/crm'))               return { label: 'CRM' };
   if (pathname.startsWith('/hrms'))              return { label: 'HRMS' };
   if (pathname.startsWith('/analytics'))         return { label: 'Analytics' };
   if (pathname.startsWith('/calendar'))          return { label: 'Calendar' };
-  if (pathname.startsWith('/lead-generation'))   return { label: 'Lead Generation' };
   if (pathname.startsWith('/sequences'))         return { label: 'Sequences' };
   if (pathname.startsWith('/integrations'))      return { label: 'Integrations' };
   if (pathname.startsWith('/settings'))          return { label: 'Settings' };
@@ -216,8 +217,13 @@ const TopBar: React.FC = () => {
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>
                 <p className="text-xs text-gray-500 truncate">{user?.email}</p>
               </div>
+              {/*
+                * This item is labelled "Profile Settings" and used to navigate to
+                * /settings — a tree with no profile page on it at all. It now goes
+                * where the profile actually is.
+                */}
               <button
-                onClick={() => { navigate('/settings'); setShowProfileMenu(false); }}
+                onClick={() => { navigate('/crm/settings'); setShowProfileMenu(false); }}
                 className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <Settings className="h-4 w-4 text-gray-400" />

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Button } from '../ui/Button';
 import { CheckCircle } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import {
@@ -107,12 +108,12 @@ export default function ScoreFeedbackControls({ lead, initial, onSubmit }: Props
             className="w-full text-xs px-2.5 py-1.5 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
           />
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={handleSaveNote}
-              className="text-xs px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              size="sm"
             >
               Save note
-            </button>
+            </Button>
             <button
               onClick={() => setShowNote(false)}
               className="text-xs px-3 py-1 text-gray-500 hover:text-gray-700"

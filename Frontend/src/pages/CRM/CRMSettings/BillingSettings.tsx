@@ -1,5 +1,6 @@
 import React from 'react';
-import { Check, CreditCard, Download, Target } from 'lucide-react';
+import { Button } from '../../../components/ui/Button';
+import { Check, CreditCard, Target } from 'lucide-react';
 
 interface Invoice {
   date: string;
@@ -124,12 +125,12 @@ const BillingSettings: React.FC = () => {
             </div>
 
             <div className="pt-4 border-t border-gray-200 flex gap-3">
-              <button
+              <Button
                 onClick={handleUpgradePlan}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                size="lg"
               >
                 Upgrade Plan
-              </button>
+              </Button>
               <button
                 onClick={handleManageAddons}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -255,7 +256,7 @@ const BillingSettings: React.FC = () => {
                 <span className="text-sm font-semibold text-gray-900">3 / 5 used</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="bg-blue-600 h-full rounded-full" style={{ width: '60%' }}></div>
+                <div className="bg-brand-600 h-full rounded-full" style={{ width: '60%' }}></div>
               </div>
               <p className="text-xs text-gray-600 mt-1">60%</p>
             </div>
@@ -291,7 +292,7 @@ const BillingSettings: React.FC = () => {
                 <span className="text-sm font-semibold text-gray-900">12,456 / 100,000 per month</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="bg-blue-600 h-full rounded-full" style={{ width: '12%' }}></div>
+                <div className="bg-brand-600 h-full rounded-full" style={{ width: '12%' }}></div>
               </div>
               <p className="text-xs text-gray-600 mt-1">12%</p>
             </div>

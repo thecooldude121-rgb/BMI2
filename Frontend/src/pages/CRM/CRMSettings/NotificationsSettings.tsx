@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '../../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ExternalLink, Volume2, Monitor } from 'lucide-react';
 
@@ -441,12 +442,12 @@ const NotificationsSettings: React.FC = () => {
             </div>
 
             <div className="flex justify-end pt-4 border-t border-gray-200">
-              <button
+              <Button
                 onClick={handleSaveChanges}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                size="lg"
               >
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -519,12 +520,12 @@ const NotificationsSettings: React.FC = () => {
             </div>
 
             <div className="flex justify-end pt-4 border-t border-gray-200">
-              <button
+              <Button
                 onClick={handleSaveChanges}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                size="lg"
               >
                 Save Changes
-              </button>
+              </Button>
             </div>
           </div>
         </div>

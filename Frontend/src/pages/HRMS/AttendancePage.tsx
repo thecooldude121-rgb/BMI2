@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, CheckCircle, XCircle, Calendar, Users, TrendingUp } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
+import { NotAvailable } from '../../components/common/NotAvailable';
 
 interface AttendanceRecord {
   id: string;
@@ -111,6 +112,18 @@ const AttendancePage: React.FC = () => {
   const absentCount = attendanceRecords.filter(r => r.status === 'absent').length;
   const lateCount = attendanceRecords.filter(r => r.status === 'late').length;
   const avgHours = attendanceRecords.reduce((sum, r) => sum + r.hoursWorked, 0) / attendanceRecords.length;
+
+  // employees is always empty by design — DataContext does not read the local
+  // employees table because it has no tenant_id and HRMS is a separate platform.
+  // So this page has nothing it could honestly render. Says so rather than showing
+  // an empty grid that reads as "you have no staff".
+  if (employees.length === 0) {
+    return (
+      <div className="p-8">
+        <NotAvailable feature="Attendance tracking" detail="Part of HRMS, which is a separate platform reached over the SSO/API boundary. Nothing tracks attendance in this CRM." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

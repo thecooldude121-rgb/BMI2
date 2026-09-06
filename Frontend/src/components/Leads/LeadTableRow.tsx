@@ -10,10 +10,7 @@ import {
 import type { Lead } from '../../types/lead';
 import type { ModalId } from '../../hooks/useLeadsPageState';
 import { formatRelativeDate, formatFollowUpDate } from '../../utils/dateUtils';
-import {
-  getPrimaryAction, getSecondaryActions,
-  type ActionId, type ActionVariant, type LeadAction,
-} from '../../utils/leadActions';
+import { getSecondaryActions, type ActionId, type ActionVariant, type LeadAction } from '../../utils/leadActions';
 import { computeNBA } from '../../utils/leadNBA/engine';
 import type { NBAResult } from '../../utils/leadNBA/engine';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
