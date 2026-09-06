@@ -84,7 +84,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # 26, matching the version this project is developed on — see the note
+          # in the frontend job for why the major version is not a free choice
+          # here.
+          node-version: '26'
           cache: npm
           cache-dependency-path: Backend/package-lock.json
 
@@ -115,7 +118,24 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # PINNED TO 26 BECAUSE npm ci IS NOT VERSION-PORTABLE HERE, and this
+          # was found by the first run of this workflow rather than reasoned
+          # about. On Node 22 (npm 10) `npm ci` fails outright:
+          #
+          #   npm error `npm ci` can only install packages when your
+          #   package.json and package-lock.json are in sync.
+          #   npm error Missing: esbuild@0.28.2 from lock file
+          #
+          # The lockfile is not corrupt — `npm ci --dry-run` succeeds on both
+          # main and the feature branch under npm 11, which is what generated
+          # it. It pins esbuild 0.21.5 for vite 5 and carries a nested
+          # vitest/node_modules/vite 8.0.16 with no nested esbuild beside it;
+          # npm 11 accepts that tree and npm 10 does not.
+          #
+          # So CI runs the version development runs. Bumping this line without
+          # regenerating the lockfile under the same npm will break installs —
+          # which is worth knowing rather than rediscovering.
+          node-version: '26'
           cache: npm
           cache-dependency-path: Frontend/package-lock.json
 
