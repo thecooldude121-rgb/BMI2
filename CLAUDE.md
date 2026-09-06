@@ -715,6 +715,19 @@ failure that looks nothing like an auth problem in the output.
 acquisition (`pool.totalCount` / `idleCount` / `waitingCount`) during a full run, not any
 individual test.
 
+## CI
+
+`.github/workflows/ci.yml` runs the backend round-trip suite against a real Postgres service
+container and the frontend's tests, typecheck and `lint:hooks` on every PR and push to main.
+The typecheck step compares `typecheck:count` against the number recorded in
+`Frontend/TYPECHECK_BASELINE.md` rather than gating on zero.
+
+### TRACKED FOLLOW-UP — CI pins Node 26 because `npm ci` is not version-portable here
+The current lockfile was generated under npm 11 and `npm ci` fails outright under npm 10, so
+moving CI to an LTS requires regenerating the lockfile under that npm FIRST. The full
+reasoning, including the exact error and what was checked before pinning, is in the comment
+on the frontend job's `setup-node` step — read it there rather than trusting a summary.
+
 ## Non-functional requirements
 - Page loads < 2s for 95% of interactions
 - All PII encrypted at rest; TLS in transit
