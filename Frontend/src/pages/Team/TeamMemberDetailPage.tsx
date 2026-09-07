@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Building2, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
+import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
 import { TeamEmailComposerModal } from '../../components/Team/TeamEmailComposerModal';
@@ -56,7 +56,6 @@ interface TeamMemberDetail {
     cycleChangeDays: number;
     cycleTeamAvg: string;
   };
-  hrmsLeads?: HRMSLead[];
   directReports?: DirectReport[];
 }
 
@@ -92,35 +91,6 @@ interface DirectReport {
   };
 }
 
-interface HRMSLead {
-  id: string;
-  company: string;
-  companyIndustry: string;
-  companySize: string;
-  companyRevenue: string;
-  value: string;
-  contact: string;
-  contactTitle: string;
-  contactEmail: string;
-  contactPhone: string;
-  contactLinkedIn: string;
-  recruitedEmployee: string;
-  recruitedDate: string;
-  recruitedPosition: string;
-  recruitedBy: string;
-  employmentStatus: string;
-  stage: string;
-  probability: number;
-  hrmsBonus: number;
-  closeDate: string;
-  dealAge: string;
-  lastActivity: string;
-  context: string;
-  decisionMakers: string[];
-  painPoints: string[];
-  nextSteps: string[];
-}
-
 interface Deal {
   id: string;
   dealId: string;
@@ -134,7 +104,6 @@ interface Deal {
   age: string;
   ageDays: number;
   source: string;
-  isHRMS: boolean;
   contact: string;
   lastActivity: string;
   nextStep: string;
@@ -146,7 +115,6 @@ interface Contact {
   company: string;
   title: string;
   lastContact: string;
-  isHRMS: boolean;
 }
 
 interface Activity {
@@ -230,90 +198,6 @@ const TEAM_MEMBER_DATA: Record<string, TeamMemberDetail> = {
       cycleChangeDays: -5,
       cycleTeamAvg: '52 days'
     },
-    hrmsLeads: [
-      {
-        id: 'hrms_lead_001',
-        company: 'DataFlow Inc',
-        companyIndustry: 'Technology - Data Analytics',
-        companySize: '150 employees',
-        companyRevenue: '$25M annual',
-        value: '$120,000',
-        contact: 'Emma Wilson',
-        contactTitle: 'VP Engineering',
-        contactEmail: 'emma.wilson@dataflow.com',
-        contactPhone: '555-1001',
-        contactLinkedIn: 'linkedin.com/in/emmawilson',
-        recruitedEmployee: 'Emma Wilson',
-        recruitedDate: 'Oct 15, 2025',
-        recruitedPosition: 'Senior Software Engineer',
-        recruitedBy: 'HR Team - Jennifer Martinez',
-        employmentStatus: 'Active employee',
-        stage: 'Qualified',
-        probability: 65,
-        hrmsBonus: 33,
-        closeDate: 'Jan 30, 2026',
-        dealAge: '45 days',
-        lastActivity: '2 hours ago (phone call)',
-        context: 'Emma Wilson was hired by your company\'s HR team as a Senior Software Engineer on Oct 15, 2025. She previously served as VP Engineering at DataFlow Inc, where she led a team of 25 engineers for 4 years. This creates a warm introduction opportunity with DataFlow Inc. Emma\'s former colleagues speak highly of her, and she maintains strong relationships with the executive team. Leverage this trusted connection for credible outreach.',
-        decisionMakers: [
-          'Emma Wilson (VP Engineering) - Your recruited employee',
-          'Marcus Chen (CEO)',
-          'Sarah Thompson (CFO)',
-          'David Park (CTO) - Emma\'s former peer'
-        ],
-        painPoints: [
-          'Legacy data infrastructure needs modernization',
-          'Scaling challenges with current analytics platform',
-          'Integration issues with cloud services'
-        ],
-        nextSteps: [
-          'Follow-up call scheduled Dec 15, 2024',
-          'Product demo requested for Dec 20, 2024',
-          'Proposal due: Dec 28, 2024'
-        ]
-      },
-      {
-        id: 'hrms_lead_002',
-        company: 'BigCo Enterprise',
-        companyIndustry: 'Enterprise Software',
-        companySize: '500 employees',
-        companyRevenue: '$120M annual',
-        value: '$95,000',
-        contact: 'Alex Johnson',
-        contactTitle: 'CTO',
-        contactEmail: 'alex.johnson@bigco.com',
-        contactPhone: '555-2002',
-        contactLinkedIn: 'linkedin.com/in/alexjohnson',
-        recruitedEmployee: 'Alex Johnson',
-        recruitedDate: 'Sep 22, 2025',
-        recruitedPosition: 'Solutions Architect',
-        recruitedBy: 'HR Team - Jennifer Martinez',
-        employmentStatus: 'Active employee',
-        stage: 'Proposal',
-        probability: 70,
-        hrmsBonus: 33,
-        closeDate: 'Feb 15, 2026',
-        dealAge: '62 days',
-        lastActivity: 'Yesterday (email sent)',
-        context: 'Alex Johnson was hired by your company\'s HR team as a Solutions Architect on Sep 22, 2025. He previously held the position of CTO at BigCo Enterprise, where he managed technology strategy for 6 years. Alex brings deep technical expertise and maintains excellent relationships with BigCo\'s leadership team. This warm connection significantly accelerates trust-building and deal progression.',
-        decisionMakers: [
-          'Alex Johnson (CTO) - Your recruited employee',
-          'Jennifer Wu (CEO)',
-          'Michael Roberts (VP Operations)',
-          'Lisa Chen (CFO)'
-        ],
-        painPoints: [
-          'Need to consolidate multiple vendor solutions',
-          'Security compliance requirements',
-          'Cost optimization goals for 2026'
-        ],
-        nextSteps: [
-          'Awaiting response to updated proposal (sent yesterday)',
-          'Legal review in progress',
-          'Contract negotiation expected mid-Jan 2026'
-        ]
-      }
-    ],
     directReports: [
       {
         id: '1',
@@ -438,8 +322,7 @@ const DEALS: Deal[] = [
     closeDate: 'Jan 30, \'26',
     age: '45 days',
     ageDays: 45,
-    source: 'HRMS',
-    isHRMS: true,
+    source: 'Referral',
     contact: 'Emma Wilson',
     lastActivity: '2 hours ago',
     nextStep: 'Product demo on Dec 20'
@@ -456,8 +339,7 @@ const DEALS: Deal[] = [
     closeDate: 'Feb 15, \'26',
     age: '62 days',
     ageDays: 62,
-    source: 'HRMS',
-    isHRMS: true,
+    source: 'Referral',
     contact: 'Alex Johnson',
     lastActivity: 'Yesterday',
     nextStep: 'Awaiting legal review'
@@ -475,7 +357,6 @@ const DEALS: Deal[] = [
     age: '78 days',
     ageDays: 78,
     source: 'Cold Outreach',
-    isHRMS: false,
     contact: 'Michael Chen',
     lastActivity: '3 days ago',
     nextStep: 'Contract review'
@@ -493,7 +374,6 @@ const DEALS: Deal[] = [
     age: '32 days',
     ageDays: 32,
     source: 'Referral',
-    isHRMS: false,
     contact: 'Lisa Martinez',
     lastActivity: '5 days ago',
     nextStep: 'Follow-up meeting Dec 20'
@@ -511,7 +391,6 @@ const DEALS: Deal[] = [
     age: '54 days',
     ageDays: 54,
     source: 'Cold Outreach',
-    isHRMS: false,
     contact: 'Robert Kim',
     lastActivity: '1 week ago',
     nextStep: 'Send revised proposal'
@@ -519,11 +398,11 @@ const DEALS: Deal[] = [
 ];
 
 const CONTACTS: Contact[] = [
-  { id: 'c1', name: 'Emma Wilson', company: 'DataFlow Inc', title: 'VP Eng', lastContact: '2 days ago', isHRMS: true },
-  { id: 'c2', name: 'Alex Johnson', company: 'BigCo Enterprise', title: 'CTO', lastContact: '1 week ago', isHRMS: true },
-  { id: 'c3', name: 'Michael Chen', company: 'TechVision Corp', title: 'CEO', lastContact: '3 days ago', isHRMS: false },
-  { id: 'c4', name: 'Lisa Martinez', company: 'CloudStart Sol', title: 'VP Sales', lastContact: '5 days ago', isHRMS: false },
-  { id: 'c5', name: 'Robert Kim', company: 'Innovation Labs', title: 'Director', lastContact: '1 week ago', isHRMS: false }
+  { id: 'c1', name: 'Emma Wilson', company: 'DataFlow Inc', title: 'VP Eng', lastContact: '2 days ago' },
+  { id: 'c2', name: 'Alex Johnson', company: 'BigCo Enterprise', title: 'CTO', lastContact: '1 week ago' },
+  { id: 'c3', name: 'Michael Chen', company: 'TechVision Corp', title: 'CEO', lastContact: '3 days ago' },
+  { id: 'c4', name: 'Lisa Martinez', company: 'CloudStart Sol', title: 'VP Sales', lastContact: '5 days ago' },
+  { id: 'c5', name: 'Robert Kim', company: 'Innovation Labs', title: 'Director', lastContact: '1 week ago' }
 ];
 
 const ACTIVITIES: Activity[] = [
@@ -544,7 +423,7 @@ const ACTIVITIES: Activity[] = [
     nextAction: 'Product demo Dec 20',
     relatedDeal: 'DataFlow Inc',
     relatedDealValue: '$120K',
-    tags: ['HRMS', 'Pricing', 'Positive']
+    tags: ['Referral', 'Pricing', 'Positive']
   },
   {
     id: 'activity_002',
@@ -562,7 +441,7 @@ const ACTIVITIES: Activity[] = [
     nextAction: 'Follow up if no response by Dec 15',
     relatedDeal: 'BigCo Enterprise',
     relatedDealValue: '$95K',
-    tags: ['HRMS', 'Proposal', 'Follow-up Needed']
+    tags: ['Referral', 'Proposal', 'Follow-up Needed']
   },
   {
     id: 'activity_003',
@@ -632,15 +511,15 @@ const COACHING_NOTES: CoachingNote[] = [
     authorTitle: 'Sales Director',
     managerId: '5',
     visibility: 'Manager+ only',
-    content: 'Sarah continues to excel with HRMS-sourced leads. Her approach to leveraging warm introductions is exemplary - she effectively uses the recruitment connection to build credibility quickly. Suggested she mentor junior reps on this strategy to scale best practices across the team. Pipeline velocity improved 20% MoM, largely due to HRMS lead quality.',
+    content: 'Sarah continues to excel with referral-sourced leads. Her approach to leveraging warm introductions is exemplary - she establishes credibility quickly and gets to a real discovery conversation faster than the team average. Suggested she mentor junior reps on this strategy to scale best practices across the team. Pipeline velocity improved 20% MoM, largely on referral lead quality.',
     focusAreas: [
-      'Scale HRMS strategy across team',
+      'Scale the referral strategy across the team',
       'Mentor junior reps on warm introduction techniques',
       'Continue strong relationship management'
     ],
     developmentGoals: [
-      'Lead HRMS training session in January',
-      'Document HRMS playbook for team'
+      'Lead a referral-sourcing training session in January',
+      'Document the referral playbook for the team'
     ],
     performanceRating: 'Exceeding Expectations'
   },
@@ -672,27 +551,17 @@ const COACHING_NOTES: CoachingNote[] = [
     authorTitle: 'Sales Director',
     managerId: '5',
     visibility: 'Manager+ only',
-    content: 'First HRMS lead (DataFlow Inc) converted successfully to Qualified stage. This validates our HRMS integration strategy. Sarah effectively used the recruitment connection with Emma Wilson to build trust and credibility quickly, cutting through initial prospecting friction. Encouraged Sarah to document her approach for team training materials. This is a replicable playbook we can scale.',
+    content: 'First referral-sourced lead (DataFlow Inc) converted successfully to Qualified stage. Sarah used the warm introduction with Emma Wilson to build trust and credibility quickly, cutting through initial prospecting friction. Encouraged Sarah to document her approach for team training materials. This is a replicable playbook we can scale.',
     focusAreas: [
-      'Document HRMS approach',
+      'Document the referral approach',
       'Share learnings with team',
-      'Continue HRMS lead nurturing'
+      'Continue referral lead nurturing'
     ],
-    achievement: 'First HRMS lead conversion - Validated HRMS integration ROI',
+    achievement: 'First referral-sourced conversion - playbook validated',
     performanceRating: 'Exceeds Expectations',
     nextReview: 'Nov 15, 2024'
   }
 ];
-
-const HRMS_SUMMARY = {
-  totalLeads: 2,
-  totalPipeline: '$215,000',
-  avgProbability: '67.5%',
-  conversionRate: '50%',
-  hrmsAdvantage: '+33%',
-  avgSalesCycle: '38 days',
-  coldSalesCycle: '52 days'
-};
 
 export default function TeamMemberDetailPage() {
   const navigate = useNavigate();
@@ -702,7 +571,6 @@ export default function TeamMemberDetailPage() {
   const navigationState = location.state as { from?: string } | null;
   const [currentRole, setCurrentRole] = useState<Role>('Manager');
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-  const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set());
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
@@ -711,8 +579,6 @@ export default function TeamMemberDetailPage() {
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<string>('');
-  const [hrmsModalOpen, setHrmsModalOpen] = useState(false);
-  const [selectedHrmsLead, setSelectedHrmsLead] = useState<HRMSLead | null>(null);
   const [editNoteModalOpen, setEditNoteModalOpen] = useState(false);
   const [deleteNoteModalOpen, setDeleteNoteModalOpen] = useState(false);
   const [selectedNote, setSelectedNote] = useState<CoachingNote | null>(null);
@@ -802,7 +668,6 @@ export default function TeamMemberDetailPage() {
   }
 
   // Comprehensive role-based permissions
-  const canViewHRMS = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
   const canManageNotes = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
   const canScheduleMeetings = currentRole === 'Manager';
   const canAddNotes = ['CEO', 'VP', 'Manager'].includes(currentRole);
@@ -841,16 +706,6 @@ export default function TeamMemberDetailPage() {
   const canSchedule1on1Action = ['CEO', 'VP', 'Manager'].includes(currentRole);
 
   // Toggle functions
-  const toggleLeadExpansion = (leadId: string) => {
-    const newExpanded = new Set(expandedLeads);
-    if (newExpanded.has(leadId)) {
-      newExpanded.delete(leadId);
-    } else {
-      newExpanded.add(leadId);
-    }
-    setExpandedLeads(newExpanded);
-  };
-
   const toggleActivityExpansion = (activityId: string) => {
     const newExpanded = new Set(expandedActivities);
     if (newExpanded.has(activityId)) {
@@ -920,11 +775,6 @@ export default function TeamMemberDetailPage() {
   const handleViewAccount = (accountId: string, accountName: string) => {
     navigate(`/accounts/${accountId}`);
     showToast(`Opening ${accountName}`, 'info');
-  };
-
-  const handleViewLead = (leadId: string, leadName: string) => {
-    navigate(`/leads/${leadId}`);
-    showToast(`Opening ${leadName}`, 'info');
   };
 
   // Direct Reports handlers
@@ -1051,16 +901,6 @@ export default function TeamMemberDetailPage() {
 
   const handleShareDocument = () => {
     setDocumentModalOpen(true);
-  };
-
-  const handleContactAction = (contactName: string) => {
-    setSelectedContact(contactName);
-    setContactModalOpen(true);
-  };
-
-  const handleViewHRMS = (lead: HRMSLead) => {
-    setSelectedHrmsLead(lead);
-    setHrmsModalOpen(true);
   };
 
   const handleEditNote = (note: CoachingNote) => {
@@ -1897,205 +1737,6 @@ export default function TeamMemberDetailPage() {
           />
         )}
 
-        {/* HRMS Connection Section */}
-        {canViewHRMS && member.hrmsLeads && member.hrmsLeads.length > 0 && (
-          <div className="bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 rounded-xl shadow-sm p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-slate-800">HRMS-Sourced Leads</h2>
-                <p className="text-sm text-slate-600">
-                  {member.name} benefits from {member.hrmsLeads.length} recruitment-powered opportunities
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {member.hrmsLeads.map((lead, index) => {
-                const isExpanded = expandedLeads.has(lead.id);
-                return (
-                  <div key={lead.id} className="bg-white rounded-lg p-6 border border-orange-200">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-bold text-slate-800">
-                            {index + 1}. {lead.company}
-                          </h3>
-                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                            {lead.companyIndustry}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs text-slate-600 mb-3">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            {lead.companySize}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <BarChart3 className="w-3 h-3" />
-                            {lead.companyRevenue}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-600 mb-1">
-                          <span className="font-semibold">Contact:</span> {lead.contact} ({lead.contactTitle})
-                        </p>
-                        <div className="flex items-center gap-3 text-xs text-slate-600 mb-2">
-                          <span className="flex items-center gap-1">
-                            <Mail className="w-3 h-3" />
-                            {lead.contactEmail}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3 h-3" />
-                            {lead.contactPhone}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-600 mb-1">
-                          <span className="font-semibold">Recruited:</span> {lead.recruitedDate} as {lead.recruitedPosition} | <span className="font-semibold">Stage:</span> <span className="text-blue-600 font-medium">{lead.stage}</span>
-                        </p>
-                        <p className="text-sm text-slate-600 mb-1">
-                          <span className="font-semibold">Close Probability:</span> {lead.probability}% <span className="text-orange-600 font-medium">(+{lead.hrmsBonus}% HRMS bonus)</span> | <span className="font-semibold">Close:</span> {lead.closeDate}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          Deal Age: {lead.dealAge} | Last Activity: {lead.lastActivity}
-                        </p>
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="text-2xl font-bold text-slate-800">{lead.value}</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                      <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-blue-600" />
-                        Recruitment Context
-                      </h4>
-                      <p className="text-sm text-slate-700 leading-relaxed">{lead.context}</p>
-                    </div>
-
-                    <button
-                      onClick={() => toggleLeadExpansion(lead.id)}
-                      className="w-full flex items-center justify-between px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium text-slate-700 mb-3"
-                    >
-                      <span>View Detailed Intelligence</span>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-
-                    {isExpanded && (
-                      <div className="space-y-3 mb-4 border-t border-orange-200 pt-4">
-                        <div className="bg-slate-50 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                            <Users className="w-4 h-4 text-blue-600" />
-                            Key Decision Makers
-                          </h4>
-                          <ul className="space-y-1">
-                            {lead.decisionMakers.map((dm, i) => (
-                              <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-blue-600 mt-1">•</span>
-                                <span>{dm}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="bg-slate-50 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                            <AlertCircle className="w-4 h-4 text-orange-600" />
-                            Pain Points Identified
-                          </h4>
-                          <ul className="space-y-1">
-                            {lead.painPoints.map((pp, i) => (
-                              <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-orange-600 mt-1">•</span>
-                                <span>{pp}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="bg-slate-50 rounded-lg p-4">
-                          <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                            Next Steps
-                          </h4>
-                          <ul className="space-y-1">
-                            {lead.nextSteps.map((step, i) => (
-                              <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
-                                <span className="text-green-600 mt-1">•</span>
-                                <span>{step}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleViewLead(lead.id, lead.company)}
-                        className="px-3 py-1.5 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-                      >
-                        View Lead Details
-                      </button>
-                      <button
-                        onClick={() => handleViewDeal(lead.id, lead.company)}
-                        className="px-3 py-1.5 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-                      >
-                        View Deal
-                      </button>
-                      <button
-                        onClick={() => handleContactAction(lead.contact)}
-                        className="px-3 py-1.5 text-sm border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-                      >
-                        Contact {lead.contact.split(' ')[0]}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 mb-4">
-              <div className="flex items-start gap-2">
-                <span className="text-lg">💡</span>
-                <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-slate-800 mb-2">HRMS Lead Advantage:</h4>
-                  <p className="text-sm text-slate-700 mb-3">
-                    These recruitment-sourced leads have a {HRMS_SUMMARY.hrmsAdvantage} higher close rate compared to cold outreach.
-                    Total HRMS pipeline: {HRMS_SUMMARY.totalPipeline}
-                  </p>
-                  <div className="grid grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <div className="text-slate-600">Avg Probability</div>
-                      <div className="font-semibold text-slate-800">{HRMS_SUMMARY.avgProbability}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-600">Conversion Rate</div>
-                      <div className="font-semibold text-slate-800">{HRMS_SUMMARY.conversionRate}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-600">HRMS Cycle</div>
-                      <div className="font-semibold text-slate-800">{HRMS_SUMMARY.avgSalesCycle}</div>
-                    </div>
-                    <div>
-                      <div className="text-slate-600">Cold Cycle</div>
-                      <div className="font-semibold text-slate-800">{HRMS_SUMMARY.coldSalesCycle}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => navigate('/hrms/dashboard')}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
-            >
-              View in HRMS System
-            </button>
-          </div>
-        )}
-
         {/* Assigned Deals */}
         {canViewDeals && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -2132,18 +1773,6 @@ export default function TeamMemberDetailPage() {
                     <td className="py-3 text-sm">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
-                          {deal.isHRMS && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleViewHRMS(member.hrmsLeads?.find(l => l.company === deal.name) || member.hrmsLeads?.[0]!);
-                              }}
-                              className="hover:scale-110 transition-transform"
-                              title="HRMS-sourced lead (+33% close rate)"
-                            >
-                              <Building2 className="w-4 h-4 text-orange-600" />
-                            </button>
-                          )}
                           <button
                             onClick={() => handleViewDeal(deal.id, deal.fullName)}
                             className="font-medium text-slate-800 hover:text-blue-600 hover:underline text-left transition-colors"
@@ -2223,18 +1852,6 @@ export default function TeamMemberDetailPage() {
                   <tr key={contact.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="py-3 text-sm">
                       <div className="flex items-center gap-2">
-                        {contact.isHRMS && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewHRMS(member.hrmsLeads?.[0]!);
-                            }}
-                            className="hover:scale-110 transition-transform"
-                            title="Recruited employee (warm connection)"
-                          >
-                            <Building2 className="w-4 h-4 text-orange-600" />
-                          </button>
-                        )}
                         <button
                           onClick={() => handleViewContact(contact.id, contact.name)}
                           className="font-medium text-slate-800 hover:text-blue-600 hover:underline text-left transition-colors"
@@ -2528,7 +2145,7 @@ export default function TeamMemberDetailPage() {
                     <input aria-label="Focus Areas (comma separated)"
                       type="text"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Scale HRMS strategy, Mentor team, Improve qualification"
+                      placeholder="e.g., Mentor team, Improve qualification"
                     />
                   </div>
                   <div>
@@ -2798,59 +2415,6 @@ export default function TeamMemberDetailPage() {
                 <Users className="w-5 h-5" />
                 View Contact Profile
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HRMS Info Modal */}
-      {hrmsModalOpen && selectedHrmsLead && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full p-6 my-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-800">HRMS Connection Details</h2>
-                <p className="text-sm text-slate-600 mt-1">{selectedHrmsLead.company}</p>
-              </div>
-              <button onClick={() => setHrmsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="text-sm font-bold text-blue-900 mb-2">Recruited Employee</h3>
-                <p className="text-lg font-semibold text-blue-800">{selectedHrmsLead.recruitedEmployee}</p>
-                <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
-                  <div>
-                    <span className="text-slate-600">Position:</span>
-                    <p className="font-medium text-slate-800">{selectedHrmsLead.recruitedPosition}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-600">Recruited Date:</span>
-                    <p className="font-medium text-slate-800">{selectedHrmsLead.recruitedDate}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-600">Recruited By:</span>
-                    <p className="font-medium text-slate-800">{selectedHrmsLead.recruitedBy}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-600">Status:</span>
-                    <p className="font-medium text-green-600">{selectedHrmsLead.employmentStatus}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                <h3 className="text-sm font-bold text-slate-800 mb-2">HRMS Advantage</h3>
-                <p className="text-sm text-slate-700 leading-relaxed">{selectedHrmsLead.context}</p>
-              </div>
-              <div className="flex gap-3">
-                <Button onClick={() => { setHrmsModalOpen(false); handleViewDeal(selectedHrmsLead.id, selectedHrmsLead.company); }} fullWidth>
-                  View Full Deal
-                </Button>
-                <button onClick={() => setHrmsModalOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium">
-                  Close
-                </button>
-              </div>
             </div>
           </div>
         </div>

@@ -30,11 +30,15 @@ import {
  * WHY THE SERVER AND NOT A MIRROR IN THE CLIENT. `invitableRolesFor()` in
  * `usersApi.ts` was that mirror, written for the invite form, and it HAD
  * drifted: it listed sales/manager/admin and omitted `hr`, which the server's
- * ASSIGNABLE_ROLES has always included, so the invite form silently could not
+ * ASSIGNABLE_ROLES included at the time, so the invite form silently could not
  * invite an HR user. Two lists that must agree are two lists that will
  * disagree. It is now deleted — `GET /invites` serves the invite form's options
  * the same way this endpoint serves the role picker's, and no copy of this rule
  * remains in the frontend.
+ *
+ * `hr` itself has since been removed from the CRM (see utils/roles.ts), so the
+ * two lists now agree on its absence — but they agree because there is ONE
+ * list, not because the vocabulary happens to match today.
  *
  * THE DEFAULT IS DELIBERATELY UNCHANGED. Every existing caller — owner pickers,
  * assignment dropdowns — wants active people only, and quietly widening this

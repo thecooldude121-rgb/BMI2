@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Sparkles, Edit } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
 import { useStageLookup } from '../../hooks/useStageLookup';
@@ -58,7 +58,6 @@ const ReportsPage: React.FC = () => {
     leads: true,
     revenue: true,
     accounts: true,
-    hrms: true,
     custom: true,
   });
 
@@ -441,7 +440,6 @@ const ReportsPage: React.FC = () => {
                   <option value="leads">Lead & Contact Reports</option>
                   <option value="revenue">Revenue Reports</option>
                   <option value="accounts">Account Reports</option>
-                  <option value="hrms">🏢 HRMS Performance</option>
                   <option value="custom">My Custom Reports</option>
                   <option value="favorites">Favorites Only</option>
                 </select>
@@ -523,7 +521,6 @@ const ReportsPage: React.FC = () => {
                   <option value="leads">Lead & Contact Reports</option>
                   <option value="revenue">Revenue Reports</option>
                   <option value="accounts">Account Reports</option>
-                  <option value="hrms">HRMS Performance</option>
                   <option value="custom">My Custom Reports</option>
                   <option value="favorites">Favorites Only</option>
                 </select>
@@ -1151,10 +1148,9 @@ const ReportsPage: React.FC = () => {
                   title="Lead Source ROI"
                   icon="📊"
                   metrics={[
-                    { label: '🏢 HRMS: 42%', value: '($412K revenue)' },
-                    { label: '🎯 Lead Gen: 35%', value: '($298K revenue)' },
-                    { label: '🌐 Website: 18%', value: '($89K revenue)' },
-                    { label: '✍️ Manual: 5%', value: '($48K revenue)' },
+                    { label: '🎯 Lead Gen: 60%', value: '($298K revenue)' },
+                    { label: '🌐 Website: 31%', value: '($89K revenue)' },
+                    { label: '✍️ Manual: 9%', value: '($48K revenue)' },
                   ]}
                   updated="30m"
                   onView={handleViewReport}
@@ -1284,10 +1280,9 @@ const ReportsPage: React.FC = () => {
                   title="Revenue by Source"
                   icon="📊"
                   metrics={[
-                    { label: '🏢 HRMS: $412K (49%) ⭐', value: '' },
-                    { label: '🎯 Lead Gen: $298K (35%)', value: '' },
-                    { label: '🌐 Website: $89K (11%)', value: '' },
-                    { label: '✍️ Manual: $48K (5%)', value: '' },
+                    { label: '🎯 Lead Gen: $298K (69%)', value: '' },
+                    { label: '🌐 Website: $89K (20%)', value: '' },
+                    { label: '✍️ Manual: $48K (11%)', value: '' },
                   ]}
                   updated="10m"
                   onView={handleViewReport}
@@ -1456,129 +1451,6 @@ const ReportsPage: React.FC = () => {
                   onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
                   showExportMenu={showExportMenu === "Account Growth Opportunities"}
                   showMoreMenu={showReportMenu === "Account Growth Opportunities"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* HRMS Performance Section - UNIQUE */}
-        <div className="mb-6">
-          <div className="bg-[#fff3cd] border-2 border-[#ff9800] rounded-t-lg p-4">
-            <button
-              onClick={() => toggleSection('hrms')}
-              className="w-full flex items-center justify-between text-left"
-            >
-              <div className="flex items-center gap-3">
-                <Sparkles className="w-5 h-5 text-[#ff9800]" />
-                <span className="text-lg font-semibold text-gray-900">🏢 HRMS PERFORMANCE ⭐ UNIQUE</span>
-                <span className="text-sm text-gray-700">(3 reports)</span>
-              </div>
-              {expandedSections.hrms ? (
-                <ChevronUp className="w-5 h-5 text-[#ff9800]" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-[#ff9800]" />
-              )}
-            </button>
-          </div>
-          {expandedSections.hrms && (
-            <div className="bg-white border-2 border-t-0 border-[#ff9800] rounded-b-lg p-6">
-              <div className="bg-[#fff3cd] border border-[#ff9800] rounded-lg p-4 mb-6">
-                <div className="flex items-center gap-2 text-gray-900">
-                  <Sparkles className="w-5 h-5 text-[#ff9800]" />
-                  <span className="font-bold">⭐ EXCLUSIVE TO BMI CRM - Track recruitment impact on sales</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="HRMS Lead Performance"
-                  icon="🏢"
-                  metrics={[
-                    { label: 'HRMS Conversion: 42% ⭐', value: '' },
-                    { label: 'vs Non-HRMS: 28% (33% lower)', value: '' },
-                    { label: 'Avg Deal Size:', value: '' },
-                    { label: 'HRMS: $48K ⭐', value: '' },
-                    { label: 'Non-HRMS: $36K', value: '' },
-                    { label: 'Sales Cycle:', value: '' },
-                    { label: 'HRMS: 38 days ⭐', value: '' },
-                    { label: 'Non-HRMS: 67 days (43% faster!)', value: '' },
-                  ]}
-                  updated="10m"
-                  sparkline="▇█ vs ▅▆"
-                  highlight
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "HRMS Lead Performance"}
-                  showMoreMenu={showReportMenu === "HRMS Lead Performance"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="HRMS ROI Analysis"
-                  icon="💰"
-                  metrics={[
-                    { label: 'HRMS Revenue: $412K (49%) ⭐', value: '' },
-                    { label: 'Win Rate: HRMS: 78% ⭐', value: '' },
-                    { label: 'Non-HRMS: 58% (+20 points!)', value: '' },
-                    { label: 'Response Time:', value: '' },
-                    { label: 'HRMS: 2 hours ⭐', value: '' },
-                    { label: 'Non-HRMS: 2 days (24x faster!)', value: '' },
-                    { label: '🎯 ROI: 387% for HRMS leads', value: '' },
-                  ]}
-                  updated="15m"
-                  progress="████████░"
-                  highlight
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "HRMS ROI Analysis"}
-                  showMoreMenu={showReportMenu === "HRMS ROI Analysis"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Recruitment-to-Revenue"
-                  icon="🔄"
-                  metrics={[
-                    { label: 'Total Recruits: 18 placed', value: '' },
-                    { label: 'Became CRM Leads: 12 (67%)', value: '' },
-                    { label: 'Converted Deals: 8 (67%)', value: '' },
-                    { label: 'Total Revenue: $412K from HRMS connections', value: '' },
-                    { label: '💡 Jennifer Kim: Top recruiter', value: '' },
-                    { label: '6 recruits → $247K revenue', value: '' },
-                  ]}
-                  updated="30m"
-                  sparkline="████▇▆▅▃"
-                  highlight
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Recruitment-to-Revenue"}
-                  showMoreMenu={showReportMenu === "Recruitment-to-Revenue"}
                   onSchedule={handleScheduleReport}
                   onShare={handleShareReport}
                   onDelete={handleDeleteReport}

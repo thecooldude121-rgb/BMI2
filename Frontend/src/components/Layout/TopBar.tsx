@@ -21,7 +21,6 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   // Before the generic /crm line, or Settings would read as plain "CRM".
   if (pathname.startsWith('/crm/settings'))      return { parent: 'CRM', label: 'Settings' };
   if (pathname.startsWith('/crm'))               return { label: 'CRM' };
-  if (pathname.startsWith('/hrms'))              return { label: 'HRMS' };
   if (pathname.startsWith('/analytics'))         return { label: 'Analytics' };
   if (pathname.startsWith('/calendar'))          return { label: 'Calendar' };
   if (pathname.startsWith('/sequences'))         return { label: 'Sequences' };
@@ -206,7 +205,12 @@ const TopBar: React.FC = () => {
             />
             <div className="text-left hidden sm:block">
               <p className="text-xs font-semibold text-gray-800 leading-tight">{user?.name}</p>
-              <p className="text-[10px] text-gray-500 leading-tight">{user?.role}</p>
+              {/* 'Unknown' is AuthContext's fail-closed role. Spelled out here
+                  so the caption reads as a real statement rather than a
+                  one-word mystery under someone's name. */}
+              <p className="text-[10px] text-gray-500 leading-tight">
+                {user?.role === 'Unknown' ? 'Unknown role' : user?.role}
+              </p>
             </div>
             <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
           </button>

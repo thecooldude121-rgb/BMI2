@@ -51,7 +51,6 @@ export const SmartSearchPanel: React.FC<SmartSearchPanelProps> = ({
         revenue: item.revenue ? `$${(item.revenue / 1_000_000).toFixed(1)}M revenue` : null,
         avgDealSize: 50000,
         winRate: 65,
-        isHRMS: false,
       });
     } else {
       onContactSelect({
@@ -62,7 +61,6 @@ export const SmartSearchPanel: React.FC<SmartSearchPanelProps> = ({
         company: item.company_name,
         email: item.email,
         phone: item.phone,
-        isHRMS: false,
       });
     }
     setQuery('');

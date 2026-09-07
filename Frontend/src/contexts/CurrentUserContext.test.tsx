@@ -103,6 +103,12 @@ describe('CurrentUserContext', () => {
     renderWithProvider();
     // Deliberately NOT mapped to a sales tier — that would hand an HR account
     // lead-editing rights. It falls through and the permission model denies it.
+    //
+    // `hr` is no longer a CRM role at all (HRMS is a separate platform over
+    // SSO), so this is now the fail-closed case for ANY unrecognised role
+    // rather than a scenario the product can produce. Kept, and kept using
+    // `hr`, because a stray row is still storable directly — users.role has no
+    // CHECK constraint — and this asserts what the UI does when it meets one.
     expect(screen.getByTestId('role').textContent).toBe('hr');
 
     expect(roleHas('hr', 'leads.edit_fields')).toBe(false);

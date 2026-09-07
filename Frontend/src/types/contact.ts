@@ -95,7 +95,6 @@ export interface Contact {
   warningMessage?: string;
   aiScore?: number;
   conversionProbability?: number;
-  hrmsBonus?: boolean;
   enrichmentData?: {
     companySize?: string;
     companyRevenue?: string;

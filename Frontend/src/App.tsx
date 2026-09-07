@@ -29,7 +29,6 @@ import Register from './pages/Auth/Register';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const CRMModule = lazy(() => import('./pages/CRM/CRMModule'));
 const AccountsModule = lazy(() => import('./pages/Accounts'));
-const HRMSModule = lazy(() => import('./pages/HRMS/HRMSModule'));
 const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
 const Calendar = lazy(() => import('./pages/Calendar/Calendar'));
 // NO SettingsPage IMPORT. /settings redirects to /crm/settings (see the route
@@ -139,7 +138,6 @@ const App = () => {
                   <Route path="/dashboard" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />
                   <Route path="/crm/*" element={<RequireAuth><Layout><CRMModule /></Layout></RequireAuth>} />
                   <Route path="/accounts/*" element={<RequireAuth><Layout><AccountsModule /></Layout></RequireAuth>} />
-                  <Route path="/hrms/*" element={<RequireAuth><Layout><HRMSModule /></Layout></RequireAuth>} />
                   <Route path="/analytics" element={<RequireAuth><Layout><Analytics /></Layout></RequireAuth>} />
                   <Route path="/calendar" element={<RequireAuth><Layout><Calendar /></Layout></RequireAuth>} />
                   <Route path="/sequences" element={<RequireAuth><Layout><SequencesAutomationPage /></Layout></RequireAuth>} />

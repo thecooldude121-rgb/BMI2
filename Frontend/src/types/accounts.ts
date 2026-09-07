@@ -33,16 +33,6 @@ export interface EnhancedAccount {
 
   source: 'lead-gen' | 'hrms' | 'manual' | 'partner' | 'website' | 'referral';
   sourceDetails?: string;
-  hrmsConnection?: {
-    hasConnection: boolean;
-    recruitedEmployees?: number;
-    lastRecruitmentDate?: string;
-    recruitedContacts?: Array<{
-      name: string;
-      position: string;
-      dateRecruited: string;
-    }>;
-  };
 
   ownerId: string;
   assignedTeamId?: string;
@@ -553,7 +543,6 @@ export interface AccountKPI {
   totalDeals: number;
   totalRevenue: number;
   totalContacts: number;
-  hrmsAccounts: number;
 
   topAccountsByRevenue: EnhancedAccount[];
   topAccountsByDeals: EnhancedAccount[];

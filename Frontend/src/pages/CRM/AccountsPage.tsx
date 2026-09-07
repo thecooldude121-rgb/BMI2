@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertTriangle, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, Target, UserPlus, X, UserCog, FileText, GitMerge } from 'lucide-react';
+import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertTriangle, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, Target, UserPlus, X, UserCog, GitMerge } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
 import { EnhancedAccount } from '../../types/accounts';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -33,8 +33,6 @@ const AccountsPage: React.FC = () => {
   const [sortBy, setSortBy] = useState('name');
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'kanban'>('list');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [showHRMSModal, setShowHRMSModal] = useState(false);
-  const [selectedHRMSAccount, setSelectedHRMSAccount] = useState<EnhancedAccount | null>(null);
   const [showAddAccountForm, setShowAddAccountForm] = useState(false);
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [showBulkTagModal, setShowBulkTagModal] = useState(false);
@@ -125,24 +123,11 @@ const AccountsPage: React.FC = () => {
       case 'value':
         navigate('/analytics');
         break;
-      case 'hrms':
-        setSelectedSources(['hrms']);
-        applyFilter({ status: ['hrms'] as any });
-        break;
     }
   };
 
   const handleSortChange = (sortField: string) => {
     setSortBy(sortField);
-  };
-
-  const handleViewHRMSHistory = (account: EnhancedAccount) => {
-    setSelectedHRMSAccount(account);
-    setShowHRMSModal(true);
-  };
-
-  const handleAddToHRMSTarget = (account: EnhancedAccount) => {
-    alert(`Account "${account.name}" added to HRMS recruitment target list!\n\nA task has been created for the HR team.`);
   };
 
   const handleCreateDeal = (account: EnhancedAccount) => {
@@ -220,7 +205,6 @@ const AccountsPage: React.FC = () => {
   const getSourceIcon = (source: string) => {
     switch (source) {
       case 'lead-gen': return '🎯';
-      case 'hrms': return '🏢';
       case 'manual': return '✍️';
       case 'partner': return '🤝';
       case 'website': return '🌐';
@@ -232,7 +216,6 @@ const AccountsPage: React.FC = () => {
   const getSourceLabel = (source: string, details?: string) => {
     const labels = {
       'lead-gen': 'Lead Gen',
-      'hrms': 'HRMS',
       'manual': 'Manual',
       'partner': 'Partner',
       'website': 'Website',
@@ -251,7 +234,7 @@ const AccountsPage: React.FC = () => {
 
   const industries = ['SaaS', 'FinTech', 'Manufacturing', 'Healthcare', 'E-commerce', 'Retail'];
   const sizes = ['1-10', '11-50', '51-200', '201-500', '500+'];
-  const sources = ['lead-gen', 'hrms', 'manual', 'partner', 'website'];
+  const sources = ['lead-gen', 'manual', 'partner', 'website'];
 
   const displayedAccounts = filteredAccounts.slice(0, displayCount);
 
@@ -352,21 +335,6 @@ const AccountsPage: React.FC = () => {
             beside the derived one above that read 0. It had no click handler and
             no data source; its agreement with today's open-deal count was
             coincidence. Removed — one card, one number, from the API. */}
-
-        <div
-          onClick={() => handleKPIClick('hrms')}
-          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">From HRMS</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.hrmsAccounts}</p>
-            </div>
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <UserPlus className="h-5 w-5 text-orange-600" />
-            </div>
-          </div>
-        </div>
 
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between">
@@ -630,9 +598,6 @@ const AccountsPage: React.FC = () => {
                               >
                                 {account.name}
                               </button>
-                              {account.hrmsConnection?.hasConnection && (
-                                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded border border-orange-300">🏢 HRMS</span>
-                              )}
                             </div>
                             {account.website && (
                               <p className="text-sm text-blue-600 mt-0.5">{account.website.replace('https://', '').replace('http://', '')}</p>
@@ -777,41 +742,6 @@ const AccountsPage: React.FC = () => {
                             )}
                           </div>
 
-                          {/* HRMS Connection Highlight */}
-                          {account.hrmsConnection?.hasConnection && (
-                            <div
-                              onClick={() => handleViewHRMSHistory(account)}
-                              className="bg-gradient-to-r from-orange-50 via-yellow-50 to-orange-50 border-2 border-orange-400 rounded-lg p-5 cursor-pointer hover:shadow-lg hover:border-orange-500 transition-all duration-200 hover:scale-[1.01] animate-pulse-slow"
-                              style={{ backgroundColor: '#fff3cd' }}
-                            >
-                              <div className="flex items-start space-x-4">
-                                <div className="text-3xl animate-bounce-slow">🏢</div>
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-2 mb-2">
-                                    <h4 className="text-base font-bold text-orange-900">
-                                      HRMS CONNECTION
-                                    </h4>
-                                    <span className="px-2 py-0.5 bg-purple-600 text-white text-xs font-bold rounded">UNIQUE</span>
-                                  </div>
-                                  <p className="text-sm font-bold text-orange-800 mb-1">
-                                    ✨ Recruited: {account.hrmsConnection.recruitedContacts?.map(c => `${c.name} (${c.position})`).join(', ')}
-                                  </p>
-                                  {account.hrmsConnection.recruitedEmployees && account.hrmsConnection.recruitedEmployees > 1 && (
-                                    <p className="text-sm font-semibold text-orange-700 mt-1">
-                                      🔗 Existing relationship advantage - {account.hrmsConnection.recruitedEmployees} employees recruited
-                                    </p>
-                                  )}
-                                  <p className="text-sm font-bold text-orange-800 mt-2">
-                                    💡 Warm intro opportunity!
-                                  </p>
-                                  <p className="text-xs text-orange-700 mt-2 italic font-medium">
-                                    Click to view full HRMS history →
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
                           {/* Active Deals */}
                           {account.relatedDeals && account.relatedDeals.length > 0 ? (
                             <div className="space-y-2 bg-white rounded-lg p-3 border border-gray-200">
@@ -923,24 +853,6 @@ const AccountsPage: React.FC = () => {
                               <UserPlus className="h-4 w-4 inline mr-1" />
                               Add Contact
                             </button>
-                            {account.hrmsConnection?.hasConnection && (
-                              <button
-                                onClick={() => handleViewHRMSHistory(account)}
-                                className="px-4 py-2 text-sm bg-orange-100 text-orange-700 border border-orange-300 rounded-lg hover:bg-orange-200"
-                              >
-                                <FileText className="h-4 w-4 inline mr-1" />
-                                View HRMS History
-                              </button>
-                            )}
-                            {!account.hrmsConnection?.hasConnection && account.source !== 'hrms' && (
-                              <button
-                                onClick={() => handleAddToHRMSTarget(account)}
-                                className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                              >
-                                <UserPlus className="h-4 w-4 inline mr-1" />
-                                Add to HRMS Target List
-                              </button>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -982,22 +894,6 @@ const AccountsPage: React.FC = () => {
             key={account.id}
             className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
           >
-            {/* HRMS Connection Banner - Top Priority on Mobile */}
-            {account.hrmsConnection?.hasConnection && (
-              <div
-                onClick={() => handleViewHRMSHistory(account)}
-                className="bg-gradient-to-r from-orange-400 to-yellow-400 p-3 cursor-pointer active:opacity-80"
-              >
-                <div className="flex items-center space-x-2">
-                  <span className="text-2xl">🏢</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-white">HRMS CONNECTION - UNIQUE!</p>
-                    <p className="text-xs text-white">Warm intro opportunity - Tap for details</p>
-                  </div>
-                  <span className="px-2 py-1 bg-purple-600 text-white text-xs font-bold rounded">UNIQUE</span>
-                </div>
-              </div>
-            )}
 
             {/* Card Header */}
             <div className="p-4 space-y-3">
@@ -1099,14 +995,6 @@ const AccountsPage: React.FC = () => {
                   <Plus className="h-4 w-4 inline mr-1" />
                   Deal
                 </button>
-                {account.hrmsConnection?.hasConnection && (
-                  <button
-                    onClick={() => handleViewHRMSHistory(account)}
-                    className="px-3 py-2 text-sm bg-orange-100 text-orange-700 border border-orange-300 rounded-lg active:bg-orange-200"
-                  >
-                    🏢
-                  </button>
-                )}
               </div>
             </div>
 
@@ -1164,90 +1052,6 @@ const AccountsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* HRMS History Modal */}
-      {showHRMSModal && selectedHRMSAccount && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900 flex items-center">
-                <Building2 className="h-6 w-6 mr-2 text-orange-600" />
-                HRMS Connection History
-              </h2>
-              <button
-                onClick={() => setShowHRMSModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            <div className="p-6 space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{selectedHRMSAccount.name}</h3>
-                <p className="text-sm text-gray-600">{selectedHRMSAccount.website}</p>
-              </div>
-
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <h4 className="font-semibold text-orange-900 mb-3">Recruited Employees</h4>
-                <div className="space-y-3">
-                  {selectedHRMSAccount.hrmsConnection?.recruitedContacts?.map((contact, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white p-3 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-900">{contact.name}</p>
-                        <p className="text-sm text-gray-600">{contact.position}</p>
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Recruited: {new Date(contact.dateRecruited).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Total Recruited</p>
-                  <p className="text-2xl font-bold text-gray-900">{selectedHRMSAccount.hrmsConnection?.recruitedEmployees || 0}</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">Last Recruitment</p>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {selectedHRMSAccount.hrmsConnection?.lastRecruitmentDate
-                      ? new Date(selectedHRMSAccount.hrmsConnection.lastRecruitmentDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                      : 'N/A'
-                    }
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h4 className="font-semibold text-green-900 mb-2">Cross-Sell Opportunities</h4>
-                <p className="text-sm text-green-800">
-                  ✨ Strong existing relationship through {selectedHRMSAccount.hrmsConnection?.recruitedEmployees || 0} recruited employee(s)
-                </p>
-                <p className="text-sm text-green-700 mt-1">
-                  💡 High probability of warm introductions and referrals
-                </p>
-              </div>
-            </div>
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowHRMSModal(false)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Close
-              </button>
-              <Button
-                onClick={() => {
-                  navigate(`/crm/accounts/${selectedHRMSAccount.id}`);
-                  setShowHRMSModal(false);
-                }}
-              >
-                View Full Account
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
     </div>
   );

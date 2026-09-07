@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Sparkles, Briefcase } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { SmartSearchPanel } from '../../components/Deal/DealForm/SmartSearchPanel';
 import { DealFormBasicInfo } from '../../components/Deal/DealForm/DealFormBasicInfo';
@@ -17,7 +17,6 @@ import { PostSaveModal, PostSaveAction } from '../../components/Deal/DealForm/Po
 import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPanel';
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
-import { HRMSAdvantageModal } from '../../components/Deal/DealForm/HRMSAdvantageModal';
 import { createDeal, updateDeal, fetchDeals, getDeal } from '../../utils/dealsApi';
 import { useData } from '../../contexts/DataContext';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
@@ -93,7 +92,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     forecastCategory: '',
     owner: 'current-user',
     source: '',
-    hrmsConnection: null,
     priority: 'Medium',
     tags: [],
     product: '',
@@ -146,8 +144,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
   const [allDeals, setAllDeals] = useState<any[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showHRMSModal, setShowHRMSModal] = useState(false);
-  const [hrmsModalData, setHrmsModalData] = useState<any>(null);
   // true = user has manually typed a deal name → never auto-overwrite
   // false = name is empty or was auto-generated → safe to overwrite
   const [dealNameUserEdited, setDealNameUserEdited] = useState(false);
@@ -372,40 +368,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   };
 
   const handleAccountSelect = (account: any) => {
-    // Check for HRMS connection
-    const isHRMS = account.isHRMS || account.name.toLowerCase().includes('techstart');
-
-    if (isHRMS) {
-      // Show HRMS modal for warm intro advantage
-      setHrmsModalData({
-        recruitedPerson: account.recruitedPerson || 'Sarah Lee',
-        title: 'CFO',
-        company: account.name,
-        recruitmentDate: '2024-11-14'
-      });
-      setShowHRMSModal(true);
-
-      // Store account for later use
-      setSelectedAccount(account);
-    } else {
-      // Non-HRMS account - proceed normally
-      processAccountSelection(account, false);
-    }
-  };
-
-  const processAccountSelection = (account: any, isHRMS: boolean) => {
     setSelectedAccount(account);
 
     setFormData(prev => ({
       ...prev,
       accountId: account.id,
       accountName: account.name,
-      source: isHRMS ? 'hrms' : prev.source,
-      hrmsConnection: isHRMS ? {
-        recruited: hrmsModalData?.recruitedPerson || account.recruitedPerson || 'Sarah Lee',
-        recruitmentDate: hrmsModalData?.recruitmentDate || '2024-11-14'
-      } : null,
-      priority: isHRMS ? 'High' : prev.priority,
       sourceJourney: {
         type: 'account',
         name: account.name,
@@ -414,63 +382,19 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }));
 
     // Generate AI suggestions based on account
-    const baseWinRate = account.winRate || 68;
-    const hrmsBoost = isHRMS ? 15 : 0; // HRMS adds +15% win probability
-
     const suggestions = {
       dealValue: account.avgDealSize || '50000',
       valueRange: `$${(account.avgDealSize * 0.9 / 1000).toFixed(0)}K - $${(account.avgDealSize * 1.1 / 1000).toFixed(0)}K`,
       closeDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       closeDays: 45,
-      probability: Math.min(baseWinRate + hrmsBoost, 100),
+      probability: Math.min(account.winRate || 68, 100),
       contact: account.primaryContact,
-      isHRMS
     };
     setAiSuggestions(suggestions);
     setShowSmartSearch(false);
-
-    if (isHRMS) {
-      showToast('success', 'HRMS Advantage activated! Win probability boosted to 75%');
-    }
-  };
-
-  const handleUseHRMSAdvantage = () => {
-    if (selectedAccount) {
-      processAccountSelection(selectedAccount, true);
-    }
-    setShowHRMSModal(false);
-  };
-
-  const handleSkipHRMSAdvantage = () => {
-    if (selectedAccount) {
-      processAccountSelection(selectedAccount, false);
-    }
-    setShowHRMSModal(false);
   };
 
   const handleContactSelect = (contact: any) => {
-    // Check for HRMS connection on contact
-    const isHRMS = contact.isHRMS || contact.source === 'HRMS Connection';
-
-    if (isHRMS) {
-      // Show HRMS modal for warm intro advantage
-      setHrmsModalData({
-        recruitedPerson: contact.name,
-        title: contact.title,
-        company: contact.company,
-        recruitmentDate: '2024-11-14'
-      });
-      setShowHRMSModal(true);
-
-      // Store contact for later use
-      setSelectedContact(contact);
-    } else {
-      // Non-HRMS contact - proceed normally
-      processContactSelection(contact, false);
-    }
-  };
-
-  const processContactSelection = (contact: any, isHRMS: boolean) => {
     setSelectedContact(contact);
 
     setFormData(prev => ({
@@ -481,22 +405,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       // If no account is linked yet, auto-fill company from the contact so
       // the deal name generator has enough context to fire
       ...(!prev.accountName && contact.company ? { accountName: contact.company } : {}),
-      source: isHRMS ? 'hrms' : prev.source,
-      hrmsConnection: isHRMS ? {
-        recruited: contact.name,
-        recruitmentDate: hrmsModalData?.recruitmentDate || '2024-11-14'
-      } : prev.hrmsConnection,
-      priority: isHRMS ? 'High' : prev.priority,
       sourceJourney: {
         type: 'contact',
         name: contact.name,
         id: contact.id
       }
     }));
-
-    if (isHRMS) {
-      showToast('success', 'HRMS Advantage activated! This is a warm intro opportunity');
-    }
   };
 
   const handleApplyAISuggestions = () => {
@@ -523,7 +437,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       primaryContactId: '',
       primaryContactName: '',
       source: '',
-      hrmsConnection: null
     }));
     showToast('info', 'Selection cleared, search again');
   };
@@ -555,7 +468,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       contactEmail: '', contactRole: DEFAULT_CONTACT_ROLE.id,
       primaryContactSentiment: 'neutral' as 'positive' | 'neutral' | 'negative',
       additionalContacts: [] as StakeholderContact[], competitors: [] as Competitor[],
-      forecastCategory: '', owner: 'current-user', source: '', hrmsConnection: null,
+      forecastCategory: '', owner: 'current-user', source: '',
       priority: 'Medium', tags: [], product: '', contractTerm: '', paymentTerms: '',
       description: '', nextSteps: '', closeDateOverrideReason: '', sourceJourney: null,
     });
@@ -657,9 +570,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     if (allRoles.some(r => getContactRole(r).id === 'decision-maker')) probability += 10;
     if (allRoles.some(r => getContactRole(r).id === 'champion'))       probability += 15;
     if (allRoles.some(r => getContactRole(r).id === 'economic-buyer')) probability += 10;
-
-    // HRMS connection boost
-    if (data.source === 'hrms' || data.hrmsConnection) probability += 15;
 
     // Sweet-spot check always in USD so it works across all currencies
     const dealValue = parseAmountInput(data.dealValue?.toString() || '0');
@@ -778,7 +688,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }));
 
     // Auto-update probability based on multiple factors
-    if (['stage', 'contactRole', 'additionalContacts', 'source', 'dealValue', 'hrmsConnection'].includes(field)) {
+    if (['stage', 'contactRole', 'additionalContacts', 'source', 'dealValue'].includes(field)) {
       const newProbability = calculateWinProbability(newData);
       setFormData(prev => ({ ...prev, probability: newProbability }));
     }
@@ -968,8 +878,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       forecastCategory: '',
       owner: 'current-user',
       source: '',
-      hrmsConnection: null,
-      priority: 'Medium',
+        priority: 'Medium',
       tags: [],
       product: '',
       contractTerm: '',
@@ -1145,15 +1054,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className={`${aiSuggestions.isHRMS ? 'bg-gradient-to-br from-orange-50 to-purple-50' : 'bg-purple-50'} rounded-lg p-4 border ${aiSuggestions.isHRMS ? 'border-orange-200' : 'border-purple-200'}`}>
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-sm font-semibold text-purple-900">🤖 AI Auto-populated:</div>
-                    {aiSuggestions.isHRMS && (
-                      <div className="flex items-center space-x-1">
-                        <Briefcase className="h-4 w-4 text-orange-600" />
-                        <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded">🏢 HRMS</span>
-                      </div>
-                    )}
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
@@ -1174,18 +1077,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-purple-800">• Win Probability:</span>
-                      <span className="font-medium text-purple-900">{aiSuggestions.probability}% {aiSuggestions.isHRMS ? '(+15% HRMS boost!)' : '(Similar deals)'}</span>
+                      <span className="font-medium text-purple-900">{aiSuggestions.probability}% (Similar deals)</span>
                     </div>
-                    {aiSuggestions.isHRMS && (
-                      <div className="mt-3 p-2 bg-green-100 rounded border border-green-300">
-                        <div className="text-xs font-bold text-green-900">🎉 Warm Intro Advantage Detected!</div>
-                        <div className="text-xs text-green-800 mt-1">HRMS connection increases close rate by 33%</div>
-                      </div>
-                    )}
                   </div>
                   <button
                     onClick={handleApplyAISuggestions}
-                    className={`mt-4 w-full px-4 py-2 ${aiSuggestions.isHRMS ? 'bg-orange-600 hover:bg-orange-700' : 'bg-purple-600 hover:bg-purple-700'} text-white rounded-lg font-medium transition-colors`}
+                    className="mt-4 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
                   >
                     Apply All Suggestions
                   </button>
@@ -1353,16 +1250,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         dealId={postSaveModal.dealId}
         onAction={handlePostSaveAction}
       />
-
-      {/* HRMS Advantage Modal */}
-      {hrmsModalData && (
-        <HRMSAdvantageModal
-          isOpen={showHRMSModal}
-          onClose={handleSkipHRMSAdvantage}
-          onUseAdvantage={handleUseHRMSAdvantage}
-          hrmsData={hrmsModalData}
-        />
-      )}
     </div>
   );
 };

@@ -341,7 +341,7 @@ describe('User management — round trip', () => {
     it('a manager CAN still invite at or below their own level', async () => {
       // The guard must not break the ordinary case it exists to bound.
       const manager = await addUserWithRole(ws, 'manager');
-      for (const role of ['sales', 'hr', 'manager']) {
+      for (const role of ['sales', 'manager']) {
         const res = await request(app).post('/api/v1/invites').set(auth(manager))
           .send({ email: `ok.${role}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role });
         expect(res.status, `${role}: ${JSON.stringify(res.body)}`).toBe(201);
@@ -359,7 +359,7 @@ describe('User management — round trip', () => {
 
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(res.body.assignable_roles).not.toContain('admin');
-      expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr']);
+      expect(res.body.assignable_roles).toEqual(['sales', 'manager']);
 
       // Every role the list DOES offer must actually be invitable, or the
       // picker is lying in the other direction.
@@ -370,19 +370,33 @@ describe('User management — round trip', () => {
       }
     });
 
-    it('GET /invites gives an ADMIN the full list, INCLUDING hr', async () => {
-      // hr is the case that had silently drifted: the deleted client-side
-      // invitableRolesFor() listed sales/manager/admin only, so the form could
-      // not invite an HR user even though the server has always allowed it.
+    it('GET /invites gives an ADMIN the full list, and hr is DELIBERATELY absent', async () => {
+      /*
+       * THIS TEST USED TO ASSERT THE OPPOSITE, and the inversion is the point.
+       *
+       * `hr` was once the case that had silently drifted: the deleted
+       * client-side invitableRolesFor() listed sales/manager/admin only, so the
+       * invite form could not invite an HR user even though the server allowed
+       * it. This test existed to pin that fix.
+       *
+       * `hr` is now removed from the CRM entirely — HRMS is a separate platform
+       * over SSO, so an HR persona is not a CRM role. So its absence here is a
+       * DECISION, not the drift returning. The two are distinguishable only by
+       * what the server does with an explicit attempt, which is why the 400
+       * below matters more than the list assertion: a drifted list would still
+       * have accepted `role: 'hr'`. This one refuses it.
+       */
       const res = await request(app).get('/api/v1/invites').set(auth(ws));
       expect(res.status).toBe(200);
-      expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr', 'admin']);
-      expect(res.body.assignable_roles).toContain('hr');
+      expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'admin']);
+      expect(res.body.assignable_roles).not.toContain('hr');
 
+      // Enforced, not merely unlisted.
       const created = await request(app).post('/api/v1/invites').set(auth(ws))
         .send({ email: `hr.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, role: 'hr' });
-      expect(created.status, JSON.stringify(created.body)).toBe(201);
-      expect(created.body.invite.role).toBe('hr');
+      expect(created.status, JSON.stringify(created.body)).toBe(400);
+      expect(created.body.message).toContain('role must be one of');
+      expect(created.body.message).not.toContain('hr');
     });
 
     it('an ADMIN may still invite an admin — the rule is "not above your own"', async () => {

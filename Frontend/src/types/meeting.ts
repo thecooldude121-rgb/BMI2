@@ -58,8 +58,6 @@ export interface Meeting {
   prepNotes?: string[];
   notes?: string;
   tags?: string[];
-  hrmsConnected?: boolean;
-  hrmsRecruitedDate?: string;
   createdAt: string;
   updatedAt: string;
 }

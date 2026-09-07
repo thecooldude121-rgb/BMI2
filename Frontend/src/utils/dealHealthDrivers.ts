@@ -265,15 +265,7 @@ export function explainDealHealth(
     });
   }
 
-  // ── 8. HRMS connection ───────────────────────────────────────────────────
-  if (deal.isHRMS) {
-    positives.push({
-      id: 'hrms', sentiment: 'positive', impact: 'medium',
-      label: 'Embedded in customer systems',
-    });
-  }
-
-  // ── 9. Strategic value ───────────────────────────────────────────────────
+  // ── 8. Strategic value ───────────────────────────────────────────────────
   if (deal.amount >= 100_000) {
     positives.push({
       id: 'high-value', sentiment: 'positive', impact: 'low',

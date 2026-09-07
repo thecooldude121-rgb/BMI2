@@ -16,7 +16,7 @@ import type { Contact, ContactSource, ContactStatus } from '../types/contact';
  *
  * STILL WITHOUT A COLUMN, and therefore left absent rather than invented (the
  * Phase 0 rule): lastContact, aiEnriched, enrichedDataPoints, aiScore,
- * conversionProbability, hrmsBonus, enrichmentData, activeDeal, nextAction,
+ * conversionProbability, enrichmentData, activeDeal, nextAction,
  * warningMessage, and reportsTo. There is no activity, enrichment or deal-link
  * data for contacts. Do not default any of them.
  */
@@ -120,7 +120,7 @@ export function mapRowToContact(row: ContactRow): Contact {
     updatedAt: row.updated_at ?? '',
 
     // Intentionally absent: lastContact, aiEnriched, enrichedDataPoints,
-    // aiScore, conversionProbability, hrmsBonus, enrichmentData, activeDeal,
+    // aiScore, conversionProbability, enrichmentData, activeDeal,
     // nextAction, warningMessage. There is no activity, enrichment or deal-link
     // data for contacts yet. Do not default these.
   };

@@ -222,7 +222,7 @@ describe('Role change', () => {
   it('GET /users tells an ADMIN they may assign every role, and whom they may touch', async () => {
     const res = await request(app).get('/api/v1/users?include_inactive=true').set(auth(ws));
     expect(res.status).toBe(200);
-    expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr', 'admin']);
+    expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'admin']);
     // An admin may act on everyone, including themselves — self-demotion is
     // legal while somebody else is privileged, so the control must render.
     expect(res.body.data.every((u: any) => u.can_change_role === true)).toBe(true);
@@ -238,7 +238,7 @@ describe('Role change', () => {
     // THE POINT. The picker is populated from this, so a manager cannot be
     // shown an option the server would answer 403 to.
     expect(res.body.assignable_roles).not.toContain('admin');
-    expect(res.body.assignable_roles).toEqual(['sales', 'manager', 'hr']);
+    expect(res.body.assignable_roles).toEqual(['sales', 'manager']);
 
     const rowFor = (id: string) => res.body.data.find((u: any) => String(u.id) === String(id));
     expect(rowFor(admin.userId).can_change_role).toBe(false);   // above them
