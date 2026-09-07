@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
-import {
-  FileText, Image as ImageIcon, FileSpreadsheet, Video, File, Presentation,
-  Eye, Download, ChevronUp, ChevronDown, ChevronRight, Briefcase, Building2,
-  Loader2, Check, Pin
-} from 'lucide-react';
+import { FileText, Image as ImageIcon, FileSpreadsheet, Video, File, Presentation, Eye, Download, ChevronUp, ChevronDown, ChevronRight, Loader2, Check, Pin } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+/**
+ * REAL COLUMNS ONLY.
+ *
+ * The shape this replaced declared `last_viewed_date`, `last_viewed_by`,
+ * `view_count`, `deal_id`, `deal_name`, `account_id`, `account_name`,
+ * `activity_id` and `thumbnail_url` — NONE of which exist on `documents`. The
+ * strip therefore showed a view count, a "last viewed" time and clickable
+ * deal/account chips for every document, all invented.
+ *
+ * `created_at` replaces `last_viewed_date`: when a document was ADDED is a
+ * fact the table holds; when it was last viewed is not, and needs an events
+ * table (logged in CLAUDE.md's backlog).
+ */
 interface RecentDocument {
-  document_id: string;
-  document_name: string;
-  file_type: string;
-  file_size: number;
-  category: string;
-  last_viewed_date: string;
-  last_viewed_by: string;
-  view_count: number;
-  deal_id?: string | null;
-  deal_name?: string;
-  account_id?: string | null;
-  account_name?: string;
-  activity_id?: string;
-  thumbnail_url?: string;
+  id: string;
+  name: string;
+  file_type?: string | null;
+  file_size?: number | string | null;
+  category?: string | null;
+  created_at?: string | null;
+  uploaded_by?: string | null;
   file_url: string;
 }
 
@@ -35,8 +37,9 @@ interface RecentDocumentsSectionProps {
   isLoading?: boolean;
 }
 
-const getFileIcon = (fileType: string) => {
-  const type = fileType.toLowerCase();
+/** Nullable: documents.file_type is nullable. */
+const getFileIcon = (fileType: string | null | undefined) => {
+  const type = (fileType ?? '').toLowerCase();
   if (type === 'pdf') {
     return <FileText className="w-8 h-8 text-[#dc2626]" />;
   }
@@ -58,7 +61,8 @@ const getFileIcon = (fileType: string) => {
   return <File className="w-8 h-8 text-gray-500" />;
 };
 
-const getCategoryColor = (category: string): string => {
+/** Nullable: documents.category is nullable. */
+const getCategoryColor = (category: string | null | undefined): string => {
   const colors: Record<string, string> = {
     'Proposal': 'bg-blue-100 text-blue-700',
     'Contract': 'bg-emerald-100 text-emerald-700',
@@ -68,7 +72,7 @@ const getCategoryColor = (category: string): string => {
     'Meeting Materials': 'bg-indigo-100 text-indigo-700',
     'Email Attachments': 'bg-cyan-100 text-cyan-700'
   };
-  return colors[category] || 'bg-gray-100 text-gray-700';
+  return (category && colors[category]) || 'bg-gray-100 text-gray-700';
 };
 
 const getRelativeTime = (dateString: string): string => {
@@ -95,7 +99,15 @@ const getRelativeTime = (dateString: string): string => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const formatFileSize = (bytes: number): string => {
+/** Nullable: documents.file_size is nullable, and "0 B" is not "unrecorded". */
+const formatFileSize = (bytes: number | string | null | undefined): string => {
+  if (bytes === null || bytes === undefined || bytes === '') return 'Size not recorded';
+  const n = typeof bytes === 'string' ? Number(bytes) : bytes;
+  if (!Number.isFinite(n)) return 'Size not recorded';
+  return formatBytes(n);
+};
+
+const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -123,22 +135,22 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
   const handleDownload = (doc: RecentDocument, e: React.MouseEvent) => {
     e.stopPropagation();
 
-    setDownloadingDocs(prev => new Set(prev).add(doc.document_id));
+    setDownloadingDocs(prev => new Set(prev).add(doc.id));
 
     onDownload(doc);
 
     setTimeout(() => {
       setDownloadingDocs(prev => {
         const newSet = new Set(prev);
-        newSet.delete(doc.document_id);
+        newSet.delete(doc.id);
         return newSet;
       });
-      setDownloadedDocs(prev => new Set(prev).add(doc.document_id));
+      setDownloadedDocs(prev => new Set(prev).add(doc.id));
 
       setTimeout(() => {
         setDownloadedDocs(prev => {
           const newSet = new Set(prev);
-          newSet.delete(doc.document_id);
+          newSet.delete(doc.id);
           return newSet;
         });
       }, 2000);
@@ -297,19 +309,19 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
           >
             {recentDocuments.map((doc, index) => (
               <div
-                key={doc.document_id}
+                key={doc.id}
                 className="flex-shrink-0 w-[calc(100%-2rem)] sm:w-[240px] md:w-[220px] lg:w-[200px] xl:w-[180px] snap-center"
-                onMouseEnter={() => setHoveredCard(doc.document_id)}
+                onMouseEnter={() => setHoveredCard(doc.id)}
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 <div
                   className={`
                     bg-white border border-[#e5e7eb] rounded-lg p-3 h-[180px]
                     cursor-pointer transition-all ease-in-out
-                    ${hoveredCard === doc.document_id ? 'shadow-[0_4px_12px_rgba(0,0,0,0.1)] -translate-y-0.5 border-blue-300' : 'hover:border-gray-300 duration-200'}
+                    ${hoveredCard === doc.id ? 'shadow-[0_4px_12px_rgba(0,0,0,0.1)] -translate-y-0.5 border-blue-300' : 'hover:border-gray-300 duration-200'}
                   `}
-                  onClick={() => navigate(`/crm/documents/${doc.document_id}`)}
-                  title={doc.document_name}
+                  onClick={() => navigate(`/crm/documents/${doc.id}`)}
+                  title={doc.name}
                 >
                   <div className="flex flex-col h-full">
                     <div className="flex justify-center mb-2">
@@ -318,7 +330,7 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
 
                     <div className="flex-1 min-h-0">
                       <p className="text-[14px] font-semibold text-gray-900 line-clamp-2 mb-1 leading-tight">
-                        {doc.document_name}
+                        {doc.name}
                       </p>
 
                       <div className="flex items-center gap-2 mb-2">
@@ -327,53 +339,27 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
                         </span>
                       </div>
 
-                      {(doc.deal_name || doc.account_name) && (
-                        <div className="mb-1">
-                          <p className="text-xs text-gray-500 mb-0.5">Related:</p>
-                          <div className="flex flex-col gap-1">
-                            {doc.deal_name && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/crm/deals/${doc.deal_id}`);
-                                }}
-                                className="flex items-center gap-1 text-[12px] font-medium text-[#3b82f6] hover:text-blue-700 hover:underline text-left"
-                                title={`Go to ${doc.deal_name}`}
-                              >
-                                <Briefcase className="w-3 h-3 flex-shrink-0" />
-                                <span className="truncate min-w-0">{doc.deal_name}</span>
-                                <ChevronRight className="w-3 h-3 flex-shrink-0 ml-auto" />
-                              </button>
-                            )}
-                            {doc.account_name && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/crm/accounts/${doc.account_id}`);
-                                }}
-                                className="flex items-center gap-1 text-[12px] font-medium text-[#3b82f6] hover:text-blue-700 hover:underline text-left"
-                                title={`Go to ${doc.account_name}`}
-                              >
-                                <Building2 className="w-3 h-3 flex-shrink-0" />
-                                <span className="truncate min-w-0">{doc.account_name}</span>
-                                <ChevronRight className="w-3 h-3 flex-shrink-0 ml-auto" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {/*
+                        Deal and account chips were here, linking to
+                        /crm/deals/{deal_id} and /crm/accounts/{account_id}.
+                        NEITHER COLUMN EXISTS — the real link is `module` +
+                        `record_id`, a free-text pair with no foreign key — so
+                        the chips displayed invented names and the links could
+                        not have resolved. Restoring them needs the
+                        module/record_id decision in CLAUDE.md's backlog.
+                      */}
 
                       <div className="flex items-center gap-2 text-xs text-gray-500">
                         <span>{formatFileSize(doc.file_size)}</span>
                         <span>•</span>
-                        <span>{doc.view_count} views</span>
+                        <span>{doc.uploaded_by || 'Owner not recorded'}</span>
                       </div>
                     </div>
 
                     <div className="mt-2 pt-2 border-t border-gray-100">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[12px] text-[#6b7280]">
-                          {getRelativeTime(doc.last_viewed_date)}
+                          {doc.created_at ? getRelativeTime(doc.created_at) : 'Date not recorded'}
                         </p>
                       </div>
 
@@ -391,22 +377,22 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
                         <button
                           onClick={(e) => handleDownload(doc, e)}
                           className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors group ${
-                            downloadedDocs.has(doc.document_id)
+                            downloadedDocs.has(doc.id)
                               ? 'bg-green-50'
                               : 'hover:bg-[#f3f4f6]'
                           }`}
                           title={
-                            downloadingDocs.has(doc.document_id)
+                            downloadingDocs.has(doc.id)
                               ? 'Downloading...'
-                              : downloadedDocs.has(doc.document_id)
+                              : downloadedDocs.has(doc.id)
                               ? 'Downloaded'
                               : 'Download'
                           }
-                          disabled={downloadingDocs.has(doc.document_id)}
+                          disabled={downloadingDocs.has(doc.id)}
                         >
-                          {downloadingDocs.has(doc.document_id) ? (
+                          {downloadingDocs.has(doc.id) ? (
                             <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                          ) : downloadedDocs.has(doc.document_id) ? (
+                          ) : downloadedDocs.has(doc.id) ? (
                             <Check className="w-4 h-4 text-green-600" />
                           ) : (
                             <Download className="w-4 h-4 text-gray-600 group-hover:text-blue-600" />
