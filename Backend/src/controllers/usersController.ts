@@ -5,6 +5,8 @@ import { requireTenantId } from '../middleware/tenant';
 import {
   ASSIGNABLE_ROLES, PRIVILEGED_ROLES, canAssign, canActOn, rolesAssignableBy,
 } from '../utils/roles';
+import { idInTenant } from '../utils/tenantScope';
+import { wouldCreateCycle } from '../utils/reportingLine';
 
 /**
  * GET /api/v1/users
@@ -53,10 +55,21 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
     const includeInactive = String(req.query.include_inactive ?? '').toLowerCase() === 'true';
 
     const result = await pool.query(
-      `SELECT id, first_name, last_name, email, role, department, is_active, last_login_at, created_at
-         FROM users
-        WHERE tenant_id = $1 ${includeInactive ? '' : 'AND is_active = true'}
-        ORDER BY is_active DESC, first_name`,
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.department,
+              u.is_active, u.last_login_at, u.created_at,
+              u.manager_id,
+              -- Manager NAME, resolved through a TENANT-MATCHED join (migration
+              -- 041). users.id is a global primary key, so without the
+              -- predicate a manager_id pointing at another workspace would
+              -- render that person's name here. Same requirement as every other
+              -- FK join in this codebase: the write creates the bad row, the
+              -- join is what leaks it.
+              NULLIF(btrim(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), '')
+                AS manager_name
+         FROM users u
+         LEFT JOIN users m ON m.id = u.manager_id AND m.tenant_id = u.tenant_id
+        WHERE u.tenant_id = $1 ${includeInactive ? '' : 'AND u.is_active = true'}
+        ORDER BY u.is_active DESC, u.first_name`,
       [tenantId]
     );
 
@@ -67,9 +80,19 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
       success: true,
       data: result.rows.map(row => ({
         ...row,
-        can_change_role: mayManageRoles && canActOn(callerRole, row.role),
+        // Both flags from the shared helper, so the roster and the two PATCH
+        // responses cannot disagree about what this caller may do.
+        ...memberPermissions(callerRole, row.role),
       })),
       assignable_roles: mayManageRoles ? rolesAssignableBy(callerRole) : [],
+      /*
+       * Everyone in the workspace is a candidate manager, so the picker needs
+       * no separate list — it filters the roster it already has. What it CANNOT
+       * work out for itself is which candidates would create a cycle, because
+       * that needs the whole reporting line. The endpoint refuses those with a
+       * 409; the picker's job is to show the refusal, not to predict it.
+       */
+      can_manage_managers: mayManageRoles,
     });
   } catch (error) { next(error); }
 };
@@ -89,6 +112,30 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
  * workspace. A user in another workspace must be indistinguishable from one
  * that does not exist, so this returns null and the caller answers 404.
  */
+/**
+ * The per-row permission flags, computed ONCE for every response that carries a
+ * member.
+ *
+ * WHY THIS EXISTS, and it is a bug fix rather than tidying. `GET /users`
+ * computed `can_change_role` inline while the PATCH responses carried NO flags
+ * at all. The client patches its roster from a mutation response, and
+ * `toMember` reads an absent flag as `false` — deliberately, so an older server
+ * is never read as permitting something. The consequence was that changing
+ * somebody's role made their own "Change role" link DISAPPEAR until the next
+ * refetch, because the response said (by omission) that the caller could no
+ * longer touch them.
+ *
+ * That was already true for roles before migration 041; adding a second
+ * control on the same row is what made it visible, and it was found by clicking
+ * through the UI rather than by any test. Serving the flags from one place is
+ * what stops the two answers diverging.
+ */
+function memberPermissions(callerRole: string, targetRole: string) {
+  const mayManage = (DESTRUCTIVE_ACTION_ROLES as readonly string[]).includes(callerRole);
+  const actOn = mayManage && canActOn(callerRole, targetRole);
+  return { can_change_role: actOn, can_change_manager: actOn };
+}
+
 async function findMember(tenantId: string, id: string, db: Queryable = pool) {
   const result = await db.query(
     'SELECT id, first_name, last_name, email, role, is_active FROM users WHERE id = $1 AND tenant_id = $2',
@@ -356,7 +403,11 @@ export const changeUserRole = async (req: AuthRequest, res: Response, next: Next
     // a 200 that confirms what role somebody holds.
     if (target.role === role) {
       await client.query('COMMIT');
-      res.json({ success: true, data: target, message: `That account is already a ${role}` });
+      res.json({
+        success: true,
+        data: { ...target, ...memberPermissions(callerRole, target.role) },
+        message: `That account is already a ${role}`,
+      });
       return;
     }
 
@@ -397,7 +448,12 @@ export const changeUserRole = async (req: AuthRequest, res: Response, next: Next
     await client.query('COMMIT');
     res.json({
       success: true,
-      data: updated.rows[0],
+      // The flags travel WITH the row (see memberPermissions): without them the
+      // client's patched roster loses this member's controls until a refetch.
+      // Computed against the NEW role, since that is what the caller may now
+      // act on — demoting an admin to sales, for instance, leaves them
+      // touchable where the admin they were is not.
+      data: { ...updated.rows[0], ...memberPermissions(callerRole, role) },
       message: `Role changed from ${target.role} to ${role}. They will need to sign in again.`,
     });
   } catch (error) {
@@ -406,4 +462,148 @@ export const changeUserRole = async (req: AuthRequest, res: Response, next: Next
   } finally {
     client.release();
   }
+};
+
+/**
+ * PATCH /api/v1/users/:id/manager
+ * Body: { manager_id: number | null }
+ *
+ * Sets or clears who somebody reports to (migration 041).
+ *
+ * GATED ON THE SAME ROLES AS THE ROLE CHANGE, and for a related reason: a
+ * reporting line decides whose numbers roll up to whom, so it is management
+ * data even though it grants no permission by itself. Four guards, each failing
+ * independently:
+ *
+ *   1. YOU CANNOT RESTRUCTURE SOMEONE ABOVE YOU (`canActOn`). Without this a
+ *      manager could reassign the admin above them, which is the same
+ *      "reach above yourself" shape guard 2 of the role change exists to stop.
+ *      403.
+ *   2. THE MANAGER MUST BE IN YOUR WORKSPACE. users.id is a global primary key,
+ *      so the FK alone is satisfied by someone else's colleague. Validated
+ *      through tenantScope, and the message names the field WITHOUT disclosing
+ *      that the row exists elsewhere — same rule as every other foreign id
+ *      here. 400.
+ *   3. NO CYCLES. A -> B -> A satisfies the FK and the self-check and makes any
+ *      recursive walk non-terminating. 409, because it is a conflict with the
+ *      current shape of the hierarchy rather than a malformed request.
+ *   4. A NO-OP WRITES NOTHING, so a double-submitted form does not bump
+ *      updated_at for a change that did not happen.
+ *
+ * NO token_version BUMP, deliberately, and this is where it differs from the
+ * role change. A manager change alters no permission — `protect` reads the role
+ * from the row on every request and the reporting line is not consulted — so
+ * signing somebody out would be a cost with no safety behind it.
+ */
+export const changeUserManager = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const callerRole = String(req.user?.role ?? '');
+    const raw = (req.body as { manager_id?: unknown }).manager_id;
+
+    // Absent and null are DIFFERENT. Null clears the manager, which is a real
+    // state — the top of the reporting line has nobody above them. Omitting the
+    // field entirely is a malformed request, not an instruction to clear.
+    if (raw === undefined) {
+      res.status(400).json({ success: false, message: 'manager_id is required (send null to clear it)' });
+      return;
+    }
+
+    const managerId: number | null =
+      raw === null || raw === '' ? null : Number(raw);
+
+    if (managerId !== null && !Number.isInteger(managerId)) {
+      res.status(400).json({ success: false, message: 'manager_id must be a user id or null' });
+      return;
+    }
+
+    const target = await findMember(tenantId, req.params.id);
+    if (!target) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    // Guard 1 — never restructure above your own level.
+    if (!canActOn(callerRole, target.role)) {
+      res.status(403).json({
+        success: false,
+        message: `A ${callerRole || 'user'} cannot change who a ${target.role} reports to.`,
+      });
+      return;
+    }
+
+    if (managerId !== null) {
+      // Guard 2 — same workspace. The message names the field and stops there.
+      if (!(await idInTenant('users', managerId, tenantId))) {
+        res.status(400).json({
+          success: false,
+          message: 'manager_id does not name a user in this workspace',
+        });
+        return;
+      }
+
+      // Guard 3 — no cycles. Covers self-reference too, so the database CHECK
+      // is a backstop rather than the thing the caller sees.
+      if (await wouldCreateCycle(Number(target.id), managerId, tenantId)) {
+        res.status(409).json({
+          success: false,
+          message: 'That would create a reporting loop — the person you picked already reports to this user, directly or indirectly.',
+        });
+        return;
+      }
+    }
+
+    /*
+     * The manager's NAME, resolved the same tenant-matched way getUsers does,
+     * so the client can render the change without a refetch.
+     *
+     * Resolved BEFORE the no-op branch on purpose: a no-op response that
+     * omitted manager_name would be read by the client as "no manager", and
+     * patching the roster with it would blank the name already on screen. A
+     * response that changes nothing must still describe the row completely.
+     */
+    const managerName = managerId === null ? null : (
+      await pool.query(
+        `SELECT NULLIF(btrim(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')), '') AS name
+           FROM users WHERE id = $1 AND tenant_id = $2`,
+        [managerId, tenantId],
+      )
+    ).rows[0]?.name ?? null;
+
+    // Guard 4 — no-op. After the guards, so an unauthorised caller does not get
+    // a 200 that confirms who somebody reports to.
+    const current = await pool.query(
+      'SELECT manager_id FROM users WHERE id = $1 AND tenant_id = $2',
+      [target.id, tenantId],
+    );
+    if ((current.rows[0]?.manager_id ?? null) === managerId) {
+      res.json({
+        success: true,
+        data: {
+          ...target,
+          manager_id: managerId,
+          manager_name: managerName,
+          ...memberPermissions(callerRole, target.role),
+        },
+        message: 'No change — that is already their manager',
+      });
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE users SET manager_id = $1, updated_at = NOW()
+        WHERE id = $2 AND tenant_id = $3
+        RETURNING id, first_name, last_name, email, role, is_active, manager_id`,
+      [managerId, target.id, tenantId],
+    );
+
+    res.json({
+      success: true,
+      data: {
+        ...updated.rows[0],
+        manager_name: managerName,
+        ...memberPermissions(callerRole, target.role),
+      },
+    });
+  } catch (error) { next(error); }
 };

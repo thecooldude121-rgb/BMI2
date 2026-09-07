@@ -4,6 +4,7 @@ import { Users, UserPlus, Download, Upload, Search, Edit, MoreVertical, Mail, Us
 import { getRoleDisplayName, getStatusBadgeClass, getStatusIcon } from '../../../utils/teamManagementMockData';
 import {
   fetchRoster, deactivateMember, reactivateMember, inviteMember, changeMemberRole,
+  changeMemberManager,
   fetchInvites, formatLastLogin, ApiError,
   type WorkspaceMember, type PendingInvite, type InviteResult,
 } from '../../../utils/usersApi';
@@ -80,6 +81,13 @@ const TeamManagement: React.FC = () => {
   const [roleTarget, setRoleTarget] = useState<TeamMember | null>(null);
   const [roleChoice, setRoleChoice] = useState<string>('');
   const [roleError, setRoleError] = useState<string | null>(null);
+  // Manager change (migration 041). Same shape as the role dialog above, and
+  // for the same reason: the candidate list and the per-row permission are
+  // SERVED, so there is no rule here to drift from the server's.
+  const [managerTarget, setManagerTarget] = useState<TeamMember | null>(null);
+  const [managerChoice, setManagerChoice] = useState<string>('');
+  const [managerError, setManagerError] = useState<string | null>(null);
+  const [canManageManagers, setCanManageManagers] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const dropdownButtonRefs = useRef<{ [key: string]: React.RefObject<HTMLButtonElement> }>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +106,7 @@ const TeamManagement: React.FC = () => {
       ]);
       setTeamMembersState(roster.members);
       setAssignableRoles(roster.assignableRoles);
+      setCanManageManagers(roster.canManageManagers);
       setPendingInvites(invites?.pending ?? null);
       setInvitableRoles(invites?.assignableRoles ?? []);
       // Keep the picker's selection inside the served list. Left alone, the
@@ -314,6 +323,55 @@ const TeamManagement: React.FC = () => {
    * deactivation handler above: closing it in `finally` dismissed the server's
    * explanation as it arrived.
    */
+  /**
+   * Manager change — open the dialog. Only reachable from a row the SERVER
+   * marked `canChangeManager`, so there is no client-side rule here either.
+   */
+  const openManagerDialog = (member: TeamMember) => {
+    setManagerTarget(member);
+    setManagerChoice(member.managerId ?? '');   // opens on the current manager, so Confirm starts disabled
+    setManagerError(null);
+  };
+
+  const closeManagerDialog = () => {
+    setManagerTarget(null);
+    setManagerChoice('');
+    setManagerError(null);
+  };
+
+  /**
+   * REAL. PATCH /users/:id/manager.
+   *
+   * THE 409 IS RENDERED INLINE AND VERBATIM, exactly as the role dialog does
+   * with the last-admin guard. It means the person picked already reports to
+   * this member, directly or indirectly, so the edge would close a reporting
+   * loop — and the server's own wording is the only part that says what to do
+   * instead. Nothing is pre-checked here: detecting a loop needs the whole
+   * reporting line, which only the server has.
+   */
+  const handleManagerConfirm = async (member: TeamMember, managerId: string) => {
+    setBusyMemberId(member.id);
+    setManagerError(null);
+    try {
+      const updated = await changeMemberManager(member.id, managerId === '' ? null : managerId);
+      // Patch from the SERVER'S row, not from the local roster: the manager
+      // NAME is resolved server-side through a tenant-matched join, so the
+      // client must not construct it — doing so would bypass the predicate.
+      setTeamMembersState(prev => prev.map(m => (m.id === updated.id ? updated : m)));
+      showToast(
+        updated.managerName
+          ? `${updated.name} now reports to ${updated.managerName}.`
+          : `${updated.name} no longer has a manager recorded.`,
+        'success',
+      );
+      closeManagerDialog();
+    } catch (e) {
+      setManagerError(e instanceof Error ? e.message : 'Could not change the reporting line');
+    } finally {
+      setBusyMemberId(null);
+    }
+  };
+
   const handleRoleConfirm = async (member: TeamMember, role: string) => {
     // Belt on the no-op: the button is disabled, but a form submit or an
     // Enter key could still arrive. A no-op that returns 200 would render as a
@@ -867,10 +925,47 @@ const TeamManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Reporting lines were fabricated: no manager_id or direct-reports
-                  relation exists. Structure kept, absence labelled. */}
+              {/* MIGRATION 041 CHANGED THIS. The note here used to read
+                  "Reporting lines were fabricated: no manager_id or
+                  direct-reports relation exists" — true when written, and no
+                  longer: users.manager_id is a real, tenant-scoped,
+                  self-referencing column now, and "Reports to" below is wired
+                  to it.
+
+                  What is still absent is a direct-reports ROLLUP on this page.
+                  That is a different thing from the relation, and it belongs
+                  with the Team pages rather than here. */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <div className="flex items-center gap-2 text-gray-600 mb-1">
+                      <Briefcase className="h-4 w-4" />
+                      <span className="font-medium">Reports to:</span>
+                    </div>
+                    <div className="ml-6 flex items-center gap-2">
+                      {/* The NAME comes from the server, resolved through a
+                          tenant-matched join. Null covers two cases and both
+                          read the same on purpose: nobody is recorded above
+                          them, or the stored id points outside this workspace
+                          and the join refused it. */}
+                      <span className="text-gray-900">
+                        {member.managerName ?? 'Not recorded'}
+                      </span>
+                      {/* Same rule as the role control: rendered only when the
+                          SERVER says this caller may change it, and absent
+                          rather than disabled when it may not. */}
+                      {canManageManagers && member.canChangeManager && (
+                        <button
+                          type="button"
+                          onClick={() => openManagerDialog(member)}
+                          aria-label={`Change who ${member.name} reports to`}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                        >
+                          Change
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <div>
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
                       <Calendar className="h-4 w-4" />
@@ -1047,6 +1142,97 @@ const TeamManagement: React.FC = () => {
         unavailable, which is the established convention here: a control that
         admits it does nothing beats a control that lies.
       */}
+
+      {/* Change who someone reports to — REAL. PATCH /users/:id/manager.
+          Migration 041.
+
+          THERE IS NO SERVED LIST OF CANDIDATE MANAGERS, and that is deliberate
+          rather than an omission: everyone in the workspace is a candidate, so
+          this filters the roster it already has. What it CANNOT work out is
+          which candidates would close a reporting loop — that needs the whole
+          reporting line, which only the server has. So the server answers 409
+          and this renders the refusal verbatim, instead of trying to predict
+          it and drifting. */}
+      {managerTarget && (() => {
+        const unchanged = (managerChoice || null) === (managerTarget.managerId ?? null);
+        const busy      = busyMemberId === managerTarget.id;
+        // Everyone except the person themselves. Self-management is refused by
+        // the server (409) and by a database CHECK, but offering it would be
+        // advertising a certain failure.
+        const candidates = teamMembersState.filter(m => String(m.id) !== String(managerTarget.id) && m.isActive);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="manager-title">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+              <h3 id="manager-title" className="text-lg font-semibold text-gray-900 mb-2">
+                Who does {managerTarget.name} report to?
+              </h3>
+
+              <label htmlFor="manager-select" className="block text-sm font-medium text-gray-700 mb-1">
+                Manager
+              </label>
+              <select
+                id="manager-select"
+                value={managerChoice}
+                onChange={(e) => { setManagerChoice(e.target.value); setManagerError(null); }}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-1"
+              >
+                {/* Clearing is a first-class option, not an afterthought: the
+                    top of a reporting line has nobody above them, and the
+                    server treats null as a real value (while an ABSENT field
+                    is a 400, so this always sends one). */}
+                <option value="">No manager</option>
+                {candidates.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}{String(m.id) === String(managerTarget.managerId) ? ' (current)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              {unchanged && (
+                <p className="mb-3 text-xs text-gray-500">
+                  {managerTarget.managerName
+                    ? `Pick someone else to continue — ${managerTarget.name} already reports to ${managerTarget.managerName}.`
+                    : `Pick a manager to continue — ${managerTarget.name} has no manager recorded.`}
+                </p>
+              )}
+
+              {/* NO SIGN-OUT NOTICE HERE, unlike the role dialog, and the
+                  difference is real: a manager change alters no permission, so
+                  the server does not bump token_version and nobody is signed
+                  out. Copying the warning across would have been a scarier
+                  message than the action deserves. */}
+
+              {managerError && (
+                <p role="alert" className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {managerError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeManagerDialog}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleManagerConfirm(managerTarget, managerChoice)}
+                  /* Disabled on a no-op, same as the role dialog: the server
+                     answers 200 for a change that did not happen, and a
+                     success toast over an unchanged row is this project's
+                     signature failure. */
+                  disabled={unchanged || busy}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {busy ? 'Saving…' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Change role — REAL. PATCH /users/:id/role.
 
