@@ -490,6 +490,33 @@ here in the same session, or the next person re-derives it or guesses wrong.
   module, do not go looking for it in git history expecting a starting point: it was
   fabricated UI with no fetch behind it, and the work is a new build.
 
+- **Document access/download telemetry needs an events table, and is NOT built.**
+  `DocumentDetailPage` rendered a per-document "12 views" and a download count, plus
+  a "Last Viewed" date. None had a column: `access_count`, `download_count` and
+  `last_accessed_at` do not exist on `documents`, and the counts were a hardcoded
+  literal (`access_count || 12`) and a client-side counter that reset on reload. They
+  read as an audit trail of who opened a file, which is why they were deleted rather
+  than labelled. Recording them for real means a new append-only events table
+  (document id, user id, action, timestamp, workspace) plus a write on the content
+  endpoint — deliberately out of scope for what was meant to stay a small wiring fix,
+  the same call made for the BANT framework and the `ROLE_MAP` fallback.
+- **`documents.module` / `record_id` have no foreign key, so related-entity panels
+  stay empty.** The detail page's related deal, account and contacts came from a
+  fixture keyed off three hardcoded document ids. The real columns are a free-text
+  module name and a free-text id with nothing constraining either, so resolving them
+  needs the same decision `deals.pipeline_id` needs: become a real FK, or stay a
+  loose reference and be validated on write. Until then those panels render their
+  empty state rather than an invented deal.
+- **Document sharing does not exist, and its modal never worked.**
+  `ShareDocumentModal.onShare` passes one object; `handleShareDocument` took
+  `(userId, visibility, message)`, so the object arrived as `userId`, the team-member
+  lookup never matched, and every attempt fell into "Please select a user". Had it
+  matched it would have toasted success for local state that vanished on reload.
+  There is no `document_shares` table, no `visibility` column, and no endpoint
+  honouring a permission or an expiry. The handler now says so; the modal still
+  collects a permission and an expiry that go nowhere, which is the visible part of
+  the gap.
+
 ## Roles — who may grant what
 
 **Nobody may invite someone above their own role.** `POST /invites` is gated on

@@ -255,3 +255,39 @@ describe('Documents — round trip', () => {
     expect(gone.rows[0].n).toBe(0);
   });
 });
+
+/**
+ * A malformed :id must be a 404, not a 500 leaking Postgres text.
+ *
+ * documents.id is a UUID. Before this, /documents/doc_acme_proposal_v2 raised
+ * 22P02 and errorHandler passed it through as a 500 whose body was the driver's
+ * own message — the browser rendered
+ * 'invalid input syntax for type uuid: "doc_acme_proposal_v2"' to the user.
+ * Found by loading a stale fixture id in a real browser after wiring the detail
+ * page, not by any test.
+ */
+describe('Documents — malformed id', () => {
+  let ws: TestWorkspace;
+
+  beforeAll(async () => { ws = await setupWorkspace('docs-badid'); });
+  afterAll(async () => { await teardownWorkspace(ws); });
+
+  it('answers 404 for a non-uuid id, with no database internals in the body', async () => {
+    const res = await request(app)
+      .get('/api/v1/documents/doc_acme_proposal_v2')
+      .set(auth(ws));
+
+    expect(res.status, JSON.stringify(res.body)).toBe(404);
+    expect(res.body.message).toBe('Document not found');
+    // The failure mode this pins: driver text reaching the caller.
+    expect(JSON.stringify(res.body)).not.toMatch(/invalid input syntax|uuid|22P02/i);
+  });
+
+  it('still answers 404 for a well-formed uuid that does not exist', async () => {
+    const res = await request(app)
+      .get('/api/v1/documents/00000000-0000-0000-0000-000000000000')
+      .set(auth(ws));
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Document not found');
+  });
+});

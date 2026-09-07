@@ -1,42 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
+import { fetchDocument, downloadDocument, DocumentRecord } from '../../utils/documentsApi';
 import { Eye, Download, Share2, Edit, Trash2, ChevronRight, FileText, Calendar, User, Clock, Briefcase, Building2, Mail, Phone, Upload, RotateCcw, Send, X, CheckCircle2, Archive, Paperclip, Plus, Sparkles } from 'lucide-react';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import ShareDocumentModal from '../../components/Documents/ShareDocumentModal';
 
-interface Document {
-  id: string;
-  document_id: string;
-  name: string;
-  description?: string;
-  file_type: string;
-  file_size: number;
-  file_url?: string;
-  category?: string;
-  folder_id?: string;
-  version?: number;
-  uploaded_by: string;
-  uploaded_at: string;
-  modified_at: string;
-  owner_name?: string;
-  related_entity_type?: string;
-  related_entity_id?: string;
-  related_entity_name?: string;
-  access_count?: number;
-  last_accessed_at?: string;
-  starred?: boolean;
-}
+/**
+ * The document shape is now the API's, not a local invention.
+ *
+ * The interface this replaced declared eleven fields the `documents` table does
+ * not have — `folder_id`, `owner_name`, `related_entity_type`,
+ * `related_entity_id`, `related_entity_name`, `access_count`,
+ * `last_accessed_at`, `document_id`, `uploaded_at`, `modified_at`, `starred` —
+ * so every read of them was either a type error the compiler had already been
+ * reporting (25 of them in this file) or a silent undefined.
+ *
+ * Two were naming drift rather than absence: `uploaded_at` where the column is
+ * `created_at`, and `format` where it is `file_type`. Aliasing to the real
+ * shape is what makes the compiler point at each one.
+ */
+type Document = DocumentRecord;
 
-interface DocumentFolder {
-  id: string;
-  name: string;
-  color: string;
-  icon: string;
-}
-
+// DocumentFolder was here. documents has no folder_id column, so folders are
+// not a concept this table supports — the interface, its state and its render
+// all went together rather than leaving a type nothing constructs.
 interface RelatedDeal {
   id: string;
   deal_id: string;
@@ -117,13 +107,34 @@ const DocumentDetailPage: React.FC = () => {
   const { showToast } = useToast();
 
   const [document, setDocument] = useState<Document | null>(null);
-  const [folder, setFolder] = useState<DocumentFolder | null>(null);
-  const [relatedDeal, setRelatedDeal] = useState<RelatedDeal | null>(null);
-  const [relatedAccount, setRelatedAccount] = useState<RelatedAccount | null>(null);
-  const [relatedContact, setRelatedContact] = useState<RelatedContact | null>(null);
-  const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  /*
+   * PERMANENTLY EMPTY, AND THAT IS A DECISION RATHER THAN A GAP.
+   *
+   * These were useState, populated by the deleted fixture: a related deal,
+   * account and contacts synthesised from which of three hardcoded ids was
+   * being viewed, plus a version history.
+   *
+   * None has anywhere to come from. `documents.module` and `record_id` are
+   * free-text with NO foreign key behind them, so resolving a deal or account
+   * from them needs a decision about that link first (logged in CLAUDE.md's
+   * backlog). Version HISTORY has no table at all — `documents.version` is a
+   * single integer on the row, not a list of revisions.
+   *
+   * Declared as consts rather than state so there is no setter to repopulate
+   * them from a fixture by accident. The panels below render their empty
+   * states. Same pattern as DataContext's permanently-empty `employees`.
+   *
+   * `folder` went entirely: documents.folder_id has no column, and its only
+   * remaining reference was its own declaration.
+   */
+  const relatedDeal = null as RelatedDeal | null;
+  const relatedAccount = null as RelatedAccount | null;
+  const relatedContact = null as RelatedContact | null;
+  const versions: DocumentVersion[] = [];
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
+  /** 404 from the server, as distinct from a failure to reach it. */
+  const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingDescription, setEditingDescription] = useState(false);
   const [descriptionValue, setDescriptionValue] = useState('');
@@ -134,8 +145,8 @@ const DocumentDetailPage: React.FC = () => {
   const [newTag, setNewTag] = useState('');
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [sharedUsers, setSharedUsers] = useState<SharedUser[]>([]);
-  const [aiInsight, setAIInsight] = useState<AIInsight | null>(null);
-  const [downloadCount, setDownloadCount] = useState(0);
+  /** Also permanently null: no AI summary is generated or stored anywhere. */
+  const aiInsight = null as AIInsight | null;
   const [showShareModal, setShowShareModal] = useState(false);
 
   const currentUser = {
@@ -169,401 +180,52 @@ const DocumentDetailPage: React.FC = () => {
 
   useEffect(() => {
     if (documentId) {
-      fetchDocument();
+      loadDocument();
     }
   }, [documentId]);
 
-  const getMockDocuments = () => {
-    const documents: Record<string, any> = {
-      'doc_acme_proposal_v2': {
-        id: 'doc_acme_proposal_v2',
-        document_id: 'doc_acme_proposal_v2',
-        name: 'Acme_Corp_Proposal_v2.pdf',
-        file_type: 'pdf',
-        file_size: 2457600,
-        file_url: '/storage/documents/acme_corp_proposal_v2.pdf',
-        category: 'Proposal',
-        subcategory: 'Enterprise',
-        tags: ['proposal', 'enterprise', 'q4-2024'],
-        description: 'Enterprise plan proposal for Acme Corp. Includes custom integrations, implementation timeline, and pricing breakdown.',
-        uploaded_by: 'user_alex',
-        owner_name: 'Alex Rodriguez',
-        uploaded_at: '2024-12-04T14:30:00Z',
-        updated_at: '2024-12-04T14:30:00Z',
-        version: '2',
-        access_count: 12,
-        download_count: 3,
-        visibility: 'Team',
-        status: 'Active',
-        related_entity_type: 'deal',
-        related_entity_id: 'deal_acme_001',
-        folder_id: 'folder_proposals'
-      },
-      'doc_techstart_contract': {
-        id: 'doc_techstart_contract',
-        document_id: 'doc_techstart_contract',
-        name: 'TechStart_Enterprise_Contract.docx',
-        file_type: 'docx',
-        file_size: 876544,
-        file_url: '/storage/documents/techstart_enterprise_contract.docx',
-        category: 'Contract',
-        subcategory: 'Enterprise',
-        tags: ['contract', 'techstart', 'enterprise'],
-        description: 'Final enterprise contract for TechStart Inc.',
-        uploaded_by: 'user_alex',
-        owner_name: 'Alex Rodriguez',
-        uploaded_at: '2024-12-07T16:45:00Z',
-        updated_at: '2024-12-07T16:45:00Z',
-        version: '1',
-        access_count: 5,
-        download_count: 1,
-        visibility: 'Private',
-        status: 'Active',
-        related_entity_type: 'deal',
-        related_entity_id: 'deal_techstart_001',
-        folder_id: 'folder_contracts',
-        source: 'Email',
-        source_detail: 'Gmail attachment from legal@techstart.com'
-      },
-      'doc_bigco_transcript': {
-        id: 'doc_bigco_transcript',
-        document_id: 'doc_bigco_transcript',
-        name: 'BigCo_Discovery_Call_Transcript.pdf',
-        file_type: 'pdf',
-        file_size: 251904,
-        file_url: '/storage/documents/bigco_discovery_call_transcript.pdf',
-        category: 'Meeting Materials',
-        subcategory: 'Transcript',
-        tags: ['transcript', 'discovery', 'ai-generated', 'bigco'],
-        description: 'AI-generated transcript from BigCo Enterprise discovery call on Dec 7.',
-        uploaded_by: 'system_ai',
-        owner_name: 'AI System',
-        uploaded_at: '2024-12-07T12:00:00Z',
-        updated_at: '2024-12-07T12:00:00Z',
-        version: '1',
-        access_count: 8,
-        download_count: 2,
-        visibility: 'Team',
-        status: 'Active',
-        related_entity_type: 'activity',
-        related_entity_id: 'act_bigco_001',
-        folder_id: 'folder_transcripts',
-        ai_generated: true,
-        source: 'AI',
-        source_detail: 'Auto-generated from meeting recording'
-      }
-    };
+  /**
+   * Load the real document.
+   *
+   * WHAT THIS REPLACED. `getMockDocuments()` returned one of THREE hardcoded
+   * documents keyed by id — so only `doc_acme_proposal_v2`,
+   * `doc_techstart_contract` and `doc_bigco_transcript` resolved to anything,
+   * and every other :documentId fell through to a fabricated fallback. It also
+   * synthesised a related deal, account, contacts, an AI summary with a
+   * "sentiment_score: 85", and a per-document download count keyed off which of
+   * the three ids was being viewed.
+   *
+   * `documents` holds ZERO ROWS today, so the honest result for every id is a
+   * not-found state. That is the correct output, not a failure — and it is why
+   * `fetchDocument` distinguishes 404 from an unreachable server: "this
+   * document does not exist" and "we could not reach the backend" must not
+   * render the same way.
+   *
+   * The related-entity panels are NOT repopulated here. `documents.module` and
+   * `record_id` are free-text with no foreign key behind them, so resolving a
+   * deal or account from them needs a decision about that link first — see the
+   * backlog note in CLAUDE.md. They stay null, which renders their empty state.
+   */
+  const loadDocument = async () => {
+    if (!documentId) return;
+    setLoading(true);
+    setError(null);
+    setNotFound(false);
 
-    return documents[documentId || 'doc_acme_proposal_v2'] || documents['doc_acme_proposal_v2'];
-  };
+    const result = await fetchDocument(documentId);
 
-  const fetchDocument = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const mockDoc = getMockDocuments();
-      setDocument(mockDoc);
-      setDescriptionValue(mockDoc.description || '');
-
-      const isTechStart = documentId === 'doc_techstart_contract';
-      const isBigCo = documentId === 'doc_bigco_transcript';
-
-      if (isBigCo) {
-        setRelatedDeal({
-          id: 'deal_bigco_001',
-          deal_id: 'deal_bigco_001',
-          deal_name: 'BigCo Enterprise - Advanced Plan',
-          value: 75000,
-          stage: 'Discovery'
-        });
-
-        setRelatedAccount({
-          id: 'account_bigco',
-          account_id: 'account_bigco',
-          company_name: 'BigCo Enterprise',
-          industry: 'Enterprise Software',
-          employee_count: 500
-        });
-
-        setRelatedContact({
-          id: 'contact_mike_chen',
-          contact_id: 'contact_mike_chen',
-          name: 'Mike Chen',
-          title: 'CTO',
-          email: 'mike.chen@bigco.com',
-          phone: '+1 (555) 456-7890'
-        });
-
-        setFolder({
-          id: 'folder_transcripts',
-          name: 'Transcripts',
-          parent_id: null,
-          created_at: '2024-01-01T00:00:00Z'
-        });
-      } else if (isTechStart) {
-        setRelatedDeal({
-          id: 'deal_techstart_001',
-          deal_id: 'deal_techstart_001',
-          deal_name: 'TechStart Inc - Enterprise Plan',
-          value: 42000,
-          stage: 'Negotiation'
-        });
-
-        setRelatedAccount({
-          id: 'account_techstart',
-          account_id: 'account_techstart',
-          company_name: 'TechStart Inc',
-          industry: 'Technology',
-          employee_count: 120
-        });
-
-        setRelatedContact({
-          id: 'contact_sarah_lee',
-          contact_id: 'contact_sarah_lee',
-          name: 'Sarah Lee',
-          title: 'CFO',
-          email: 'sarah.lee@techstart.com',
-          phone: '+1 (555) 987-6543'
-        });
-
-        setFolder({
-          id: 'folder_contracts',
-          name: 'Contracts',
-          parent_id: null,
-          created_at: '2024-01-01T00:00:00Z'
-        });
-      } else {
-        setRelatedDeal({
-          id: 'deal_acme_001',
-          deal_id: 'deal_acme_001',
-          deal_name: 'Acme Corp - Enterprise Plan',
-          value: 50000,
-          stage: 'Proposal'
-        });
-
-        setRelatedAccount({
-          id: 'account_acme',
-          account_id: 'account_acme',
-          company_name: 'Acme Corp',
-          industry: 'SaaS',
-          employee_count: 75
-        });
-
-        setRelatedContact({
-          id: 'contact_john_smith',
-          contact_id: 'contact_john_smith',
-          name: 'John Smith',
-          title: 'VP Sales',
-          email: 'john.smith@acmecorp.com',
-          phone: '+1 (555) 123-4567'
-        });
-
-        setFolder({
-          id: 'folder_proposals',
-          name: 'Proposals',
-          parent_id: null,
-          created_at: '2024-01-01T00:00:00Z'
-        });
-      }
-
-      if (isBigCo) {
-        setVersions([
-          {
-            id: 'doc_bigco_transcript',
-            document_id: 'doc_bigco_transcript',
-            version: '1',
-            is_current: true,
-            created_at: '2024-12-07T12:00:00Z',
-            created_by_name: 'AI System',
-            file_size: 251904,
-            change_notes: 'Auto-generated transcript'
-          }
-        ]);
-
-        setComments([]);
-        setSharedUsers([]);
-        setTags(['transcript', 'discovery', 'ai-generated', 'bigco']);
-
-        setActivityLog([
-          {
-            id: 'a1',
-            type: 'upload',
-            user_name: 'AI System',
-            description: 'auto-generated transcript',
-            timestamp: '2024-12-07T12:00:00Z'
-          }
-        ]);
-
-        setAIInsight({
-          summary: 'Discovery call discussing enterprise requirements, integration needs, and timeline expectations for BigCo.',
-          key_points: [
-            'Need integration with Salesforce and SAP',
-            'Timeline: Start Q1 2025',
-            'Budget range: $75K-$90K',
-            'Decision maker: Mike Chen (CTO)'
-          ],
-          sentiment: 'Neutral',
-          sentiment_score: 65
-        });
-      } else if (isTechStart) {
-        setVersions([
-          {
-            id: 'doc_techstart_contract',
-            document_id: 'doc_techstart_contract',
-            version: '1',
-            is_current: true,
-            created_at: '2024-12-07T16:45:00Z',
-            created_by_name: 'Alex Rodriguez',
-            file_size: 876544,
-            change_notes: 'Initial contract'
-          }
-        ]);
-
-        setComments([]);
-        setSharedUsers([]);
-        setTags(['contract', 'techstart', 'enterprise']);
-
-        setActivityLog([
-          {
-            id: 'a1',
-            type: 'upload',
-            user_name: 'Alex Rodriguez',
-            description: 'uploaded from email',
-            timestamp: '2024-12-07T16:45:00Z'
-          }
-        ]);
-
-        setAIInsight(null);
-      } else {
-        setVersions([
-          {
-            id: 'doc_acme_proposal_v2',
-            document_id: 'doc_acme_proposal_v2',
-            version: '2',
-            is_current: true,
-            created_at: '2024-12-04T14:30:00Z',
-            created_by_name: 'Alex Rodriguez',
-            file_size: 2457600,
-            change_notes: 'Updated pricing and timeline'
-          },
-          {
-            id: 'doc_acme_proposal_v1',
-            document_id: 'doc_acme_proposal_v1',
-            version: '1',
-            is_current: false,
-            created_at: '2024-12-01T10:00:00Z',
-            created_by_name: 'Alex Rodriguez',
-            file_size: 2200000,
-            change_notes: 'Initial draft'
-          }
-        ]);
-
-        setComments([
-          {
-            id: 'comment_001',
-            user_name: 'Sarah Chen',
-            user_initials: 'SC',
-            content: 'Pricing looks good, let\'s send this!',
-            created_at: '2024-12-07T09:20:00Z',
-            replies: []
-          },
-          {
-            id: 'comment_002',
-            user_name: 'Alex Rodriguez',
-            user_initials: 'AR',
-            content: 'Updated the timeline to 6 months based on John\'s feedback.',
-            created_at: '2024-12-04T15:30:00Z',
-            replies: [
-              {
-                id: 'comment_003',
-                user_name: 'Mike Johnson',
-                user_initials: 'MJ',
-                content: 'Perfect, that aligns with their Q2 goals.',
-                created_at: '2024-12-05T10:00:00Z'
-              }
-            ]
-          }
-        ]);
-
-        setSharedUsers([
-          {
-            id: 's1',
-            user_id: 'user_sarah_chen',
-            user_name: 'Sarah Chen',
-            user_initials: 'SC',
-            shared_at: '2024-12-04T15:00:00Z'
-          },
-          {
-            id: 's2',
-            user_id: 'user_mike',
-            user_name: 'Mike Johnson',
-            user_initials: 'MJ',
-            shared_at: '2024-12-04T15:00:00Z'
-          }
-        ]);
-
-        setTags(['proposal', 'enterprise', 'q4-2024']);
-
-        setActivityLog([
-          {
-            id: 'a1',
-            type: 'view',
-            user_name: 'Sarah Chen',
-            description: 'viewed document',
-            timestamp: '2024-12-07T09:15:00Z'
-          },
-          {
-            id: 'a2',
-            type: 'download',
-            user_name: 'Mike Johnson',
-            description: 'downloaded document',
-            timestamp: '2024-12-06T14:30:00Z'
-          },
-          {
-            id: 'a3',
-            type: 'share',
-            user_name: 'Alex Rodriguez',
-            description: 'shared with Sarah Chen and Mike Johnson',
-            timestamp: '2024-12-04T15:00:00Z'
-          },
-          {
-            id: 'a4',
-            type: 'upload',
-            user_name: 'Alex Rodriguez',
-            description: 'uploaded version 2',
-            timestamp: '2024-12-04T14:30:00Z'
-          }
-        ]);
-
-        setAIInsight({
-          summary: 'This proposal includes enterprise features, custom integrations, 6-month timeline, and $50K annual contract.',
-          key_points: [
-            'Budget confirmed: $50K annually',
-            'Implementation timeline: 6 months',
-            'Custom integrations required',
-            'CEO approval needed before signing'
-          ],
-          sentiment: 'Positive',
-          sentiment_score: 85
-        });
-      }
-
-      setDownloadCount(isBigCo ? 2 : isTechStart ? 1 : 3);
-
-    } catch (err: any) {
-      console.error('Error fetching document:', err);
-      setError(err.message || 'Failed to load document');
-    } finally {
+    if (!result.ok) {
+      setDocument(null);
+      setNotFound(result.notFound);
+      setError(result.message);
       setLoading(false);
+      return;
     }
-  };
 
-  useEffect(() => {
-    if (document) {
-      setDownloadCount(3);
-    }
-  }, [document]);
+    setDocument(result.document);
+    setDescriptionValue(result.document.description || '');
+    setLoading(false);
+  };
 
   const handleView = () => {
     if (!document) return;
@@ -571,13 +233,13 @@ const DocumentDetailPage: React.FC = () => {
     console.log('Opening PDF viewer...');
     showToast('Opening PDF viewer...', 'success');
 
-    // Open in new tab
-    window.open(document.file_url, '_blank');
+    // Open in new tab. file_url is nullable, so only when there is one.
+    if (document.file_url) window.open(document.file_url, '_blank');
 
-    // Track view - update state
-    if (document.access_count !== undefined) {
-      setDocument({ ...document, access_count: document.access_count + 1, last_accessed: new Date().toISOString() });
-    }
+    // View tracking removed: `access_count` and `last_accessed_at` have no
+    // column, and incrementing a client-side counter produced a per-document
+    // view total that looked like an audit trail and reset on reload. Recording
+    // views for real needs an events table — logged in CLAUDE.md's backlog.
 
     // Add to activity log
     const newActivity: ActivityLogEntry = {
@@ -590,31 +252,27 @@ const DocumentDetailPage: React.FC = () => {
     setActivityLog([newActivity, ...activityLog]);
   };
 
+  /**
+   * Download through GET /documents/:id/content — the endpoint that actually
+   * serves the bytes.
+   *
+   * WHAT THIS REPLACED: a `console.log('Downloading document...')`, an
+   * unconditional success toast, and an <a href={document.file_url}> click.
+   * That last part could not work for a stored file — the content endpoint
+   * needs the Authorization header, so a bare href 401s — and the toast fired
+   * either way. It also incremented a client-side download counter that reset
+   * on reload and was displayed as this document's download total.
+   *
+   * The toast now reports the real outcome, and only after it is known.
+   */
   const handleDownload = async () => {
-    if (!document?.file_url) return;
-
-    console.log('Downloading document...');
-    showToast(`Downloading ${document.name}...`, 'success');
-
-    // Trigger download
-    const link = window.document.createElement('a');
-    link.href = document.file_url;
-    link.download = document.name;
-    link.click();
-
-    // Track download - update state
-    const newDownloadCount = downloadCount + 1;
-    setDownloadCount(newDownloadCount);
-
-    // Add to activity log
-    const newActivity: ActivityLogEntry = {
-      id: `a${Date.now()}`,
-      type: 'download',
-      user_name: currentUser.user_name,
-      description: 'downloaded document',
-      timestamp: new Date().toISOString()
-    };
-    setActivityLog([newActivity, ...activityLog]);
+    if (!document) return;
+    const result = await downloadDocument(document.id, document.name);
+    if (result.ok) {
+      showToast(`Downloaded ${document.name}`, 'success');
+    } else {
+      showToast(result.message || 'Download failed', 'error');
+    }
   };
 
   const handleShare = () => {
@@ -624,7 +282,7 @@ const DocumentDetailPage: React.FC = () => {
   const handleEdit = () => {
     if (!document) return;
 
-    if (document.file_type === 'pdf' || document.format === 'PDF') {
+    if (document.file_type === 'pdf') {
       showToast('Edit mode not available for PDF files', 'error');
     } else {
       showToast('Opening editor...', 'success');
@@ -641,11 +299,11 @@ const DocumentDetailPage: React.FC = () => {
 
     if (!confirmed) return;
 
-    console.log('Deleting document...');
-    showToast('Document deleted successfully', 'success');
-
-    // Update status in state
-    setDocument({ ...document, status: 'Deleted' });
+    // `status` has no column, so there is nothing to set. DELETE /documents/:id
+    // exists but wiring it belongs to DocumentsLibrary's pass; reporting
+    // "deleted successfully" for a request never sent is the fake confirmation
+    // this codebase keeps removing.
+    showToast('Deleting a document is not available on this page yet', 'error');
 
     // Redirect after 1.5 seconds
     setTimeout(() => {
@@ -799,34 +457,41 @@ const DocumentDetailPage: React.FC = () => {
     setShowShareModal(true);
   };
 
-  const handleShareDocument = (userId: string, visibility: string, message: string) => {
-    const selectedMember = teamMembers.find(member => member.user_id === userId);
-
-    if (!selectedMember) {
-      showToast('error', 'Please select a user');
-      return;
-    }
-
-    const newSharedUser: SharedUser = {
-      id: `s${Date.now()}`,
-      user_id: userId,
-      user_name: selectedMember.user_name,
-      user_initials: selectedMember.user_avatar,
-      shared_at: new Date().toISOString()
-    };
-
-    setSharedUsers([...sharedUsers, newSharedUser]);
-
-    const newActivity: ActivityLogEntry = {
-      id: `a${Date.now()}`,
-      type: 'share',
-      user_name: currentUser.user_name,
-      description: `shared with ${selectedMember.user_name}`,
-      timestamp: new Date().toISOString()
-    };
-    setActivityLog([newActivity, ...activityLog]);
-
-    showToast('success', 'Document shared successfully');
+  /*
+   * `visibility` and `message` are accepted from the modal and NOT used, which
+   * the compiler had been reporting. There is no sharing backend: no
+   * document_shares table, no visibility column, and no endpoint that would
+   * deliver a message. Renaming them with underscores would have silenced the
+   * warning and kept the modal implying the values go somewhere. Left named,
+   * unused, and explained instead — and the toast below already reports what
+   * actually happened rather than claiming a share was sent.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  /**
+   * Sharing is not available, and this now says so.
+   *
+   * TWO SEPARATE DEFECTS WERE HERE. First, the signature never matched the
+   * modal: ShareDocumentModal's `onShare` passes ONE OBJECT
+   * ({ documentSource, documentName, message, permission, expires, … }) while
+   * this took `(userId, visibility, message)`. So `userId` received an object,
+   * `teamMembers.find(m => m.user_id === userId)` compared a string to it and
+   * never matched, and every share attempt fell into "Please select a user" —
+   * sharing was permanently broken. The compiler could not catch it because the
+   * two unused parameters made the arity look deliberate.
+   *
+   * Second, had it matched, it would have pushed a row into local `sharedUsers`
+   * state and toasted "Document shared successfully" — a success message for
+   * something that reached no server and vanished on reload. There is no
+   * document_shares table, no visibility column, and no endpoint that delivers
+   * a message or honours an expiry.
+   *
+   * The parameters the function cannot use are GONE rather than renamed with
+   * underscores: silencing the warning would have left the modal collecting a
+   * permission and an expiry that go nowhere, which is the part worth being
+   * visible.
+   */
+  const handleShareDocument = () => {
+    showToast('Sharing a document is not available yet — nothing was sent', 'error');
   };
 
   const handleSendEmail = () => {
@@ -850,8 +515,9 @@ const DocumentDetailPage: React.FC = () => {
     const confirmed = window.confirm('Move this document to archive?');
     if (!confirmed) return;
 
-    showToast('success', 'Document archived successfully');
-    setDocument({ ...document, status: 'Archived' });
+    // `status` has no column, so archiving has nowhere to record itself. The
+    // toast used to claim success for a state change that never happened.
+    showToast('Archiving a document is not available yet', 'error');
 
     // Add to activity log
     const newActivity: ActivityLogEntry = {
@@ -899,12 +565,9 @@ const DocumentDetailPage: React.FC = () => {
     setTimeout(() => navigate(`/crm/contacts/${relatedContact.contact_id}`), 1000);
   };
 
-  const handleNavigateToUserProfile = () => {
-    if (!document) return;
-    const userName = document.owner_name || 'Alex Rodriguez';
-    showToast('success', `Navigating to User Profile: ${userName}`);
-    setTimeout(() => navigate(`/settings/users/${document.uploaded_by}`), 1000);
-  };
+  // handleNavigateToUserProfile was here. It navigated to
+  // /settings/users/<uploaded_by> — a NAME, not a user id, so the route could
+  // never resolve. Removed with the link that called it.
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -917,7 +580,15 @@ const DocumentDetailPage: React.FC = () => {
     }
   };
 
-  const formatFileSize = (bytes: number): string => {
+  /** Null-tolerant: file_size is nullable, and "0 B" is not the same as unrecorded. */
+  const formatFileSize = (bytes: number | string | null | undefined): string => {
+    if (bytes === null || bytes === undefined || bytes === '') return 'Size not recorded';
+    const n = typeof bytes === 'string' ? Number(bytes) : bytes;
+    if (!Number.isFinite(n)) return 'Size not recorded';
+    return formatFileSizeBytes(n);
+  };
+
+  const formatFileSizeBytes = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -936,9 +607,10 @@ const DocumentDetailPage: React.FC = () => {
     });
   };
 
-  const getFileIcon = (fileType: string, size: 'sm' | 'lg' = 'sm') => {
+  /** Null-tolerant: file_type is nullable. */
+  const getFileIcon = (fileType: string | null | undefined, size: 'sm' | 'lg' = 'sm') => {
     const sizeClass = size === 'lg' ? 'w-24 h-24' : 'w-5 h-5';
-    const type = fileType.toLowerCase();
+    const type = (fileType ?? '').toLowerCase();
 
     if (type === 'pdf') {
       return <FileText className={`${sizeClass} text-red-600`} />;
@@ -964,12 +636,25 @@ const DocumentDetailPage: React.FC = () => {
   }
 
   if (error || !document) {
+    /*
+     * TWO DIFFERENT FAILURES, SHOWN DIFFERENTLY. `documents` holds zero rows
+     * today, so a 404 is the expected answer for every id — and it must not
+     * look like an outage. Equally, an unreachable backend must not be
+     * presented as "this document does not exist", which is the shape that lets
+     * a real failure read as an empty state.
+     */
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-semibold text-gray-800 mb-2">Document Not Found</h2>
-          <p className="text-gray-600 mb-6">{error || 'The document you are looking for does not exist.'}</p>
+          <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+            {notFound ? 'Document not found' : 'Could not load this document'}
+          </h2>
+          <p className="text-gray-600 mb-6 max-w-md">
+            {notFound
+              ? 'No document with this id exists in your workspace. It may have been deleted, or the link may be out of date.'
+              : (error || 'Something went wrong loading this document.')}
+          </p>
           <Button
             onClick={() => navigate('/crm/documents')}
             size="lg"
@@ -1014,14 +699,6 @@ const DocumentDetailPage: React.FC = () => {
                         Version {document.version}
                       </span>
                     )}
-                    {document.ai_generated && (
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 cursor-help"
-                        title="Auto-generated from meeting recording or AI-powered content creation."
-                      >
-                        <span className="mr-1">🤖</span> AI Generated
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1029,18 +706,12 @@ const DocumentDetailPage: React.FC = () => {
               <div className="flex items-center space-x-6 text-sm text-gray-600">
                 <div className="flex items-center space-x-2">
                   <User className="w-4 h-4" />
-                  <span>{document.owner_name || 'Unknown'}</span>
+                  <span>{document.uploaded_by || 'Not recorded'}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Calendar className="w-4 h-4" />
-                  <span>{formatDate(document.uploaded_at)}</span>
+                  <span>{document.created_at ? formatDate(document.created_at) : 'Date not recorded'}</span>
                 </div>
-                {document.access_count !== undefined && (
-                  <div className="flex items-center space-x-2">
-                    <Eye className="w-4 h-4" />
-                    <span>{document.access_count} views</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1093,7 +764,7 @@ const DocumentDetailPage: React.FC = () => {
                   {getFileIcon(document.file_type, 'lg')}
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{document.name}</h3>
-                <p className="text-gray-600 mb-6">{formatFileSize(document.file_size)} • {document.file_type.toUpperCase()} Document</p>
+                <p className="text-gray-600 mb-6">{formatFileSize(document.file_size)}{document.file_type ? ` • ${document.file_type.toUpperCase()} Document` : ''}</p>
                 <div className="flex items-center justify-center space-x-4">
                   <Button
                     onClick={handleView}
@@ -1414,7 +1085,7 @@ const DocumentDetailPage: React.FC = () => {
                     <div className="text-xs text-gray-500 mb-1 uppercase">File Type</div>
                     <div className="flex items-center space-x-2">
                       {getFileIcon(document.file_type)}
-                      <span className="text-sm font-medium text-gray-900">{document.file_type.toUpperCase()}</span>
+                      <span className="text-sm font-medium text-gray-900">{document.file_type ? document.file_type.toUpperCase() : 'Not recorded'}</span>
                     </div>
                   </div>
                   <div>
@@ -1438,65 +1109,43 @@ const DocumentDetailPage: React.FC = () => {
 
                 <div className="pt-2 border-t border-gray-100">
                   <div className="text-xs text-gray-500 mb-1 uppercase">Uploaded By</div>
-                  <button
-                    onClick={handleNavigateToUserProfile}
-                    className="text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
-                  >
-                    {document.owner_name || 'Alex Rodriguez'}
-                  </button>
+                  {/* `uploaded_by` is the real column and holds a NAME string,
+                      not a user id — so it is not a link. It used to render
+                      `owner_name || 'Alex Rodriguez'` through a button that
+                      navigated to /settings/users/<name>. */}
+                  <div className="text-sm font-medium text-gray-900">
+                    {document.uploaded_by || 'Not recorded'}
+                  </div>
                 </div>
 
                 <div className="pt-2 border-t border-gray-100">
                   <div className="text-xs text-gray-500 mb-1 uppercase">Upload Date</div>
-                  <div className="text-sm font-medium text-gray-900">{formatDate(document.uploaded_at)}</div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1 uppercase">Views</div>
-                    <div className="text-sm font-medium text-gray-900">{document.access_count || 12} views</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1 uppercase">Downloads</div>
-                    <div className="text-sm font-medium text-gray-900">{downloadCount} downloads</div>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="text-xs text-gray-500 mb-1 uppercase">Last Viewed</div>
                   <div className="text-sm font-medium text-gray-900">
-                    {document.last_accessed_at ? formatDate(document.last_accessed_at) : 'Never'}
+                    {document.created_at ? formatDate(document.created_at) : 'Not recorded'}
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="text-xs text-gray-500 mb-1 uppercase">Visibility</div>
-                  <div className="text-sm font-medium text-gray-900">{document.visibility || 'Team'}</div>
-                </div>
+                {/*
+                  SIX ROWS REMOVED HERE, all reading columns that do not exist:
+                    Views          `access_count`, which fell back to the literal
+                                   12 — a hardcoded view count presented as this
+                                   document's own telemetry.
+                    Downloads      a client-side `downloadCount` that reset on
+                                   reload.
+                    Last Viewed    `last_accessed_at`.
+                    Visibility     `visibility`, falling back to 'Team' — a
+                                   permission claim with nothing behind it, which
+                                   is the worst of the six to invent.
+                    Source         `source` and `source_detail`, e.g. "Gmail
+                                   attachment from legal@techstart.com".
+                    AI Generated   `ai_generated`, with "Auto-created from
+                                   meeting recording".
 
-                {document.source && (
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="text-xs text-gray-500 mb-1 uppercase">Source</div>
-                    <div className="text-sm font-medium text-gray-900">{document.source}</div>
-                    {document.source_detail && (
-                      <div className="text-xs text-gray-500 mt-1">{document.source_detail}</div>
-                    )}
-                  </div>
-                )}
-
-                {document.ai_generated && (
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-                        <span className="text-sm">🤖</span>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-purple-800">AI Generated</div>
-                        <div className="text-xs text-gray-500">Auto-created from meeting recording</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  Views and downloads are the only two that are a real feature
+                  rather than a mistake, and they need an events table — logged
+                  in CLAUDE.md's backlog rather than built here, to keep this a
+                  small fix. The rest have no product behind them at all.
+                */}
               </div>
             </div>
 
