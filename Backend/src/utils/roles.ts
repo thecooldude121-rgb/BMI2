@@ -11,7 +11,7 @@
  */
 
 /** Every role the app understands. Not every role every caller may grant. */
-export const ASSIGNABLE_ROLES = ['sales', 'manager', 'hr', 'admin'] as const;
+export const ASSIGNABLE_ROLES = ['sales', 'manager', 'admin'] as const;
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 /**
@@ -27,10 +27,20 @@ export const PRIVILEGED_ROLES: readonly string[] = ['admin', 'manager'];
 /**
  * Seniority, for "never above your own role" comparisons.
  *
- * `hr` sits WITH `sales`, not between it and `manager`: a manager has always
- * been allowed to invite an hr user, so hr is not above manager, and nothing in
- * the app grants hr anything a sales user cannot do. If that changes, this is
- * the one place to change it.
+ * `hr` USED TO SIT HERE, ranked with `sales`. It is GONE DELIBERATELY, not
+ * dropped by accident — HRMS is a separate platform reached over SSO, so an HR
+ * persona is not a CRM role and this CRM has no permission it grants. Removed
+ * after confirming zero users held it in any workspace and no invite was
+ * pending, so nothing was orphaned. If HR ever needs access to this CRM it
+ * comes back as a deliberate decision here, and the reason is worth stating:
+ * the frontend permission model (`utils/permissions.ts`) never recognised `hr`
+ * anyway, so an hr account could sign in and then be denied by every UI gate.
+ *
+ * Note this matters for the drift history: `invitableRolesFor()` in the
+ * frontend once OMITTED `hr` while the server accepted it, which is why the
+ * assignable-role list is served rather than mirrored. An `hr` missing from a
+ * list is now correct everywhere, which is the opposite of that bug — the tests
+ * assert its absence on purpose.
  *
  * UNKNOWN ROLES RANK 0 — BELOW EVERYTHING, DELIBERATELY. `users.role` has no
  * CHECK constraint, so an arbitrary string can be stored. Ranking an unknown
@@ -39,7 +49,7 @@ export const PRIVILEGED_ROLES: readonly string[] = ['admin', 'manager'];
  * cannot be exploited from the caller's side because `requireRole` refuses any
  * role it does not recognise before this is ever consulted.
  */
-const RANK: Record<string, number> = { sales: 1, hr: 1, manager: 2, admin: 3 };
+const RANK: Record<string, number> = { sales: 1, manager: 2, admin: 3 };
 
 export const rankOf = (role: string | undefined): number => RANK[(role ?? '').toLowerCase()] ?? 0;
 

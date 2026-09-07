@@ -44,10 +44,13 @@ const ROLE_FROM_SESSION: Record<string, Role> = {
   Admin:   'admin',
   Manager: 'manager',
   Sales:   'sales',
-  // 'HR' is deliberately absent. It is not a CRM persona, and mapping it to a
-  // sales tier would hand an HR account lead-editing rights it was never meant
-  // to have. Unmapped roles fall through to the raw lowercased value, which
-  // roleHas does not recognise and therefore denies.
+  // 'HR' is deliberately absent, and is now absent from the CRM entirely —
+  // HRMS is a separate platform over SSO, so HR is not a CRM role at all (see
+  // Backend utils/roles.ts). This mapping was already correct before that
+  // decision: mapping HR to a sales tier would have handed an HR account
+  // lead-editing rights it was never meant to have. Unmapped roles fall through
+  // to the raw lowercased value, which roleHas does not recognise and therefore
+  // denies — which is why this file needed no change when `hr` was removed.
 };
 
 const CurrentUserContext = createContext<CurrentUserContextValue>({

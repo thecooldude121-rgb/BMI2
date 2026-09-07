@@ -86,7 +86,7 @@ function mockServer(overrides: Partial<{
         // "GET /invites serves the role options…". There is no client-side
         // fallback: an absent field means an empty picker, deliberately, so
         // these fixtures must send what the server sends.
-        assignable_roles: overrides.invitableRoles ?? ['sales', 'manager', 'hr', 'admin'],
+        assignable_roles: overrides.invitableRoles ?? ['sales', 'manager', 'admin'],
       }) } as Response;
     }
     if (overrides.onPost) return overrides.onPost(url, init?.body ? JSON.parse(init.body as string) : undefined);
@@ -395,7 +395,7 @@ describe('TeamManagement — actions with no endpoint', () => {
 describe('TeamManagement — the role picker', () => {
   /** Rows as an ADMIN caller sees them: everyone touchable. */
   const asAdmin = rows.map(r => ({ ...r, can_change_role: true }));
-  const ADMIN_ROLES = ['sales', 'manager', 'hr', 'admin'];
+  const ADMIN_ROLES = ['sales', 'manager', 'admin'];
 
   const roleButtonFor = (name: string) =>
     screen.queryByRole('button', { name: `Change role for ${name}` });
@@ -409,7 +409,7 @@ describe('TeamManagement — the role picker', () => {
         { ...rows[1], can_change_role: true },                       // Sam, sales
         { ...rows[2], role: 'admin', can_change_role: false },       // Dee, admin
       ],
-      assignableRoles: ['sales', 'manager', 'hr'],
+      assignableRoles: ['sales', 'manager'],
     });
     render(<TeamManagement />);
     await screen.findByText('Sam Okafor');
@@ -420,7 +420,7 @@ describe('TeamManagement — the role picker', () => {
 
     // THE ASSERTION: admin is not an option at all, not merely rejected later.
     expect(options).not.toContain('admin');
-    expect(options).toEqual(['sales', 'manager', 'hr']);
+    expect(options).toEqual(['sales', 'manager']);
   });
 
   it('renders NO role control for someone already above the caller — not a disabled one', async () => {
@@ -429,7 +429,7 @@ describe('TeamManagement — the role picker', () => {
         { ...rows[0], can_change_role: true },                        // Priya — touchable
         { ...rows[2], role: 'admin', can_change_role: false },        // Dee — an admin, above a manager
       ],
-      assignableRoles: ['sales', 'manager', 'hr'],
+      assignableRoles: ['sales', 'manager'],
     });
     render(<TeamManagement />);
     await screen.findByText('Dee Activated');
@@ -575,10 +575,27 @@ describe('TeamManagement — the invite role picker', () => {
   const optionsOf = (select: HTMLElement) =>
     within(select).getAllByRole('option').map(o => (o as HTMLOptionElement).value);
 
-  it('offers HR — the option the deleted client-side mirror had silently dropped', async () => {
-    // invitableRolesFor() listed sales/manager/admin. The server's
-    // ASSIGNABLE_ROLES has always included hr, so the form could not invite an
-    // HR user and nothing anywhere said so. This is that regression, pinned.
+  it('renders a served role this build no longer issues — the client holds no copy of the vocabulary', async () => {
+    /*
+     * THIS TEST USED TO BE "offers HR", and the rewrite is deliberate.
+     *
+     * Its original job: invitableRolesFor() listed sales/manager/admin while
+     * the server's ASSIGNABLE_ROLES included `hr`, so the invite form could not
+     * invite an HR user and nothing said so. The mirror is deleted and this
+     * pinned it.
+     *
+     * `hr` is now removed from the CRM entirely (HRMS is a separate platform
+     * over SSO), so the server never sends it any more. But the PROPERTY this
+     * test protects is not "hr is offered" — it is that the client renders
+     * exactly what it is served and keeps no vocabulary of its own. Feeding it
+     * `hr` on purpose is now the sharpest way to assert that: if anyone
+     * reintroduces a client-side allowlist, this fails, because `hr` is what
+     * would get filtered out.
+     *
+     * The absence of `hr` from the REAL server is asserted in
+     * roundTrip.userManagement.test.ts, where the server is real. Here we
+     * assert only that the client does not second-guess whatever it is sent.
+     */
     mockServer({ invitableRoles: ['sales', 'manager', 'hr', 'admin'] });
     render(<TeamManagement />);
 
@@ -586,12 +603,12 @@ describe('TeamManagement — the invite role picker', () => {
   });
 
   it('never offers a MANAGER the admin role — the list is the server\'s', async () => {
-    mockServer({ invitableRoles: ['sales', 'manager', 'hr'] });
+    mockServer({ invitableRoles: ['sales', 'manager'] });
     render(<TeamManagement />);
 
     const options = optionsOf(await openInvite());
     expect(options).not.toContain('admin');
-    expect(options).toEqual(['sales', 'manager', 'hr']);
+    expect(options).toEqual(['sales', 'manager']);
   });
 
   it('sends a role that was actually offered, not a hardcoded default', async () => {
@@ -600,7 +617,7 @@ describe('TeamManagement — the invite role picker', () => {
     // could submit a role they never saw selected.
     let sent: unknown = null;
     mockServer({
-      invitableRoles: ['manager', 'hr'],
+      invitableRoles: ['manager', 'admin'],
       onPost: (_url, body) => { sent = body; return {
         ok: true, status: 201,
         json: async () => ({ success: true, invite: { id: 'i1', email: 'x@y.z', role: 'manager', expires_at: '' }, email_sent: true }),

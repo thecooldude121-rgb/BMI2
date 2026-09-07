@@ -34,7 +34,7 @@ type TeamMember = WorkspaceMember;
  * disappearing or being labelled "Unknown".
  */
 const ROLE_LABELS: Record<string, string> = {
-  sales: 'Sales', manager: 'Manager', hr: 'HR', admin: 'Admin',
+  sales: 'Sales', manager: 'Manager', admin: 'Admin',
 };
 const roleLabel = (role: string): string =>
   ROLE_LABELS[(role ?? '').toLowerCase()] ?? role;
@@ -844,8 +844,8 @@ const TeamManagement: React.FC = () => {
                         FABRICATED role vocabulary (sales_manager, sales_rep,
                         account_executive) and of the four roles the server
                         actually issues it maps only `admin` — so this line read
-                        "sales" / "manager" / "hr" / "Administrator", an
-                        inconsistent mix, and disagreed with the picker below. */}
+                        "sales" / "manager" / "Administrator", an inconsistent
+                        mix, and disagreed with the picker below. */}
                     <span>{roleLabel(member.role)}</span>
                     {member.canChangeRole && assignableRoles.length > 0 && (
                       <button

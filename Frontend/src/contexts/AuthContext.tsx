@@ -33,7 +33,7 @@ export interface User {
   id: string;
   name: string; 
   email: string;
-  role: 'Admin' | 'Sales' | 'HR' | 'Manager';
+  role: 'Admin' | 'Sales' | 'Manager';
   avatar?: string;
   department?: string;
   /**
@@ -44,9 +44,24 @@ export interface User {
   workspaceId?: string;
 }
 
-/** The API stores lowercase roles; this UI's permission map uses capitalised ones. */
+/**
+ * The API stores lowercase roles; this UI's permission map uses capitalised ones.
+ *
+ * `hr: 'HR'` was here and is REMOVED DELIBERATELY — HRMS is a separate platform
+ * over SSO, so HR is not a CRM role (see Backend utils/roles.ts). Verified zero
+ * users held it in any workspace before removing.
+ *
+ * WORTH KNOWING, because it is the one place removal widens rather than narrows:
+ * the `?? 'Sales'` fallback below means an unrecognised role renders as Sales.
+ * So a stray `hr` row — impossible to create through the API now, but storable
+ * directly since `users.role` has no CHECK constraint — would show the Sales UI
+ * rather than the old HR-only one. That is cosmetic, not a privilege grant: the
+ * API is the control, `requireRole` refuses any role it does not recognise, and
+ * `rankOf` ranks unknown roles 0. Making this fallback fail closed is a separate
+ * change and a bigger one, since every unknown role currently depends on it.
+ */
 const ROLE_MAP: Record<string, User['role']> = {
-  admin: 'Admin', sales: 'Sales', hr: 'HR', manager: 'Manager',
+  admin: 'Admin', sales: 'Sales', manager: 'Manager',
 };
 
 export interface ApiUser {
@@ -191,9 +206,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return false;
     const rolePermissions: Record<User['role'], string[]> = {
       Admin: ['all'],
-      Manager: ['crm', 'hrms', 'analytics', 'integrations', 'calendar', 'settings', 'gamification', 'dashboard', 'team'],
+      Manager: ['crm', 'analytics', 'integrations', 'calendar', 'settings', 'gamification', 'dashboard', 'team'],
       Sales: ['crm', 'calendar', 'integrations', 'dashboard', 'team'],
-      HR: ['hrms', 'analytics', 'dashboard'],
     };
     const userPermissions = rolePermissions[user.role] || [];
     return userPermissions.includes('all') || userPermissions.includes(permission);

@@ -219,8 +219,11 @@ export const listInvites = async (req: AuthRequest, res: Response, next: NextFun
       //
       // This replaces `invitableRolesFor()` in the frontend, a hand-written
       // copy of the same rule that had already drifted: it omitted `hr`, which
-      // ASSIGNABLE_ROLES has always included, so the invite form silently could
-      // not invite an HR user. No client-side mirror of this rule remains.
+      // ASSIGNABLE_ROLES included at the time, so the invite form silently
+      // could not invite an HR user. No client-side mirror of this rule
+      // remains. (`hr` has since been removed from the CRM entirely — see
+      // utils/roles.ts. The drift argument stands on its own: the list that
+      // disagreed was a copy, and copies are what this serves instead of.)
       assignable_roles: rolesAssignableBy(String(req.user?.role ?? '')),
     });
   } catch (error) { next(error); }
