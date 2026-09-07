@@ -1,11 +1,15 @@
-# Project: BMI Platform — AI CRM (Module 1 of 4)
+# Project: BMI Platform — AI CRM
 
 ## What this is
-A multi-tenant B2B SaaS CRM — the first module of a larger platform (AI CRM, Meeting Agent,
-Lead Generation Tool, HRMS Lite). **Only the AI CRM module is in scope right now.** Do not
-build Meeting Agent, Lead Gen, or HRMS features unless explicitly asked — they are future
-phases. Do not build AI features (email drafts, deal health scoring, next-best-action) yet
-either — those are Phase 2. This phase is CRM core data + pipeline only.
+A multi-tenant B2B SaaS CRM. **This repo is the CRM platform.** It is not "module 1 of 4" —
+that framing is retired. **Lead Generation and HRMS are separate products, with their own
+repos and their own deployments**, connected to this one over SSO. They are not future
+phases of this codebase, and no amount of "later" makes them belong here. **Meeting Agent's
+status is undecided — mark it TBD; it is not in scope either way.** Do not build any of the
+three.
+
+Do not build AI features (email drafts, deal health scoring, next-best-action) yet either —
+those are Phase 2. This phase is CRM core data + pipeline only.
 
 Target users: Account Executives, Sales Managers, SDRs at IT Services / EdTech companies in
 India, Middle East, and Africa.
@@ -13,6 +17,41 @@ India, Middle East, and Africa.
 > **Note:** This file was introduced late in the project. Earlier sessions ran without these
 > rules loaded, so parts of the existing codebase may not comply. Where built code and this
 > spec disagree, surface the conflict rather than silently following either one.
+
+## Identity & SSO — this CRM is the identity provider
+**This CRM owns workspaces, users, roles and authentication for the whole platform family.**
+Lead Generation and HRMS authenticate against it; they do not have their own user stores.
+The mechanics of that contract are in "Auth is the SSO contract" under Architecture rules
+below — this section defines the boundary, not the protocol.
+
+- **`workspace_id` is a shared identifier that external platforms CONSUME, never MINT.** It
+  originates here and only here. If Lead Gen or HRMS ever mints one, two systems disagree
+  about what a workspace is and every tenant-scoping guarantee in this file stops being
+  enforceable. (The DB column is still `tenant_id`; the JWT claim and the external contract
+  are both `workspace_id` — `middleware/auth.ts` maps between them in exactly one place.)
+- **Cross-platform data exchange happens over a defined API boundary. Never assume shared
+  database access to Lead Gen or HRMS tables.** No JOIN, no view, no second connection
+  string, no "it's the same Postgres for now". A query that reaches another product's table
+  is a design error even when it runs: that product owns its schema, is free to change it,
+  and will not tell you.
+- Anything from another platform arrives as a value this CRM stored, or as the response to a
+  call this CRM made. It does not arrive as a row you can join to.
+- `employees` is the worked example of getting this wrong — see "Open architecture question"
+  below. It sits in this repo, has no `tenant_id`, and belongs to HRMS.
+
+### "Leads" (ours) vs "Lead Generation Tool" (theirs) — do not conflate
+The names differ by one word. The concepts do not overlap.
+
+- **"Leads" IS part of this CRM and stays.** SLA tracking, duplicate detection, the
+  qualification pipeline, lead scoring, and conversion to contact / account / deal. It lives
+  at `/crm/leads`, in `pages/CRM/Lead*`, `components/Leads/` (plural), `types/leadDomain.ts`,
+  and `Backend/src/controllers/leadsController.ts`. First-class CRM module.
+- **"Lead Generation Tool" is the separate platform and does not belong in this repo.**
+  Sourcing, prospect discovery, enrichment, outbound sequences, campaigns. Its code was
+  deleted in `881857f` (118 files, 56,073 lines) and must not come back.
+- We **work** leads that already exist; that product **finds** them. Before deleting, moving
+  or "consolidating" anything with "lead" in its name, decide which of the two it is — and
+  say which, out loud, in the commit message.
 
 ## Tech stack (fixed — do not substitute without asking)
 - Build tool / dev server: **Vite** (dev server runs on port 5173)
@@ -48,7 +87,8 @@ India, Middle East, and Africa.
   unscoped `JOIN` and an unvalidated foreign id, both of which live in exactly the code a
   direct-from-browser query would bypass.
 - **Auth is the SSO contract.** This CRM is the identity provider for Lead Generation and
-  HRMS later, so all workspace-resolution logic lives server-side in `authController`: a
+  HRMS — separate platforms, see "Identity & SSO" above — so all workspace-resolution logic
+  lives server-side in `authController`: a
   client sends credentials and receives either a token or the set of workspaces to choose
   between. It never decides, and can never assert, which workspace a session belongs to.
   - The JWT's canonical claim is **`workspace_id`**. The DB column is still `tenant_id`;
@@ -396,8 +436,9 @@ race was**: it discloses a row count, it does not lose data.
    the above have real data to summarize)
 
 Explicitly **not** in this phase: Gmail/Outlook email sync, AI email drafts, deal health
-scoring, next-best-action, Meeting Agent, Lead Gen, HRMS. Omit these rather than
-half-building them.
+scoring, next-best-action. Omit these rather than half-building them. Meeting Agent is TBD
+and out of scope; Lead Generation and HRMS are not "not in this phase" at all — they are
+other products, and nothing about them is ever built here.
 
 ## Design system (apply consistently — do not invent new patterns)
 **Colors:**
@@ -438,6 +479,16 @@ here in the same session, or the next person re-derives it or guesses wrong.
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
   share nothing but the word "configuration"; do not fold one into the other.
+- **Structured qualification scoring would be built NEW, not recovered.** The Lead
+  Generation Tool deletion (`881857f`) also took a BANT qualification framework with it —
+  `components/LeadQualification/BANTFramework.tsx`, `AIScoreBreakdown.tsx`,
+  `QualificationHistory.tsx` and `services/bantValidationService.ts`. That was correct:
+  every importer was under `pages/LeadGeneration/`, no CRM-side file referenced any of it,
+  and deleting it broke nothing. But it is now **fully gone from the repo** — two stray
+  string mentions survive (`utils/leadScoring.ts`, `DealDetailsPanel.tsx`) and no
+  implementation. So if structured qualification scoring is ever wanted in the CRM Leads
+  module, do not go looking for it in git history expecting a starting point: it was
+  fabricated UI with no fetch behind it, and the work is a new build.
 
 ## Roles — who may grant what
 
