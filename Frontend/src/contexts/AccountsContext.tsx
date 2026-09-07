@@ -797,7 +797,6 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     // Contacts CAN be attributed — contacts.company_id is a real FK — and
     // relatedContacts now holds the real records, so this sum is exact.
     const totalContacts = accounts.reduce((sum, acc) => sum + (acc.relatedContacts?.length ?? 0), 0);
-    const hrmsAccounts = accounts.filter(acc => acc.source === 'hrms' || acc.hrmsConnection?.hasConnection).length;
 
     return {
       totalAccounts: accounts.length,
@@ -817,7 +816,6 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
       totalDeals,
       totalRevenue,
       totalContacts,
-      hrmsAccounts,
       topAccountsByRevenue: accounts
         .filter(acc => acc.annualRevenue)
         .sort((a, b) => (b.annualRevenue || 0) - (a.annualRevenue || 0))

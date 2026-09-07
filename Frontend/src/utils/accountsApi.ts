@@ -124,7 +124,7 @@ export function mapRowToAccount(row: CompanyRow): EnhancedAccount {
 
     // ── Intentionally absent: no data source ────────────────────────────────
     // healthScore, engagementScore, employeeCount, lastActivityDate,
-    // hrmsConnection, relatedContacts, relatedDeals, recentActivities, stats.
+    // relatedContacts, relatedDeals, recentActivities, stats.
     // Leaving them undefined makes the UI render "no data", which is the truth.
     // Do not default these — see the Phase 0 note at the top of this file.
   };
