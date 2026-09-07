@@ -21,7 +21,6 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   // Before the generic /crm line, or Settings would read as plain "CRM".
   if (pathname.startsWith('/crm/settings'))      return { parent: 'CRM', label: 'Settings' };
   if (pathname.startsWith('/crm'))               return { label: 'CRM' };
-  if (pathname.startsWith('/hrms'))              return { label: 'HRMS' };
   if (pathname.startsWith('/analytics'))         return { label: 'Analytics' };
   if (pathname.startsWith('/calendar'))          return { label: 'Calendar' };
   if (pathname.startsWith('/sequences'))         return { label: 'Sequences' };
