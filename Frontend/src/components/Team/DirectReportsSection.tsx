@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Users, ChevronRight, Mail, Phone, Calendar, TrendingUp, DollarSign, Target, Clock } from 'lucide-react';
+import { NotAvailable } from '../common/NotAvailable';
 
 interface DirectReport {
   id: string;
@@ -54,17 +55,11 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
 }) => {
   const navigate = useNavigate();
 
-  const teamStats = {
-    totalDeals: reports.reduce((sum, r) => sum + r.activeDeals, 0),
-    totalPipeline: reports.reduce((sum, r) => sum + r.pipelineValue, 0),
-    totalQuota: reports.reduce((sum, r) => sum + r.quotaValue, 0),
-    avgWinRate: reports.reduce((sum, r) => sum + r.winRate, 0) / reports.length,
-    avgQuota: reports.reduce((sum, r) => sum + r.quotaAttainment, 0) / reports.length,
-    pipelineChange: '+8%',
-    lastMonthPipeline: 676000,
-    activityHealth: 'Excellent',
-    avgResponseTime: '2.1 hours'
-  };
+  // teamStats aggregated the invented per-report figures, and carried three
+  // literals of its own — pipelineChange '+8%', activityHealth 'Excellent' and
+  // avgResponseTime '2.1 hours'. Nothing renders them any more, so the whole
+  // object goes rather than sitting unused: an aggregate over fabricated inputs
+  // is not a number worth keeping warm.
 
   // Calculate coaching alerts based on thresholds
   const getCoachingAlert = () => {
@@ -110,12 +105,6 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
 
   const coachingAlert = getCoachingAlert();
 
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(1)}M`;
-    }
-    return `$${(value / 1000).toFixed(0)}K`;
-  };
 
   const getStatusBadge = (status: string) => {
     if (status === 'active') {
@@ -183,18 +172,17 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
                 <div className="flex items-center gap-2">
                   <Target className="w-4 h-4 text-blue-600" />
                   <span className="text-sm text-slate-600">Active Deals:</span>
-                  <span className="text-sm font-semibold text-slate-900">{report.activeDeals} deals</span>
+                  <span className="text-sm text-slate-300">—</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-green-600" />
                   <span className="text-sm text-slate-600">Pipeline:</span>
-                  <span className="text-sm font-semibold text-slate-900">{report.pipeline}</span>
-                  <span className="text-xs text-slate-500">({report.quotaAttainment}% of {report.quota} quota)</span>
+                  <span className="text-sm text-slate-300">—</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-purple-600" />
                   <span className="text-sm text-slate-600">Win Rate:</span>
-                  <span className="text-sm font-semibold text-slate-900">{report.winRate}% ({report.performanceLabel})</span>
+                  <span className="text-sm text-slate-300">—</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <Clock className="w-4 h-4 text-orange-600 mt-0.5" />
@@ -285,60 +273,46 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
           <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
             <div className="text-2xl mb-1">💼</div>
             <div className="text-sm text-slate-600 mb-1">Total Deals</div>
-            <div className="text-2xl font-bold text-slate-900">{teamStats.totalDeals}</div>
-            <div className="text-xs text-slate-500 mt-1">Combined</div>
+            <div className="text-2xl font-bold text-slate-300">—</div>
+            <div className="text-xs text-slate-400 mt-1">Not connected</div>
           </div>
           <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
             <div className="text-2xl mb-1">🎯</div>
             <div className="text-sm text-slate-600 mb-1">Total Pipeline</div>
-            <div className="text-2xl font-bold text-slate-900">{formatCurrency(teamStats.totalPipeline)}</div>
-            <div className="text-xs text-slate-500 mt-1">{teamStats.pipelineChange} vs LM</div>
+            <div className="text-2xl font-bold text-slate-300">—</div>
+            <div className="text-xs text-slate-400 mt-1">Not connected</div>
           </div>
           <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
             <div className="text-2xl mb-1">🏆</div>
             <div className="text-sm text-slate-600 mb-1">Avg Win Rate</div>
-            <div className="text-2xl font-bold text-slate-900">{teamStats.avgWinRate.toFixed(0)}%</div>
-            <div className="text-xs text-slate-500 mt-1">Team avg</div>
+            <div className="text-2xl font-bold text-slate-300">—</div>
+            <div className="text-xs text-slate-400 mt-1">Not connected</div>
           </div>
           <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
             <div className="text-2xl mb-1">📅</div>
             <div className="text-sm text-slate-600 mb-1">Team Activity</div>
-            <div className="text-2xl font-bold text-slate-900">Active</div>
-            <div className="text-xs text-slate-500 mt-1">Last 24hrs</div>
+            <div className="text-2xl font-bold text-slate-300">—</div>
+            <div className="text-xs text-slate-400 mt-1">Not connected</div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-2">
-          <div>
-            <span className="text-sm font-semibold text-slate-700">Team Quota Attainment:</span>{' '}
-            <span className="text-lg font-bold text-green-600">{teamStats.avgQuota.toFixed(0)}%</span>
-            <span className="text-xs text-slate-500 ml-2">
-              ({formatCurrency(teamStats.totalPipeline)} actual / {formatCurrency(teamStats.totalQuota)} quota)
-            </span>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-slate-600">
-            {reports.map((report, index) => (
-              <span key={report.id}>
-                {report.name.split(' ')[0]}: <span className="font-semibold text-slate-900">{report.quotaAttainment}%</span>
-              </span>
-            ))}
-          </div>
-        </div>
+        {/*
+          STOPGAP — two blocks here rendered a team quota attainment percentage,
+          a per-person quota breakdown ("Sarah: 108%"), a "Team Activity Health"
+          rating, an average response time, and a count of "Members Exceeding
+          Expectations" — all from hardcoded literals in TEAM_MEMBER_DATA.
 
-        <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-1 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600">Team Activity Health:</span>
-            <span className="font-semibold text-green-600">{teamStats.activityHealth}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600">Average Response Time:</span>
-            <span className="font-semibold text-slate-900">{teamStats.avgResponseTime}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-600">Members Exceeding Expectations:</span>
-            <span className="font-semibold text-slate-900">{reports.length}</span>
-          </div>
-        </div>
+          Replaced rather than blanked to "—", because unlike a stat card these
+          rows ARE the claim: a line reading "Members Exceeding Expectations: —"
+          still asserts the product measures that about named people. None of it
+          is computable today — `quotas` is empty and keys on `rep_name`, there
+          are no `activities` rows, and `users` has no manager relationship to
+          define a team by.
+        */}
+        <NotAvailable
+          feature="Team quota and activity rollups"
+          detail="Quota attainment, activity health, response times and performance standing are not measured yet. Quota records, activity history and a manager relationship between users all need to exist first."
+        />
       </div>
 
       <div className={`rounded-lg p-4 ${

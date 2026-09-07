@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { NotAvailable } from '../../components/common/NotAvailable';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
 import { TeamEmailComposerModal } from '../../components/Team/TeamEmailComposerModal';
 import { ScheduleCallModal } from '../../components/Team/ScheduleCallModal';
@@ -502,66 +503,27 @@ const ACTIVITIES: Activity[] = [
   }
 ];
 
-const COACHING_NOTES: CoachingNote[] = [
-  {
-    id: 'note_001',
-    date: 'Dec 10, 2024',
-    author: 'John Smith',
-    authorRole: 'Director',
-    authorTitle: 'Sales Director',
-    managerId: '5',
-    visibility: 'Manager+ only',
-    content: 'Sarah continues to excel with referral-sourced leads. Her approach to leveraging warm introductions is exemplary - she establishes credibility quickly and gets to a real discovery conversation faster than the team average. Suggested she mentor junior reps on this strategy to scale best practices across the team. Pipeline velocity improved 20% MoM, largely on referral lead quality.',
-    focusAreas: [
-      'Scale the referral strategy across the team',
-      'Mentor junior reps on warm introduction techniques',
-      'Continue strong relationship management'
-    ],
-    developmentGoals: [
-      'Lead a referral-sourcing training session in January',
-      'Document the referral playbook for the team'
-    ],
-    performanceRating: 'Exceeding Expectations'
-  },
-  {
-    id: 'note_002',
-    date: 'Nov 15, 2024',
-    author: 'John Smith',
-    authorRole: 'Director',
-    authorTitle: 'Sales Director',
-    managerId: '5',
-    visibility: 'Manager+ only',
-    content: 'Strong performance this quarter. Win rate of 72% significantly exceeds team average of 67%. Sarah is excellent at relationship building and maintains consistent follow-through with prospects. Working on shortening sales cycles further through better qualification in early stages. Recommended attending advanced MEDDIC training in Q1 2026.',
-    focusAreas: [
-      'Improve early-stage qualification',
-      'Shorten sales cycle from 45 to 40 days',
-      'Maintain high win rate'
-    ],
-    developmentGoals: [
-      'Complete MEDDIC certification Q1 2026',
-      'Reduce time in Qualified stage by 15%'
-    ],
-    performanceRating: 'Exceeds Expectations'
-  },
-  {
-    id: 'note_003',
-    date: 'Oct 5, 2024',
-    author: 'John Smith',
-    authorRole: 'Director',
-    authorTitle: 'Sales Director',
-    managerId: '5',
-    visibility: 'Manager+ only',
-    content: 'First referral-sourced lead (DataFlow Inc) converted successfully to Qualified stage. Sarah used the warm introduction with Emma Wilson to build trust and credibility quickly, cutting through initial prospecting friction. Encouraged Sarah to document her approach for team training materials. This is a replicable playbook we can scale.',
-    focusAreas: [
-      'Document the referral approach',
-      'Share learnings with team',
-      'Continue referral lead nurturing'
-    ],
-    achievement: 'First referral-sourced conversion - playbook validated',
-    performanceRating: 'Exceeds Expectations',
-    nextReview: 'Nov 15, 2024'
-  }
-];
+/**
+ * ALWAYS EMPTY, AND THAT IS A DECISION RATHER THAN A GAP.
+ *
+ * This held three invented coaching notes — each an INVENTED PERFORMANCE
+ * JUDGEMENT ABOUT A REAL NAMED EMPLOYEE, attributed to a real named manager
+ * ("John Smith, Sales Director"), carrying a performance rating badge
+ * ("Exceeding Expectations"), focus areas, development goals and an
+ * achievement line.
+ *
+ * There is NO `coaching_notes` TABLE, so none of it was ever a record and
+ * nothing entered through the Add Note control is saved. The content is deleted
+ * rather than captioned for the same reason as the metrics above: a written
+ * performance judgement attributed to a named manager is actionable outside the
+ * software.
+ *
+ * The array is kept and emptied rather than removed so the section, its
+ * handlers and its edit/delete modals stay intact and compiling — wiring this
+ * up means giving it real rows, not rebuilding the surface. Same pattern as
+ * `DataContext`'s permanently-empty `employees`.
+ */
+const COACHING_NOTES: CoachingNote[] = [];
 
 export default function TeamMemberDetailPage() {
   const navigate = useNavigate();
@@ -1650,14 +1612,44 @@ export default function TeamMemberDetailPage() {
             <BarChart3 className="w-6 h-6 text-blue-600" />
             Performance Metrics
           </h2>
+          {/*
+            STOPGAP — these six cards rendered INVENTED PERFORMANCE FIGURES
+            ABOUT A REAL, NAMED EMPLOYEE: active deals, pipeline, won deals,
+            win rate against a "team average", quota attainment ("108% / On
+            target") and average sales cycle, each with a fabricated trend like
+            "+15% MoM" or "+5% vs last quarter".
+
+            Blanked to "—" rather than captioned `PREVIEW · SAMPLE CONTENT`,
+            which is what every other unbacked panel here gets. The difference
+            is consequence: a quota attainment figure beside a real person's
+            name can be screenshotted into a performance review or a
+            compensation conversation, where it is indistinguishable from a
+            real number. That is the same reasoning CLAUDE.md applies to a
+            fabricated credential — the blast radius extends outside the app,
+            so the value goes rather than getting a label.
+
+            The card scaffolding stays so the layout survives and wiring this up
+            later means filling six values, not rebuilding a section. What it
+            needs, none of which exists yet: quota records per user (`quotas`
+            is empty and keyed on `rep_name`, not a user id), a manager
+            relationship on `users` (only `employees.manager_id` exists, and
+            that table is HRMS-owned and must not be joined),
+            `deals.assigned_to` as a user reference rather than a display name,
+            and `activities` rows for anything cycle-related.
+          */}
+          <NotAvailable
+            feature="Individual performance metrics"
+            detail="None of the figures below are calculated from your data. Deal counts, pipeline value, win rate, quota attainment and sales-cycle timings need quota records, a manager relationship between users, and deal ownership stored as a user reference rather than a name."
+            className="mb-4"
+          />
           <div className="grid grid-cols-6 gap-4">
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="w-5 h-5 text-blue-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Active Deals</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{member.metrics.activeDeals}</div>
-              <div className="text-xs text-green-600">{member.metrics.activeDealsChange}</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -1665,8 +1657,8 @@ export default function TeamMemberDetailPage() {
                 <Target className="w-5 h-5 text-blue-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Total Pipeline</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{member.metrics.totalPipeline}</div>
-              <div className="text-xs text-green-600">{member.metrics.pipelineChange}</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -1674,8 +1666,8 @@ export default function TeamMemberDetailPage() {
                 <TrendingUp className="w-5 h-5 text-green-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Won Deals</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{member.metrics.wonDeals}</div>
-              <div className="text-xs text-slate-500">{member.metrics.wonDealsQ}</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -1683,8 +1675,8 @@ export default function TeamMemberDetailPage() {
                 <Trophy className="w-5 h-5 text-yellow-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Win Rate</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{member.metrics.winRate}%</div>
-              <div className="text-xs text-green-600">{member.metrics.winRateComparison}</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -1692,8 +1684,8 @@ export default function TeamMemberDetailPage() {
                 <Target className="w-5 h-5 text-blue-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Quota Attainmnt</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{member.metrics.quotaAttainment}%</div>
-              <div className="text-xs text-green-600">{member.metrics.quotaStatus}</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -1701,8 +1693,8 @@ export default function TeamMemberDetailPage() {
                 <Clock className="w-5 h-5 text-purple-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Avg Cycle</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{member.metrics.avgCycle}</div>
-              <div className="text-xs text-green-600">{member.metrics.cycleChange}</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
           </div>
         </div>
@@ -1827,7 +1819,7 @@ export default function TeamMemberDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Users className="w-6 h-6 text-blue-600" />
-              Assigned Contacts (24 contacts)
+              Assigned Contacts ({CONTACTS.length})
             </h2>
             <button
               onClick={handleViewAllContacts}
@@ -1888,7 +1880,7 @@ export default function TeamMemberDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Calendar className="w-6 h-6 text-blue-600" />
-              Recent Activity (47 Total, Showing 5)
+              Recent Activity ({ACTIVITIES.length})
             </h2>
             <button
               onClick={handleViewAllActivities}
@@ -2085,7 +2077,7 @@ export default function TeamMemberDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <MessageSquare className="w-6 h-6 text-blue-600" />
-                Coaching Notes (3 Total, Showing All)
+                Coaching Notes
               </h2>
               {canAddNotes && (
                 <Button
@@ -2188,6 +2180,16 @@ export default function TeamMemberDetailPage() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* COACHING_NOTES is permanently empty (see its definition), so this
+                list renders nothing. The placeholder explains why, rather than
+                leaving a blank section that reads as a loading failure. */}
+            {COACHING_NOTES.length === 0 && (
+              <NotAvailable
+                feature="Coaching notes"
+                detail="Coaching notes are not stored yet — there is no table behind this section, so nothing entered here is saved and no history can be shown for this person."
+              />
             )}
 
             <div className="space-y-5">
