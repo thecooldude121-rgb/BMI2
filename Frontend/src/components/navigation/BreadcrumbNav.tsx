@@ -31,8 +31,6 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({ items }) => {
       // Convert segment to readable label
       let label = segment.charAt(0).toUpperCase() + segment.slice(1);
       if (segment === 'crm') label = 'CRM';
-      if (segment === 'hrms') label = 'HRMS';
-      if (segment === 'lead-generation') label = 'Lead Generation';
       
       breadcrumbs.push({
         label,
