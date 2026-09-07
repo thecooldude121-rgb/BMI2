@@ -46,6 +46,8 @@ interface ForecastDeal {
   name: string;
   company: string;
   owner: string;
+  /** Resolved owner user id, or null when ownership is only a name (migration 039). */
+  ownerUserId?: number | null;
   value: number;
   stage: string;
   closeDate: string;
@@ -368,7 +370,13 @@ const ForecastPage: React.FC = () => {
           id:       d.id,
           name:     resolvedName,
           company:  coName,
+          // Owner name comes RESOLVED from the server where ownership is a
+          // real user reference (migration 039 projects it from the joined
+          // user), and falls back to the legacy string otherwise. 'Unassigned'
+          // is a truthful label here: 20 of 25 live deals have no resolved
+          // owner, and this page groups by owner.
           owner:    d.assigned_to || 'Unassigned',
+          ownerUserId: d.assigned_to_user_id ?? null,
           value:    parseFloat(d.value) || 0,
           stage:    d.stage || '',
           closeDate,

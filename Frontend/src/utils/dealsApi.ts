@@ -53,7 +53,19 @@ export interface DealPayload {
   close_date_is_past?: boolean;
   close_date_override_reason?: string;
   forecast_category?: string;
+  /**
+   * Owner NAME. Still the field every form writes, and still what the API
+   * returns — see migration 039. It is projected from the joined user where
+   * ownership is resolved, and falls back to the legacy string otherwise.
+   */
   assigned_to?: string;
+  /**
+   * Owner USER ID (migration 039). Send this whenever the id is known; the
+   * server validates it against the caller's workspace and rejects an id from
+   * another one with a 400 naming the field. Null clears ownership, which is a
+   * real state — 20 of 25 live deals have no resolved owner.
+   */
+  assigned_to_user_id?: number | null;
   description?: string;
   next_step?: string;
   notes?: string;
@@ -244,7 +256,12 @@ export interface RelatedDeal {
   stage: string | null;
   probability: number | null;
   expected_close_date: string | null;
+  /** Owner name — resolved from the joined user where possible (migration 039). */
   assigned_to: string | null;
+  /** Owner user id, or null when ownership is unresolved (migration 039). */
+  assigned_to_user_id: number | null;
+  /** Owner email, present only when the owner resolved to a real user. */
+  assigned_to_email: string | null;
   contact_email: string | null;
   company_name: string | null;
   /** The real account link (migration 027). Null on 22 of 25 deals today. */
