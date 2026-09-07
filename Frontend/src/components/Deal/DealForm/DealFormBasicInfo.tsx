@@ -656,9 +656,6 @@ export const DealFormBasicInfo: React.FC<DealFormBasicInfoProps> = ({
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500">
                 <span className="bg-gray-50 border border-gray-200 rounded px-2 py-0.5">Stage base</span>
                 <span className="bg-gray-50 border border-gray-200 rounded px-2 py-0.5">Contact role</span>
-                {(formData.source === 'hrms' || formData.hrmsConnection) && (
-                  <span className="bg-orange-50 border border-orange-200 text-orange-700 rounded px-2 py-0.5">+15% HRMS</span>
-                )}
               </div>
             </>
           )}

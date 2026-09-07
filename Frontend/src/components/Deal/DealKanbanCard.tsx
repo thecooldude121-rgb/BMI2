@@ -8,7 +8,6 @@
  *
  *   ┌─ 3px state border ──────────────────────────────────┐
  *   │ ZONE 1 — Identity                                   │
- *   │  Deal Name (13px/600)            [HRMS]             │
  *   │  Company Name (11px/gray-500)                       │
  *   ├─────────────────────────────────────────────────────┤
  *   │ ZONE 2 — Value signal (single scan line)            │
@@ -29,7 +28,7 @@
  */
 
 import React, { useState } from 'react';
-import { Building2, Sparkles, CheckCircle2, AlertTriangle, Mail, Activity, Edit2, MoreHorizontal, ArrowRight } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertTriangle, Mail, Activity, Edit2, MoreHorizontal, ArrowRight } from 'lucide-react';
 import {
   formatCloseDate,
   formatRelativeTime,
@@ -70,8 +69,6 @@ export interface DealCard {
   owner: string;
   lastActivity: string;
   daysSinceContact: number;
-  isHRMS: boolean;
-  hrmsDetails?: string;
   priority: 'high' | 'medium' | 'low';
   health: 'healthy' | 'at-risk' | 'stalled';
   source: string;
@@ -104,7 +101,6 @@ export interface DealKanbanCardProps {
   inspectionBadge?: { label: string; style: string; title: string } | null;
   onCardClick: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
-  onHRMSClick: (e: React.MouseEvent, deal: DealCard) => void;
   onScoreClick: (e: React.MouseEvent, id: string) => void;
   onContactClick: (e: React.MouseEvent, id: string) => void;
   onStatusClick: (e: React.MouseEvent, deal: DealCard) => void;
@@ -171,7 +167,6 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
   inspectionBadge = null,
   onCardClick,
   onContextMenu,
-  onHRMSClick,
   onScoreClick,
   onContactClick,
   onStatusClick,
@@ -294,15 +289,6 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
             >
               {inspectionBadge.label}
             </span>
-          ) : deal.isHRMS ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onHRMSClick(e, deal); }}
-              className="text-[10px] px-1.5 py-0.5 rounded font-medium transition-opacity hover:opacity-80 ml-auto"
-              style={{ backgroundColor: '#fef3c7', border: '1px solid #f59e0b', color: '#92400e' }}
-              title="HRMS-connected deal"
-            >
-              HRMS
-            </button>
           ) : null}
         </div>
       </div>
@@ -312,7 +298,7 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
   // ─────────────────────────────────────────────────────────────────────────
   // STANDARD MODE — 4 zones with hover quick-action strip.
   //
-  // Zone 1: Identity (deal name, company, HRMS badge)
+  // Zone 1: Identity (deal name, company)
   // Zone 2: Value signal (amount + close date on one scan line)
   // Zone 3: State chip + last-activity time
   // Zone 4: Metadata (owner avatar + AI score)
@@ -344,24 +330,11 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
       {/*
         Deal name is the primary identifier — 13px/semibold, two-line clamp.
         Company sits directly below as muted context.
-        HRMS badge is top-right so it never interrupts the left-to-right
-        name scan.  It's a button so reps can click directly into HRMS context.
       */}
       <div className="flex items-start justify-between mb-0.5">
         <h4 className="text-[14px] font-semibold text-gray-900 leading-snug line-clamp-2 flex-1 mr-2">
           {deal.dealName}
         </h4>
-        {deal.isHRMS && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onHRMSClick(e, deal); }}
-            className="flex-shrink-0 flex items-center space-x-1 px-2 py-0.5 text-[10px] rounded font-semibold transition-opacity hover:opacity-80"
-            style={{ backgroundColor: '#fef3c7', border: '1px solid #f59e0b', color: '#92400e' }}
-            title="HRMS-connected deal — click for details"
-          >
-            <Building2 className="h-2.5 w-2.5" />
-            <span>HRMS</span>
-          </button>
-        )}
       </div>
       <p className="text-[11px] text-gray-500 mb-1.5 truncate">{deal.companyName || '—'}</p>
 

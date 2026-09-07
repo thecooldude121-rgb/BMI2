@@ -8,7 +8,6 @@ import { Meeting, MeetingFilters } from '../../types/meeting';
 import ScheduleMeetingModal from '../../components/Meeting/ScheduleMeetingModal';
 import RecordingPlayerModal from '../../components/Meeting/RecordingPlayerModal';
 import ActionItemsPanel from '../../components/Meeting/ActionItemsPanel';
-import HRMSConnectionModal from '../../components/Meeting/HRMSConnectionModal';
 import BulkTaskCreatorModal from '../../components/Meeting/BulkTaskCreatorModal';
 import PrepNotesModal from '../../components/Meeting/PrepNotesModal';
 import { useToast } from '../../contexts/ToastContext';
@@ -29,7 +28,6 @@ export default function MeetingsPage() {
     scheduleMeeting: false,
     recordingPlayer: false,
     actionItems: false,
-    hrmsConnection: false,
     bulkTaskCreator: false,
     moreOptions: false,
     prepNotes: false
@@ -199,11 +197,6 @@ export default function MeetingsPage() {
     setModals({ ...modals, actionItems: true });
   };
 
-  const handleOpenHRMSModal = (meeting: Meeting) => {
-    setSelectedMeeting(meeting);
-    setModals({ ...modals, hrmsConnection: true });
-  };
-
   const handleOpenPrepNotes = (meeting: Meeting) => {
     setSelectedMeeting(meeting);
     setModals({ ...modals, prepNotes: true });
@@ -293,9 +286,6 @@ END:VCALENDAR`;
         onClick={() => navigate(`/crm/meetings/${meeting.id}`)}
         onContextMenu={(e) => handleContextMenu(e, meeting)}
       >
-        {meeting.hrmsConnected && (
-          <div className="absolute top-4 right-4 w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse" title="HRMS Connected" />
-        )}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             {isLive && (
@@ -391,26 +381,6 @@ END:VCALENDAR`;
                 </button>
               </span>
             </div>
-          )}
-
-          {meeting.hrmsConnected && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenHRMSModal(meeting);
-              }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all hover:shadow-md border"
-              style={{
-                backgroundColor: '#fff3cd',
-                borderColor: '#ff9800',
-                fontSize: '13px'
-              }}
-            >
-              <Building2 className="h-4 w-4" style={{ color: '#ff9800' }} />
-              <span className="font-medium" style={{ color: '#ff9800' }}>
-                🏢 HRMS Connected {meeting.hrmsRecruitedDate && `- Recruited ${new Date(meeting.hrmsRecruitedDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}
-              </span>
-            </button>
           )}
 
           {meeting.location && (
@@ -1124,20 +1094,6 @@ END:VCALENDAR`;
             }}
             actionItems={selectedMeeting.aiSummary?.actionItems || []}
             meetingTitle={selectedMeeting.title}
-          />
-
-          <HRMSConnectionModal
-            isOpen={modals.hrmsConnection}
-            onClose={() => {
-              setModals({ ...modals, hrmsConnection: false });
-              setSelectedMeeting(null);
-            }}
-            hrmsData={{
-              companyName: selectedMeeting.accountName || '',
-              contactName: selectedMeeting.attendees[0]?.name || '',
-              contactTitle: selectedMeeting.attendees[0]?.title || '',
-              recruitmentDate: selectedMeeting.hrmsRecruitedDate || ''
-            }}
           />
 
           <PrepNotesModal

@@ -23,12 +23,10 @@ interface Deal {
   owner: string;
   lastActivity: string;
   daysSinceContact: number;
-  isHRMS: boolean;
   priority: 'high' | 'medium' | 'low';
   health: 'excellent' | 'healthy' | 'at-risk' | 'critical';
   source: string;
   status?: string;
-  hrmsDetails?: string;
 }
 
 interface PipelineStage {
@@ -56,7 +54,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   const [showStageModal, setShowStageModal] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState<Deal | null>(null);
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
-  const [showHRMSModal, setShowHRMSModal] = useState<Deal | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
   const [showProposalModal, setShowProposalModal] = useState<Deal | null>(null);
   const [showScoreTooltip, setShowScoreTooltip] = useState<string | null>(null);
@@ -140,7 +137,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     owner: deal.owner ?? '',
     lastActivity: deal.lastActivity ?? '',
     daysSinceContact: deal.daysSinceContact ?? 0,
-    isHRMS: deal.isHRMS ?? false,
     priority: deal.priority ?? 'low',
     health: (['healthy', 'at-risk', 'stalled'] as const).includes(deal.health as never)
       ? (deal.health as 'healthy' | 'at-risk' | 'stalled')
@@ -331,7 +327,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
             >
               <option value="all">All</option>
               <option value="Lead Gen">Lead Gen</option>
-              <option value="HRMS">HRMS</option>
               <option value="Website">Website</option>
               <option value="Manual">Manual</option>
             </select>
@@ -412,11 +407,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                   }}
                   onFocus={() => setSelectedCard(deal.id)}
                 >
-                {/* HRMS Orange Accent Line */}
-                {deal.isHRMS && (
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-orange-500 rounded-t-xl"></div>
-                )}
-
                 {/* Company & Deal Name */}
                 <div className="mb-4">
                   <div className="flex items-start justify-between mb-2">
@@ -424,15 +414,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                       <Building2 className="h-5 w-5 text-gray-400 flex-shrink-0" />
                       <span className="font-bold text-gray-900 text-lg">{deal.companyName}</span>
                     </div>
-                    {deal.isHRMS && (
-                      <span
-                        className="px-2 py-0.5 text-xs font-medium rounded cursor-pointer hover:opacity-80"
-                        style={{ backgroundColor: '#fff3cd', border: '1px solid #ff9800', color: '#e65100' }}
-                        onClick={(e) => { e.stopPropagation(); setShowHRMSModal(deal); }}
-                      >
-                        HRMS
-                      </span>
-                    )}
                   </div>
                   <div className="text-sm text-gray-600 ml-7">{deal.dealName}</div>
                 </div>
@@ -941,52 +922,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
         </div>
       )}
 
-      {/* HRMS Modal */}
-      {showHRMSModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">HRMS Connection Details</h3>
-            </div>
-            <div className="px-6 py-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <Building2 className="h-6 w-6 text-orange-600" />
-                  <div>
-                    <div className="font-semibold text-gray-900">{showHRMSModal.companyName}</div>
-                    <div className="text-sm text-gray-600">Connected to HRMS System</div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <span className="text-sm text-gray-600">Last Sync:</span>
-                    <span className="text-sm font-medium text-gray-900">{formatRelativeTime(showHRMSModal.lastActivity, '—')}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <span className="text-sm text-gray-600">Data Quality:</span>
-                    <span className="text-sm font-medium text-green-600">Excellent</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-gray-600">Integration Status:</span>
-                    <span className="flex items-center space-x-1 text-sm font-medium text-green-600">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>Active</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowHRMSModal(null)}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Send Proposal Modal */}
       {showProposalModal && (

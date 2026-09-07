@@ -131,8 +131,6 @@ export const sampleMeetings: Meeting[] = [
     hasRecording: true,
     recordingDuration: 30,
     hasTranscript: false,
-    hrmsConnected: true,
-    hrmsRecruitedDate: '2024-11-01',
     createdAt: new Date(today.getTime() + 14 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(today.getTime() + 15 * 60 * 60 * 1000).toISOString()
   },
@@ -186,7 +184,6 @@ export const sampleMeetings: Meeting[] = [
     aiProcessingStatus: 'not-recorded',
     hasRecording: false,
     hasTranscript: false,
-    hrmsConnected: true,
     createdAt: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
   },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lightbulb, Briefcase } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 
 export const TipsHelpPanel: React.FC = () => {
   return (
@@ -21,17 +21,6 @@ export const TipsHelpPanel: React.FC = () => {
           </ul>
         </div>
 
-        <div className="pt-4 border-t border-gray-200">
-          <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border-2 border-orange-300">
-            <div className="flex items-center space-x-2 mb-2">
-              <Briefcase className="h-5 w-5 text-orange-600" />
-              <span className="text-sm font-bold text-orange-900">🏢 UNIQUE: HRMS Connection</span>
-            </div>
-            <div className="text-sm text-orange-800">
-              If this deal came from HRMS recruitment, select "HRMS (Recruitment)" as source to track warm intro advantage and higher close rates!
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -98,12 +98,10 @@ interface Deal {
   owner: string;
   lastActivity: string;
   daysSinceContact: number;
-  isHRMS: boolean;
   priority: 'high' | 'medium' | 'low';
   health: 'excellent' | 'healthy' | 'at-risk' | 'critical';
   source: string;
   status?: string;
-  hrmsDetails?: string;
   nextStep?: string;
   nextStepDueDate?: string;
   createdAt?: string;
@@ -375,7 +373,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const [showActionDropdown, setShowActionDropdown] = useState<string | null>(null);
   const [showEmailModal, setShowEmailModal] = useState<Deal | null>(null);
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
-  const [showHRMSModal, setShowHRMSModal] = useState<Deal | null>(null);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [showDealNameFilter, setShowDealNameFilter] = useState(false);
   const columnPickerRef = useRef<HTMLTableCellElement>(null);
@@ -809,7 +806,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     owner: deal.owner ?? '',
     lastActivity: deal.lastActivity ?? '',
     daysSinceContact: deal.daysSinceContact ?? 0,
-    isHRMS: deal.isHRMS ?? false,
     priority: deal.priority ?? 'low',
     health: (['healthy', 'at-risk', 'stalled'] as const).includes(deal.health as never)
       ? (deal.health as 'healthy' | 'at-risk' | 'stalled')
@@ -1534,16 +1530,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                   >
                     {deal.dealName}
                   </span>
-                  {deal.isHRMS && (
-                    <span
-                      className="flex-shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded cursor-pointer hover:opacity-80"
-                      style={{ backgroundColor: '#fff3cd', border: '1px solid #f59e0b', color: '#92400e' }}
-                      onClick={(e) => { e.stopPropagation(); setShowHRMSModal(deal); }}
-                      title="Connected to HR System — click to view integration"
-                    >
-                      HR System <ExternalLink size={8} className="inline" />
-                    </span>
-                  )}
                 </div>
                 {/* getNextBestAction() is a pure synchronous function — safe to call inline in render.
                     For >500 deals, memoize per deal.id using useMemo. */}
@@ -4625,57 +4611,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
               >
                 Save Call Log
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── HRMS Modal ────────────────────────────────────────────────────────── */}
-      {showHRMSModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">HRMS Connection Details</h3>
-            </div>
-            <div className="px-6 py-4">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3 p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <Building2 className="h-6 w-6 text-orange-600" />
-                  <div>
-                    <div className="font-semibold text-gray-900">{showHRMSModal.dealName}</div>
-                    <div className="text-sm text-gray-600">
-                      {showHRMSModal.companyName
-                        ? `${showHRMSModal.companyName} · Connected to HRMS System`
-                        : 'Connected to HRMS System'}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <span className="text-sm text-gray-600">Last Sync:</span>
-                    <span className="text-sm font-medium text-gray-900">{formatRelativeTime(showHRMSModal.lastActivity, '—')}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <span className="text-sm text-gray-600">Data Quality:</span>
-                    <span className="text-sm font-medium text-green-600">Excellent</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <span className="text-sm text-gray-600">Integration Status:</span>
-                    <span className="flex items-center space-x-1 text-sm font-medium text-green-600">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>Active</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={() => setShowHRMSModal(null)}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Close
               </button>
             </div>
           </div>

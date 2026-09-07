@@ -62,10 +62,6 @@ export const AIInsightsPanel: React.FC<AIInsightsPanelProps> = ({
       });
     }
 
-    if (formData.source === 'hrms' || formData.hrmsConnection) {
-      factors.push({ type: 'positive', text: 'HRMS warm intro', impact: 15, detail: 'Connection increases close rate by 33%' });
-    }
-
     if (formData.source && formData.source.includes('lead-gen')) {
       factors.push({ type: 'warning', text: 'Competitor risk', impact: -8, detail: 'May use existing solution' });
     }

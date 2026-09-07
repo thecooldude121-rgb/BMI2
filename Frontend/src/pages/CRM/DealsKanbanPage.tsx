@@ -10,7 +10,7 @@ import { formatRelativeTime, formatCloseDate, daysFromNow, isWithinDays, parseDa
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { getStageChartColor } from '../../config/stageColors';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Plus, Search, Filter, Download, Settings, TrendingUp, AlertTriangle, Target, Building2, Calendar, CheckCircle2, XCircle, MoreVertical, MoreHorizontal, FileDown, Upload, Archive, Columns, LayoutList, AlignJustify, RotateCcw, X as XIcon, Eye, ShieldAlert, ChevronDown, ArrowUpDown, Check, Bookmark, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Download, Settings, TrendingUp, AlertTriangle, Target, Calendar, CheckCircle2, XCircle, MoreVertical, MoreHorizontal, FileDown, Upload, Archive, Columns, LayoutList, AlignJustify, RotateCcw, X as XIcon, Eye, ShieldAlert, ChevronDown, ArrowUpDown, Check, Bookmark, Pencil, Trash2 } from 'lucide-react';
 import DealsListView from './DealsListView';
 import DealsGridView from './DealsGridView';
 import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
@@ -91,8 +91,6 @@ const DealsKanbanPage: React.FC = () => {
   const [highlightedDeals, setHighlightedDeals] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'closeDate' | 'value' | 'health' | 'activity' | 'stage'>('closeDate');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'grid' | 'calendar'>('kanban');
-  const [showHRMSModal, setShowHRMSModal] = useState(false);
-  const [selectedHRMSDeal, setSelectedHRMSDeal] = useState<DealCard | null>(null);
   const [showScoreTooltip, setShowScoreTooltip] = useState<string | null>(null);
   const [showContextMenu, setShowContextMenu] = useState<{ dealId: string; x: number; y: number } | null>(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
@@ -324,8 +322,6 @@ const DealsKanbanPage: React.FC = () => {
             // Store raw ISO; formatRelativeTime() from dateUtils renders it human-readable on card
             lastActivity: d.updated_at || d.created_at || '',
             daysSinceContact: d.days_since_contact ?? 0,
-            isHRMS: Boolean(d.is_hrms),
-            hrmsDetails: d.hrms_details || '',
             priority: (['high', 'medium', 'low'].includes(d.priority?.toLowerCase())
               ? d.priority.toLowerCase()
               : 'medium') as 'high' | 'medium' | 'low',
@@ -593,9 +589,7 @@ const DealsKanbanPage: React.FC = () => {
     // Sum of negotiation-stage deals = realistic "probable close" value this month
     const highProbValue = negotiationDeals.reduce((sum, d) => sum + d.amount, 0);
 
-    const hrmsDeals = activeDeals.filter(d => d.isHRMS);
-
-    return { needAttention, negotiationDeals, highProbValue, hrmsDeals };
+    return { needAttention, negotiationDeals, highProbValue };
   }, [stages]);
 
   const inspectionSignals = useMemo(
@@ -859,13 +853,6 @@ const DealsKanbanPage: React.FC = () => {
     navigate('/crm/forecast');
   };
 
-  const handleViewHRMSDeals = () => {
-    const hrmsDeals = stages.flatMap(s => s.deals).filter(d => d.isHRMS);
-    setHighlightedDeals(hrmsDeals.map(d => d.id));
-    setSelectedSourceFilter('hrms');
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-  };
-
   const handleSort = (sortOption: 'closeDate' | 'value' | 'health' | 'activity' | 'stage') => {
     setSortBy(sortOption);
     setShowSortDropdown(false);
@@ -909,12 +896,6 @@ const DealsKanbanPage: React.FC = () => {
       case 'calendar': return 'Calendar';
       default: return 'Kanban';
     }
-  };
-
-  const handleHRMSBadgeClick = (e: React.MouseEvent, deal: DealCard) => {
-    e.stopPropagation();
-    setSelectedHRMSDeal(deal);
-    setShowHRMSModal(true);
   };
 
   const handleContactClick = (e: React.MouseEvent, dealId: string) => {
@@ -1296,10 +1277,8 @@ const DealsKanbanPage: React.FC = () => {
       if (selectedValueFilter === '100k+'  && d.amount < 100_000) return false;
 
       // Source filter
-      if (selectedSourceFilter === 'hrms'    && !d.isHRMS) return false;
       if (selectedSourceFilter === 'website' && !d.source?.toLowerCase().includes('website')) return false;
       if (selectedSourceFilter === 'leadgen' && !d.source?.toLowerCase().includes('lead gen')) return false;
-      if (selectedSourceFilter === 'manual'  && d.isHRMS) return false;
 
       if (selectedAccountFilter === 'missing' && d.hasAccount) return false;
 
@@ -1756,22 +1735,6 @@ const DealsKanbanPage: React.FC = () => {
                   <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Forecast</span>
                 </button>
 
-                <div className="w-px h-4 bg-gray-100 flex-shrink-0 mx-0.5" />
-
-                {/* HRMS */}
-                <button
-                  onClick={handleViewHRMSDeals}
-                  title={aiInsights.hrmsDeals.length > 0
-                    ? `${aiInsights.hrmsDeals.length} HRMS-connected deal${aiInsights.hrmsDeals.length !== 1 ? 's' : ''}`
-                    : 'No HRMS-connected deals'}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors group flex-shrink-0"
-                >
-                  <Building2 className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${aiInsights.hrmsDeals.length > 0 ? 'text-indigo-500' : 'text-gray-300 group-hover:text-indigo-400'}`} />
-                  <span className={`text-[13px] font-semibold tabular-nums transition-colors ${aiInsights.hrmsDeals.length > 0 ? 'text-gray-800 group-hover:text-indigo-600' : 'text-gray-400'}`}>
-                    {aiInsights.hrmsDeals.length > 0 ? aiInsights.hrmsDeals.length : '—'}
-                  </span>
-                  <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">HRMS</span>
-                </button>
               </div>
             );
           })()}
@@ -2054,7 +2017,7 @@ const DealsKanbanPage: React.FC = () => {
               { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
                 options: [['all','Any value'],['0-25k','Up to $25K'],['25-50k','$25K – $50K'],['50-100k','$50K – $100K'],['100k+','$100K+']] },
               { label: 'Source', value: selectedSourceFilter, onChange: setSelectedSourceFilter,
-                options: [['all','All sources'],['leadgen','Lead gen'],['hrms','HRMS'],['website','Website'],['manual','Manual']] },
+                options: [['all','All sources'],['leadgen','Lead gen'],['website','Website']] },
               { label: 'Account', value: selectedAccountFilter, onChange: (v: any) => setSelectedAccountFilter(v),
                 options: [['all','Any account'],['missing','Missing account']] },
             ] as const).map(f => (
@@ -2407,7 +2370,6 @@ const DealsKanbanPage: React.FC = () => {
                                 stalledOverride={isStalled(deal)}
                                 onCardClick={handleCardClick}
                                 onContextMenu={handleContextMenu}
-                                onHRMSClick={handleHRMSBadgeClick}
                                 onScoreClick={handleScoreClick}
                                 onContactClick={handleContactClick}
                                 onStatusClick={handleStatusClick}
@@ -2557,63 +2519,6 @@ const DealsKanbanPage: React.FC = () => {
                 }}
               >
                 Create Tasks
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showHRMSModal && selectedHRMSDeal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center space-x-2">
-                <Building2 className="h-5 w-5 text-blue-600" />
-                <h3 className="text-lg font-semibold text-gray-900">HRMS Connection Details</h3>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-1">{selectedHRMSDeal.companyName || selectedHRMSDeal.dealName}</h4>
-                <p className="text-sm text-gray-500">{formatCurrency(selectedHRMSDeal.amount)}</p>
-              </div>
-
-              {selectedHRMSDeal.hrmsDetails ? (
-                <div>
-                  <div className="text-sm font-medium text-gray-700 mb-1">HRMS Details:</div>
-                  <div className="text-sm text-gray-900 whitespace-pre-wrap">{selectedHRMSDeal.hrmsDetails}</div>
-                </div>
-              ) : (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                  <p className="text-sm text-gray-500">No HRMS details recorded for this deal.</p>
-                </div>
-              )}
-
-              <div>
-                <div className="text-sm font-medium text-gray-700 mb-1">Why it matters:</div>
-                <p className="text-sm text-gray-600">HRMS-connected deals have a warm introduction through an existing recruitment relationship, which typically shortens the sales cycle.</p>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowHRMSModal(false);
-                  setSelectedHRMSDeal(null);
-                }}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-              <Button
-                onClick={() => {
-                  navigate('/hrms');
-                  setShowHRMSModal(false);
-                  setSelectedHRMSDeal(null);
-                }}
-              >
-                View HRMS Module
               </Button>
             </div>
           </div>
@@ -2847,11 +2752,6 @@ const DealsKanbanPage: React.FC = () => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
                           <span className="font-semibold text-gray-900">{deal.companyName}</span>
-                          {deal.isHRMS && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
-                              HRMS
-                            </span>
-                          )}
                         </div>
                         <div className="text-sm text-gray-600">
                           {deal.contactName} • Close: {formatCloseDate(deal.closeDate)}

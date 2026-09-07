@@ -186,19 +186,7 @@ export const SAVED_VIEWS: SavedView[] = [
     predicate: (deal) => deal.amount >= HIGH_VALUE_THRESHOLD,
   },
 
-  // ── 6. HRMS-linked Deals ─────────────────────────────────────────────────
-  // Uses source: 'hrms' preset AND a predicate so the isHRMS flag is the
-  // authoritative check (source field could be inconsistently populated).
-  {
-    id:          'hrms',
-    label:       'HRMS-linked',
-    description: 'Deals connected to an HRMS recruitment event',
-    emoji:       '🏢',
-    filterPreset: { sortBy: 'health' },
-    predicate: (deal) => deal.isHRMS,
-  },
-
-  // ── 7. Best Probability ───────────────────────────────────────────────────
+  // ── 6. Best Probability ───────────────────────────────────────────────────
   // Requires a predicate — no dropdown covers aiScore.
   {
     id:          'best-probability',
@@ -210,7 +198,7 @@ export const SAVED_VIEWS: SavedView[] = [
       deal.aiScore >= HIGH_PROBABILITY_AI_SCORE && deal.health === 'healthy',
   },
 
-  // ── 8. Needs Manager Review ───────────────────────────────────────────────
+  // ── 7. Needs Manager Review ───────────────────────────────────────────────
   // High-value deals that are at risk or stalled — the combinations a manager
   // most needs to unblock. Requires a predicate.
   {

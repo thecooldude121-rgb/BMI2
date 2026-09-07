@@ -103,7 +103,6 @@ interface PanelDeal {
   priority: 'high' | 'medium' | 'low';
   daysSinceContact: number;
   lastActivity: string;
-  isHRMS: boolean;
   contactCount: number;
   competitorCount: number;
   stakeholders: StakeholderContact[];
@@ -234,7 +233,6 @@ function mapApiToPanelDeal(data: any): PanelDeal {
     priority,
     daysSinceContact: Number(data.days_since_contact) || 0,
     lastActivity:  data.updated_at || data.created_at || '',
-    isHRMS:        Boolean(data.is_hrms),
     stakeholders: (() => {
       try {
         const s = typeof data.stakeholders === 'string'
@@ -710,7 +708,6 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     owner:            deal.owner,
     lastActivity:     deal.lastActivity,
     daysSinceContact: deal.daysSinceContact,
-    isHRMS:           deal.isHRMS,
     priority:         deal.priority,
     health:           deal.health,
     source:           deal.source,

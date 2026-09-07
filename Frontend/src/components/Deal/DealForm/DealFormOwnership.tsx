@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Briefcase, Award, UserCheck } from 'lucide-react';
+import { UserCheck } from 'lucide-react';
 import { getUsers } from '../../../utils/dealsApi';
 import { DealTag } from '../../../config/dealTags';
 import { DealTagBrowserModal } from './DealTagBrowserModal';
@@ -34,7 +34,7 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
   const sources = [
     { id: 'lead-gen-apollo',  name: 'Lead Gen (Apollo.io)' },
     { id: 'lead-gen-zoominfo', name: 'Lead Gen (ZoomInfo)' },
-    { id: 'hrms',             name: '🏢 HRMS (Recruitment)' },
+    { id: 'hrms',             name: 'HRMS' },
     { id: 'website',          name: 'Website (Contact Form)' },
     { id: 'manual',           name: 'Manual Entry' },
     { id: 'referral',         name: 'Referral' },
@@ -134,69 +134,6 @@ export const DealFormOwnership: React.FC<DealFormOwnershipProps> = ({
             <p className="mt-1 text-sm text-red-600">{validationErrors.source}</p>
           )}
         </div>
-
-        {/* HRMS Connection Details */}
-        {formData.source === 'hrms' && (
-          <div className="p-5 bg-gradient-to-br from-orange-50 via-orange-50 to-yellow-50 rounded-xl border-2 border-orange-300 shadow-sm">
-            <div className="flex items-center space-x-2 mb-4">
-              <Briefcase className="h-6 w-6 text-orange-600" />
-              <h3 className="text-base font-bold text-orange-900">🏢 HRMS Connection Detected!</h3>
-            </div>
-
-            <div className="space-y-4">
-              <div className="p-3 bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg border-2 border-green-300">
-                <div className="flex items-center space-x-2 mb-2">
-                  <Award className="h-5 w-5 text-green-700" />
-                  <span className="text-sm font-bold text-green-900">💡 Warm Intro Advantage!</span>
-                </div>
-                <div className="text-sm text-green-800 space-y-1">
-                  <div>
-                    <span className="font-bold">{formData.hrmsConnection?.recruited || 'Sarah Lee'} (CFO)</span>
-                    {' '}was recruited from <span className="font-bold">TechStart</span> on{' '}
-                    <span className="font-bold">Nov 14, 2024</span>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-green-300">
-                    Historical data: <span className="font-bold text-green-900">33% higher close rate!</span>
-                  </div>
-                  <div className="text-xs text-green-700 mt-1">
-                    Recommended: Use this warm intro advantage in your outreach
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-orange-900 mb-1">Recruited Person:</label>
-                <select aria-label="Recruited Person:"
-                  className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                  value={formData.hrmsConnection?.recruited || ''}
-                  onChange={(e) => onChange('hrmsConnection', { ...formData.hrmsConnection, recruited: e.target.value })}
-                >
-                  <option value="Sarah Lee">Sarah Lee</option>
-                  <option value="Mike Chen">Mike Chen</option>
-                  <option value="David Kumar">David Kumar</option>
-                  <option value="Emily Wong">Emily Wong</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-orange-900 mb-1">Recruitment Date:</label>
-                <input aria-label="Recruitment Date:"
-                  type="date"
-                  value={formData.hrmsConnection?.recruitmentDate || '2024-11-14'}
-                  onChange={(e) => onChange('hrmsConnection', { ...formData.hrmsConnection, recruitmentDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                />
-              </div>
-
-              <button
-                type="button"
-                className="w-full px-4 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium transition-colors shadow-sm"
-              >
-                View Full HRMS Details →
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Priority */}
         <div>
