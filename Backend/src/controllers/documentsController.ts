@@ -131,7 +131,28 @@ export const getDocumentById = async (req: AuthRequest, res: Response, next: Nex
     );
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Document not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
-  } catch (error) { next(error); }
+  } catch (error) {
+    /*
+     * documents.id is a UUID, so a non-uuid path parameter raises Postgres
+     * 22P02 (invalid_text_representation) rather than returning no rows. That
+     * reached errorHandler as an unmapped error and surfaced as a 500 whose
+     * body was the DRIVER'S OWN TEXT — a browser hitting
+     * /crm/documents/doc_acme_proposal_v2 rendered
+     * 'invalid input syntax for type uuid: "doc_acme_proposal_v2"' to the
+     * user. Two problems in one: the wrong status, and database internals
+     * leaking into the UI.
+     *
+     * A malformed id is exactly "not a document in your workspace", so answer
+     * that. Same reasoning and same code as idInTenant in
+     * utils/tenantScope.ts, whose comment records which id columns are
+     * integers and which are not.
+     */
+    if ((error as { code?: string }).code === '22P02') {
+      res.status(404).json({ success: false, message: 'Document not found' });
+      return;
+    }
+    next(error);
+  }
 };
 
 export const createDocument = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {

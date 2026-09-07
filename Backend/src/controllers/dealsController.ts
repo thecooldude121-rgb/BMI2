@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
-import { foreignIdsInTenant } from '../utils/tenantScope';
+import { foreignIdsInTenant, userIdForName, userNameForId } from '../utils/tenantScope';
 import { resolveStageForWrite, findStage, STAGE_NOT_IN_WORKSPACE } from '../utils/pipelineStages';
 import { resolveActorName } from '../utils/actorName';
 import { workspaceDefaultCurrency } from './workspaceController';
@@ -23,10 +23,46 @@ import { workspaceDefaultCurrency } from './workspaceController';
  */
 const JSONB_ARRAY_COLUMNS = new Set(['stakeholders', 'competitors', 'attachment_metadata']);
 
+/**
+ * The deal-source vocabulary. MIRRORS deals_source_check (migration 040).
+ *
+ * WHY THIS EXISTS AT ALL, given the constraint. errorHandler.ts maps no
+ * Postgres constraint codes — no 23505, 23502 or 23514 handling anywhere in it
+ * — so a CHECK violation reaches the caller as a bare 500 Internal Server
+ * Error telling them nothing. That is exactly the deals.value NOT NULL failure
+ * recorded in CLAUDE.md, where a missing amount surfaced as a masked 500 and
+ * the fix was validation rather than a schema change. The constraint is the
+ * backstop that makes drift impossible; this is what the caller actually sees.
+ *
+ * TWO LISTS THAT MUST AGREE, and that is a known cost rather than an oversight
+ * — see the note at the foot of migration 040 naming all four places. The
+ * proper fix is to serve this vocabulary the way GET /users serves
+ * assignable_roles, so the client renders the rule instead of copying it. Until
+ * then, changing one of these means changing all four.
+ */
+const DEAL_SOURCES = [
+  'lead-gen-apollo', 'lead-gen-zoominfo', 'hrms', 'website', 'manual',
+  'referral', 'event', 'partner', 'inbound', 'cold-outreach', 'other',
+] as const;
+
+/**
+ * Null and '' are ACCEPTED, deliberately: an unrecorded source is a real state
+ * (15 of 25 live deals), and an update that omits the field must not be read as
+ * clearing it. Empty string normalises to NULL so a blank <select> does not
+ * store '' next to the NULLs and split the same meaning across two values.
+ */
+const normalizeSource = (value: unknown): { ok: true; value: string | null } | { ok: false; message: string } => {
+  if (value === undefined || value === null || value === '') return { ok: true, value: null };
+  if (typeof value !== 'string' || !(DEAL_SOURCES as readonly string[]).includes(value)) {
+    return { ok: false, message: `source must be one of: ${DEAL_SOURCES.join(', ')}` };
+  }
+  return { ok: true, value };
+};
+
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { stage, assigned_to, search, contact_email, company_name, company_id, limit = 50, offset = 0, include_test } = req.query;
+    const { stage, assigned_to, assigned_to_user_id, search, contact_email, company_name, company_id, limit = 50, offset = 0, include_test } = req.query;
     // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
     // produce duplicate rows for the same deal.  Duplicate cards on the board
     // are caused by genuine duplicate rows in the deals table (different ids,
@@ -61,6 +97,25 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
              -- (No backticks in this comment on purpose: it lives inside a JS
              -- template literal, and one would close the string. CLAUDE.md
              -- lesson 7 — and I did it here anyway before catching it.)
+             -- OWNER, DUAL-READ (migration 039). assigned_to stays a NAME in
+             -- the response — the resolved user's name where the FK is set,
+             -- otherwise the legacy string. Same play as ps.slug AS stage:
+             -- project the old field name from the new source one phase BEFORE
+             -- the varchar is dropped, so the response shape does not change on
+             -- cutover day and every frontend read of deal.assigned_to keeps
+             -- working throughout.
+             --
+             -- d.* also carries assigned_to, and node-pg takes the LAST field of
+             -- a duplicated name, so this alias wins — the mechanism C0 relied
+             -- on and verified with a payload diff.
+             COALESCE(
+               NULLIF(btrim(au.first_name || ' ' || au.last_name), ''),
+               d.assigned_to
+             ) AS assigned_to,
+             -- Exposed so the client can tell RESOLVED ownership from a bare
+             -- name, and so per-owner grouping has a stable key.
+             d.assigned_to_user_id,
+             au.email AS assigned_to_email,
              ps.slug AS stage,
              -- DATE columns re-projected as text. A DATE is a calendar day with
              -- no time and no timezone, but the pg driver builds a JS Date at
@@ -96,6 +151,11 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
       -- global primary key, so without it a bad stage_id could project another
       -- workspace's stage name. LEFT so a deal is never dropped from the list
       -- by a stage that cannot be resolved.
+      -- users.id is a GLOBAL primary key, so the tenant predicate is not
+      -- optional: without it a deal in workspace A pointing at a user in
+      -- workspace B would render that user's name. Same requirement as the
+      -- leads and pipeline_stages joins.
+      LEFT JOIN users au ON au.id = d.assigned_to_user_id AND au.tenant_id = d.tenant_id
       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
       WHERE d.tenant_id = $1`;
     const params: any[] = [tenantId];
@@ -114,7 +174,15 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     // Filters on the DERIVED slug now that deals.stage is gone (migration 038).
     // The join is already in the FROM clause for the projection.
     if (stage)       { query += ` AND ps.slug = $${i++}`;            params.push(stage); }
-    if (assigned_to) { query += ` AND d.assigned_to = $${i++}`;       params.push(assigned_to); }
+    // Owner filter, dual-read. Callers pass a NAME (the documented contract),
+    // so match the resolved user's name OR the legacy string — a deal migrated
+    // to the FK and one not yet migrated both answer the same query.
+    if (assigned_to) {
+      query += ` AND (btrim(au.first_name || ' ' || au.last_name) = $${i} OR d.assigned_to = $${i})`;
+      params.push(assigned_to); i++;
+    }
+    // Optional exact-ownership filter for callers that hold a user id.
+    if (assigned_to_user_id) { query += ` AND d.assigned_to_user_id = $${i++}`; params.push(assigned_to_user_id); }
     if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${search}%`); i++; }
 
     // contact_email / company_name: the ONLY link deals carry to a contact or an
@@ -174,8 +242,17 @@ export const getDealById = async (req: AuthRequest, res: Response, next: NextFun
               co.country  AS company_country,
               GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact,
               -- PHASE C0, same reasoning as getDeals: see the long note there.
-              ps.slug AS stage
+              ps.slug AS stage,
+              -- OWNER, DUAL-READ (migration 039) — same reasoning and same
+              -- COALESCE as getDeals; see the note there.
+              COALESCE(
+                NULLIF(btrim(au.first_name || ' ' || au.last_name), ''),
+                d.assigned_to
+              ) AS assigned_to,
+              d.assigned_to_user_id,
+              au.email AS assigned_to_email
        FROM deals d
+       LEFT JOIN users au ON au.id = d.assigned_to_user_id AND au.tenant_id = d.tenant_id
        LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
        -- Scoped for the same reason as getDeals: see the comment there.
        LEFT JOIN leads l ON d.lead_id = l.id AND l.tenant_id = d.tenant_id
@@ -201,7 +278,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       pipeline_id, pipeline_name, deal_type,
       stage, probability, expected_close_date,
       close_date_is_past, close_date_override_reason, forecast_category,
-      assigned_to, description, next_step, next_step_due_date, next_step_owner,
+      assigned_to, assigned_to_user_id, description, next_step, next_step_due_date, next_step_owner,
       next_step_status, notes, company_name, company_id,
       contact_name, contact_email, contact_title, stakeholders, competitors,
       source, priority, tags, product, contract_term, payment_terms,
@@ -256,6 +333,11 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       [
         { field: 'lead_id',    table: 'leads',     value: lead_id },
         { field: 'company_id', table: 'companies', value: company_id },
+        // Migration 039. users.id is a global primary key, so an id from
+        // another workspace satisfies the FK and breaks tenant isolation. The
+        // write is the half that creates the bad row; the read join carries the
+        // matching predicate.
+        { field: 'assigned_to_user_id', table: 'users', value: assigned_to_user_id },
       ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
 
@@ -293,13 +375,30 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     }
     const stageRow = resolved.stage;
 
+    // Migration 040: reject an unknown source with a clean 400 rather than
+    // letting deals_source_check answer as a masked 500.
+    const sourceCheck = normalizeSource(source);
+    if (!sourceCheck.ok) {
+      res.status(400).json({ success: false, message: sourceCheck.message });
+      return;
+    }
+
+    // DUAL-WRITE (migration 039). Prefer an explicit id; otherwise resolve the
+    // submitted NAME to a user in this workspace. Several forms still send only
+    // a name, so resolving here is what makes their writes produce resolved
+    // ownership without rewriting each picker. Unresolvable names store NULL —
+    // an unresolved owner, never a guessed one.
+    const resolvedOwnerId =
+      (assigned_to_user_id as number | null | undefined) ??
+      (await userIdForName(assigned_to, tenantId));
+
     const result = await pool.query(
       `INSERT INTO deals
          (name, title, lead_id, value, currency, base_amount_usd,
           pipeline_id, pipeline_name, deal_type,
           probability, expected_close_date,
           close_date_is_past, close_date_override_reason, forecast_category,
-          assigned_to, description, next_step, next_step_due_date, next_step_owner,
+          assigned_to, assigned_to_user_id, description, next_step, next_step_due_date, next_step_owner,
           next_step_status, notes, company_name, company_id,
           contact_name, contact_email, contact_title, stakeholders, competitors,
           source, priority, tags, product, contract_term, payment_terms,
@@ -310,7 +409,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
           exchange_rate, nr_margin, start_date, contract_end_date, country, account_industry,
           stage_id, tenant_id)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
        RETURNING *`,
       [
         dealName, title || dealName, lead_id, value,
@@ -324,13 +423,13 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         probability || 0, expected_close_date,
         close_date_is_past ?? false, close_date_override_reason ?? null,
         forecast_category ?? null,
-        assigned_to, description, next_step ?? null,
+        assigned_to, resolvedOwnerId, description, next_step ?? null,
         next_step_due_date ?? null, next_step_owner ?? null,
         next_step_status ?? 'pending', notes, company_name, company_id ?? null,
         contact_name, contact_email, contact_title,
         JSON.stringify(stakeholders ?? []),
         JSON.stringify(competitors ?? []),
-        source, priority || 'Medium', tags, product, contract_term, payment_terms,
+        sourceCheck.value, priority || 'Medium', tags, product, contract_term, payment_terms,
         JSON.stringify(attachment_metadata ?? []),
         win_prob_override_reason ?? null,
         win_prob_ai ?? null,
@@ -350,7 +449,22 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     // RETURNING * cannot join, but the resolved stage row is already in scope,
     // so the response carries the same `stage` the read paths project rather
     // than the raw column. Keeps every response shape identical through C2.
-    res.status(201).json({ success: true, data: { ...result.rows[0], stage: stageRow.slug } });
+    // Owner name resolved for the same reason as `stage` above: RETURNING *
+    // cannot join, so a create that supplied only assigned_to_user_id would
+    // answer with assigned_to: null and the client would render no owner until
+    // it refetched. Falls back to whatever string was submitted.
+    const ownerNameForResponse =
+      (await userNameForId(resolvedOwnerId, tenantId)) ?? (assigned_to ?? null);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        ...result.rows[0],
+        stage: stageRow.slug,
+        assigned_to: ownerNameForResponse,
+        assigned_to_user_id: resolvedOwnerId,
+      },
+    });
   } catch (error) { next(error); }
 };
 
@@ -366,8 +480,28 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
       [
         { field: 'lead_id',    table: 'leads',     value: req.body.lead_id },
         { field: 'company_id', table: 'companies', value: req.body.company_id },
+        // Migration 039 — same reasoning as createDeal. Re-pointing ownership
+        // at another workspace's user needs only an id in a PUT body.
+        { field: 'assigned_to_user_id', table: 'users', value: req.body.assigned_to_user_id },
       ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
+
+    // Migration 040, same reasoning as createDeal. Only when the field is
+    // present: an update that omits `source` must not be read as clearing it.
+    if (req.body.source !== undefined) {
+      const check = normalizeSource(req.body.source);
+      if (!check.ok) { res.status(400).json({ success: false, message: check.message }); return; }
+      req.body.source = check.value;
+    }
+
+    // DUAL-WRITE (migration 039), same reasoning as createDeal: a body that
+    // changes the owner NAME without supplying an id gets the id resolved here,
+    // so name-only clients still produce resolved ownership. Only fills the
+    // field when it is absent — an explicit assigned_to_user_id (including an
+    // explicit null, to clear ownership) always wins.
+    if (req.body.assigned_to !== undefined && req.body.assigned_to_user_id === undefined) {
+      req.body.assigned_to_user_id = await userIdForName(req.body.assigned_to, tenantId);
+    }
 
     // createDeal requires a non-blank name and a present, non-negative,
     // finite value. This path enforced neither, so the same inputs createDeal
@@ -425,7 +559,7 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
       // write it directly either. stage_id is appended after the loop.
     }
 
-    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
+    const fields = ['name','title','lead_id','value','currency','base_amount_usd','pipeline_id','pipeline_name','deal_type','probability','expected_close_date','close_date_is_past','close_date_override_reason','forecast_category','assigned_to','assigned_to_user_id','description','next_step','next_step_due_date','next_step_owner','next_step_status','notes','company_name','company_id','contact_name','contact_email','contact_title','stakeholders','competitors','source','priority','tags','product','contract_term','payment_terms','attachment_metadata','win_prob_override_reason','win_prob_ai','momentum_score','is_test','sales_drive_folder','agreement_url','account_module_setup','client_discovers','discovery_date','platform_fee','custom_fee','license_fee','onboarding_fee','white_labelling_fee','exchange_rate','nr_margin','start_date','contract_end_date','country','account_industry'];
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
@@ -791,8 +925,25 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
       }
 
       case 'owner': {
+        // DUAL-WRITE (migration 039). The payload carries a NAME, which is the
+        // existing contract for this action, so the name is still stored. The
+        // subquery resolves it to a user id in the SAME workspace where it
+        // matches exactly and unambiguously, and writes NULL otherwise —
+        // deliberately, so an unrecognised name leaves the deal with an
+        // unresolved owner rather than a wrong one.
+        //
+        // The tenant predicate inside the subquery is not optional: users.id is
+        // a global primary key, so without it a name matching a user in another
+        // workspace would be resolved to that user's id.
         const r = await client.query(
-          `UPDATE deals SET assigned_to = $1, updated_at = NOW()
+          `UPDATE deals SET assigned_to = $1,
+                            assigned_to_user_id = (
+                              SELECT u.id FROM users u
+                               WHERE u.tenant_id = $3
+                                 AND lower(btrim(u.first_name || ' ' || u.last_name)) = lower(btrim($1))
+                               LIMIT 1
+                            ),
+                            updated_at = NOW()
            WHERE id = ANY($2::varchar[]) AND tenant_id = $3 RETURNING id`,
           [payload!.owner, foundIds, tenantId],
         );

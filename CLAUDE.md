@@ -196,7 +196,10 @@ counts like "147 contacts" and "$2.4M pipeline" surviving across pages).
 - **A component tree with zero data-fetching calls is suspected fabricated code — report it,
   do not assume it is a work in progress.** Grep the whole tree for `fetch(`, the API client
   and the data contexts; if the count is zero across every file, the feature is backed by
-  nothing no matter how finished the UI looks. This has now happened twice at whole-feature
+  nothing no matter how finished the UI looks. **Follow the imports — see lesson 15.** That
+  clause about the API client and the data contexts is doing real work and has been skipped:
+  three pages were called zero-fetch on `grep -c 'fetch(' <page>` alone when the fetch was
+  one import away, in a hook or a service module. This has now happened twice at whole-feature
   scale: the six-widget dashboard built from hardcoded literals, and a second complete Deals
   implementation (`components/Deals/`, 8 files, ~4,400 lines, routed and drag-and-droppable)
   whose data came from `generateSampleDeals()` — zero `fetch` calls in the entire directory,
@@ -489,6 +492,33 @@ here in the same session, or the next person re-derives it or guesses wrong.
   implementation. So if structured qualification scoring is ever wanted in the CRM Leads
   module, do not go looking for it in git history expecting a starting point: it was
   fabricated UI with no fetch behind it, and the work is a new build.
+
+- **Document access/download telemetry needs an events table, and is NOT built.**
+  `DocumentDetailPage` rendered a per-document "12 views" and a download count, plus
+  a "Last Viewed" date. None had a column: `access_count`, `download_count` and
+  `last_accessed_at` do not exist on `documents`, and the counts were a hardcoded
+  literal (`access_count || 12`) and a client-side counter that reset on reload. They
+  read as an audit trail of who opened a file, which is why they were deleted rather
+  than labelled. Recording them for real means a new append-only events table
+  (document id, user id, action, timestamp, workspace) plus a write on the content
+  endpoint — deliberately out of scope for what was meant to stay a small wiring fix,
+  the same call made for the BANT framework and the `ROLE_MAP` fallback.
+- **`documents.module` / `record_id` have no foreign key, so related-entity panels
+  stay empty.** The detail page's related deal, account and contacts came from a
+  fixture keyed off three hardcoded document ids. The real columns are a free-text
+  module name and a free-text id with nothing constraining either, so resolving them
+  needs the same decision `deals.pipeline_id` needs: become a real FK, or stay a
+  loose reference and be validated on write. Until then those panels render their
+  empty state rather than an invented deal.
+- **Document sharing does not exist, and its modal never worked.**
+  `ShareDocumentModal.onShare` passes one object; `handleShareDocument` took
+  `(userId, visibility, message)`, so the object arrived as `userId`, the team-member
+  lookup never matched, and every attempt fell into "Please select a user". Had it
+  matched it would have toasted success for local state that vanished on reload.
+  There is no `document_shares` table, no `visibility` column, and no endpoint
+  honouring a permission or an expiry. The handler now says so; the modal still
+  collects a permission and an expiry that go nowhere, which is the visible part of
+  the gap.
 
 ## Roles — who may grant what
 
@@ -1052,3 +1082,42 @@ something directly, do that instead of reasoning about what should be true.**
    every object the migration touches against live, and only then update the recorded
    checksum. Better: never apply a migration until the version you are applying is the
    version you have committed.
+15. **`grep -c 'fetch(' <page>` DOES NOT ANSWER "is this page wired". Follow every
+   service and hook module the page imports, and look for the fetch THERE.** The
+   no-fabricated-data rule above says a component tree with zero data-fetching calls is
+   suspected fabricated code — and the cheap way to check that is exactly the check that
+   fails, because in this codebase the fetch usually is not in the page.
+
+   **This is a documented rule rather than a one-off note because it produced three wrong
+   conclusions in a single session, twice at whole-page scale:**
+   - **`ReportsPage.tsx`** was reported as a zero-fetch fabricated tree in a scoping
+     report and in a PR description. It imports `useDashboardData()` and derives its four
+     headline stats — Revenue Won, Deals Won, Open Pipeline, Win Rate — from live deals.
+     One card even reports "quota not tracked" honestly. It is a HYBRID: real headline
+     numbers above 107 hardcoded metric rows, which makes it more dangerous than a fake
+     page, not less — the correct figures vouch for the invented ones.
+   - **`DocumentsLibrary.tsx`** was reported the same way. `documentsService.ts` already
+     calls the real Node API and `loadDocuments()` already populates the list. The actual
+     fabrication was the SIDEBAR COUNTS and the recent-documents strip, so the page showed
+     a correctly-empty list beside a sidebar advertising 247 documents.
+   - **`contexts/IntegrationsContext.tsx`** was listed as a live fabricated provider when
+     it had already been remediated: every field initialises empty and `generateApiKey`
+     THROWS rather than minting a fake key.
+
+   In each case `grep -c 'fetch(' <file>` returned 0 and the claim was made on that alone.
+   Two of the three reached a PR description before being corrected.
+
+   **What to run instead**, before saying a page is unwired:
+   ```
+   grep -nE "^import .*(use[A-Z]|Api'|apiClient|Service'|Context')" <file>
+   ```
+   then open each hit and check for the fetch inside it. A page that imports
+   `useDashboardData`, a `*Api.ts`, a `*Service.ts` or a data context is wired until
+   proven otherwise.
+
+   **And the inverse matters just as much:** "wired" is not "honest". Both hybrids above
+   fetch real data AND render invented data beside it. So the question is never
+   *does this page fetch* — it is *does every figure on screen come from what it
+   fetched*, which is answered per figure, not per file. This is lesson 3 and lesson 9 one
+   level out: there, data could not reach a consumer that bypassed or ignored it; here, a
+   consumer reads real data for some values and literals for the rest.

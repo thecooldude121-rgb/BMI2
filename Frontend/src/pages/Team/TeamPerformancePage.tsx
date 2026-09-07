@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Users, TrendingUp, Target, Trophy, Search, Download } from 'lucide-react';
+import { NotAvailable } from '../../components/common/NotAvailable';
 
 type Role = 'CEO' | 'VP' | 'Manager' | 'Rep' | 'Admin' | 'Analyst' | 'Support';
 
@@ -11,9 +12,6 @@ interface TeamMember {
   email: string;
   role: string;
   manager: string;
-  deals: number;
-  pipeline: string;
-  winRate: number;
   status: 'Active' | 'Inactive';
   initials: string;
 }
@@ -25,9 +23,6 @@ const TEAM_MEMBERS: TeamMember[] = [
     email: 'alex@bmi.com',
     role: 'Sales Rep',
     manager: 'Sarah Chen',
-    deals: 8,
-    pipeline: '$450K',
-    winRate: 67,
     status: 'Active',
     initials: 'AR'
   },
@@ -37,9 +32,6 @@ const TEAM_MEMBERS: TeamMember[] = [
     email: 'sarah@bmi.com',
     role: 'Sales Manager',
     manager: 'John Smith',
-    deals: 12,
-    pipeline: '$680K',
-    winRate: 72,
     status: 'Active',
     initials: 'SC'
   },
@@ -49,9 +41,6 @@ const TEAM_MEMBERS: TeamMember[] = [
     email: 'mike@bmi.com',
     role: 'Account Executive',
     manager: 'John Smith',
-    deals: 6,
-    pipeline: '$320K',
-    winRate: 58,
     status: 'Active',
     initials: 'MJ'
   },
@@ -61,9 +50,6 @@ const TEAM_MEMBERS: TeamMember[] = [
     email: 'emily@bmi.com',
     role: 'Sales Rep',
     manager: 'Sarah Chen',
-    deals: 5,
-    pipeline: '$280K',
-    winRate: 65,
     status: 'Active',
     initials: 'ED'
   },
@@ -73,9 +59,6 @@ const TEAM_MEMBERS: TeamMember[] = [
     email: 'john@bmi.com',
     role: 'Sales Director',
     manager: 'CEO',
-    deals: 15,
-    pipeline: '$1.2M',
-    winRate: 75,
     status: 'Active',
     initials: 'JS'
   }
@@ -154,14 +137,8 @@ export default function TeamPerformancePage() {
   const visibleMembers = getVisibleMembers();
 
   // Calculate stats based on visible members
-  const teamSize = visibleMembers.length;
-  const totalDeals = visibleMembers.reduce((sum, m) => sum + m.deals, 0);
-  const totalPipelineValue = visibleMembers.reduce((sum, m) => {
-    const value = parseInt(m.pipeline.replace(/[$KM,]/g, '')) * (m.pipeline.includes('M') ? 1000 : 1);
-    return sum + value;
-  }, 0);
-  const avgWinRate = Math.round(visibleMembers.reduce((sum, m) => sum + m.winRate, 0) / visibleMembers.length);
-  const formattedPipeline = totalPipelineValue >= 1000 ? `$${(totalPipelineValue / 1000).toFixed(1)}M` : `$${totalPipelineValue}K`;
+  // Aggregates over `deals`, `pipeline` and `winRate` lived here. Those fields
+  // are gone from the fixture (they were invented), so there is nothing to sum.
 
   const filteredMembers = visibleMembers.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -238,6 +215,34 @@ export default function TeamPerformancePage() {
           </div>
         </div>
 
+        {/*
+          STOPGAP — every figure below TEAM_MEMBERS is a hardcoded literal, and
+          this page has no data layer at all (no fetch, no data hook). The
+          numbers that used to render here were invented: per-rep deal counts,
+          pipeline totals, win rates and a flat "Quota 112% / On track".
+
+          They are blanked to "—" rather than left under a label because these
+          are PERFORMANCE FIGURES ABOUT REAL, NAMED EMPLOYEES — Alex Rodriguez,
+          Sarah Chen, Mike Johnson, Emily Davis and David Kumar are all real
+          users in this workspace. A fabricated quota attainment next to a real
+          person's name can be screenshotted into a review or a comp
+          conversation, which puts it in the same class as a fabricated
+          credential: the blast radius extends outside the app. CLAUDE.md's
+          no-fabricated-data rule says that class gets deleted, not labelled.
+
+          Wiring this up needs backend work that does not exist yet: `users` has
+          no manager relation (only `employees.manager_id`, which is HRMS-owned
+          and must not be joined), `quotas` is empty and keyed by `rep_name`
+          rather than a user id, and `deals.assigned_to` is a display-name
+          string, so per-rep aggregation cannot be done reliably. See the
+          fabricated-data scoping report.
+        */}
+        <NotAvailable
+          feature="Team performance reporting"
+          detail="Nothing on this page is connected to your data yet. The team roster, deal counts, pipeline totals, win rates and quota attainment are all placeholders — they are not calculated from your workspace. Per-rep reporting needs a manager relationship on users, quota records, and deal ownership stored as a user reference rather than a name."
+          className="mb-6"
+        />
+
         {/* Stats Bar */}
         {!repViewMode && (
           <div className="grid grid-cols-6 gap-4 mb-6">
@@ -246,8 +251,8 @@ export default function TeamPerformancePage() {
                 <Users className="w-5 h-5 text-blue-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Team Size</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{teamSize}</div>
-              <div className="text-xs text-slate-500">All Active</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-5">
@@ -255,8 +260,8 @@ export default function TeamPerformancePage() {
                 <TrendingUp className="w-5 h-5 text-green-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Active Deals</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{totalDeals}</div>
-              <div className="text-xs text-slate-500">Across all</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-5">
@@ -264,8 +269,8 @@ export default function TeamPerformancePage() {
                 <Target className="w-5 h-5 text-blue-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Total Pipeline</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{formattedPipeline}</div>
-              <div className="text-xs text-green-600">+12% vs Q</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-5">
@@ -273,8 +278,8 @@ export default function TeamPerformancePage() {
                 <Trophy className="w-5 h-5 text-yellow-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Avg Win Rate</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">{avgWinRate}%</div>
-              <div className="text-xs text-green-600">Above tgt</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-5">
@@ -282,8 +287,8 @@ export default function TeamPerformancePage() {
                 <Target className="w-5 h-5 text-green-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Quota</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-800 mb-1">112%</div>
-              <div className="text-xs text-green-600">On track</div>
+              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not connected</div>
             </div>
           </div>
         )}
@@ -391,24 +396,22 @@ export default function TeamPerformancePage() {
                     </td>
                     {!repViewMode && (
                       <>
+                        {/* Deal count, pipeline and win rate were invented
+                            literals attached to a real named employee. Blanked
+                            until per-rep aggregation is possible — see the
+                            banner above. The "view this rep's deals" link is
+                            kept, because it navigates by name to a page that
+                            filters real deals. */}
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => handleDealsClick(member.name)}
-                            className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                            className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                           >
-                            {member.deals}
+                            View deals
                           </button>
                         </td>
-                        <td className="px-6 py-4 text-right text-sm font-semibold text-slate-800">{member.pipeline}</td>
-                        <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                            member.winRate >= 70 ? 'bg-green-100 text-green-700' :
-                            member.winRate >= 60 ? 'bg-blue-100 text-blue-700' :
-                            'bg-orange-100 text-orange-700'
-                          }`}>
-                            {member.winRate}%
-                          </span>
-                        </td>
+                        <td className="px-6 py-4 text-right text-sm text-slate-300">—</td>
+                        <td className="px-6 py-4 text-center text-sm text-slate-300">—</td>
                       </>
                     )}
                     <td className="px-6 py-4 text-center">

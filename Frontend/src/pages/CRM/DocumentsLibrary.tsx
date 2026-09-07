@@ -39,6 +39,15 @@ interface Document {
   updated_at?: string;
 
   version: number;
+  /*
+   * REAL COLUMNS the local interface omitted. `module` + `record_id` are how a
+   * document links to a deal/account/contact — a free-text module name and a
+   * free-text id, with NO foreign key. The interface instead declared four
+   * separate id columns (deal_id, account_id, contact_id, activity_id) that do
+   * not exist on the table, so all four link filters matched nothing.
+   */
+  module?: string | null;
+  record_id?: string | null;
   parent_document_id?: string | null;
 
   description?: string;
@@ -60,134 +69,80 @@ interface Document {
   starred?: boolean;
 }
 
+/*
+ * FILTER VOCABULARIES ONLY — every count here is now DERIVED, not declared.
+ *
+ * These lists carried hardcoded totals that could not all be true at once:
+ * categories summed to 208, file types to 247, related-to to 582, sources to
+ * 199, owners to 260 and date ranges to 247. And `documents` holds ZERO ROWS —
+ * so the sidebar claimed 247 documents beside a main list that correctly showed
+ * none. An empty list contradicted by a populated sidebar is worse than either
+ * alone: it reads as a loading bug rather than an empty workspace.
+ *
+ * Counts come from `facets` below, computed off the same fetched array the list
+ * renders. No second data path — the service call was already there.
+ */
 const CATEGORIES = [
-  { name: 'Proposal', count: 42, icon: '📄' },
-  { name: 'Contract', count: 23, icon: '📋' },
-  { name: 'Presentation', count: 35, icon: '📊' },
-  { name: 'Case Study', count: 18, icon: '📑' },
-  { name: 'Pricing', count: 28, icon: '💰' },
-  { name: 'Meeting Materials', count: 56, icon: '🤝' },
-  { name: 'Email Attachments', count: 6, icon: '📧' }
+  { name: 'Proposal', icon: '\u{1F4C4}' },
+  { name: 'Contract', icon: '\u{1F4CB}' },
+  { name: 'Presentation', icon: '\u{1F4CA}' },
+  { name: 'Case Study', icon: '\u{1F4D1}' },
+  { name: 'Pricing', icon: '\u{1F4B0}' },
+  { name: 'Meeting Materials', icon: '\u{1F91D}' },
+  { name: 'Email Attachments', icon: '\u{1F4E7}' }
 ];
 
 const FILE_TYPES = [
-  { type: 'pdf', label: 'PDF', count: 128 },
-  { type: 'docx', label: 'Word', count: 67 },
-  { type: 'pptx', label: 'PowerPoint', count: 34 },
-  { type: 'xlsx', label: 'Excel', count: 12 },
-  { type: 'mp4', label: 'Video', count: 6 }
+  { type: 'pdf',  label: 'PDF' },
+  { type: 'docx', label: 'Word' },
+  { type: 'pptx', label: 'PowerPoint' },
+  { type: 'xlsx', label: 'Excel' },
+  { type: 'mp4',  label: 'Video' }
 ];
 
+/*
+ * `module` is the real column behind "related to" — a free-text module name
+ * paired with `record_id`. The old list counted against four separate id
+ * columns (deal_id, account_id, contact_id, activity_id) that DO NOT EXIST on
+ * the table, so every one of those filters matched nothing.
+ */
 const RELATED_TO = [
-  { type: 'Deals', label: 'Deals', count: 156 },
-  { type: 'Accounts', label: 'Accounts', count: 198 },
-  { type: 'Contacts', label: 'Contacts', count: 124 },
-  { type: 'Activities', label: 'Activities', count: 89 },
-  { type: 'Unlinked', label: 'Unlinked', count: 15 }
+  { type: 'deals',      label: 'Deals' },
+  { type: 'accounts',   label: 'Accounts' },
+  { type: 'contacts',   label: 'Contacts' },
+  { type: 'activities', label: 'Activities' },
+  { type: 'unlinked',   label: 'Unlinked' }
 ];
 
-const SOURCES = [
-  { type: 'Upload', label: 'Manual Upload', count: 112 },
-  { type: 'Email', label: 'Email Attachment', count: 45 },
-  { type: 'AI', label: 'AI-Generated', count: 34 },
-  { type: 'Calendar', label: 'Calendar Recording', count: 8 }
-];
+/*
+ * RECENT_DOCUMENTS_MOCK held five invented documents — Acme_Corp_Proposal_v2,
+ * TechStart_Enterprise_Contract, a BigCo call transcript, a demo deck and a
+ * DataFlow case study — each with a view_count, a last_viewed_by name, and
+ * deal_id / account_id links to records that do not exist.
+ *
+ * They rendered in the "Recent Documents" strip ALONGSIDE a correctly-empty
+ * main list, which is how one page came to assert both that you have five
+ * documents and that you have none. `recentDocuments` is now derived from the
+ * real fetched set.
+ */
 
-const RECENT_DOCUMENTS_MOCK = [
-  {
-    document_id: "doc_acme_proposal_v2",
-    document_name: "Acme_Corp_Proposal_v2.pdf",
-    file_type: "pdf",
-    file_size: 2457600,
-    category: "Proposal",
-    last_viewed_date: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    last_viewed_by: "user_alex",
-    view_count: 12,
-    deal_id: "deal_acme_001",
-    deal_name: "Acme Corp - $50K",
-    account_id: "account_acme",
-    account_name: "Acme Corp",
-    thumbnail_url: "/storage/thumbnails/doc_acme_proposal_v2_thumb.jpg",
-    file_url: "/storage/documents/acme_corp_proposal_v2.pdf"
-  },
-  {
-    document_id: "doc_techstart_contract",
-    document_name: "TechStart_Enterprise_Contract.docx",
-    file_type: "docx",
-    file_size: 876544,
-    category: "Contract",
-    last_viewed_date: new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString(),
-    last_viewed_by: "user_alex",
-    view_count: 5,
-    deal_id: "deal_techstart_001",
-    deal_name: "TechStart - $42K",
-    account_id: "account_techstart",
-    account_name: "TechStart Solutions",
-    thumbnail_url: "/storage/thumbnails/doc_techstart_contract_thumb.jpg",
-    file_url: "/storage/documents/techstart_contract.docx"
-  },
-  {
-    document_id: "doc_bigco_transcript",
-    document_name: "BigCo_Discovery_Call_Transcript.pdf",
-    file_type: "pdf",
-    file_size: 251904,
-    category: "Meeting Materials",
-    last_viewed_date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    last_viewed_by: "user_alex",
-    view_count: 8,
-    deal_id: "deal_bigco_001",
-    deal_name: "BigCo - $75K",
-    activity_id: "act_bigco_001",
-    thumbnail_url: "/storage/thumbnails/doc_bigco_transcript_thumb.jpg",
-    file_url: "/storage/documents/bigco_discovery_call_transcript.pdf"
-  },
-  {
-    document_id: "doc_bmi_demo_deck",
-    document_name: "BMI_CRM_Demo_Deck.pptx",
-    file_type: "pptx",
-    file_size: 12902400,
-    category: "Presentation",
-    last_viewed_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    last_viewed_by: "user_alex",
-    view_count: 45,
-    deal_id: null,
-    account_id: null,
-    thumbnail_url: "/storage/thumbnails/doc_bmi_demo_deck_thumb.jpg",
-    file_url: "/storage/documents/demo_deck.pptx"
-  },
-  {
-    document_id: "doc_dataflow_case_study",
-    document_name: "DataFlow_Case_Study.pdf",
-    file_type: "pdf",
-    file_size: 1887437,
-    category: "Case Study",
-    last_viewed_date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    last_viewed_by: "user_alex",
-    view_count: 34,
-    account_id: "account_dataflow",
-    account_name: "DataFlow Inc",
-    thumbnail_url: "/storage/thumbnails/doc_dataflow_case_study_thumb.jpg",
-    file_url: "/storage/documents/case_study.pdf"
-  }
-];
-
-// Owner filter options. The per-owner `count` values are display-only leftovers
-// from the fixture era and are not derived from the loaded documents — the list
-// itself is what the filter uses.
-const OWNERS = [
-  { name: 'user_alex', label: 'Alex Rodriguez', count: 89 },
-  { name: 'user_sarah_chen', label: 'Sarah Chen', count: 78 },
-  { name: 'user_mike', label: 'Mike Johnson', count: 56 },
-  { name: 'user_emily', label: 'Emily Davis', count: 24 },
-  { name: 'system_ai', label: 'System (AI)', count: 13 }
-];
-
+/*
+ * SOURCES and OWNERS are gone.
+ *
+ * SOURCES filtered on a `source` column that does not exist (Manual Upload /
+ * Email Attachment / AI-Generated / Calendar Recording, with counts). Nothing
+ * on `documents` records how a file arrived.
+ *
+ * OWNERS named four people with per-person document counts. `uploaded_by` IS a
+ * real column, but it holds a free-text name — so the honest owner list is
+ * whichever names appear in the data, which `facets.owners` derives.
+ */
 const DATE_RANGES = [
-  { label: 'Today', count: 3, days: 0 },
-  { label: 'This Week', count: 12, days: 7 },
-  { label: 'This Month', count: 34, days: 30 },
-  { label: 'Last 3 Months', count: 89, days: 90 },
-  { label: 'Older', count: 109, days: 999 }
+  { label: 'Today', days: 0 },
+  { label: 'This Week', days: 7 },
+  { label: 'This Month', days: 30 },
+  { label: 'Last 3 Months', days: 90 },
+  { label: 'Older', days: 999 }
 ];
 
 // PHASE 2: 1,510 lines of MOCK_DOCUMENTS fixtures were deleted here. They were
@@ -214,7 +169,85 @@ const DocumentsLibrary: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [recentDocuments, setRecentDocuments] = useState(RECENT_DOCUMENTS_MOCK);
+  /**
+   * The five most recently created documents, DERIVED from the fetched set.
+   *
+   * Was `useState(RECENT_DOCUMENTS_MOCK)` — five invented files that rendered
+   * beside a correctly-empty main list. A const, not state, so there is no
+   * setter to repopulate it from a fixture by accident.
+   */
+  /**
+   * SIDEBAR COUNTS, DERIVED FROM THE FETCHED SET.
+   *
+   * Every one of these was a hardcoded literal, and the six lists disagreed
+   * with each other — categories summed to 208, file types to 247, related-to
+   * to 582. With zero documents in the table the sidebar was advertising 247
+   * of them next to a main list that correctly showed none.
+   *
+   * Computed off `documents`, which the existing documentsService call already
+   * populates, rather than through a second request. `GET /documents` supports
+   * no facet endpoint and does not need one at this scale; if the library ever
+   * paginates server-side these counts have to move to the server, because
+   * counting a page is not counting the set. Noted here so that is a decision
+   * rather than a surprise.
+   */
+  const facets = useMemo(() => {
+    const tally = (values: (string | null | undefined)[]) => {
+      const out = new Map<string, number>();
+      for (const v of values) {
+        if (!v) continue;
+        out.set(v, (out.get(v) ?? 0) + 1);
+      }
+      return out;
+    };
+
+    const byCategory = tally(documents.map(d => d.category));
+    const byFileType = tally(documents.map(d => (d.file_type ?? '').toLowerCase()));
+    const byModule   = tally(documents.map(d => (d.module ?? '').toLowerCase()));
+    const byOwner    = tally(documents.map(d => d.uploaded_by));
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const ageInDays = (iso: string | null | undefined) => {
+      if (!iso) return null;
+      const t = new Date(iso).getTime();
+      return Number.isFinite(t) ? Math.floor((Date.now() - t) / dayMs) : null;
+    };
+
+    /** Buckets are exclusive and ordered, so a document is counted once. */
+    const dateBucket = (days: number | null): string | null => {
+      if (days === null) return null;
+      if (days <= 0) return 'Today';
+      if (days <= 7) return 'This Week';
+      if (days <= 30) return 'This Month';
+      if (days <= 90) return 'Last 3 Months';
+      return 'Older';
+    };
+    const byDate = tally(documents.map(d => dateBucket(ageInDays(d.created_at))));
+
+    return {
+      total: documents.length,
+      starred: documents.filter(d => d.is_starred).length,
+      category: (name: string) => byCategory.get(name) ?? 0,
+      fileType: (type: string) => byFileType.get(type.toLowerCase()) ?? 0,
+      /** 'unlinked' means no module recorded, which is a real state. */
+      relatedTo: (type: string) =>
+        type === 'unlinked'
+          ? documents.filter(d => !d.module).length
+          : byModule.get(type.toLowerCase()) ?? 0,
+      dateRange: (label: string) => byDate.get(label) ?? 0,
+      /** Derived owner list, for when the sidebar section is restored. */
+      owners: [...byOwner.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => ({ name, count })),
+    };
+  }, [documents]);
+
+  const recentDocuments = useMemo(
+    () => [...documents]
+      .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+      .slice(0, 5),
+    [documents],
+  );
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
@@ -493,10 +526,14 @@ const DocumentsLibrary: React.FC = () => {
     };
   }, []);
 
-  const getUserLabel = (userId: string): string => {
-    const owner = OWNERS.find(o => o.name === userId);
-    return owner ? owner.label : userId;
-  };
+  /**
+   * `uploaded_by` holds a display NAME already, so there is nothing to look up.
+   * This used to map a synthetic key ('user_alex') to a label ('Alex
+   * Rodriguez') through the deleted OWNERS list; an unrecognised key fell
+   * through to itself, which is why 'user_alex' was rendering verbatim in some
+   * places.
+   */
+  const getUserLabel = (uploadedBy: string): string => uploadedBy || 'Not recorded';
 
   const handleUpload = async (newDocument: Document) => {
     await loadDocuments();
@@ -939,19 +976,7 @@ const DocumentsLibrary: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const toggleSource = (source: string) => {
-    setSelectedSources(prev =>
-      prev.includes(source) ? prev.filter(s => s !== source) : [...prev, source]
-    );
-    setCurrentPage(1);
-  };
 
-  const toggleOwner = (owner: string) => {
-    setSelectedOwners(prev =>
-      prev.includes(owner) ? prev.filter(o => o !== owner) : [...prev, owner]
-    );
-    setCurrentPage(1);
-  };
 
   const toggleDocSelection = (docId: string) => {
     const newSelected = new Set(selectedDocs);
@@ -1296,11 +1321,18 @@ const DocumentsLibrary: React.FC = () => {
         </h3>
         <div className="space-y-2">
           {[
-            { id: 'all', label: 'All Documents', count: 247 },
-            { id: 'my', label: 'My Documents', count: 89 },
-            { id: 'shared', label: 'Shared with Me', count: 34 },
-            { id: 'recent', label: 'Recent', count: 15 },
-            { id: 'favorites', label: 'Favorites', count: 8 }
+            /*
+             * 'My Documents' and 'Shared with Me' are GONE rather than derived.
+             * `uploaded_by` is a free-text name with nothing tying it to the
+             * session, so "mine" is not answerable — and there is no
+             * document_shares table at all, so "shared with me" has no source
+             * whatsoever. They used to read 89 and 34.
+             *
+             * The three that remain are computed from the fetched set.
+             */
+            { id: 'all', label: 'All Documents', count: facets.total },
+            { id: 'recent', label: 'Recent', count: facets.dateRange('This Week') },
+            { id: 'favorites', label: 'Favorites', count: facets.starred }
           ].map(filter => (
             <button
               key={filter.id}
@@ -1351,7 +1383,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{cat.icon} {cat.name}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({cat.count})</span>
+              <span className="text-[13px] text-[#6b7280]">({facets.category(cat.name)})</span>
             </button>
           ))}
         </div>
@@ -1382,7 +1414,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{ft.label}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({ft.count})</span>
+              <span className="text-[13px] text-[#6b7280]">({facets.fileType(ft.type)})</span>
             </button>
           ))}
         </div>
@@ -1413,73 +1445,28 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{rt.label}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({rt.count})</span>
+              <span className="text-[13px] text-[#6b7280]">({facets.relatedTo(rt.type)})</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* By Source */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Upload className="w-4 h-4" />
-          By Source
-        </h3>
-        <div className="space-y-2">
-          {SOURCES.map(src => (
-            <button
-              key={src.type}
-              onClick={() => { toggleSource(src.type); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors text-left text-sm ${
-                selectedSources.includes(src.type)
-                  ? 'bg-[#eff6ff] text-[#667eea]'
-                  : 'text-[#4b5563] hover:bg-[#eff6ff]'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {selectedSources.includes(src.type) ? (
-                  <CheckSquare className="w-4 h-4" style={{ color: '#667eea' }} />
-                ) : (
-                  <Square className="w-4 h-4 text-gray-400" />
-                )}
-                <span>{src.label}</span>
-              </div>
-              <span className="text-[13px] text-[#6b7280]">({src.count})</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/*
+        THE "BY SOURCE" AND "BY OWNER" SIDEBAR SECTIONS WERE HERE.
 
-      {/* By Owner */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Users className="w-4 h-4" />
-          By Owner
-        </h3>
-        <div className="space-y-2">
-          {OWNERS.map(owner => (
-            <button
-              key={owner.name}
-              onClick={() => { toggleOwner(owner.name); setSidebarOpen(false); }}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors text-left text-sm ${
-                selectedOwners.includes(owner.name)
-                  ? 'bg-[#eff6ff] text-[#667eea]'
-                  : 'text-[#4b5563] hover:bg-[#eff6ff]'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {selectedOwners.includes(owner.name) ? (
-                  <CheckSquare className="w-4 h-4" style={{ color: '#667eea' }} />
-                ) : (
-                  <Square className="w-4 h-4 text-gray-400" />
-                )}
-                <span>{owner.label}</span>
-              </div>
-              <span className="text-[13px] text-[#6b7280]">({owner.count})</span>
-            </button>
-          ))}
-        </div>
-      </div>
+        By Source filtered on a `source` column that does not exist. Nothing on
+        `documents` records how a file arrived, so Manual Upload / Email
+        Attachment / AI-Generated / Calendar Recording were four filters that
+        could never match anything, above four invented counts.
+
+        By Owner listed four named people with per-person totals. `uploaded_by`
+        IS a real column, but it holds a free-text NAME — so a fixed list of
+        four is wrong in both directions: it offers people who may have
+        uploaded nothing and omits anyone who did. `facets.owners` derives an
+        honest list; it is not rendered yet because with zero documents a
+        section header over an empty list reads as broken. Restore it when the
+        table has rows.
+      */}
 
       {/* By Date */}
       <div>
@@ -1510,7 +1497,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{range.label}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({range.count})</span>
+              <span className="text-[13px] text-[#6b7280]">({facets.dateRange(range.label)})</span>
             </button>
           ))}
         </div>
@@ -2015,7 +2002,20 @@ const DocumentsLibrary: React.FC = () => {
               {!error && !hasActiveFilters() && !contextFilter.type && (
                 <div className="mb-6">
                   <RecentDocumentsSection
-                    recentDocuments={recentDocuments}
+                    // Narrowed to the real columns the strip can show. The
+                    // local Document type still carries legacy aliases — see the
+                    // type-alignment note in CLAUDE.md — so this maps explicitly
+                    // rather than passing the whole row.
+                    recentDocuments={recentDocuments.map(d => ({
+                      id: d.id ?? d.document_id,
+                      name: d.name ?? d.document_name,
+                      file_type: d.file_type,
+                      file_size: d.file_size,
+                      category: d.category,
+                      created_at: d.created_at,
+                      uploaded_by: d.uploaded_by,
+                      file_url: d.file_url,
+                    }))}
                     onViewAll={handleRecentViewAll}
                     onPreview={handleRecentPreview}
                     onDownload={handleRecentDownload}

@@ -1276,9 +1276,16 @@ const DealsKanbanPage: React.FC = () => {
       if (selectedValueFilter === '50-100k' && (d.amount < 50_000 || d.amount > 100_000)) return false;
       if (selectedValueFilter === '100k+'  && d.amount < 100_000) return false;
 
-      // Source filter
-      if (selectedSourceFilter === 'website' && !d.source?.toLowerCase().includes('website')) return false;
-      if (selectedSourceFilter === 'leadgen' && !d.source?.toLowerCase().includes('lead gen')) return false;
+      // Source filter. Matches the stored vocabulary EXACTLY (migration 040
+      // constrains deals.source to lowercase-hyphenated slugs).
+      //
+      // The 'leadgen' arm used to substring-match 'lead gen' WITH A SPACE while
+      // the deal form submits 'lead-gen-apollo' / 'lead-gen-zoominfo' with
+      // hyphens, so it matched nothing the product could produce — a filter that
+      // silently returned an empty board. Normalizing the column is what made
+      // that visible; leaving it would have been half the job.
+      if (selectedSourceFilter === 'website' && d.source !== 'website') return false;
+      if (selectedSourceFilter === 'leadgen' && !d.source?.startsWith('lead-gen')) return false;
 
       if (selectedAccountFilter === 'missing' && d.hasAccount) return false;
 

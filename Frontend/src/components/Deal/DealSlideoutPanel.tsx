@@ -75,6 +75,8 @@ interface PanelDeal {
   stageName: string;
   closeDate: string;       // raw ISO — used for the date input value
   owner: string;
+  /** Resolved owner user id; undefined when ownership is only a name (migration 039). */
+  ownerUserId?: number;
   ownerInfo?: DealOwnerInfo;
   dealValueHistory?: DealValueHistoryEntry[];
   contactName: string;
@@ -197,6 +199,11 @@ function mapApiToPanelDeal(data: any): PanelDeal {
     stageName:     STAGE_LABEL[stage] ?? stage,
     closeDate:     data.expected_close_date ? data.expected_close_date.split('T')[0] : '',
     owner:         data.assigned_to || '',
+    // Resolved owner id, or undefined when ownership is only a name string
+    // (migration 039). `owner` above is already the RESOLVED name where the FK
+    // is set — the server projects it from the joined user — so display needs
+    // no change here; this is for callers that need to key on identity.
+    ownerUserId:   data.assigned_to_user_id ?? undefined,
     ownerInfo: data.assigned_to ? {
       id: data.owner_id || undefined,
       name: data.assigned_to,
@@ -604,12 +611,23 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     setShowOwnerAssignDropdown(true);
   }
 
-  async function assignOwnerFromDropdown(name: string) {
+  /**
+   * DUAL-WRITE (migration 039). The dropdown iterates real users from
+   * GET /users, so the id is in hand — send it alongside the name rather than
+   * the name alone. That is how ownership becomes resolvable going forward:
+   * 20 of 25 existing deals have no resolved owner precisely because the only
+   * thing ever stored was a display string.
+   *
+   * The name is still written, deliberately. The varchar is not dropped in
+   * this migration and every read still falls back to it, so a client that has
+   * not been migrated keeps working — the deals.stage -> stage_id precedent.
+   */
+  async function assignOwnerFromDropdown(name: string, userId?: number) {
     if (!deal) return;
     setShowOwnerAssignDropdown(false);
     setSaving(true);
     try {
-      await updateDeal(deal.id, { assigned_to: name });
+      await updateDeal(deal.id, { assigned_to: name, assigned_to_user_id: userId ?? null });
       setDeal(prev => prev ? {
         ...prev,
         owner: name,
@@ -1126,7 +1144,7 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
                                     <button
                                       type="button"
                                       className="w-full text-left px-3 py-2 text-[12px] text-gray-700 hover:bg-indigo-50 transition-colors"
-                                      onClick={() => assignOwnerFromDropdown(`${u.first_name} ${u.last_name}`)}
+                                      onClick={() => assignOwnerFromDropdown(`${u.first_name} ${u.last_name}`, u.id)}
                                     >
                                       <span className="font-medium">{u.first_name} {u.last_name}</span>
                                       {u.role && <span className="text-gray-400 ml-1">({u.role})</span>}

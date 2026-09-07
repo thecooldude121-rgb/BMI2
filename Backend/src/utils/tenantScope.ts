@@ -106,3 +106,73 @@ export async function foreignIdsInTenant(
   }
   return null;
 }
+
+/**
+ * Resolve a display NAME to a user id inside one workspace, or null.
+ *
+ * WHY THIS EXISTS. Deal ownership is moving from a name string to
+ * `deals.assigned_to_user_id` (migration 039), but several forms still submit
+ * only a name — the deal form's owner <select> uses the name as its option
+ * value, and so does the detail page's assign-owner modal. Resolving on the
+ * SERVER means every one of those writers starts producing resolved ownership
+ * without each picker having to be rewritten first, and there is exactly one
+ * place doing the matching rather than one per form.
+ *
+ * Returns null rather than guessing when:
+ *   - no user in this workspace has that name (the "John Smith" case: 15 live
+ *     deals name someone who was never a user), or
+ *   - MORE THAN ONE does. Picking an arbitrary one of two same-named
+ *     colleagues would be a silent mis-assignment, and a wrong owner is worse
+ *     than an unresolved one.
+ *
+ * The tenant predicate is not optional: users.id is a global primary key, so
+ * without it a name matching someone in another workspace would resolve to
+ * their id and quietly hand them the deal.
+ */
+export async function userIdForName(
+  name: unknown,
+  tenantId: string,
+): Promise<number | null> {
+  if (typeof name !== 'string' || !name.trim()) return null;
+  const result = await pool.query(
+    `SELECT id FROM users
+      WHERE tenant_id = $1
+        AND lower(btrim(first_name || ' ' || last_name)) = lower(btrim($2))
+      LIMIT 2`,
+    [tenantId, name],
+  );
+  return result.rowCount === 1 ? Number(result.rows[0].id) : null;
+}
+
+/**
+ * The display name for a user id inside one workspace, or null.
+ *
+ * The mirror of `userIdForName`, and it exists for the same reason the create
+ * path carries `stage: stageRow.slug`: `RETURNING *` cannot join, so a create
+ * that supplied only `assigned_to_user_id` would answer with
+ * `assigned_to: null` and the client would show no owner until it refetched.
+ * Resolving here keeps the create response identical in shape to what the read
+ * paths project.
+ *
+ * Tenant-scoped for the usual reason — users.id is a global primary key.
+ */
+export async function userNameForId(
+  userId: unknown,
+  tenantId: string,
+): Promise<string | null> {
+  if (userId === null || userId === undefined || userId === '') return null;
+  try {
+    const result = await pool.query(
+      `SELECT btrim(first_name || ' ' || last_name) AS name
+         FROM users WHERE id = $1 AND tenant_id = $2`,
+      [userId, tenantId],
+    );
+    const name = result.rows[0]?.name as string | undefined;
+    return name && name.length ? name : null;
+  } catch (error) {
+    // Same 22P02 reasoning as idInTenant: a malformed id is simply not a user
+    // in this workspace.
+    if ((error as { code?: string }).code === '22P02') return null;
+    throw error;
+  }
+}
