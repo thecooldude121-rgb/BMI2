@@ -212,3 +212,110 @@ describe('Deal ownership — user reference (migration 039)', () => {
     expect(legacy.body.data.map((d: { id: string }) => d.id)).toContain(nameOnly);
   });
 });
+
+/**
+ * deals.source vocabulary. Migration 040.
+ *
+ * The point of these is the ERROR SHAPE as much as the constraint.
+ * errorHandler.ts maps no Postgres constraint codes, so without the validator
+ * in dealsController a bad source would reach the caller as a bare 500 —
+ * the deals.value NOT NULL failure recorded in CLAUDE.md, repeated. The
+ * constraint stops the data drifting; the 400 is what a caller can act on.
+ */
+describe('Deal source vocabulary (migration 040)', () => {
+  let ws: TestWorkspace;
+  const dealIds: string[] = [];
+
+  const create = (body: Record<string, unknown>) =>
+    request(app).post('/api/v1/deals').set(auth(ws)).send({
+      name: `Source ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      value: 1000, currency: 'USD', stage: 'prospecting', ...body,
+    });
+
+  beforeAll(async () => { ws = await setupWorkspace('dealsource'); });
+
+  afterAll(async () => {
+    if (dealIds.length) {
+      await pool.query('DELETE FROM deal_stage_history WHERE deal_id = ANY($1::varchar[])', [dealIds]);
+      await pool.query('DELETE FROM deals WHERE id = ANY($1::varchar[])', [dealIds]);
+      const left = await pool.query(
+        'SELECT COUNT(*)::int AS n FROM deals WHERE id = ANY($1::varchar[])', [dealIds]);
+      if (left.rows[0].n !== 0) throw new Error(`Cleanup failed: ${left.rows[0].n} deals remain`);
+    }
+    await teardownWorkspace(ws);
+  });
+
+  it('accepts every source the deal form can submit', async () => {
+    // The constraint covers what the FORM offers, not what the table happens to
+    // hold. If these two ever diverge, this is what fails.
+    for (const source of ['lead-gen-apollo', 'lead-gen-zoominfo', 'hrms', 'website',
+                          'manual', 'referral', 'event', 'partner', 'inbound',
+                          'cold-outreach', 'other']) {
+      const res = await create({ source });
+      expect(res.status, `${source}: ${JSON.stringify(res.body)}`).toBe(201);
+      if (res.body?.data?.id) dealIds.push(res.body.data.id);
+      expect(res.body.data.source).toBe(source);
+    }
+  });
+
+  it('rejects an unknown source with a 400 that names the vocabulary, NOT a 500', async () => {
+    const res = await create({ source: 'Cold Outreach' });   // the exact drifted value
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toContain('source must be one of');
+    expect(res.body.message).toContain('cold-outreach');
+  });
+
+  it('rejects a drifted source on UPDATE too, and leaves the row alone', async () => {
+    const created = await create({ source: 'manual' });
+    const id = created.body.data.id;
+    dealIds.push(id);
+
+    const res = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws))
+      .send({ source: 'MANUAL' });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+
+    const db = await pool.query('SELECT source FROM deals WHERE id = $1', [id]);
+    expect(db.rows[0].source).toBe('manual');
+  });
+
+  it('treats an absent or blank source as NULL — unrecorded is a real state', async () => {
+    const omitted = await create({});
+    expect(omitted.status).toBe(201);
+    dealIds.push(omitted.body.data.id);
+
+    const blank = await create({ source: '' });
+    expect(blank.status, JSON.stringify(blank.body)).toBe(201);
+    dealIds.push(blank.body.data.id);
+
+    // '' normalises to NULL so the same meaning is not split across two values.
+    const db = await pool.query(
+      'SELECT source FROM deals WHERE id = ANY($1::varchar[])',
+      [[omitted.body.data.id, blank.body.data.id]]);
+    expect(db.rows.every(r => r.source === null)).toBe(true);
+  });
+
+  it('an update that omits source does not clear it', async () => {
+    const created = await create({ source: 'referral' });
+    const id = created.body.data.id;
+    dealIds.push(id);
+
+    const res = await request(app).put(`/api/v1/deals/${id}`).set(auth(ws))
+      .send({ name: 'Renamed, source untouched' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    const db = await pool.query('SELECT source FROM deals WHERE id = $1', [id]);
+    expect(db.rows[0].source).toBe('referral');
+  });
+
+  it('the database constraint backstops the validator', async () => {
+    // Bypass the API entirely: if the validator were removed, this is what
+    // still stops the column drifting.
+    await expect(
+      pool.query(
+        `INSERT INTO deals (name, value, source, tenant_id, stage_id)
+         VALUES ('constraint probe', 1, 'Cold Outreach', $1,
+                 (SELECT id FROM pipeline_stages WHERE tenant_id = $1 LIMIT 1))`,
+        [ws.tenantId]),
+    ).rejects.toThrow(/deals_source_check/);
+  });
+});

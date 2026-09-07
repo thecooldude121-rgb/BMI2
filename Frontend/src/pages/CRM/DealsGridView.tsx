@@ -78,7 +78,13 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
       (selectedValue === '50-100k' && deal.amount >= 50000 && deal.amount < 100000) ||
       (selectedValue === '100k+' && deal.amount >= 100000);
 
-    const matchesSource = selectedSource === 'all' || deal.source.includes(selectedSource);
+    // Exact match against the stored vocabulary (migration 040). This was
+    // `deal.source.includes(selectedSource)` against Title-Case options
+    // ("Lead Gen", "Website", "Manual") while the column holds
+    // lowercase-hyphenated slugs, so no option ever matched anything.
+    const matchesSource = selectedSource === 'all'
+      || deal.source === selectedSource
+      || (selectedSource === 'lead-gen' && deal.source.startsWith('lead-gen'));
 
     return matchesStage && matchesOwner && matchesCloseDate && matchesValue && matchesSource;
   });
@@ -326,9 +332,13 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All</option>
-              <option value="Lead Gen">Lead Gen</option>
-              <option value="Website">Website</option>
-              <option value="Manual">Manual</option>
+              {/* Values are the stored slugs, not display text — see the
+                  filter predicate above. */}
+              <option value="lead-gen">Lead Gen</option>
+              <option value="website">Website</option>
+              <option value="manual">Manual</option>
+              <option value="referral">Referral</option>
+              <option value="partner">Partner</option>
             </select>
           </div>
         </div>

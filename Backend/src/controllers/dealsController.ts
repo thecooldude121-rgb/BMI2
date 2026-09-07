@@ -23,6 +23,42 @@ import { workspaceDefaultCurrency } from './workspaceController';
  */
 const JSONB_ARRAY_COLUMNS = new Set(['stakeholders', 'competitors', 'attachment_metadata']);
 
+/**
+ * The deal-source vocabulary. MIRRORS deals_source_check (migration 040).
+ *
+ * WHY THIS EXISTS AT ALL, given the constraint. errorHandler.ts maps no
+ * Postgres constraint codes — no 23505, 23502 or 23514 handling anywhere in it
+ * — so a CHECK violation reaches the caller as a bare 500 Internal Server
+ * Error telling them nothing. That is exactly the deals.value NOT NULL failure
+ * recorded in CLAUDE.md, where a missing amount surfaced as a masked 500 and
+ * the fix was validation rather than a schema change. The constraint is the
+ * backstop that makes drift impossible; this is what the caller actually sees.
+ *
+ * TWO LISTS THAT MUST AGREE, and that is a known cost rather than an oversight
+ * — see the note at the foot of migration 040 naming all four places. The
+ * proper fix is to serve this vocabulary the way GET /users serves
+ * assignable_roles, so the client renders the rule instead of copying it. Until
+ * then, changing one of these means changing all four.
+ */
+const DEAL_SOURCES = [
+  'lead-gen-apollo', 'lead-gen-zoominfo', 'hrms', 'website', 'manual',
+  'referral', 'event', 'partner', 'inbound', 'cold-outreach', 'other',
+] as const;
+
+/**
+ * Null and '' are ACCEPTED, deliberately: an unrecorded source is a real state
+ * (15 of 25 live deals), and an update that omits the field must not be read as
+ * clearing it. Empty string normalises to NULL so a blank <select> does not
+ * store '' next to the NULLs and split the same meaning across two values.
+ */
+const normalizeSource = (value: unknown): { ok: true; value: string | null } | { ok: false; message: string } => {
+  if (value === undefined || value === null || value === '') return { ok: true, value: null };
+  if (typeof value !== 'string' || !(DEAL_SOURCES as readonly string[]).includes(value)) {
+    return { ok: false, message: `source must be one of: ${DEAL_SOURCES.join(', ')}` };
+  }
+  return { ok: true, value };
+};
+
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
@@ -339,6 +375,14 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
     }
     const stageRow = resolved.stage;
 
+    // Migration 040: reject an unknown source with a clean 400 rather than
+    // letting deals_source_check answer as a masked 500.
+    const sourceCheck = normalizeSource(source);
+    if (!sourceCheck.ok) {
+      res.status(400).json({ success: false, message: sourceCheck.message });
+      return;
+    }
+
     // DUAL-WRITE (migration 039). Prefer an explicit id; otherwise resolve the
     // submitted NAME to a user in this workspace. Several forms still send only
     // a name, so resolving here is what makes their writes produce resolved
@@ -385,7 +429,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         contact_name, contact_email, contact_title,
         JSON.stringify(stakeholders ?? []),
         JSON.stringify(competitors ?? []),
-        source, priority || 'Medium', tags, product, contract_term, payment_terms,
+        sourceCheck.value, priority || 'Medium', tags, product, contract_term, payment_terms,
         JSON.stringify(attachment_metadata ?? []),
         win_prob_override_reason ?? null,
         win_prob_ai ?? null,
@@ -441,6 +485,14 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
         { field: 'assigned_to_user_id', table: 'users', value: req.body.assigned_to_user_id },
       ], tenantId);
     if (badRef) { res.status(400).json({ success: false, message: badRef }); return; }
+
+    // Migration 040, same reasoning as createDeal. Only when the field is
+    // present: an update that omits `source` must not be read as clearing it.
+    if (req.body.source !== undefined) {
+      const check = normalizeSource(req.body.source);
+      if (!check.ok) { res.status(400).json({ success: false, message: check.message }); return; }
+      req.body.source = check.value;
+    }
 
     // DUAL-WRITE (migration 039), same reasoning as createDeal: a body that
     // changes the owner NAME without supplying an id gets the id resolved here,
