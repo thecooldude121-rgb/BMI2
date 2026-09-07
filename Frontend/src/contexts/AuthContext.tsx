@@ -33,7 +33,7 @@ export interface User {
   id: string;
   name: string; 
   email: string;
-  role: 'Admin' | 'Sales' | 'Manager';
+  role: 'Admin' | 'Sales' | 'Manager' | 'Unknown';
   avatar?: string;
   department?: string;
   /**
@@ -51,14 +51,21 @@ export interface User {
  * over SSO, so HR is not a CRM role (see Backend utils/roles.ts). Verified zero
  * users held it in any workspace before removing.
  *
- * WORTH KNOWING, because it is the one place removal widens rather than narrows:
- * the `?? 'Sales'` fallback below means an unrecognised role renders as Sales.
- * So a stray `hr` row — impossible to create through the API now, but storable
- * directly since `users.role` has no CHECK constraint — would show the Sales UI
- * rather than the old HR-only one. That is cosmetic, not a privilege grant: the
- * API is the control, `requireRole` refuses any role it does not recognise, and
- * `rankOf` ranks unknown roles 0. Making this fallback fail closed is a separate
- * change and a bigger one, since every unknown role currently depends on it.
+ * THIS MAP FAILS CLOSED. An unrecognised role becomes `'Unknown'`, which grants
+ * nothing — see `rolePermissions` in `hasPermission`, where it maps to `[]`.
+ *
+ * It used to fall back to `'Sales'`, which was the wrong direction and was
+ * found while removing `hr`: a stray role would have silently presented as a
+ * real one, so the UI would offer CRM navigation to an account nobody had
+ * granted it to. Harmless in terms of actual data access — the API is the
+ * control, `requireRole` refuses any role it does not recognise and `rankOf`
+ * ranks unknown roles 0 — but a UI that shows you a door the server will not
+ * open is its own bug, and this project has been burned before by a display
+ * layer that disagreed with the server.
+ *
+ * `users.role` has no CHECK constraint, so an arbitrary string IS storable
+ * directly even though the API will no longer produce one. `'Unknown'` is what
+ * the UI does when it meets one.
  */
 const ROLE_MAP: Record<string, User['role']> = {
   admin: 'Admin', sales: 'Sales', manager: 'Manager',
@@ -82,7 +89,7 @@ function toUser(u: ApiUser): User {
     id: String(u.id),
     name: name || u.email,
     email: u.email,
-    role: ROLE_MAP[String(u.role ?? '').toLowerCase()] ?? 'Sales',
+    role: ROLE_MAP[String(u.role ?? '').toLowerCase()] ?? 'Unknown',
     // No avatar column value means no avatar. Absent, not a stock photo.
     avatar: u.avatar_url ?? undefined,
     department: u.department ?? undefined,
@@ -208,6 +215,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       Admin: ['all'],
       Manager: ['crm', 'analytics', 'integrations', 'calendar', 'settings', 'gamification', 'dashboard', 'team'],
       Sales: ['crm', 'calendar', 'integrations', 'dashboard', 'team'],
+      // Fails closed: an unrecognised role gets no module at all, rather than
+      // inheriting Sales' list. See ROLE_MAP above.
+      Unknown: [],
     };
     const userPermissions = rolePermissions[user.role] || [];
     return userPermissions.includes('all') || userPermissions.includes(permission);

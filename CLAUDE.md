@@ -553,11 +553,16 @@ control advertises an action that does not exist for you.
 Both are empty/false for a caller who cannot change roles, because `GET /users` is
 deliberately ungated (assignment pickers need the roster) while the role change is not.
 
-**Why served rather than mirrored, concretely:** `invitableRolesFor()` in `usersApi.ts` is
-exactly that mirror, written for the invite form — and it has ALREADY DRIFTED. It lists
-sales/manager/admin and omits `hr`, which the server's `ASSIGNABLE_ROLES` has always
-included. That is the prediction "two lists that must agree will disagree" already come
-true, in this repo, before anyone noticed.
+**Why served rather than mirrored, concretely:** `invitableRolesFor()` in `usersApi.ts` was
+exactly that mirror, written for the invite form — and it had ALREADY DRIFTED. It listed
+sales/manager/admin and omitted `hr`, which the server's `ASSIGNABLE_ROLES` included at the
+time. That is the prediction "two lists that must agree will disagree" already come true,
+in this repo, before anyone noticed.
+
+> **`hr` IS NO LONGER A CRM ROLE**, so the two lists now agree on its absence. They agree
+> because there is ONE list, not because the vocabularies happen to match — which is the
+> whole point, and the reason this passage is kept in the past tense rather than deleted.
+> See "The `hr` role is gone" below.
 
 Other behaviour worth not regressing: the confirm button is **disabled on a no-op** (the
 picker opens on the member's current role) because a no-op returns 200 and a success toast
@@ -579,13 +584,54 @@ already `requireRole('admin','manager')`, so everyone who reaches it may grant s
 
 **What the mirror had actually cost, confirmed rather than hypothesised:** it listed
 sales/manager/admin and omitted `hr`, so the invite form could not invite an HR user at all
-even though the server has always accepted it. Nothing failed and nothing was logged — the
-option simply was not there. That is the whole argument for serving a rule instead of
-copying it, in one concrete bug.
+even though the server accepted it. Nothing failed and nothing was logged — the option
+simply was not there. That is the whole argument for serving a rule instead of copying it,
+in one concrete bug. (`hr` has since been removed from the CRM outright; the argument does
+not depend on the role, only on the copy.)
 
 **No client-side copy of the assignable-role rule remains anywhere in the frontend.** Both
 pickers read a served `assignable_roles`: `fetchInvites` for the invite form, `fetchRoster`
 for the role picker.
+
+### The `hr` role is gone from the CRM — deliberately, not by drift
+HRMS is a separate platform reached over SSO (see "Identity & SSO"), so HR is not a CRM
+persona and this CRM has no permission to grant one. `hr` is removed from
+`ASSIGNABLE_ROLES` and `RANK` in `utils/roles.ts`, and from every frontend role map.
+
+**Checked before removing, because the answer decides whether it orphans anyone: ZERO users
+held `hr` in any workspace, and there were no pending invites at all.** No migration was
+needed either — neither `users.role` nor `workspace_invites.role` has a CHECK constraint,
+and `db:seed:users` hardcodes no roles (it reads existing rows and rotates their passwords).
+
+**The distinction between "deliberately gone" and "accidentally missing" matters more here
+than anywhere else in this file**, because `hr` IS this repo's canonical drift story — the
+two passages above are about it. So the tests assert its absence ON PURPOSE:
+- `roundTrip.userManagement.test.ts` renamed its case to "hr is DELIBERATELY absent" and
+  asserts `POST /invites` with `role: 'hr'` returns **400**. That assertion carries the
+  weight: a drifted list would still have ACCEPTED `role: 'hr'`; this refuses it.
+- `TeamManagement.test.tsx` still feeds its mock `hr` on purpose. The property was never
+  "hr is offered" — it is that the client keeps no vocabulary of its own. Reintroduce a
+  client-side allowlist and `hr` is precisely what gets filtered, and that test fails.
+- Both were mutation-tested: restoring `hr` to `ASSIGNABLE_ROLES` and `RANK` fails them.
+
+### FIXED — `AuthContext`'s role map fails closed
+`ROLE_MAP` in `contexts/AuthContext.tsx` used to fall back `?? 'Sales'`, so any role string
+the UI did not recognise silently presented as a real role, with CRM navigation attached.
+Found while removing `hr`. It now falls back to `'Unknown'`, which `hasPermission` maps to
+`[]` — no module at all — and `TopBar` renders as "Unknown role" rather than a bare word
+under someone's name.
+
+This was always a DISPLAY-layer bug, never a privilege grant: the API is the control,
+`requireRole` refuses any role it does not recognise and `rankOf` ranks unknown roles 0. It
+still mattered, because a UI that shows you a door the server will not open is the same
+class of defect as a success toast over an unchanged database. `users.role` has no CHECK
+constraint, so an arbitrary string remains storable directly even though the API will not
+produce one; `'Unknown'` is what the UI does when it meets one.
+
+Pinned by `contexts/AuthContext.roleMapping.test.tsx` (10 tests), which drives a real
+session — token in storage, `GET /auth/me` response — rather than poking provider state,
+and asserts an unrecognised role is not ANY known role rather than merely checking one
+value. Mutation-tested: restoring `?? 'Sales'` fails 9 of the 10.
 
 ### The live workspace has an admin again
 It had four `sales` and one `manager` and **zero admins**, so the stage-configuration screen

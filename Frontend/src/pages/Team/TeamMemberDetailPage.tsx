@@ -322,7 +322,7 @@ const DEALS: Deal[] = [
     closeDate: 'Jan 30, \'26',
     age: '45 days',
     ageDays: 45,
-    source: 'HRMS',
+    source: 'Referral',
     contact: 'Emma Wilson',
     lastActivity: '2 hours ago',
     nextStep: 'Product demo on Dec 20'
@@ -339,7 +339,7 @@ const DEALS: Deal[] = [
     closeDate: 'Feb 15, \'26',
     age: '62 days',
     ageDays: 62,
-    source: 'HRMS',
+    source: 'Referral',
     contact: 'Alex Johnson',
     lastActivity: 'Yesterday',
     nextStep: 'Awaiting legal review'
@@ -423,7 +423,7 @@ const ACTIVITIES: Activity[] = [
     nextAction: 'Product demo Dec 20',
     relatedDeal: 'DataFlow Inc',
     relatedDealValue: '$120K',
-    tags: ['HRMS', 'Pricing', 'Positive']
+    tags: ['Referral', 'Pricing', 'Positive']
   },
   {
     id: 'activity_002',
@@ -441,7 +441,7 @@ const ACTIVITIES: Activity[] = [
     nextAction: 'Follow up if no response by Dec 15',
     relatedDeal: 'BigCo Enterprise',
     relatedDealValue: '$95K',
-    tags: ['HRMS', 'Proposal', 'Follow-up Needed']
+    tags: ['Referral', 'Proposal', 'Follow-up Needed']
   },
   {
     id: 'activity_003',
@@ -511,15 +511,15 @@ const COACHING_NOTES: CoachingNote[] = [
     authorTitle: 'Sales Director',
     managerId: '5',
     visibility: 'Manager+ only',
-    content: 'Sarah continues to excel with HRMS-sourced leads. Her approach to leveraging warm introductions is exemplary - she effectively uses the recruitment connection to build credibility quickly. Suggested she mentor junior reps on this strategy to scale best practices across the team. Pipeline velocity improved 20% MoM, largely due to HRMS lead quality.',
+    content: 'Sarah continues to excel with referral-sourced leads. Her approach to leveraging warm introductions is exemplary - she establishes credibility quickly and gets to a real discovery conversation faster than the team average. Suggested she mentor junior reps on this strategy to scale best practices across the team. Pipeline velocity improved 20% MoM, largely on referral lead quality.',
     focusAreas: [
-      'Scale HRMS strategy across team',
+      'Scale the referral strategy across the team',
       'Mentor junior reps on warm introduction techniques',
       'Continue strong relationship management'
     ],
     developmentGoals: [
-      'Lead HRMS training session in January',
-      'Document HRMS playbook for team'
+      'Lead a referral-sourcing training session in January',
+      'Document the referral playbook for the team'
     ],
     performanceRating: 'Exceeding Expectations'
   },
@@ -551,13 +551,13 @@ const COACHING_NOTES: CoachingNote[] = [
     authorTitle: 'Sales Director',
     managerId: '5',
     visibility: 'Manager+ only',
-    content: 'First HRMS lead (DataFlow Inc) converted successfully to Qualified stage. This validates our HRMS integration strategy. Sarah effectively used the recruitment connection with Emma Wilson to build trust and credibility quickly, cutting through initial prospecting friction. Encouraged Sarah to document her approach for team training materials. This is a replicable playbook we can scale.',
+    content: 'First referral-sourced lead (DataFlow Inc) converted successfully to Qualified stage. Sarah used the warm introduction with Emma Wilson to build trust and credibility quickly, cutting through initial prospecting friction. Encouraged Sarah to document her approach for team training materials. This is a replicable playbook we can scale.',
     focusAreas: [
-      'Document HRMS approach',
+      'Document the referral approach',
       'Share learnings with team',
-      'Continue HRMS lead nurturing'
+      'Continue referral lead nurturing'
     ],
-    achievement: 'First HRMS lead conversion - Validated HRMS integration ROI',
+    achievement: 'First referral-sourced conversion - playbook validated',
     performanceRating: 'Exceeds Expectations',
     nextReview: 'Nov 15, 2024'
   }
