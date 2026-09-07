@@ -274,14 +274,27 @@ const ImportLeadsPage: React.FC = () => {
           <Upload className="h-8 w-8 text-blue-600 mt-1" />
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Import Leads from Lead Generation Tool
+              Import Leads
             </h1>
             <p className="text-gray-600 text-lg mb-3">
-              Connect and sync leads automatically from your lead generation tools
+              Connect and sync leads from an external lead generation tool
             </p>
+            {/* This used to advertise "our native BMI Lead Gen Tool with
+                real-time sync, unlimited leads, and advanced AI scoring
+                included FREE". Lead Generation is a SEPARATE PLATFORM now (see
+                CLAUDE.md, "Identity & SSO"), and none of those features exists
+                to promise — so the claim went. The generic "any external tool"
+                framing stays, because an import over an API boundary is exactly
+                the right shape for this page.
+
+                The connect action is already honest: handleCompleteConnection
+                says plainly that there is no OAuth flow behind it and nothing
+                was connected. */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
               <p className="text-blue-900 font-medium">
-                BMI CRM integrates with any lead generation tool. For the best experience, use our native BMI Lead Gen Tool with real-time sync, unlimited leads, and advanced AI scoring included FREE.
+                BMI CRM can import leads from any external lead generation tool.
+                Connecting a provider is not available yet — no integration is
+                wired behind these cards.
               </p>
             </div>
           </div>

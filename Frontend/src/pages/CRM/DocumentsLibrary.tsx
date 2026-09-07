@@ -67,7 +67,6 @@ const CATEGORIES = [
   { name: 'Case Study', count: 18, icon: '📑' },
   { name: 'Pricing', count: 28, icon: '💰' },
   { name: 'Meeting Materials', count: 56, icon: '🤝' },
-  { name: 'HRMS Documents', count: 8, icon: '👥' },
   { name: 'Email Attachments', count: 6, icon: '📧' }
 ];
 
@@ -91,7 +90,6 @@ const SOURCES = [
   { type: 'Upload', label: 'Manual Upload', count: 112 },
   { type: 'Email', label: 'Email Attachment', count: 45 },
   { type: 'AI', label: 'AI-Generated', count: 34 },
-  { type: 'HRMS', label: 'HRMS Sync', count: 12 },
   { type: 'Calendar', label: 'Calendar Recording', count: 8 }
 ];
 
@@ -181,8 +179,7 @@ const OWNERS = [
   { name: 'user_sarah_chen', label: 'Sarah Chen', count: 78 },
   { name: 'user_mike', label: 'Mike Johnson', count: 56 },
   { name: 'user_emily', label: 'Emily Davis', count: 24 },
-  { name: 'system_ai', label: 'System (AI)', count: 13 },
-  { name: 'system_hrms', label: 'System (HRMS)', count: 12 }
+  { name: 'system_ai', label: 'System (AI)', count: 13 }
 ];
 
 const DATE_RANGES = [
@@ -206,7 +203,6 @@ const getCategoryColor = (category: string): string => {
     'Case Study': 'bg-[#8b5cf6] text-white',
     'Pricing': 'bg-[#14b8a6] text-white',
     'Meeting Materials': 'bg-[#6366f1] text-white',
-    'HRMS Documents': 'bg-[#ff9800] text-white',
     'Email Attachments': 'bg-[#06b6d4] text-white'
   };
   return colors[category] || 'bg-gray-100 text-gray-700';
@@ -266,7 +262,6 @@ const DocumentsLibrary: React.FC = () => {
     type: 'deal' | 'account' | 'contact' | 'activity' | 'category' | 'source' | null;
     id: string | null;
     name: string | null;
-    hrmsConnected?: boolean;
     title?: string;
     accountName?: string;
     activityType?: string;
@@ -380,7 +375,6 @@ const DocumentsLibrary: React.FC = () => {
     const activityName = searchParams.get('activity_name');
     const activityType = searchParams.get('activity_type') ?? undefined;
     const title = searchParams.get('title') ?? undefined;
-    const hrmsConnected = searchParams.get('hrms_connected') === 'true';
 
     if (dealId) {
       setContextFilter({ type: 'deal', id: dealId, name: dealName || 'Deal' });
@@ -390,7 +384,6 @@ const DocumentsLibrary: React.FC = () => {
         type: 'account',
         id: accountId,
         name: accountName || 'Account',
-        hrmsConnected
       });
       setSelectedRelatedTo(['Accounts']);
     } else if (contactId) {
@@ -400,7 +393,6 @@ const DocumentsLibrary: React.FC = () => {
         name: contactName || 'Contact',
         title,
         accountName,
-        hrmsConnected
       });
       setSelectedRelatedTo(['Contacts']);
     } else if (activityId) {
@@ -1605,18 +1597,6 @@ const DocumentsLibrary: React.FC = () => {
                       matching <span className="font-semibold">"{searchQuery}"</span>
                     </span>
                   )}
-                  {contextFilter.type === 'account' && contextFilter.hrmsConnected && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded-full">
-                      <Building2 className="w-3 h-3" />
-                      HRMS Connected
-                    </span>
-                  )}
-                  {contextFilter.type === 'contact' && contextFilter.hrmsConnected && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded-full">
-                      <Building2 className="w-3 h-3" />
-                      HRMS Connection
-                    </span>
-                  )}
                 </div>
                 <p className="text-xs text-blue-600 mt-1">
                   {filteredDocuments.length} document{filteredDocuments.length !== 1 ? 's' : ''} found
@@ -2129,7 +2109,7 @@ const DocumentsLibrary: React.FC = () => {
                             </button>
                           </div>
 
-                          {(doc.source === 'AI' || doc.source === 'Email' || doc.source === 'HRMS' || doc.source === 'Calendar') && (
+                          {(doc.source === 'AI' || doc.source === 'Email' || doc.source === 'Calendar') && (
                             <div className="mb-3 space-y-1">
                               {doc.source === 'AI' && (
                                 <button
@@ -2159,20 +2139,6 @@ const DocumentsLibrary: React.FC = () => {
                                 >
                                   <Mail className="w-3 h-3" />
                                   <span>From: Gmail</span>
-                                </button>
-                              )}
-                              {doc.source === 'HRMS' && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSourceFilter('HRMS');
-                                  }}
-                                  className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                                  style={{ fontSize: '10px', color: '#ff9800' }}
-                                  title="Auto-synced from HRMS module"
-                                >
-                                  <Building2 className="w-3 h-3" />
-                                  <span>HRMS Connected</span>
                                 </button>
                               )}
                               {doc.source === 'Calendar' && (
@@ -2252,20 +2218,6 @@ const DocumentsLibrary: React.FC = () => {
                                   >
                                     <Phone className="w-3 h-3 flex-shrink-0" />
                                     <span className="truncate">{activityName}</span>
-                                    <span className="flex-shrink-0">→</span>
-                                  </button>
-                                )}
-                                {doc.source === 'HRMS' && doc.contact_id && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigate(`/crm/contacts/${doc.contact_id}`);
-                                    }}
-                                    className="flex items-center gap-1 w-full hover:opacity-80 transition-opacity"
-                                    style={{ fontSize: '13px', color: '#667eea' }}
-                                  >
-                                    <Building2 className="w-3 h-3 flex-shrink-0" />
-                                    <span className="truncate">HRMS Connected</span>
                                     <span className="flex-shrink-0">→</span>
                                   </button>
                                 )}

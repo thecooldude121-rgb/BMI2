@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, TrendingUp, DollarSign, Building2, AlertTriangle, Lightbulb } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Building2, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
 import { useStageLookup } from '../../hooks/useStageLookup';
@@ -240,21 +240,21 @@ const CRMDashboard: React.FC = () => {
 
   // ── Not yet on real data ──────────────────────────────────────────────────
   //
-  // aiInsights: three fixed sentences. One of them ("N deals need attention")
-  // is computable from real data; the other two need HRMS and close-rate
-  // history that do not exist. Labelled as a preview in the panel below.
+  // aiInsights: two fixed sentences. One of them ("N deals need attention") is
+  // computable from real data; the other needs close-rate history that no
+  // endpoint provides. Labelled as a preview in the panel below.
+  //
+  // A third read "2 high-value leads from HRMS ready to contact" and is GONE,
+  // not relabelled: HRMS is a separate platform over SSO, so there is no
+  // integration for it to ever become true about. Sample copy for a feature
+  // that is merely unbuilt can be labelled; sample copy for a feature that will
+  // never exist here is just wrong.
   const aiInsights = [
     {
       icon: AlertTriangle,
       message: '3 deals need attention - No activity in 5 days',
       action: 'View Deals',
       type: 'warning'
-    },
-    {
-      icon: Lightbulb,
-      message: '2 high-value leads from HRMS ready to contact',
-      action: 'View Leads',
-      type: 'info'
     },
     {
       icon: TrendingUp,
@@ -298,7 +298,7 @@ const CRMDashboard: React.FC = () => {
       },
       {
         name: 'Mike',
-        achievement: 'earned HRMS Master',
+        achievement: 'earned Pipeline Master',
         badge: true,
         time: '5h ago'
       },
@@ -543,16 +543,16 @@ const CRMDashboard: React.FC = () => {
               "3 deals need attention"   -> computable today from
                                             deals.days_since_contact, but not
                                             wired; the number shown is invented.
-              "2 high-value leads from HRMS" -> there is no HRMS integration and
-                                            no lead-source pipeline behind it.
               "close rate up 12%"        -> needs period-over-period close-rate
                                             history, which no endpoint provides.
 
             The two action buttons navigated to /crm/deals?filter=needs-attention
-            and /crm/leads?filter=hrms-source. NOTHING reads either query
-            parameter — grep is conclusive — so each button promised a filtered
+            and /crm/leads?filter=hrms-source. NOTHING read either query
+            parameter — grep was conclusive — so each button promised a filtered
             view and delivered the plain unfiltered page. They are gone: a
             labelled preview whose buttons still act real is only half honest.
+            The HRMS line itself is gone too, for a stronger reason than being
+            unwired — see the comment on `aiInsights`.
 
             Kept visible rather than deleted because the shape of the feature is
             a real product decision worth showing. Marked so it cannot be read as

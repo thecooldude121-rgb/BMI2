@@ -197,8 +197,7 @@ const DocumentDetailPage: React.FC = () => {
         status: 'Active',
         related_entity_type: 'deal',
         related_entity_id: 'deal_acme_001',
-        folder_id: 'folder_proposals',
-        hrms_connected: false
+        folder_id: 'folder_proposals'
       },
       'doc_techstart_contract': {
         id: 'doc_techstart_contract',
@@ -209,8 +208,8 @@ const DocumentDetailPage: React.FC = () => {
         file_url: '/storage/documents/techstart_enterprise_contract.docx',
         category: 'Contract',
         subcategory: 'Enterprise',
-        tags: ['contract', 'techstart', 'hrms', 'enterprise'],
-        description: 'Final enterprise contract for TechStart Inc. HRMS-connected deal.',
+        tags: ['contract', 'techstart', 'enterprise'],
+        description: 'Final enterprise contract for TechStart Inc.',
         uploaded_by: 'user_alex',
         owner_name: 'Alex Rodriguez',
         uploaded_at: '2024-12-07T16:45:00Z',
@@ -223,7 +222,6 @@ const DocumentDetailPage: React.FC = () => {
         related_entity_type: 'deal',
         related_entity_id: 'deal_techstart_001',
         folder_id: 'folder_contracts',
-        hrms_connected: true,
         source: 'Email',
         source_detail: 'Gmail attachment from legal@techstart.com'
       },
@@ -424,7 +422,7 @@ const DocumentDetailPage: React.FC = () => {
 
         setComments([]);
         setSharedUsers([]);
-        setTags(['contract', 'techstart', 'hrms', 'enterprise']);
+        setTags(['contract', 'techstart', 'enterprise']);
 
         setActivityLog([
           {
@@ -1016,14 +1014,6 @@ const DocumentDetailPage: React.FC = () => {
                         Version {document.version}
                       </span>
                     )}
-                    {document.hrms_connected && (
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 cursor-help"
-                        title="This deal originated from an HRMS recruitment. Higher close probability."
-                      >
-                        <span className="mr-1">🔗</span> HRMS Connected
-                      </span>
-                    )}
                     {document.ai_generated && (
                       <span
                         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 cursor-help"
@@ -1491,20 +1481,6 @@ const DocumentDetailPage: React.FC = () => {
                     {document.source_detail && (
                       <div className="text-xs text-gray-500 mt-1">{document.source_detail}</div>
                     )}
-                  </div>
-                )}
-
-                {document.hrms_connected && (
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                        <span className="text-sm">🔗</span>
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-emerald-800">HRMS Connected</div>
-                        <div className="text-xs text-gray-500">Synced with employee records</div>
-                      </div>
-                    </div>
                   </div>
                 )}
 
