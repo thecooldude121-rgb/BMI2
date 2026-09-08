@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, MapPin, Globe, Hash, AlertCircle, ChevronDown, ChevronUp, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
+import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, AlertCircle, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { NotAvailable } from '../../components/common/NotAvailable';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
+import { useTeamPerformance } from '../../hooks/useTeamPerformance';
 import { TeamEmailComposerModal } from '../../components/Team/TeamEmailComposerModal';
 import { ScheduleCallModal } from '../../components/Team/ScheduleCallModal';
 import { ScheduleMeetingModal } from '../../components/Team/ScheduleMeetingModal';
@@ -14,130 +15,39 @@ import { ShareDocumentModal } from '../../components/Team/ShareDocumentModal';
 
 type Role = 'CEO' | 'VP' | 'Manager' | 'Rep' | 'Admin' | 'Analyst' | 'Support';
 
-interface TeamMemberDetail {
-  id: string;
-  name: string;
-  initials: string;
-  role: string;
-  email: string;
-  phone: string;
-  manager: string;
-  managerId: string;
-  status: 'Active' | 'Inactive';
-  memberSince: string;
-  lastActive: string;
-  location: string;
-  timezone: string;
-  team: string;
-  department: string;
-  employeeNumber: string;
-  metrics: {
-    activeDeals: number;
-    activeDealsChange: string;
-    activeDealsChangeValue: number;
-    totalPipeline: string;
-    totalPipelineValue: number;
-    pipelineChange: string;
-    pipelineChangePct: number;
-    pipelinePrevious: string;
-    wonDeals: number;
-    wonDealsQ: string;
-    wonDealsPrevQ: number;
-    winRate: number;
-    winRateComparison: string;
-    winRateTeamAvg: number;
-    winRateTrend: string;
-    quotaAttainment: number;
-    quotaTarget: string;
-    quotaActual: string;
-    quotaStatus: string;
-    avgCycle: string;
-    avgCycleDays: number;
-    cycleChange: string;
-    cycleChangeDays: number;
-    cycleTeamAvg: string;
-  };
-  directReports?: DirectReport[];
-}
+/*
+ * `Role` above drives ONLY the developer "View as" switcher further down, which
+ * simulates access control this product does not enforce here. It is a
+ * pre-existing defect, left in place deliberately so this change stays about
+ * data, and reported rather than silently kept. Real RBAC is enforced at the
+ * API; the equivalent simulator on TeamPerformancePage was deleted when that
+ * page was rewritten.
+ */
 
-interface DirectReport {
-  id: string;
-  name: string;
-  initials: string;
-  role: string;
-  email: string;
-  phone: string;
-  photoColor: string;
-  status: 'active' | 'inactive';
-  memberSince: string;
-  reportsTo: string;
-  reportsToId: string;
-  activeDeals: number;
-  pipeline: string;
-  pipelineValue: number;
-  winRate: number;
-  quota: string;
-  quotaValue: number;
-  quotaAttainment: number;
-  performanceLabel: string;
-  lastActivityType: string;
-  lastActivity: string;
-  lastActivityDate: string;
-  activityStatus: string;
-  coachingStatus: {
-    needsAttention: boolean;
-    last1on1: string;
-    next1on1: string;
-    performanceTrend: string;
-  };
-}
-
-interface Deal {
-  id: string;
-  dealId: string;
-  name: string;
-  fullName: string;
-  value: string;
-  valueNum: number;
-  stage: string;
-  probability: number;
-  closeDate: string;
-  age: string;
-  ageDays: number;
-  source: string;
-  contact: string;
-  lastActivity: string;
-  nextStep: string;
-}
-
-interface Contact {
-  id: string;
-  name: string;
-  company: string;
-  title: string;
-  lastContact: string;
-}
-
-interface Activity {
-  id: string;
-  type: 'call' | 'email' | 'meeting' | 'task';
-  icon: string;
-  contact: string;
-  company: string;
-  date: string;
-  relativeDate: string;
-  duration?: string;
-  attendees?: number;
-  subject: string;
-  description: string;
-  outcome: string;
-  sentiment: string;
-  sentimentEmoji: string;
-  nextAction: string;
-  relatedDeal: string;
-  relatedDealValue: string;
-  tags: string[];
-}
+/*
+ * THE FIXTURES THAT USED TO LIVE HERE ARE GONE — 369 lines of them.
+ *
+ * `TEAM_MEMBER_DATA` held two invented employees (ids '1' and '2') with
+ * invented phone numbers, offices, timezones, employee numbers and a 24-field
+ * `metrics` block. Because it had only two entries and the page read
+ * `TEAM_MEMBER_DATA[id || '2']`, THREE OF THE FIVE REAL USERS in this
+ * workspace rendered "Member Not Found" — confirmed live at /team/5, which is
+ * a real admin. Identity now comes from the roster, so every real user
+ * resolves and nobody who does not exist does.
+ *
+ * `DEALS`, `CONTACTS` and `ACTIVITIES` were still POPULATED and still
+ * RENDERING after cd667e2, which only blanked the metric cards. That page
+ * therefore showed invented deals, an invented contact book ("Emma Wilson,
+ * VP Eng, DataFlow Inc") and an invented activity feed AS THE WORK OF A REAL,
+ * NAMED EMPLOYEE. Deals are now this person's real rows; contacts and
+ * activities have no per-user endpoint yet and render an honest empty state.
+ *
+ * What is NOT recoverable from `users`, and so is labelled rather than
+ * invented: phone, office location, timezone, team and employee number. Those
+ * are HRMS-owned employee attributes, and HRMS is a separate platform reached
+ * over the API boundary — see CLAUDE.md's "Identity & SSO". The CRM has no
+ * column for any of them and must not grow one to fill a card.
+ */
 
 interface CoachingNote {
   id: string;
@@ -154,354 +64,6 @@ interface CoachingNote {
   achievement?: string;
   nextReview?: string;
 }
-
-const TEAM_MEMBER_DATA: Record<string, TeamMemberDetail> = {
-  '2': {
-    id: '2',
-    name: 'Sarah Chen',
-    initials: 'SC',
-    role: 'Sales Manager',
-    email: 'sarah@bmi.com',
-    phone: '555-0001',
-    manager: 'John Smith',
-    managerId: '5',
-    status: 'Active',
-    memberSince: 'Oct 1, 2024',
-    lastActive: '2 hours ago',
-    location: 'San Francisco, CA',
-    timezone: 'PST (UTC-8)',
-    team: 'Sales East',
-    department: 'Sales',
-    employeeNumber: 'EMP-001234',
-    metrics: {
-      activeDeals: 12,
-      activeDealsChange: '+3 vs LM',
-      activeDealsChangeValue: 3,
-      totalPipeline: '$680K',
-      totalPipelineValue: 680000,
-      pipelineChange: '+15% MoM',
-      pipelineChangePct: 15,
-      pipelinePrevious: '$591K',
-      wonDeals: 8,
-      wonDealsQ: 'This Q',
-      wonDealsPrevQ: 6,
-      winRate: 72,
-      winRateComparison: 'Above avg',
-      winRateTeamAvg: 67,
-      winRateTrend: '+5% vs last quarter',
-      quotaAttainment: 108,
-      quotaTarget: '$630K',
-      quotaActual: '$680K',
-      quotaStatus: 'On target',
-      avgCycle: '45 days',
-      avgCycleDays: 45,
-      cycleChange: '-5 days',
-      cycleChangeDays: -5,
-      cycleTeamAvg: '52 days'
-    },
-    directReports: [
-      {
-        id: '1',
-        name: 'Alex Rodriguez',
-        initials: 'AR',
-        role: 'Sales Representative',
-        email: 'alex@bmi.com',
-        phone: '555-0002',
-        photoColor: '#3b82f6',
-        status: 'active',
-        memberSince: 'Oct 1, 2024',
-        reportsTo: 'Sarah Chen',
-        reportsToId: '2',
-        activeDeals: 8,
-        pipeline: '$450,000',
-        pipelineValue: 450000,
-        winRate: 67,
-        quota: '$432,000',
-        quotaValue: 432000,
-        quotaAttainment: 104,
-        performanceLabel: 'Solid performer',
-        lastActivityType: 'Phone call with prospect',
-        lastActivity: '2 hours ago',
-        lastActivityDate: 'Dec 13, 2024 at 2:00 PM PST',
-        activityStatus: 'Active (recent engagement)',
-        coachingStatus: {
-          needsAttention: false,
-          last1on1: 'Dec 8, 2024',
-          next1on1: 'Dec 20, 2024',
-          performanceTrend: 'Steady'
-        }
-      },
-      {
-        id: '4',
-        name: 'Emily Davis',
-        initials: 'ED',
-        role: 'Sales Representative',
-        email: 'emily@bmi.com',
-        phone: '555-0004',
-        photoColor: '#3b82f6',
-        status: 'active',
-        memberSince: 'Oct 1, 2024',
-        reportsTo: 'Sarah Chen',
-        reportsToId: '2',
-        activeDeals: 5,
-        pipeline: '$280,000',
-        pipelineValue: 280000,
-        winRate: 65,
-        quota: '$260,000',
-        quotaValue: 260000,
-        quotaAttainment: 108,
-        performanceLabel: 'On track',
-        lastActivityType: 'Email to prospect',
-        lastActivity: '5 hours ago',
-        lastActivityDate: 'Dec 13, 2024 at 11:00 AM PST',
-        activityStatus: 'Active',
-        coachingStatus: {
-          needsAttention: false,
-          last1on1: 'Dec 9, 2024',
-          next1on1: 'Dec 22, 2024',
-          performanceTrend: 'Improving'
-        }
-      }
-    ]
-  },
-  '1': {
-    id: '1',
-    name: 'Alex Rodriguez',
-    initials: 'AR',
-    role: 'Sales Representative',
-    email: 'alex@bmi.com',
-    phone: '555-0002',
-    manager: 'Sarah Chen',
-    managerId: '2',
-    status: 'Active',
-    memberSince: 'Oct 1, 2024',
-    lastActive: '2 hours ago',
-    location: 'San Francisco, CA',
-    timezone: 'PST (UTC-8)',
-    team: 'Sales East',
-    department: 'Sales',
-    employeeNumber: 'EMP-001235',
-    metrics: {
-      activeDeals: 8,
-      activeDealsChange: '+2 vs LM',
-      activeDealsChangeValue: 2,
-      totalPipeline: '$450K',
-      totalPipelineValue: 450000,
-      pipelineChange: '+12% MoM',
-      pipelineChangePct: 12,
-      pipelinePrevious: '$402K',
-      wonDeals: 6,
-      wonDealsQ: 'This Q',
-      wonDealsPrevQ: 4,
-      winRate: 67,
-      winRateComparison: 'Above avg',
-      winRateTeamAvg: 65,
-      winRateTrend: '+3% vs last quarter',
-      quotaAttainment: 104,
-      quotaTarget: '$432K',
-      quotaActual: '$450K',
-      quotaStatus: 'Exceeding target',
-      avgCycle: '42 days',
-      avgCycleDays: 42,
-      cycleChange: '-3 days',
-      cycleChangeDays: -3,
-      cycleTeamAvg: '52 days'
-    }
-  }
-};
-
-const DEALS: Deal[] = [
-  {
-    id: 'd1',
-    dealId: 'deal_001',
-    name: 'DataFlow Inc',
-    fullName: 'DataFlow Inc - Enterprise Analytics Platform',
-    value: '$120K',
-    valueNum: 120000,
-    stage: 'Qualified',
-    probability: 65,
-    closeDate: 'Jan 30, \'26',
-    age: '45 days',
-    ageDays: 45,
-    source: 'Referral',
-    contact: 'Emma Wilson',
-    lastActivity: '2 hours ago',
-    nextStep: 'Product demo on Dec 20'
-  },
-  {
-    id: 'd2',
-    dealId: 'deal_002',
-    name: 'BigCo Enterprise',
-    fullName: 'BigCo Enterprise - Infrastructure Upgrade',
-    value: '$95K',
-    valueNum: 95000,
-    stage: 'Proposal',
-    probability: 70,
-    closeDate: 'Feb 15, \'26',
-    age: '62 days',
-    ageDays: 62,
-    source: 'Referral',
-    contact: 'Alex Johnson',
-    lastActivity: 'Yesterday',
-    nextStep: 'Awaiting legal review'
-  },
-  {
-    id: 'd3',
-    dealId: 'deal_003',
-    name: 'TechVision Corp',
-    fullName: 'TechVision Corp - Cloud Migration',
-    value: '$85K',
-    valueNum: 85000,
-    stage: 'Negotiation',
-    probability: 80,
-    closeDate: 'Dec 31, \'25',
-    age: '78 days',
-    ageDays: 78,
-    source: 'Cold Outreach',
-    contact: 'Michael Chen',
-    lastActivity: '3 days ago',
-    nextStep: 'Contract review'
-  },
-  {
-    id: 'd4',
-    dealId: 'deal_004',
-    name: 'CloudStart Solutions',
-    fullName: 'CloudStart Solutions - SaaS Platform',
-    value: '$65K',
-    valueNum: 65000,
-    stage: 'Qualified',
-    probability: 50,
-    closeDate: 'Jan 15, \'26',
-    age: '32 days',
-    ageDays: 32,
-    source: 'Referral',
-    contact: 'Lisa Martinez',
-    lastActivity: '5 days ago',
-    nextStep: 'Follow-up meeting Dec 20'
-  },
-  {
-    id: 'd5',
-    dealId: 'deal_005',
-    name: 'Innovation Labs',
-    fullName: 'Innovation Labs - Custom Development',
-    value: '$110K',
-    valueNum: 110000,
-    stage: 'Proposal',
-    probability: 60,
-    closeDate: 'Feb 1, \'26',
-    age: '54 days',
-    ageDays: 54,
-    source: 'Cold Outreach',
-    contact: 'Robert Kim',
-    lastActivity: '1 week ago',
-    nextStep: 'Send revised proposal'
-  }
-];
-
-const CONTACTS: Contact[] = [
-  { id: 'c1', name: 'Emma Wilson', company: 'DataFlow Inc', title: 'VP Eng', lastContact: '2 days ago' },
-  { id: 'c2', name: 'Alex Johnson', company: 'BigCo Enterprise', title: 'CTO', lastContact: '1 week ago' },
-  { id: 'c3', name: 'Michael Chen', company: 'TechVision Corp', title: 'CEO', lastContact: '3 days ago' },
-  { id: 'c4', name: 'Lisa Martinez', company: 'CloudStart Sol', title: 'VP Sales', lastContact: '5 days ago' },
-  { id: 'c5', name: 'Robert Kim', company: 'Innovation Labs', title: 'Director', lastContact: '1 week ago' }
-];
-
-const ACTIVITIES: Activity[] = [
-  {
-    id: 'activity_001',
-    type: 'call',
-    icon: '📞',
-    contact: 'Emma Wilson',
-    company: 'DataFlow Inc',
-    date: 'Dec 13, 2024 at 2:00 PM PST',
-    relativeDate: '2 hours ago',
-    duration: '35 minutes',
-    subject: 'Pricing discussion for enterprise plan',
-    description: 'Discussed pricing options for enterprise plan. Emma is positive about moving forward with the qualified package. She mentioned budget approval is likely by end of month. Follow-up scheduled for next week to address any technical questions from her team.',
-    outcome: 'Positive',
-    sentiment: 'Very Positive',
-    sentimentEmoji: '😊',
-    nextAction: 'Product demo Dec 20',
-    relatedDeal: 'DataFlow Inc',
-    relatedDealValue: '$120K',
-    tags: ['Referral', 'Pricing', 'Positive']
-  },
-  {
-    id: 'activity_002',
-    type: 'email',
-    icon: '✉️',
-    contact: 'Alex Johnson',
-    company: 'BigCo Enterprise',
-    date: 'Dec 12, 2024 at 4:30 PM PST',
-    relativeDate: 'Yesterday',
-    subject: 'Updated Proposal - Q1 2026 Implementation',
-    description: 'Sent updated proposal with revised timeline based on Alex\'s feedback from last week. Adjusted implementation schedule to start Q1 2026 instead of Q4 2025. Included detailed project plan and resource allocation. Awaiting response.',
-    outcome: 'Pending Response',
-    sentiment: 'Neutral (waiting)',
-    sentimentEmoji: '😐',
-    nextAction: 'Follow up if no response by Dec 15',
-    relatedDeal: 'BigCo Enterprise',
-    relatedDealValue: '$95K',
-    tags: ['Referral', 'Proposal', 'Follow-up Needed']
-  },
-  {
-    id: 'activity_003',
-    type: 'meeting',
-    icon: '🤝',
-    contact: 'Michael Chen',
-    company: 'TechVision Corp',
-    date: 'Dec 10, 2024 at 10:00 AM PST',
-    relativeDate: '3 days ago',
-    duration: '1 hour',
-    attendees: 4,
-    subject: 'Product Demo - Cloud Migration Solution',
-    description: 'Product demo completed successfully. Client impressed with features, especially the automated migration tools and security compliance features. Michael confirmed this addresses their main pain points. Moving to negotiation stage. Waiting for legal review of contract before final signatures.',
-    outcome: 'Excellent',
-    sentiment: 'Very Positive',
-    sentimentEmoji: '😊',
-    nextAction: 'Contract review with legal',
-    relatedDeal: 'TechVision Corp',
-    relatedDealValue: '$85K',
-    tags: ['Demo', 'Positive', 'Negotiation']
-  },
-  {
-    id: 'activity_004',
-    type: 'task',
-    icon: '✅',
-    contact: 'Lisa Martinez',
-    company: 'CloudStart Solutions',
-    date: 'Dec 8, 2024',
-    relativeDate: '5 days ago',
-    subject: 'Follow-up materials after discovery call',
-    description: 'Sent follow-up materials including case studies, ROI calculator, and technical documentation after initial discovery call. Lisa confirmed receipt and interest. Scheduled next meeting for Dec 20 to discuss technical requirements in detail.',
-    outcome: 'Completed',
-    sentiment: 'Positive',
-    sentimentEmoji: '😊',
-    nextAction: 'Technical deep-dive Dec 20',
-    relatedDeal: 'CloudStart Solutions',
-    relatedDealValue: '$65K',
-    tags: ['Follow-up', 'Discovery', 'Materials Sent']
-  },
-  {
-    id: 'activity_005',
-    type: 'call',
-    icon: '📞',
-    contact: 'Lisa Martinez',
-    company: 'CloudStart Solutions',
-    date: 'Dec 6, 2024 at 11:00 AM PST',
-    relativeDate: '1 week ago',
-    duration: '45 minutes',
-    subject: 'Discovery call - Requirements gathering',
-    description: 'Discovery call to understand CloudStart\'s requirements and pain points. Identified 3 key challenges: 1) Current platform doesn\'t scale, 2) Integration complexity, 3) High maintenance costs. Our enterprise solution is a good fit for all three. Lisa is the primary decision maker with $100K budget authority.',
-    outcome: 'Qualified',
-    sentiment: 'Positive',
-    sentimentEmoji: '😊',
-    nextAction: 'Send follow-up materials (completed)',
-    relatedDeal: 'CloudStart Solutions',
-    relatedDealValue: '$65K',
-    tags: ['Discovery', 'Qualified', 'Budget Confirmed']
-  }
-];
 
 /**
  * ALWAYS EMPTY, AND THAT IS A DECISION RATHER THAN A GAP.
@@ -533,7 +95,6 @@ export default function TeamMemberDetailPage() {
   const navigationState = location.state as { from?: string } | null;
   const [currentRole, setCurrentRole] = useState<Role>('Manager');
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-  const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
   // Modal states
@@ -545,7 +106,6 @@ export default function TeamMemberDetailPage() {
   const [deleteNoteModalOpen, setDeleteNoteModalOpen] = useState(false);
   const [selectedNote, setSelectedNote] = useState<CoachingNote | null>(null);
   const [callModalOpen, setCallModalOpen] = useState(false);
-  const [oneOnOneModalOpen, setOneOnOneModalOpen] = useState(false);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [shareDocModalOpen, setShareDocModalOpen] = useState(false);
   const [addTaskModalOpen, setAddTaskModalOpen] = useState(false);
@@ -553,12 +113,59 @@ export default function TeamMemberDetailPage() {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [documentModalOpen, setDocumentModalOpen] = useState(false);
-  const [selectedReportId, setSelectedReportId] = useState<string>('');
+
+  /** Compact money for the metric cards. Same shape as the team page's. */
+  const metricMoney = (n: number) =>
+    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
+    : n >= 1_000   ? `$${Math.round(n / 1_000)}K`
+    : `$${n}`;
 
   // Ref for more actions dropdown
   const moreActionsRef = useRef<HTMLDivElement>(null);
 
-  const member = TEAM_MEMBER_DATA[id || '2'];
+  /*
+   * REAL DATA. `useTeamPerformance` already computes per-member rollups and
+   * resolves direct reports from `users.manager_id`, so this page finds its
+   * person in that result rather than fetching a second time or keeping its
+   * own copy of the arithmetic.
+   *
+   * There is no `GET /users/:id`, and none is needed: `GET /users` returns the
+   * whole workspace roster (it is deliberately ungated so assignment pickers
+   * can read it), so the person is found in a list that is already loaded.
+   */
+  const { members, loading, error, period, truncated } = useTeamPerformance();
+  const row = members.find((r) => String(r.member.id) === String(id));
+
+  /*
+   * The identity fields, mapped from the roster row. Fields with NO COLUMN in
+   * `users` are `null` and the UI labels them — never filled with a plausible
+   * value. See the note at the top of this file for why phone, location,
+   * timezone, team and employee number are absent rather than pending.
+   */
+  const member = row && {
+    id:             String(row.member.id),
+    name:           row.member.name || row.member.email,
+    initials:       row.member.initials,
+    email:          row.member.email,
+    role:           row.member.role,
+    department:     row.member.department,
+    status:         row.member.status,
+    manager:        row.member.managerName,
+    managerId:      row.member.managerId,
+    memberSince:    row.member.createdAt,
+    lastActive:     row.member.lastLoginAt,
+    // Each report resolved to its own rollup, so the section shows real
+    // pipeline and quota per person rather than a name alone.
+    directReports:  row.directReports
+      .map((r) => members.find((m) => String(m.member.id) === String(r.id)))
+      .filter((m): m is NonNullable<typeof m> => m != null),
+    // No column in `users` for any of these — HRMS owns them.
+    phone:          null,
+    location:       null,
+    timezone:       null,
+    team:           null,
+    employeeNumber: null,
+  };
 
   // Keyboard shortcuts: E, C, M, T, N, D, A
   useEffect(() => {
@@ -613,15 +220,35 @@ export default function TeamMemberDetailPage() {
     }
   }, [moreActionsOpen]);
 
+  /*
+   * LOADING IS NOT "NOT FOUND", and separating them is the whole point of this
+   * block. The roster arrives asynchronously now, so the old single `!member`
+   * branch would flash "Member Not Found" at every real user on every load —
+   * the same shape as CLAUDE.md lesson 4, where screenshots taken before a
+   * fetch resolved were twice reported as a broken page.
+   */
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-8">
+        <p className="text-sm text-slate-500">Loading team member…</p>
+      </div>
+    );
+  }
+
   if (!member) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 flex items-center justify-center p-8">
         <div className="bg-white rounded-xl shadow-lg p-12 max-w-md text-center">
-          <h2 className="text-2xl font-bold text-slate-800 mb-4">Member Not Found</h2>
-          <Button
-            onClick={() => navigate('/team')}
-            size="lg"
-          >
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">
+            {/* A failed roster fetch is a different fact from a bad id. */}
+            {error ? 'Could not load this member' : 'Member not found'}
+          </h2>
+          <p className="text-sm text-slate-600 mb-6">
+            {error
+              ? `${error} Try again, or go back to the team list.`
+              : 'Nobody in this workspace has that id. They may have been removed.'}
+          </p>
+          <Button onClick={() => navigate('/team')} size="lg">
             Back to Team
           </Button>
         </div>
@@ -630,24 +257,18 @@ export default function TeamMemberDetailPage() {
   }
 
   // Comprehensive role-based permissions
-  const canManageNotes = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
   const canScheduleMeetings = currentRole === 'Manager';
   const canAddNotes = ['CEO', 'VP', 'Manager'].includes(currentRole);
 
   // Direct Reports visibility logic
-  const isViewingOwnProfile = id === '2' && currentRole === 'Manager'; // Sarah viewing her own profile
-  const isManagersManager = id === '2' && ['CEO', 'VP'].includes(currentRole); // John/higher viewing Sarah
   const canViewDirectReports = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole) && currentRole !== 'Rep';
   const canTakeDirectReportActions = ['CEO', 'VP', 'Manager', 'Admin'].includes(currentRole);
-  const canEditCoachingNotes = isViewingOwnProfile || (isManagersManager && currentRole !== 'Admin');
-  const showDirectReportsReadOnly = currentRole === 'Analyst' || currentRole === 'Admin';
   const canEditNotes = currentRole === 'Manager' || currentRole === 'CEO';
   const canViewPerformance = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
   const canViewDeals = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
   const canViewContacts = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
   const canViewActivities = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
   const canViewCoachingNotes = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const hasFullAccess = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
   const hasLimitedView = currentRole === 'Rep';
   const hasNoAccess = currentRole === 'Support';
 
@@ -661,23 +282,7 @@ export default function TeamMemberDetailPage() {
   const canShareDocument = ['Manager', 'Admin'].includes(currentRole);
   const canUseMoreActions = !hasNoAccess;
 
-  // More Actions dropdown - role-specific options
-  const canViewAllDeals = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canViewAllContacts2 = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canViewAllActivities2 = ['CEO', 'VP', 'Manager', 'Admin', 'Analyst'].includes(currentRole);
-  const canSchedule1on1Action = ['CEO', 'VP', 'Manager'].includes(currentRole);
-
   // Toggle functions
-  const toggleActivityExpansion = (activityId: string) => {
-    const newExpanded = new Set(expandedActivities);
-    if (newExpanded.has(activityId)) {
-      newExpanded.delete(activityId);
-    } else {
-      newExpanded.add(activityId);
-    }
-    setExpandedActivities(newExpanded);
-  };
-
   const toggleNoteExpansion = (noteId: string) => {
     const newExpanded = new Set(expandedNotes);
     if (newExpanded.has(noteId)) {
@@ -724,43 +329,15 @@ export default function TeamMemberDetailPage() {
     showToast(`Loading ${member.name}'s activities`, 'info');
   };
 
-  const handleViewDeal = (dealId: string, dealName: string) => {
-    navigate(`/deals/${dealId}`);
-    showToast(`Opening ${dealName}`, 'info');
-  };
-
   const handleViewContact = (contactId: string, contactName: string) => {
     navigate(`/contacts/${contactId}`);
     showToast(`Opening ${contactName}'s profile`, 'info');
   };
 
-  const handleViewAccount = (accountId: string, accountName: string) => {
-    navigate(`/accounts/${accountId}`);
-    showToast(`Opening ${accountName}`, 'info');
-  };
-
   // Direct Reports handlers
-  const handleViewReportProfile = (reportId: string) => {
-    navigate(`/team/${reportId}`);
-    const report = member.directReports?.find(r => r.id === reportId);
-    if (report) {
-      showToast(`Loading ${report.name}'s profile`, 'info');
-    }
-  };
-
   const handleEmailReport = (email: string) => {
     setSelectedContact(email);
     setEmailModalOpen(true);
-  };
-
-  const handleScheduleCallWithReport = (reportId: string) => {
-    setSelectedReportId(reportId);
-    setCallModalOpen(true);
-  };
-
-  const handleSchedule1on1WithReport = (reportId: string) => {
-    setSelectedReportId(reportId);
-    setOneOnOneModalOpen(true);
   };
 
   // Modal handlers
@@ -1228,26 +805,6 @@ export default function TeamMemberDetailPage() {
     setSelectedNote(null);
   };
 
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'call': return <Phone className="w-5 h-5 text-blue-600" />;
-      case 'email': return <Mail className="w-5 h-5 text-green-600" />;
-      case 'meeting': return <Video className="w-5 h-5 text-purple-600" />;
-      case 'task': return <CheckCircle className="w-5 h-5 text-orange-600" />;
-      default: return <MessageSquare className="w-5 h-5 text-slate-600" />;
-    }
-  };
-
-  const getActivityLabel = (type: string) => {
-    switch (type) {
-      case 'call': return 'Call';
-      case 'email': return 'Email';
-      case 'meeting': return 'Meeting';
-      case 'task': return 'Task Completed';
-      default: return 'Activity';
-    }
-  };
-
   // Support role - No Access
   if (hasNoAccess) {
     return (
@@ -1355,41 +912,54 @@ export default function TeamMemberDetailPage() {
                   </span>
                 </div>
                 <p className="text-lg text-slate-600 mb-2">{member.role}</p>
+                {/*
+                  IDENTITY, and what is NOT here matters as much as what is.
+                  Removed rather than left blank: phone, office location,
+                  timezone, team and employee number. `users` has no column for
+                  any of them — they are HRMS-owned employee attributes, and
+                  HRMS is a separate platform reached over the API boundary
+                  (CLAUDE.md, "Identity & SSO"). An icon beside an empty value
+                  reads as a loading failure; the field simply not being here
+                  reads as what it is. The CRM must not grow a column to fill a
+                  card either.
+
+                  Also gone: the literal "(Director)" that used to follow the
+                  manager's name, which was an invented job title attached to
+                  whoever happened to be above this person.
+                */}
                 <div className="flex items-center gap-4 text-sm text-slate-600 mb-2">
                   <span className="flex items-center gap-2">
                     <Mail className="w-4 h-4" />
                     {member.email}
                   </span>
-                  <span className="flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    {member.phone}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-slate-600 mb-2">
-                  <span className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    {member.location}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <Globe className="w-4 h-4" />
-                    {member.timezone}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-slate-600 mb-2">
-                  <span>Team: <span className="font-medium text-blue-600">{member.team}</span></span>
-                  <span>•</span>
-                  <span>Department: <span className="font-medium">{member.department}</span></span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <Hash className="w-3 h-3" />
-                    {member.employeeNumber}
-                  </span>
+                  {/* department IS a real column, and is nullable. */}
+                  {member.department && (
+                    <span>Department: <span className="font-medium">{member.department}</span></span>
+                  )}
                 </div>
                 <p className="text-sm text-slate-600 mb-1">
-                  Reports to: <button onClick={handleViewManagerProfile} className="font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors">{member.manager}</button> (Director)
+                  Reports to:{' '}
+                  {member.managerId && member.manager ? (
+                    <button
+                      onClick={handleViewManagerProfile}
+                      className="font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                    >
+                      {member.manager}
+                    </button>
+                  ) : (
+                    <span className="italic text-slate-400">Not set</span>
+                  )}
                 </p>
                 <p className="text-sm text-slate-500">
-                  Member since: {member.memberSince} | Last active: {member.lastActive}
+                  Member since{' '}
+                  {member.memberSince
+                    ? new Date(member.memberSince).toLocaleDateString()
+                    : '—'}
+                  {' · '}
+                  {/* Null means never signed in — a real state, not a gap. */}
+                  {member.lastActive
+                    ? `last signed in ${new Date(member.lastActive).toLocaleDateString()}`
+                    : 'never signed in'}
                 </p>
               </div>
             </div>
@@ -1605,60 +1175,61 @@ export default function TeamMemberDetailPage() {
           </div>
         )}
 
-        {/* Performance Metrics */}
-        {canViewPerformance && (
+        {/*
+          PERFORMANCE METRICS — REAL, and this is the stopgap from cd667e2 being
+          retired rather than relabelled.
+
+          Its comment listed exactly what was missing. Five of the six cards are
+          now computable and are computed:
+            quota records per user      -> migration 042 (quotas.user_id)
+            a manager relation on users -> migration 041 (users.manager_id)
+            ownership as a reference    -> migration 039 (assigned_to_user_id)
+
+          The SIXTH — average sales cycle — still has no source: it needs either
+          `activities` rows or stage-history timings per deal, and it keeps its
+          label rather than being given a plausible number. Wiring five cards
+          and inventing the sixth would be the hybrid CLAUDE.md lesson 15
+          describes, where correct figures vouch for an invented one.
+
+          NULL IS NOT ZERO here for the same reasons as the team page: no closed
+          deals means no win rate, and no quota row means no target. Both are
+          this person's real state today.
+        */}
+        {canViewPerformance && row && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-blue-600" />
-            Performance Metrics
-          </h2>
-          {/*
-            STOPGAP — these six cards rendered INVENTED PERFORMANCE FIGURES
-            ABOUT A REAL, NAMED EMPLOYEE: active deals, pipeline, won deals,
-            win rate against a "team average", quota attainment ("108% / On
-            target") and average sales cycle, each with a fabricated trend like
-            "+15% MoM" or "+5% vs last quarter".
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <BarChart3 className="w-6 h-6 text-blue-600" />
+              Performance Metrics
+            </h2>
+            <span className="text-xs text-slate-500">Quota period {period}</span>
+          </div>
 
-            Blanked to "—" rather than captioned `PREVIEW · SAMPLE CONTENT`,
-            which is what every other unbacked panel here gets. The difference
-            is consequence: a quota attainment figure beside a real person's
-            name can be screenshotted into a performance review or a
-            compensation conversation, where it is indistinguishable from a
-            real number. That is the same reasoning CLAUDE.md applies to a
-            fabricated credential — the blast radius extends outside the app,
-            so the value goes rather than getting a label.
+          {truncated && (
+            <p role="alert" className="mb-3 text-xs text-amber-700">
+              More deals exist than were loaded, so these totals are lower bounds.
+            </p>
+          )}
 
-            The card scaffolding stays so the layout survives and wiring this up
-            later means filling six values, not rebuilding a section. What it
-            needs, none of which exists yet: quota records per user (`quotas`
-            is empty and keyed on `rep_name`, not a user id), a manager
-            relationship on `users` (only `employees.manager_id` exists, and
-            that table is HRMS-owned and must not be joined),
-            `deals.assigned_to` as a user reference rather than a display name,
-            and `activities` rows for anything cycle-related.
-          */}
-          <NotAvailable
-            feature="Individual performance metrics"
-            detail="None of the figures below are calculated from your data. Deal counts, pipeline value, win rate, quota attainment and sales-cycle timings need quota records, a manager relationship between users, and deal ownership stored as a user reference rather than a name."
-            className="mb-4"
-          />
-          <div className="grid grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="w-5 h-5 text-blue-600" />
-                <h3 className="text-sm font-semibold text-slate-700">Active Deals</h3>
+                <h3 className="text-sm font-semibold text-slate-700">Open Deals</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
-              <div className="text-xs text-slate-400">Not connected</div>
+              <div className="text-3xl font-bold text-slate-800 mb-1">{row.openCount}</div>
+              <div className="text-xs text-slate-400">Assigned to this person</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="w-5 h-5 text-blue-600" />
-                <h3 className="text-sm font-semibold text-slate-700">Total Pipeline</h3>
+                <h3 className="text-sm font-semibold text-slate-700">Open Pipeline</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
-              <div className="text-xs text-slate-400">Not connected</div>
+              <div className="text-3xl font-bold text-slate-800 mb-1">
+                {row.openValue > 0 ? metricMoney(row.openValue) : '—'}
+              </div>
+              <div className="text-xs text-slate-400">Sum of open deal values</div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -1666,35 +1237,58 @@ export default function TeamMemberDetailPage() {
                 <TrendingUp className="w-5 h-5 text-green-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Won Deals</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
-              <div className="text-xs text-slate-400">Not connected</div>
+              <div className="text-3xl font-bold text-slate-800 mb-1">{row.wonCount}</div>
+              <div className="text-xs text-slate-400">
+                {row.wonValue > 0 ? `${metricMoney(row.wonValue)} closed` : 'Nothing closed yet'}
+              </div>
             </div>
 
+            {/* No closed deals means NO win rate. 0% would say they lose everything. */}
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Trophy className="w-5 h-5 text-yellow-600" />
                 <h3 className="text-sm font-semibold text-slate-700">Win Rate</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
-              <div className="text-xs text-slate-400">Not connected</div>
-            </div>
-
-            <div className="bg-slate-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Target className="w-5 h-5 text-blue-600" />
-                <h3 className="text-sm font-semibold text-slate-700">Quota Attainmnt</h3>
+              {row.winRate == null
+                ? <div className="text-2xl font-bold text-slate-300 mb-1">—</div>
+                : <div className="text-3xl font-bold text-slate-800 mb-1">{row.winRate}%</div>}
+              <div className="text-xs text-slate-400">
+                {row.winRate == null
+                  ? 'No deals closed yet'
+                  : `${row.wonCount} won of ${row.wonCount + row.lostCount} closed`}
               </div>
-              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
-              <div className="text-xs text-slate-400">Not connected</div>
             </div>
 
+            {/* No quota row means NO target — not $0, and not 0% attainment. */}
             <div className="bg-slate-50 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-5 h-5 text-purple-600" />
+                <Target className="w-5 h-5 text-green-600" />
+                <h3 className="text-sm font-semibold text-slate-700">Quota</h3>
+              </div>
+              {row.quota == null
+                ? <div className="text-2xl font-bold text-slate-300 mb-1">—</div>
+                : <div className="text-3xl font-bold text-slate-800 mb-1">
+                    {row.attainment != null ? `${row.attainment}%` : metricMoney(row.quota)}
+                  </div>}
+              <div className="text-xs text-slate-400">
+                {row.quota == null
+                  ? `No quota entered for ${period}`
+                  : `${metricMoney(row.wonValue)} of ${metricMoney(row.quota)}`}
+              </div>
+            </div>
+
+            {/*
+              THE ONE CARD WITH NO SOURCE. Average sales cycle needs per-deal
+              stage timings or activity rows; neither is available per user, and
+              `activities` is empty. Labelled, not filled.
+            */}
+            <div className="bg-slate-50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-5 h-5 text-slate-400" />
                 <h3 className="text-sm font-semibold text-slate-700">Avg Cycle</h3>
               </div>
-              <div className="text-3xl font-bold text-slate-300 mb-1">—</div>
-              <div className="text-xs text-slate-400">Not connected</div>
+              <div className="text-2xl font-bold text-slate-300 mb-1">—</div>
+              <div className="text-xs text-slate-400">Not calculated from your data</div>
             </div>
           </div>
         </div>
@@ -1717,25 +1311,45 @@ export default function TeamMemberDetailPage() {
           </div>
         )}
 
-        {/* Direct Reports Section - Role-based visibility */}
-        {member.directReports && member.directReports.length > 0 && canViewDirectReports && (
+        {/*
+          RENDERED EVEN WHEN EMPTY, which is the change. It used to be hidden
+          unless the fixture supplied reports, so "nobody reports to this
+          person" and "we have no idea" looked identical — and with
+          `users.manager_id` all NULL today, empty is the honest answer for
+          everyone. The section's own EmptyState says so and points at where a
+          reporting line is set.
+
+          `onScheduleCall` and `onSchedule1on1` are GONE, not repointed: this
+          page performs zero fetches, so both opened a modal that persisted
+          nothing, and the 1-on-1 one showed a fabricated `last1on1` /
+          `next1on1` history. There is no meetings-per-report table behind
+          either.
+        */}
+        {canViewDirectReports && (
           <DirectReportsSection
             reports={member.directReports}
+            period={period}
             onViewTeam={() => navigate('/team')}
-            onViewProfile={handleViewReportProfile}
             onEmail={canTakeDirectReportActions ? handleEmailReport : undefined}
-            onScheduleCall={canTakeDirectReportActions ? handleScheduleCallWithReport : undefined}
-            onSchedule1on1={canTakeDirectReportActions && !showDirectReportsReadOnly ? handleSchedule1on1WithReport : undefined}
           />
         )}
 
-        {/* Assigned Deals */}
+        {/*
+          REAL DEALS — this person's own rows, from `assigned_to_user_id`
+          (migration 039), carried through `useTeamPerformance`.
+
+          It used to render the `DEALS` fixture: invented opportunities with
+          invented values and next steps, under a hardcoded "Showing 5 of 12
+          deals". The count in the heading is now the real length, and the
+          empty state is the honest answer for four of the five real users,
+          because 20 of the 24 live deals carry no owner id at all.
+        */}
         {canViewDeals && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Briefcase className="w-6 h-6 text-blue-600" />
-              Assigned Deals ({DEALS.length} active)
+              Assigned Deals ({row?.deals.length ?? 0})
             </h2>
             <button
               onClick={handleViewAllDeals}
@@ -1745,329 +1359,113 @@ export default function TeamMemberDetailPage() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-slate-200">
-                <tr className="text-left">
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Deal Name</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Contact</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Value</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Stage</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Probability</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Age</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Close Date</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Next Step</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DEALS.map((deal) => (
-                  <tr key={deal.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-3 text-sm">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewDeal(deal.id, deal.fullName)}
-                            className="font-medium text-slate-800 hover:text-blue-600 hover:underline text-left transition-colors"
-                          >
-                            {deal.name}
-                          </button>
-                        </div>
-                        <span className="text-xs text-slate-500">{deal.fullName}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 text-sm text-slate-700">{deal.contact}</td>
-                    <td className="py-3 text-sm font-medium text-slate-800">{deal.value}</td>
-                    <td className="py-3 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        deal.stage === 'Negotiation' ? 'bg-green-100 text-green-700' :
-                        deal.stage === 'Proposal' ? 'bg-blue-100 text-blue-700' :
-                        deal.stage === 'Qualified' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-slate-100 text-slate-700'
-                      }`}>
-                        {deal.stage}
-                      </span>
-                    </td>
-                    <td className="py-3 text-sm">
-                      <span className={`font-medium ${
-                        deal.probability >= 70 ? 'text-green-600' :
-                        deal.probability >= 50 ? 'text-yellow-600' :
-                        'text-slate-600'
-                      }`}>
-                        {deal.probability}%
-                      </span>
-                    </td>
-                    <td className="py-3 text-sm text-slate-600">{deal.age}</td>
-                    <td className="py-3 text-sm text-slate-600">{deal.closeDate}</td>
-                    <td className="py-3 text-sm">
-                      <span className="text-slate-700 text-xs">{deal.nextStep}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {truncated && (
+            <p role="alert" className="mb-3 text-xs text-amber-700">
+              More deals exist than were loaded, so this list may be incomplete.
+            </p>
+          )}
 
-          <div className="mt-4 text-sm text-slate-500 text-center">
-            Showing 5 of 12 deals
-          </div>
+          {(row?.deals.length ?? 0) === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+              <Briefcase className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
+              <p className="text-sm font-semibold text-slate-700">No deals are assigned to this person</p>
+              <p className="text-sm text-slate-500 mt-1">
+                Set an owner on a deal to see it here.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    {['Deal', 'Company', 'Stage', 'Value', 'Close date'].map((h, i) => (
+                      <th key={h} className={`px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider ${
+                        i >= 3 ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {row?.deals.map((deal) => (
+                    <tr key={deal.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => navigate(`/crm/deals/${deal.id}`)}
+                          className="text-sm font-semibold text-slate-800 hover:text-blue-600 text-left"
+                        >
+                          {deal.name || deal.id}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {deal.company_name || <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {deal.stage || <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-medium text-slate-800">
+                        {Number(deal.value ?? 0).toLocaleString(undefined, {
+                          style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+                        })}
+                      </td>
+                      {/* No close date is a real state — 8 live deals have none. */}
+                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                        {deal.expected_close_date
+                          ? new Date(deal.expected_close_date).toLocaleDateString()
+                          : <span className="text-slate-400 italic">No close date</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
         )}
 
-        {/* Assigned Contacts */}
+        {/*
+          CONTACTS ARE NOT WIRED PER PERSON, and are no longer invented. This
+          rendered five fabricated people — "Emma Wilson, VP Eng, DataFlow
+          Inc", "Michael Chen, CEO, TechVision Corp" — as this employee's book,
+          under a hardcoded "Showing 5 of 24 contacts".
+
+          `contacts.owner_id` is real, so this is answerable, but GET /contacts
+          exposes no owner filter today. Adding one is a backend change, so the
+          section states the gap instead of guessing at it.
+        */}
         {canViewContacts && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Users className="w-6 h-6 text-blue-600" />
-              Assigned Contacts ({CONTACTS.length})
-            </h2>
-            <button
-              onClick={handleViewAllContacts}
-              className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1 hover:underline transition-colors"
-            >
-              View All <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-slate-200">
-                <tr className="text-left">
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Contact Name</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Company</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Title</th>
-                  <th className="pb-3 text-sm font-semibold text-slate-700">Last Contact</th>
-                </tr>
-              </thead>
-              <tbody>
-                {CONTACTS.map((contact) => (
-                  <tr key={contact.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleViewContact(contact.id, contact.name)}
-                          className="font-medium text-slate-800 hover:text-blue-600 hover:underline text-left transition-colors"
-                        >
-                          {contact.name}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="py-3 text-sm">
-                      <button
-                        onClick={() => handleViewAccount(contact.id, contact.company)}
-                        className="text-slate-600 hover:text-blue-600 hover:underline transition-colors"
-                      >
-                        {contact.company}
-                      </button>
-                    </td>
-                    <td className="py-3 text-sm text-slate-600">{contact.title}</td>
-                    <td className="py-3 text-sm text-slate-600">{contact.lastContact}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4 text-sm text-slate-500 text-center">
-            Showing 5 of 24 contacts
-          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Users className="w-6 h-6 text-blue-600" />
+            Assigned Contacts
+          </h2>
+          <NotAvailable
+            feature="Contacts owned by this person"
+            detail="Contacts do record an owner, but the contacts endpoint cannot yet filter by one, so this list is not calculated from your data. It stays empty rather than showing sample contacts."
+          />
         </div>
         )}
 
-        {/* Recent Activity */}
+        {/*
+          ACTIVITY IS NOT WIRED, and now says so instead of inventing a feed.
+          What used to render here: five fabricated activities attributed to
+          this named person, plus a summary of hardcoded literals — "32
+          activities" in the last 30 days, "12 activities/week", "Showing 5 of
+          47 total activities", and per-type counts of 8 and 6.
+
+          `activities` is a real table with a real `user_id`, but there is no
+          endpoint that returns one user's activities, and the table holds ZERO
+          rows — so even wired, the honest render today is this empty state.
+          Building the endpoint is a backend change and a separate unit.
+        */}
         {canViewActivities && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Calendar className="w-6 h-6 text-blue-600" />
-              Recent Activity ({ACTIVITIES.length})
-            </h2>
-            <button
-              onClick={handleViewAllActivities}
-              className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1 hover:underline transition-colors"
-            >
-              View All Activities <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {ACTIVITIES.map((activity) => {
-              const isExpanded = expandedActivities.has(activity.id);
-              return (
-              <div
-                key={activity.id}
-                onClick={() => toggleActivityExpansion(activity.id)}
-                className="bg-slate-50 rounded-lg p-5 border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 mt-1">
-                    <div className="w-10 h-10 bg-white rounded-lg border-2 border-slate-200 flex items-center justify-center text-xl">
-                      {activity.icon}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            activity.type === 'call' ? 'bg-blue-100 text-blue-700' :
-                            activity.type === 'email' ? 'bg-purple-100 text-purple-700' :
-                            activity.type === 'meeting' ? 'bg-green-100 text-green-700' :
-                            'bg-orange-100 text-orange-700'
-                          }`}>
-                            {getActivityLabel(activity.type)}
-                          </span>
-                          <span className="text-xs text-slate-500">•</span>
-                          <span className="text-xs text-slate-600">{activity.relativeDate}</span>
-                        </div>
-                        <h3 className="text-sm font-semibold text-slate-800 mb-1">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewContact('c1', activity.contact);
-                            }}
-                            className="hover:text-blue-600 hover:underline transition-colors"
-                          >
-                            {activity.contact}
-                          </button>
-                          {' - '}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewAccount('a1', activity.company);
-                            }}
-                            className="hover:text-blue-600 hover:underline transition-colors"
-                          >
-                            {activity.company}
-                          </button>
-                        </h3>
-                        <p className="text-xs text-slate-500 mb-2">{activity.date}</p>
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="flex items-center gap-1 text-sm mb-1">
-                          <span>{activity.sentimentEmoji}</span>
-                          <span className={`font-medium ${
-                            activity.sentiment.includes('Positive') ? 'text-green-600' :
-                            activity.sentiment.includes('Neutral') ? 'text-slate-600' :
-                            'text-yellow-600'
-                          }`}>
-                            {activity.sentiment}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {activity.duration && (
-                      <div className="flex items-center gap-3 text-xs text-slate-600 mb-2">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Duration: {activity.duration}
-                        </span>
-                        {activity.attendees && (
-                          <>
-                            <span>•</span>
-                            <span className="flex items-center gap-1">
-                              <Users className="w-3 h-3" />
-                              {activity.attendees} attendees
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="bg-white border border-slate-200 rounded-lg p-3 mb-3">
-                      <h4 className="text-xs font-semibold text-slate-700 mb-1">Subject:</h4>
-                      <p className="text-sm font-medium text-slate-800 mb-2">{activity.subject}</p>
-                      <h4 className="text-xs font-semibold text-slate-700 mb-1">Description:</h4>
-                      <p className="text-sm text-slate-700 leading-relaxed">{activity.description}</p>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3 mb-3">
-                      <div className="bg-white border border-slate-200 rounded-lg p-2">
-                        <div className="text-xs text-slate-600 mb-0.5">Outcome</div>
-                        <div className={`text-sm font-medium ${
-                          activity.outcome === 'Positive' || activity.outcome === 'Excellent' || activity.outcome === 'Qualified' || activity.outcome === 'Completed' ? 'text-green-600' :
-                          activity.outcome === 'Pending Response' ? 'text-yellow-600' :
-                          'text-slate-700'
-                        }`}>
-                          {activity.outcome}
-                        </div>
-                      </div>
-                      <div className="bg-white border border-slate-200 rounded-lg p-2">
-                        <div className="text-xs text-slate-600 mb-0.5">Next Action</div>
-                        <div className="text-sm font-medium text-blue-600">{activity.nextAction}</div>
-                      </div>
-                      <div className="bg-white border border-slate-200 rounded-lg p-2">
-                        <div className="text-xs text-slate-600 mb-0.5">Related Deal</div>
-                        <div className="text-sm font-medium text-slate-800">{activity.relatedDeal}</div>
-                        <div className="text-xs text-slate-600">{activity.relatedDealValue}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-600">Tags:</span>
-                      {activity.tags.map((tag, idx) => (
-                        <span key={idx} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-300 flex items-center justify-center">
-                  <button
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleActivityExpansion(activity.id);
-                    }}
-                  >
-                    {isExpanded ? (
-                      <>
-                        <ChevronUp className="w-3 h-3" />
-                        Show Less
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="w-3 h-3" />
-                        Show More Details
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            );
-            })}
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-200">
-            <div className="grid grid-cols-4 gap-4 mb-4">
-              <div className="text-center">
-                <div className="text-xs text-slate-600 mb-1">Phone Calls</div>
-                <div className="text-lg font-bold text-slate-800">18</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-slate-600 mb-1">Emails</div>
-                <div className="text-lg font-bold text-slate-800">15</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-slate-600 mb-1">Meetings</div>
-                <div className="text-lg font-bold text-slate-800">8</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-slate-600 mb-1">Tasks</div>
-                <div className="text-lg font-bold text-slate-800">6</div>
-              </div>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-slate-600 mb-1">
-                Date Range: Last 90 days | Most Active: Last 30 days (32 activities) | Avg: 12 activities/week
-              </p>
-              <p className="text-sm text-slate-500">
-                Showing 5 of 47 total activities
-              </p>
-            </div>
-          </div>
+          <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Activity className="w-6 h-6 text-blue-600" />
+            Recent Activity
+          </h2>
+          <NotAvailable
+            feature="Per-person activity feed"
+            detail="Activity is recorded against a user, but there is no endpoint yet that returns one person's activity, and the activities table is currently empty. This section stays blank rather than showing a sample timeline."
+          />
         </div>
         )}
 
@@ -2505,8 +1903,8 @@ export default function TeamMemberDetailPage() {
         onClose={() => setCallModalOpen(false)}
         memberName={member.name}
         memberEmail={member.email}
-        memberPhone={member.phone}
-        memberTimezone={member.timezone}
+        memberPhone={member.phone ?? undefined}
+        memberTimezone={member.timezone ?? undefined}
         onSchedule={handleCallSchedule}
       />
 
@@ -2516,7 +1914,7 @@ export default function TeamMemberDetailPage() {
         onClose={() => setMeetingModalOpen(false)}
         memberName={member.name}
         memberEmail={member.email}
-        memberTimezone={member.timezone}
+        memberTimezone={member.timezone ?? undefined}
         onSchedule={handleMeetingSchedule}
       />
 
@@ -2547,80 +1945,15 @@ export default function TeamMemberDetailPage() {
         onShare={handleDocumentShare}
       />
 
-      {/* Schedule 1-on-1 Modal for Direct Reports */}
-      {oneOnOneModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Schedule 1-on-1</h2>
-              <button onClick={() => setOneOnOneModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Team Member
-                </label>
-                <input aria-label="Team Member"
-                  type="text"
-                  value={member.directReports?.find(r => r.id === selectedReportId)?.name || ''}
-                  disabled
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Meeting Date & Time
-                </label>
-                <input aria-label="Meeting Date & Time"
-                  type="datetime-local"
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Meeting Type
-                </label>
-                <select aria-label="Meeting Type" className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                  <option>Performance Review</option>
-                  <option>Career Development</option>
-                  <option>Goal Setting</option>
-                  <option>Coaching Session</option>
-                  <option>General Check-in</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Agenda Items
-                </label>
-                <textarea aria-label="Agenda Items"
-                  rows={4}
-                  placeholder="List topics to discuss..."
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                onClick={() => {
-                  showToast('1-on-1 scheduled successfully', 'success');
-                  setOneOnOneModalOpen(false);
-                }}
-                fullWidth
-              >
-                Schedule 1-on-1
-              </Button>
-              <button
-                onClick={() => setOneOnOneModalOpen(false)}
-                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/*
+        THE SCHEDULE 1-ON-1 MODAL IS GONE. Nothing could open it any more once
+        the fabricated direct-report actions were removed, and it never
+        persisted anything — this page performs zero fetches. It also displayed
+        an invented `last1on1` / `next1on1` history for a real named employee,
+        and there is no table behind a 1-on-1 at all. Restoring it means
+        deciding where a recurring manager meeting is stored, not re-adding a
+        form.
+      */}
 
       {/* Share Document Modal */}
       {shareDocModalOpen && (

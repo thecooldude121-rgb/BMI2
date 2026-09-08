@@ -52,11 +52,15 @@ function authHeaders(): HeadersInit {
  */
 const DEAL_LIMIT = 500;
 
-interface RawDeal {
+export interface RawDeal {
   id: string;
+  name?: string | null;
+  company_name?: string | null;
   value: number | string | null;
   stage: string | null;
   pipeline_id?: string | null;
+  expected_close_date?: string | null;
+  probability?: number | null;
   assigned_to_user_id?: number | string | null;
   assigned_to?: string | null;
 }
@@ -92,6 +96,14 @@ export interface MemberPerformance {
   attainment: number | null;
   /** Direct reports, resolved from the real `manager_id` column (041). */
   directReports: WorkspaceMember[];
+  /**
+   * This person's OWN deals, carried so the member detail page can list them
+   * instead of the invented `DEALS` fixture it used to render. Aggregates alone
+   * were not enough: a page that shows a count but invents the rows behind it
+   * is the hybrid case CLAUDE.md lesson 15 warns about — real headline numbers
+   * vouching for fabricated detail.
+   */
+  deals: RawDeal[];
 }
 
 export interface TeamPerformance {
@@ -255,6 +267,7 @@ export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerforman
         // A zero quota yields null rather than Infinity or a huge percentage.
         attainment: quota != null && quota > 0 ? Math.round((wonValue / quota) * 100) : null,
         directReports: reportsOf(member.id),
+        deals: mine,
       };
     });
 
