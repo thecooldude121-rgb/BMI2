@@ -138,9 +138,29 @@ describe('TeamManagement — the real roster', () => {
     render(<TeamManagement />);
     await screen.findByText('Priya Nair');
 
-    // Per-member deal stats and billing were invented; both now say so.
-    expect(screen.getAllByText(/Per-member deal statistics is not available yet/i).length).toBeGreaterThan(0);
+    /*
+     * BILLING is still genuinely unbacked — no billing system, no plan column,
+     * no sync job — so it keeps its label.
+     *
+     * PER-MEMBER DEAL STATISTICS NO LONGER DOES, and its old label is now
+     * asserted ABSENT on purpose: the figures are computed from
+     * `deals.assigned_to_user_id` (039) and `quotas.user_id` (042) via
+     * `useTeamPerformance`. Leaving the old assertion would have kept passing
+     * only for as long as the gap did.
+     */
     expect(screen.getByText(/Billing and plan management is not available yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Per-member deal statistics is not available yet/i)).not.toBeInTheDocument();
+    // Awaited: the rollup resolves AFTER the roster it is derived from, so
+    // asserting straight after `findByText('Priya Nair')` races it.
+    await waitFor(() => expect(screen.getAllByText('Open deals').length).toBeGreaterThan(0));
+
+    /*
+     * The quota cell reads "Not set", NEVER "$0". This fixture serves no
+     * quotas, which is also the live state, and a zero would assert a target
+     * of nothing rather than an unset one.
+     */
+    expect(screen.getAllByText('Not set').length).toBeGreaterThan(0);
+    expect(screen.queryByText('$0')).not.toBeInTheDocument();
 
     // And the figures themselves are not on the page any more.
     expect(screen.queryByText(/Quick Stats/i)).not.toBeInTheDocument();

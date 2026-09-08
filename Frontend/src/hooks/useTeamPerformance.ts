@@ -148,12 +148,44 @@ export function currentQuotaPeriod(d = new Date()): string {
   return `Q${Math.floor(d.getMonth() / 3) + 1} ${d.getFullYear()}`;
 }
 
+/**
+ * A LIST, or an empty one — never whatever the server actually sent.
+ *
+ * Every consumer here iterates these, and `for (const d of {})` is a TypeError
+ * thrown from inside a `useMemo`, which white-screens the page rather than
+ * degrading a column. A response of the wrong shape is exactly when a page
+ * most needs to still render, so the shape is enforced at the boundary instead
+ * of trusted. Found when this hook was added to Settings → Team, whose test
+ * fixture answers unmatched URLs with `data: {}`.
+ */
+const asList = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
   return Number.isFinite(n) ? n : 0;
 };
 
-export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerformance {
+export interface TeamPerformanceOptions {
+  /**
+   * A roster the caller has ALREADY loaded, to reuse instead of fetching one.
+   *
+   * Why this exists: Settings → Team loads its own roster because it needs the
+   * envelope fields this hook does not carry (`assignable_roles`,
+   * `can_change_role`). Adding the hook there made the page request GET /users
+   * TWICE per render pass — caught by that page's existing test suite
+   * asserting exactly one call, not by review. Passing the roster in keeps it
+   * at one.
+   *
+   * `undefined` means "fetch it yourself" (what /team does). An empty array is
+   * a real roster that happens to be empty, and is NOT treated as absent.
+   */
+  members?: WorkspaceMember[];
+}
+
+export function useTeamPerformance(
+  period = currentQuotaPeriod(),
+  opts: TeamPerformanceOptions = {},
+): TeamPerformance {
   const [members, setMembers]   = useState<WorkspaceMember[]>([]);
   const [deals, setDeals]       = useState<RawDeal[]>([]);
   const [quotas, setQuotas]     = useState<RawQuota[]>([]);
@@ -164,6 +196,8 @@ export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerforman
   const [token, setToken]       = useState(0);
 
   const reload = useCallback(() => setToken(n => n + 1), []);
+
+  const suppliedMembers = opts.members;
 
   useEffect(() => {
     // Guards a state update after unmount, and an earlier slow response
@@ -178,13 +212,14 @@ export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerforman
       // not blank the page. A partial page that says what failed is more
       // useful than an error screen.
       const [membersRes, dealsRes, quotasRes, pipelinesRes] = await Promise.allSettled([
-        fetchMembers(true),
+        // Reuse a roster the caller already has; only fetch when there is none.
+        suppliedMembers ? Promise.resolve(suppliedMembers) : fetchMembers(true),
         fetch(`${API_BASE}/deals?limit=${DEAL_LIMIT}`, { headers: authHeaders() })
           .then(r => { if (!r.ok) throw new Error(`deals ${r.status}`); return r.json(); })
-          .then(j => (j.success ? (j.data as RawDeal[]) : [])),
+          .then(j => (j.success ? asList<RawDeal>(j.data) : [])),
         fetch(`${API_BASE}/quotas?period=${encodeURIComponent(period)}`, { headers: authHeaders() })
           .then(r => { if (!r.ok) throw new Error(`quotas ${r.status}`); return r.json(); })
-          .then(j => (j.success ? (j.data as RawQuota[]) : [])),
+          .then(j => (j.success ? asList<RawQuota>(j.data) : [])),
         fetchPipelines(),
       ]);
 
@@ -192,7 +227,7 @@ export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerforman
 
       const failed: string[] = [];
 
-      if (membersRes.status === 'fulfilled') setMembers(membersRes.value);
+      if (membersRes.status === 'fulfilled') setMembers(asList<WorkspaceMember>(membersRes.value));
       else { setMembers([]); failed.push('the team roster'); }
 
       if (dealsRes.status === 'fulfilled') {
@@ -207,9 +242,32 @@ export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerforman
        * The stage lookup decides won/lost. Without it every deal classifies as
        * open, which would silently zero every win rate — so a pipeline failure
        * is reported rather than absorbed.
+       *
+       * BUILT EAGERLY, INSIDE THE TRY, and that is not a style choice. `setLookup`
+       * stores a function, so it must be set through a `() => value` wrapper —
+       * but React treats that wrapper as a lazy UPDATER and calls it during the
+       * state update. Building the lookup inside it therefore ran
+       * `buildStageLookup` inside React's reducer, where a throw escapes this
+       * error handling entirely and takes the whole page down instead of
+       * degrading one column. A malformed payload did exactly that.
+       *
+       * Found by TeamManagement's existing test suite when this hook was added
+       * to that page, not by review.
        */
-      if (pipelinesRes.status === 'fulfilled') setLookup(() => buildStageLookup(pipelinesRes.value));
-      else { setLookup(() => EMPTY_STAGE_LOOKUP); failed.push('pipeline stages'); }
+      let nextLookup: StageLookup = EMPTY_STAGE_LOOKUP;
+      if (pipelinesRes.status === 'fulfilled') {
+        try {
+          nextLookup = buildStageLookup(asList(pipelinesRes.value));
+        } catch {
+          // A response that is not the expected shape. Unresolvable stages
+          // count as open, which understates a win rate rather than inflating
+          // one — the same direction `outcomeOf` already fails in.
+          failed.push('pipeline stages');
+        }
+      } else {
+        failed.push('pipeline stages');
+      }
+      setLookup(() => nextLookup);
 
       setError(failed.length ? `Could not load ${failed.join(', ')}.` : null);
       setLoading(false);
@@ -217,7 +275,7 @@ export function useTeamPerformance(period = currentQuotaPeriod()): TeamPerforman
 
     load();
     return () => { active = false; };
-  }, [period, token]);
+  }, [period, token, suppliedMembers]);
 
   return useMemo(() => {
     const outcome = outcomeOf(lookup);

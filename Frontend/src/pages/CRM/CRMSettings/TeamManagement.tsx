@@ -44,6 +44,7 @@ import { useToast } from '../../../contexts/ToastContext';
 import ForbiddenAccess from '../../../components/common/ForbiddenAccess';
 import UserActionsDropdown from '../../../components/Team/UserActionsDropdown';
 import { useNavigate } from 'react-router-dom';
+import { useTeamPerformance } from '../../../hooks/useTeamPerformance';
 
 const TeamManagement: React.FC = () => {
   const { user } = useAuth();
@@ -56,6 +57,20 @@ const TeamManagement: React.FC = () => {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [teamMembersState, setTeamMembersState] = useState<WorkspaceMember[]>([]);
+
+  /*
+   * Per-member deal figures, from the SAME hook the Team pages read, so this
+   * card and /team cannot drift into disagreeing about one person's pipeline.
+   * That is the whole reason it is a shared hook rather than a second local
+   * calculation.
+   *
+   * This roster is still loaded independently by `loadRoster` below: it needs
+   * `assignable_roles` and `can_change_role`, which are envelope fields the
+   * rollup hook does not carry. The hook is additive here — if it fails, the
+   * roster and every management control still work, and only these figures go.
+   */
+  const { members: perf, period: quotaPeriod, truncated: dealsTruncated } =
+    useTeamPerformance(undefined, { members: teamMembersState });
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[] | null>(null);
   /**
    * Roles this caller may INVITE someone as — served by GET /invites, computed
@@ -984,15 +999,78 @@ const TeamManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Quick Stats showed per-member active deals, pipeline value and
-                  prospect counts — all invented. They are computable from real
-                  deals once an owner-rollup endpoint exists; until then this is
-                  labelled rather than filled in. */}
-              <NotAvailable
-                className="mb-4"
-                feature="Per-member deal statistics"
-                detail="Active deals, pipeline value and assigned contacts for each member are not calculated yet."
-              />
+              {/*
+                REAL per-member deal figures. This stopgap's own comment said
+                they were "computable from real deals once an owner-rollup
+                endpoint exists" — `useTeamPerformance` is that rollup, reading
+                `deals.assigned_to_user_id` (039) and `quotas.user_id` (042).
+
+                "Assigned contacts" is NOT restored: `contacts.owner_id` is
+                real but GET /contacts cannot filter by owner, so that one
+                figure stays absent instead of being wired from a guess. Three
+                real numbers and a silent fourth would be the hybrid CLAUDE.md
+                lesson 15 describes.
+
+                Null is not zero here either: no quota row reads "not set", not
+                "$0".
+              */}
+              {(() => {
+                const row = perf.find((r) => String(r.member.id) === String(member.id));
+                const money = (n: number) =>
+                  n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
+                  : n >= 1_000   ? `$${Math.round(n / 1_000)}K`
+                  : `$${n}`;
+                if (!row) {
+                  // The rollup has not arrived (or failed). Say so rather than
+                  // showing zeros that look like a person with no pipeline.
+                  return (
+                    <div className="mb-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                      Deal figures are still loading.
+                    </div>
+                  );
+                }
+                return (
+                  <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-gray-50 px-3 py-2">
+                      <div className="text-xs font-medium text-gray-600">Open deals</div>
+                      <div className="text-lg font-semibold text-gray-900">{row.openCount}</div>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 px-3 py-2">
+                      <div className="text-xs font-medium text-gray-600">Open pipeline</div>
+                      <div className="text-lg font-semibold text-gray-900">
+                        {row.openValue > 0 ? money(row.openValue) : <span className="text-gray-400">—</span>}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 px-3 py-2">
+                      <div className="text-xs font-medium text-gray-600">Won</div>
+                      <div className="text-lg font-semibold text-gray-900">
+                        {row.wonCount > 0 ? `${row.wonCount} · ${money(row.wonValue)}` : <span className="text-gray-400">0</span>}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 px-3 py-2">
+                      <div className="text-xs font-medium text-gray-600">Quota ({quotaPeriod})</div>
+                      <div className="text-lg font-semibold text-gray-900">
+                        {row.quota == null
+                          ? <span className="text-sm italic text-gray-400">Not set</span>
+                          : <>
+                              {money(row.quota)}
+                              {row.attainment != null && (
+                                <span className={`ml-2 text-xs font-semibold ${
+                                  row.attainment >= 100 ? 'text-green-600' : 'text-gray-500'}`}>
+                                  {row.attainment}%
+                                </span>
+                              )}
+                            </>}
+                      </div>
+                    </div>
+                    {dealsTruncated && (
+                      <p role="alert" className="col-span-2 sm:col-span-4 text-xs text-amber-700">
+                        More deals exist than were loaded, so these totals are lower bounds.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="flex flex-wrap gap-2">
                 <Button
