@@ -425,6 +425,40 @@ race was**: it discloses a row count, it does not lose data.
     shape as the `address` / `billingAddress` bug above, so treat it the same way: a query
     or form field written against `close_date` fails silently rather than loudly.
 
+### Recorded live-data correction — D043's close date was in the year 262026
+Found while looking for the quarter the deals actually close in, during the 042 live check.
+One deal carried `expected_close_date = 262026-09-30` — a typo'd year, almost certainly a
+mis-keyed `2026`. It is recorded here for the same reason the admin promotion below is:
+a direct write to live data should be auditable rather than mysterious.
+
+```sql
+UPDATE deals
+   SET expected_close_date = make_date(
+         2026,
+         EXTRACT(MONTH FROM expected_close_date)::int,
+         EXTRACT(DAY   FROM expected_close_date)::int),
+       updated_at = NOW()
+ WHERE id = 'D043'
+   AND tenant_id = '2f5b4330-6101-4aee-bd4f-8917a83cce6b'
+   AND EXTRACT(YEAR FROM expected_close_date) = 262026;
+```
+
+Month and day are carried through from the existing value rather than retyped, so the
+statement structurally cannot change anything but the year; the `EXTRACT(YEAR ...) = 262026`
+predicate makes a second run a no-op. Verified by **re-querying the row** (`2026-09-30`,
+month and day intact) rather than by trusting `UPDATE 1`, and by re-counting: zero deals now
+hold a date outside 2000-2100.
+
+**Two things this does NOT fix, deliberately:**
+- **`D043` is named "Moving Walls - DOOH Platform - Jun 2026" and now closes 30 Sep.** The
+  name and the date disagree, and which one is wrong is a question for whoever owns the
+  deal — not something to guess at while correcting a year.
+- **Nothing prevents the next one.** There is no CHECK constraint and no client-side bound
+  on `expected_close_date`, so a four-keystroke slip in a date field still stores a year
+  260,000 years out. A `CHECK` or a form-level range would be the real fix; this was a
+  one-row correction, and widening it into a schema change is the bundling this project
+  keeps separating on purpose.
+
 ## CRM pages in scope for this phase (build in this order)
 1. **Auth + Workspace shell** — login, workspace creation, invite users, AppShell layout
 2. **Contacts** — list view, add contact, contact detail + activity timeline, merge
