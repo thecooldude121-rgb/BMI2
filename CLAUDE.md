@@ -512,6 +512,65 @@ here in the same session, or the next person re-derives it or guesses wrong.
   which is still what reads use. **Phase B is the cutover** — the stage-config API and
   admin UI, and the 26 frontend files carrying hardcoded stage knowledge, one vertical
   slice at a time with the Kanban first. Phase C drops `deals.stage` and `is_won`/`is_lost`.
+### DONE (migration 043) — the forecast tables, and how a rep is identified in them
+
+**`forecast_quotas` IS DROPPED.** Confirmed immediately before dropping, not from memory:
+0 rows in both databases, no inbound foreign keys, no dependent views, and no executable
+code reference anywhere. It could never have been used correctly — it had **no `tenant_id`
+at all**, so it was *unscopable* rather than merely unscoped, and it keyed on
+`employee_id character varying`, a reference to the **HRMS-owned** `employees` table, which
+is a boundary violation on top of a scoping one. Its `UNIQUE (employee_id, period,
+pipeline_id)` therefore spanned tenants. `quotas` (042) supersedes it in every respect.
+`000_baseline_schema.sql` still creates it and 043 drops it — the baseline is a ledger
+entry, not a document to revise (lesson 14).
+
+**`forecast_snapshots.rep_name` — THE DECISION, recorded so it is never mistaken for an
+oversight.** Two options were live: migrate identity to `user_id` mirroring 042, or keep it
+name-keyed as a deliberately denormalised point-in-time record. **Chosen: migrate to
+`user_id`, AND KEEP `rep_name`.** Both halves are load-bearing and the blend is considered,
+not a dodge:
+
+- **`user_id` was added because `rep_name` was not a passive record — it was a LIVE
+  IDENTITY-MATCHING KEY.** Two call sites proved it rather than one argument:
+  `ForecastPage.tsx` matched a snapshot to a current rep with
+  `repRows.find(r => r.name === snap.rep_name)` and de-duplicated snapshots with
+  `latest.has(row.rep_name)`. So "preserve the name" would not have been preserving
+  history; it would have kept the exact defect 042 removed, in a table that had simply
+  never been exercised. A renamed rep silently stopped matching their own history — and the
+  slippage column then compared their past commit against `nowCommit ?? 0`, reading as if
+  they had dropped their entire forecast rather than as a failed match. Two people sharing a
+  display name matched each other's rows. The feature the table exists for — "commit
+  accuracy trending and rep historical accuracy", which the UI already advertises as
+  unlocking at two snapshots — **is** cross-time rep matching.
+- **`rep_name` was kept because a snapshot differs from a quota.** In 042 the name was pure
+  defect: it identified a person badly and preserved nothing, so it went. Here it *also*
+  records what the rep was **called on the day the snapshot was taken** — real historical
+  information a reference cannot reconstruct, since resolving `user_id` later yields
+  *today's* name. Identity by reference, display by capture.
+
+Three consequences worth not regressing:
+
+- **`ON DELETE SET NULL`, the OPPOSITE of `quotas.user_id`, which CASCADEs.** A quota
+  without its person is meaningless; a snapshot is history and must outlive the person it
+  describes. Cascading would let deleting one user silently rewrite past forecast calls.
+- **`user_id` is NULLABLE, and NOT NULL would be wrong.** ForecastPage snapshots every rep
+  row it shows, and 20 of the 24 live deals still carry only a name. A required column would
+  make those unrecordable and drop ~$1.39M of pipeline out of every snapshot. `rep_name`
+  stays `NOT NULL` and is the fallback identity for exactly those rows.
+- **Uniqueness is a FUNCTIONAL index**, `(tenant_id, period_label, snapshot_date,
+  COALESCE(user_id::text, rep_name))` — the same identity the frontend groups by, enforced
+  in the database. A plain `UNIQUE` on `user_id` cannot work: NULLs are distinct, so every
+  unattributed row would duplicate on each re-snapshot. `ON CONFLICT` must restate the
+  expression for Postgres to infer it.
+
+**A bug this produced, worth the warning:** the controller's validation map was first keyed
+by `rep_name`, so two reps sharing one collapsed to a single entry and *both* rows were
+written against the second rep's id. That is the same name-as-key defect being removed from
+the table, reintroduced one layer up in the code removing it — caught by the test for the
+very case it breaks, not by review. It is keyed by position now. `roundTrip.forecastSnapshots.test.ts`
+(12 tests) pins all of the above; the re-keyed index was mutation-tested by restoring the
+old constraint, which fails the shared-name test.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two

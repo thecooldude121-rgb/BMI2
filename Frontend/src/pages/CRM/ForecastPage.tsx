@@ -98,6 +98,17 @@ interface QuotaRow {
 }
 
 interface SnapshotRow {
+  /**
+   * Migration 043: the snapshot's rep identity. Null for a row whose ownership
+   * was only a name when the snapshot was taken, which is the same transition
+   * state `RepRow.key` describes.
+   */
+  user_id: number | null;
+  /**
+   * What that rep was CALLED on the snapshot date — a recorded historical fact,
+   * not the identity key it used to be. Resolving `user_id` gives today's name;
+   * this gives the one on that forecast call.
+   */
   rep_name: string;
   snapshot_date: string;
   pipeline: number;
@@ -356,12 +367,43 @@ const ForecastPage: React.FC = () => {
         rep_name: r.rep_name ?? null,
         quota_amount: parseFloat(r.quota_amount) || 0,
       })));
+      /*
+       * Keyed by the SAME identity the server is keyed on (migration 043):
+       * the user id where there is one, the name where there is not, with the
+       * `id:`/`name:` prefixes that stop a user id of 5 colliding with a rep
+       * called "5" — the same guard `repRows` uses.
+       *
+       * This used to key on `row.rep_name` alone, which merged two people
+       * sharing a display name into one snapshot row and lost a renamed rep's
+       * own history. Rows arrive newest-first, so the first one seen per rep is
+       * the latest.
+       */
       const latest = new Map<string, SnapshotRow>();
       (s as any[]).forEach((row: any) => {
-        if (!latest.has(row.rep_name)) {
-          latest.set(row.rep_name, {
+        const uid = row.user_id == null ? null : Number(row.user_id);
+        const key = uid != null ? `id:${uid}` : `name:${row.rep_name}`;
+        if (!latest.has(key)) {
+          latest.set(key, {
+            user_id:       uid,
             rep_name:      row.rep_name,
-            snapshot_date: row.snapshot_date,
+            /*
+             * A BARE 'YYYY-MM-DD', which the renderer needs because it builds a
+             * local-midnight Date by concatenating 'T00:00:00'.
+             *
+             * The real fix is server-side (`snapshot_date::text`): a Postgres
+             * `date` arrived as a JS Date at local midnight and serialised to a
+             * UTC-shifted ISO string, so the panel first read
+             * "Snapshot: Invalid Date" and then, once parsed, the WRONG DAY.
+             * The slice stays as a cheap guard so a future change to that
+             * projection degrades to a readable date rather than to garbage.
+             *
+             * PRE-EXISTING, not caused by migration 043 — neither this line nor
+             * the renderer was touched by it. Fixed here only because 043 is
+             * what first put rows in the table for this panel to render at all,
+             * and shipping a newly-reachable panel with a broken header was the
+             * alternative.
+             */
+            snapshot_date: String(row.snapshot_date).slice(0, 10),
             pipeline:  parseFloat(row.pipeline)  || 0,
             best_case: parseFloat(row.best_case) || 0,
             commit:    parseFloat(row.commit)    || 0,
@@ -575,21 +617,18 @@ const ForecastPage: React.FC = () => {
     setTakingSnapshot(true);
     try {
       /*
-       * SNAPSHOTS ARE STILL NAME-KEYED, and that is deliberately left for
-       * migration 043 rather than half-changed here.
+       * SNAPSHOTS CARRY THE REFERENCE NOW (migration 043), closing the
+       * inconsistency this comment used to record as scheduled work.
        *
-       * `forecast_snapshots.rep_name` is a varchar with the same defect quotas
-       * just shed, so this table and that one now disagree about how a rep is
-       * identified. Changing it is a different migration with its own
-       * rationale (it is bundled with dropping the dead `forecast_quotas`
-       * table), and doing it inside this commit would mean one change that
-       * cannot be reverted independently — the reasoning that kept 039, 040 and
-       * 042 apart.
-       *
-       * Recorded here so the inconsistency is a known, scheduled one rather
-       * than something the next reader discovers.
+       * `user_id` is sent where ownership is resolved and omitted where it is
+       * not — 20 of the 24 live deals still carry only a name, and dropping
+       * those rows would take ~$1.39M of pipeline out of every snapshot. The
+       * server keeps `rep_name` required for exactly that reason and stores it
+       * as the name AS AT the snapshot date, so this send is unchanged in that
+       * respect.
        */
       const reps = repRows.map(r => ({
+        user_id:    r.userId ?? undefined,
         rep_name:   r.name,
         pipeline:   r.pipeline,
         best_case:  r.bestCase,
@@ -1167,13 +1206,28 @@ const ForecastPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {snapshots.map((snap, i) => {
-                    const current    = repRows.find(r => r.name === snap.rep_name);
+                    /*
+                     * MATCHED BY REFERENCE, falling back to the name only for a
+                     * snapshot that never had one (migration 043).
+                     *
+                     * This was `r.name === snap.rep_name`, which is the defect
+                     * 042 removed from quotas, still live here: a renamed rep
+                     * silently stopped matching their own history, and the
+                     * slippage column then compared their past commit against
+                     * `nowCommit ?? 0` — reading as if they had dropped their
+                     * entire forecast rather than as a failed match. Two people
+                     * sharing a display name matched each other's rows.
+                     */
+                    const current    = snap.user_id != null
+                      ? repRows.find(r => r.userId === snap.user_id)
+                      : repRows.find(r => r.userId == null && r.name === snap.rep_name);
                     const nowCommit  = current?.commit ?? 0;
                     const nowClosed  = current?.closed ?? 0;
                     const slippage   = snap.commit - nowCommit;
                     const deltaClose = nowClosed - snap.closed;
                     return (
-                      <tr key={snap.rep_name} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <tr key={snap.user_id != null ? `id:${snap.user_id}` : `name:${snap.rep_name}`}
+                          className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-4 py-2.5 text-[13px] font-medium text-gray-800">{snap.rep_name}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-[12px] text-gray-500">{fmtCell(snap.commit)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-medium text-gray-800">{fmtCell(nowCommit)}</td>
