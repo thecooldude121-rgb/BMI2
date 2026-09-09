@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Edit } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, Filter, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
-import { useAuth } from '../../contexts/AuthContext';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { isWonWith, isLostWith, isOpenWith } from '../../utils/pipelinesApi';
 
@@ -47,6 +46,25 @@ const UNBACKED_REPORTS: ReadonlyArray<{
   action?: { label: string; to: string };
 }> = [
   // ── Sales ────────────────────────────────────────────────────────────────
+  {
+    section: 'sales', title: 'Sales Overview', icon: '📊',
+    /*
+     * The LAST card contradicting its neighbours, and why it is here rather
+     * than half-blanked: it read "$847K Revenue +12% ⬆️" and "89% to quota"
+     * while the card beside it said no quota has been entered, and the real
+     * headline figure above it said $55K. Two of its three rows cannot be
+     * computed at all — a month-over-month change needs a previous-period
+     * query no endpoint offers, and quota progress needs a quota. The third,
+     * revenue won, is already reported correctly in the headline row, so
+     * leaving the card as a single real number would duplicate that and
+     * nothing more.
+     */
+    reason: 'Revenue won is already shown in the headline figures above. This '
+      + 'card also needs a month-over-month change, which requires a query '
+      + 'against the previous period that no endpoint offers, and quota '
+      + 'progress, which needs a quota to have been entered.',
+    action: { label: 'Enter quotas', to: '/crm/forecast' },
+  },
   {
     section: 'sales', title: 'Sales by Team', icon: '👔',
     reason: 'No reporting lines are set, so there are no teams to roll up. Every '
@@ -171,7 +189,7 @@ const UNBACKED_REPORTS: ReadonlyArray<{
  * turning the working cards into data — a later phase, not this subtraction.
  */
 const WORKING_REPORT_COUNTS: Record<ReportSection, number> = {
-  sales: 3, pipeline: 3, activity: 0, leads: 1, revenue: 2, accounts: 0, custom: 2,
+  sales: 2, pipeline: 3, activity: 0, leads: 1, revenue: 2, accounts: 0, custom: 2,
 };
 
 /**
@@ -209,7 +227,6 @@ const UnbackedReportCard: React.FC<{
 
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   // Same hook the two dashboards read, so /crm/reports cannot drift from them.
   const {
     leads, deals, contacts, loading: dataLoading, error: dataError, reload,
@@ -224,45 +241,23 @@ const ReportsPage: React.FC = () => {
      */
     truncated,
   } = useDashboardData();
-  const [selectedTimeframe, setSelectedTimeframe] = useState('month');
-  const [selectedOwner, setSelectedOwner] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Dropdown states
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showTimeframeDropdown, setShowTimeframeDropdown] = useState(false);
-  const [showOwnerDropdown, setShowOwnerDropdown] = useState(false);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [showReportMenu, setShowReportMenu] = useState<string | null>(null);
-  const [showExportMenu, setShowExportMenu] = useState<string | null>(null);
 
   // Modal states
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showRenameModal, setShowRenameModal] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<string | null>(null);
 
   // Loading & Error states
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [hasError, setHasError] = useState(false);
   const [hasNetworkError, setHasNetworkError] = useState(false);
-  const [failedReports, setFailedReports] = useState<string[]>([]);
 
   // Success states
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [successAction, setSuccessAction] = useState<React.ReactNode>(null);
 
   // Mobile filter menu
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Keyboard navigation
-  const [selectedCardIndex, setSelectedCardIndex] = useState(0);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   const [expandedSections, setExpandedSections] = useState({
     sales: true,
@@ -296,70 +291,15 @@ const ReportsPage: React.FC = () => {
     navigate(`/crm/reports/${reportSlug}`);
   };
 
-  const handleExportPDF = (reportName: string) => {
-    console.log(`Exporting ${reportName} as PDF`);
-    setSuccessMessage('Report exported successfully');
-    setSuccessAction(
-      <button className="text-sm underline hover:no-underline">View File</button>
-    );
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleExportCSV = (reportName: string) => {
-    console.log(`Exporting ${reportName} as CSV`);
-    setSuccessMessage('Report exported successfully');
-    setSuccessAction(
-      <button className="text-sm underline hover:no-underline">View File</button>
-    );
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleExportExcel = (reportName: string) => {
-    console.log(`Exporting ${reportName} as Excel`);
-    setSuccessMessage('Report exported successfully');
-    setSuccessAction(
-      <button className="text-sm underline hover:no-underline">View File</button>
-    );
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleEmailReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowEmailModal(true);
-  };
-
-  const handleScheduleReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowScheduleModal(true);
-  };
-
-  const handleShareReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowShareModal(true);
-  };
-
-  const handleDeleteReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowDeleteModal(true);
-  };
-
-  const handleRenameReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowRenameModal(true);
-  };
 
   const handleEditReport = (reportName: string) => {
     const reportSlug = reportName.toLowerCase().replace(/\s+/g, '-');
     navigate(`/crm/custom-report-builder?edit=${reportSlug}`);
   };
 
-  const handleRefreshReport = (reportName: string) => {
-    console.log(`Refreshing ${reportName}`);
-    // Implementation would refresh report data
-  };
 
   const handleRefreshAll = () => {
     /*
@@ -377,22 +317,10 @@ const ReportsPage: React.FC = () => {
   };
 
   const handleRetry = () => {
-    setHasError(false);
+    // Was three local flags plus a one-second timer that pretended to retry.
+    // `reload` is the actual retry, and the banner already uses it.
     setHasNetworkError(false);
-    setFailedReports([]);
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-  };
-
-  // Empty state handlers
-  const handleClearSearch = () => {
-    setSearchQuery('');
-  };
-
-  const handleViewAllCategories = () => {
-    setSelectedCategory('all');
+    reload();
   };
 
   /**
@@ -445,6 +373,15 @@ const ReportsPage: React.FC = () => {
     return `(${working} available · ${missing} not available)`;
   };
 
+  /*
+   * THE CATEGORY FILTER, ACTUALLY GATING THE RENDER. CLAUDE.md's design rules
+   * say a view toggle that only restyles its own control is a bug; this one
+   * previously did not even restyle — `selectedCategory` was read by nothing.
+   * It needs no data to work, which is why it is the one filter kept.
+   */
+  const showSection = (section: ReportSection) =>
+    selectedCategory === 'all' || selectedCategory === section;
+
   const renderUnbacked = (section: ReportSection) =>
     unbackedFor(section).map((r) => (
       <UnbackedReportCard key={r.title} {...r} onNavigate={navigate} />
@@ -481,23 +418,9 @@ const ReportsPage: React.FC = () => {
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Close modals with Esc
-      if (e.key === 'Escape') {
-        setShowScheduleModal(false);
-        setShowShareModal(false);
-        setShowDeleteModal(false);
-        setShowRenameModal(false);
-        setShowEmailModal(false);
-        setShowMobileFilters(false);
-        return;
-      }
-
-      // Focus search with /
-      if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
+      // Esc had closed five report modals and a mobile filter sheet, all of
+      // which are gone; and `/` focused a search box that is gone too. Only
+      // the two shortcuts that still act on something remain.
 
       // Create custom report with C
       if (e.key === 'c' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
@@ -519,13 +442,10 @@ const ReportsPage: React.FC = () => {
   }, []);
 
   // Check if there are any custom reports
-  const hasCustomReports = true; // TODO: Replace with actual check from data
 
   // Check if search has results
-  const hasSearchResults = searchQuery === '' || true; // TODO: Implement actual search logic
 
   // Check if category has reports
-  const hasCategoryReports = true; // TODO: Implement category filtering logic
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -553,7 +473,12 @@ const ReportsPage: React.FC = () => {
                 <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Clock className="w-4 h-4" />
-                  <span>Last updated: 5 minutes ago</span>
+                  {/*
+                    WAS the fixed string "Last updated: 5 minutes ago", which
+                    never moved and was never measured. Nothing records when
+                    this page last fetched, so it reports only what it knows.
+                  */}
+                  <span>{dataLoading ? 'Loading…' : 'Figures are live'}</span>
                   {isRefreshing && (
                     <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
                   )}
@@ -632,168 +557,54 @@ const ReportsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Filters Bar - Desktop */}
-        <div className="hidden md:block bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select aria-label="Date Range:"
-                  value={selectedTimeframe}
-                  onChange={(e) => setSelectedTimeframe(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="quarter">This Quarter</option>
-                  <option value="year">This Year</option>
-                  <option value="last30">Last 30 Days</option>
-                  <option value="last90">Last 90 Days</option>
-                  <option value="custom">Custom Date Range...</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select aria-label="Owner:"
-                  value={selectedOwner}
-                  onChange={(e) => setSelectedOwner(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Team</option>
-                  {/*
-                    The SIGNED-IN user, from the session — not a hardcoded name.
-                    This read "Me Only (Alex Rodriguez)" for every viewer, so it
-                    misidentified whoever was actually logged in; the same defect
-                    as the Team page's hardcoded "(You)". The remaining
-                    hardcoded colleagues below are a separate, tracked issue —
-                    they are at least real users, and this whole filter is
-                    inert until phase (b).
-                  */}
-                  <option value="me">
-                    {user?.name ? `Me Only (${user.name})` : 'Me Only'}
-                  </option>
-                  <option value="sales">Sales Team</option>
-                  <option value="sarah">Sarah Chen</option>
-                  <option value="mike">Mike Johnson</option>
-                  <option value="emily">Emily Davis</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select aria-label="Category:"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Reports</option>
-                  <option value="sales">Sales Performance</option>
-                  <option value="pipeline">Pipeline Reports</option>
-                  <option value="activity">Activity Reports</option>
-                  <option value="leads">Lead & Contact Reports</option>
-                  <option value="revenue">Revenue Reports</option>
-                  <option value="accounts">Account Reports</option>
-                  <option value="custom">My Custom Reports</option>
-                  <option value="favorites">Favorites Only</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Search:</label>
-                <div className="relative">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search reports..."
-                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/*
+          ONE FILTER, AND IT WORKS. Four were here; three are gone.
 
-        {/* Mobile Filters Toggle */}
-        <div className="md:hidden mb-6">
-          <button
-            onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="w-full bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between"
+          REMOVED — Date Range, Owner and Search. All three were bound to their
+          <select>/<input> `value` and read by NOTHING: no computation, no
+          render decision. Date Range offered eight options including "Custom
+          Date Range…", Owner listed five colleagues, and Search had a `/`
+          shortcut to focus it — none of which changed a single figure. A
+          control that claims to filter and does not is worse than its absence,
+          because the reader trusts the number that follows it.
+
+          They are not wired up instead, because none of them CAN be yet. Date
+          Range and Owner need per-period and per-owner rollups, which is the
+          phase (c) build. Search needs the report cards to be data rather than
+          hand-written JSX — the same refactor. `hasSearchResults` was
+          hardcoded `searchQuery === '' || true`, which also made its
+          no-results empty state unreachable dead code; both went with it.
+
+          KEPT AND WIRED — Category, which needs no data at all: it gates which
+          SECTIONS render, and now actually does.
+        */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 flex items-center gap-3">
+          <Filter className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
+          <label htmlFor="report-category" className="text-sm font-medium text-gray-700 shrink-0">
+            Category:
+          </label>
+          <select
+            id="report-category"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-gray-600" />
-              <span className="font-medium text-gray-900">Filters</span>
-            </div>
-            {showMobileFilters ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
-          {showMobileFilters && (
-            <div className="mt-2 bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select aria-label="Date Range:"
-                  value={selectedTimeframe}
-                  onChange={(e) => setSelectedTimeframe(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="quarter">This Quarter</option>
-                  <option value="year">This Year</option>
-                  <option value="last30">Last 30 Days</option>
-                  <option value="last90">Last 90 Days</option>
-                  <option value="custom">Custom Date Range...</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select aria-label="Owner:"
-                  value={selectedOwner}
-                  onChange={(e) => setSelectedOwner(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Team Members</option>
-                  <option value="me">My Reports</option>
-                  <option value="alex">Alex Thompson</option>
-                  <option value="sarah">Sarah Chen</option>
-                  <option value="mike">Mike Johnson</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select aria-label="Category:"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Reports</option>
-                  <option value="sales">Sales Performance</option>
-                  <option value="pipeline">Pipeline Reports</option>
-                  <option value="activity">Activity Reports</option>
-                  <option value="leads">Lead & Contact Reports</option>
-                  <option value="revenue">Revenue Reports</option>
-                  <option value="accounts">Account Reports</option>
-                  <option value="custom">My Custom Reports</option>
-                  <option value="favorites">Favorites Only</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Search:</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search reports..."
-                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3" />
-                </div>
-              </div>
-            </div>
+            <option value="all">All Reports</option>
+            <option value="sales">Sales Performance</option>
+            <option value="pipeline">Pipeline Reports</option>
+            <option value="activity">Activity Reports</option>
+            <option value="leads">Lead &amp; Contact Reports</option>
+            <option value="revenue">Revenue Reports</option>
+            <option value="accounts">Account Reports</option>
+            <option value="custom">My Custom Reports</option>
+          </select>
+          {selectedCategory !== 'all' && (
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+            >
+              Show all
+            </button>
           )}
         </div>
 
@@ -901,23 +712,20 @@ const ReportsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Empty States */}
-        {!hasSearchResults && searchQuery && (
-          <div className="mb-6">
-            <NoResultsEmptyState query={searchQuery} onClear={handleClearSearch} />
-          </div>
-        )}
-
-        {!hasCategoryReports && selectedCategory !== 'all' && hasSearchResults && (
-          <div className="mb-6">
-            <NoCategoryReportsEmptyState onViewAll={handleViewAllCategories} />
-          </div>
-        )}
+        {/*
+          THE TWO EMPTY STATES HERE WERE UNREACHABLE. Both were gated on
+          `hasSearchResults` / `hasCategoryReports`, which were hardcoded
+          `true` behind `// TODO` comments, so neither could ever render. They
+          and their components are deleted rather than left as dead code that
+          reads like a considered edge case. Every section has at least one
+          card, available or not, so "this category has no reports" cannot
+          happen either.
+        */}
 
         {/* Sales Performance Section */}
-        {(hasSearchResults || !searchQuery) && (hasCategoryReports || selectedCategory === 'all') && (
+        {true && (
         <>
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('sales') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('sales')}
@@ -940,30 +748,6 @@ const ReportsPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                 {renderUnbacked('sales')}
                 <ReportCard
-                  title="Sales Overview"
-                  icon="📊"
-                  metrics={[
-                    { label: '$847K Revenue', value: '+12% ⬆️' },
-                    { label: 'Progress bar', value: '████████░░' },
-                    { label: '89% to quota', value: '' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales Overview"}
-                  showMoreMenu={showReportMenu === "Sales Overview"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
                   title="Sales by Rep"
                   icon="👥"
                   metrics={[
@@ -971,22 +755,8 @@ const ReportsPage: React.FC = () => {
                     { label: 'Sarah: $298K #2', value: '' },
                     { label: 'Mike: $207K #3', value: '' },
                   ]}
-                  updated="5m"
                   sparkline="▇▇▇▆▅▄▃"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales by Rep"}
-                  showMoreMenu={showReportMenu === "Sales by Rep"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -998,21 +768,7 @@ const ReportsPage: React.FC = () => {
                     { label: 'Lost: 11 (32%)', value: '' },
                     { label: 'Win vs Loss', value: '████ vs ██' },
                   ]}
-                  updated="1h"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Win/Loss Analysis"}
-                  showMoreMenu={showReportMenu === "Win/Loss Analysis"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
               </div>
             </div>
@@ -1020,7 +776,7 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Pipeline Reports Section */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('pipeline') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('pipeline')}
@@ -1051,22 +807,8 @@ const ReportsPage: React.FC = () => {
                     { label: 'Proposal: $890K', value: '' },
                     { label: 'Negotiation: $890K', value: '' },
                   ]}
-                  updated="2m"
                   sparkline="▇▇▇▆▅"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Pipeline Health"}
-                  showMoreMenu={showReportMenu === "Pipeline Health"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
                 <ReportCard
                   title="Pipeline by Owner"
@@ -1077,22 +819,8 @@ const ReportsPage: React.FC = () => {
                     { label: 'Mike: $563K', value: '' },
                     { label: 'Emily: $200K', value: '' },
                   ]}
-                  updated="5m"
                   sparkline="████▇▆▃"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Pipeline by Owner"}
-                  showMoreMenu={showReportMenu === "Pipeline by Owner"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
                 <ReportCard
                   title="Aging Pipeline"
@@ -1102,22 +830,8 @@ const ReportsPage: React.FC = () => {
                     { label: '60-90 days: 5', value: '' },
                     { label: '90+ days: 3 ⚠️', value: '' },
                   ]}
-                  updated="15m"
                   sparkline="▅▅▄▄▃"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Aging Pipeline"}
-                  showMoreMenu={showReportMenu === "Aging Pipeline"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1127,7 +841,7 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Activity Reports Section */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('activity') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('activity')}
@@ -1155,7 +869,7 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Lead & Contact Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('leads') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('leads')}
@@ -1203,19 +917,6 @@ const ReportsPage: React.FC = () => {
                   ]}
                   updated={dataLoading ? 'loading' : 'live'}
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Lead Conversion Funnel"}
-                  showMoreMenu={showReportMenu === "Lead Conversion Funnel"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1225,7 +926,7 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Revenue Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('revenue') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-teal-50 to-teal-100 border border-teal-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('revenue')}
@@ -1255,21 +956,7 @@ const ReportsPage: React.FC = () => {
                     { label: '🌐 Website: $89K (20%)', value: '' },
                     { label: '✍️ Manual: $48K (11%)', value: '' },
                   ]}
-                  updated="10m"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue by Source"}
-                  showMoreMenu={showReportMenu === "Revenue by Source"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
                 <ReportCard
                   title="Revenue by Industry"
@@ -1281,22 +968,8 @@ const ReportsPage: React.FC = () => {
                     { label: 'Finance: $65K', value: '' },
                     { label: '💡 SaaS highest growth: +28%', value: '' },
                   ]}
-                  updated="30m"
                   sparkline="█████▇▅▃"
                   onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue by Industry"}
-                  showMoreMenu={showReportMenu === "Revenue by Industry"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1306,7 +979,7 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Account Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('accounts') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 border border-indigo-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('accounts')}
@@ -1334,7 +1007,7 @@ const ReportsPage: React.FC = () => {
         </div>
 
         {/* Custom Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('custom') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-pink-50 to-pink-100 border border-pink-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('custom')}
@@ -1353,8 +1026,13 @@ const ReportsPage: React.FC = () => {
           </div>
           {expandedSections.custom && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
-              {hasCustomReports ? (
-                <>
+              {/*
+                Was gated on `hasCustomReports = true`, a hardcoded stub, so the
+                EmptyState branch below it could never render. The branch is
+                dropped with the stub — there are custom reports here, they are
+                just still hardcoded until phase (c).
+              */}
+              <>
                   <div className="grid grid-cols-3 gap-6 mb-6">
                     {renderUnbacked('custom')}
                     <ReportCard
@@ -1366,23 +1044,9 @@ const ReportsPage: React.FC = () => {
                         { label: 'Value: $687K', value: '' },
                         { label: 'Avg: $45.8K', value: '' },
                       ]}
-                      updated="Last run: 2h ago"
                       sparkline="▅▆▇█▆"
                       editable
                       onView={handleViewReport}
-                      onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                      onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                      showExportMenu={showExportMenu === "SaaS Pipeline Report"}
-                      showMoreMenu={showReportMenu === "SaaS Pipeline Report"}
-                      onSchedule={handleScheduleReport}
-                      onShare={handleShareReport}
-                      onDelete={handleDeleteReport}
-                      onRename={handleRenameReport}
-                      onRefresh={handleRefreshReport}
-                      onExportPDF={handleExportPDF}
-                      onExportCSV={handleExportCSV}
-                      onExportExcel={handleExportExcel}
-                      onEmail={handleEmailReport}
                       onEdit={handleEditReport}
                     />
                     <ReportCard
@@ -1394,23 +1058,9 @@ const ReportsPage: React.FC = () => {
                         { label: 'Total: $892K', value: '' },
                         { label: 'Close This Week: 5 deals', value: '' },
                       ]}
-                      updated="Last run: 30m ago"
                       sparkline="▇▇▅▃"
                       editable
                       onView={handleViewReport}
-                      onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                      onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                      showExportMenu={showExportMenu === "High Priority Deals"}
-                      showMoreMenu={showReportMenu === "High Priority Deals"}
-                      onSchedule={handleScheduleReport}
-                      onShare={handleShareReport}
-                      onDelete={handleDeleteReport}
-                      onRename={handleRenameReport}
-                      onRefresh={handleRefreshReport}
-                      onExportPDF={handleExportPDF}
-                      onExportCSV={handleExportCSV}
-                      onExportExcel={handleExportExcel}
-                      onEmail={handleEmailReport}
                       onEdit={handleEditReport}
                     />
                   </div>
@@ -1421,16 +1071,7 @@ const ReportsPage: React.FC = () => {
                     <Plus className="w-5 h-5" />
                     Create New Custom Report
                   </button>
-                </>
-              ) : (
-                <EmptyState
-                  icon="📝"
-                  title="No Custom Reports Yet"
-                  description="Create your first custom report to track metrics that matter to you."
-                  actionLabel="Create Custom Report"
-                  onAction={handleNavigateToCustomReportBuilder}
-                />
-              )}
+              </>
             </div>
           )}
         </div>
@@ -1438,354 +1079,31 @@ const ReportsPage: React.FC = () => {
         )}
 
         {/* Modals */}
-        {showScheduleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Schedule Report Delivery</h3>
-              <p className="text-sm text-gray-600 mb-4">Report: <span className="font-medium">{selectedReport}</span></p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
-                  <select aria-label="Frequency" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option>Daily</option>
-                    <option>Weekly</option>
-                    <option>Monthly</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Recipients</label>
-                  <input aria-label="Recipients"
-                    type="text"
-                    placeholder="Enter email addresses..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Scheduling ${selectedReport}`);
-                    setShowScheduleModal(false);
-                    setSuccessMessage('Report scheduled');
-                    setSuccessAction(
-                      <div className="text-sm text-green-100">
-                        <p>Delivery: Weekly on Mondays at 9:00 AM</p>
-                        <button className="underline hover:no-underline mt-1">Manage Schedule</button>
-                      </div>
-                    );
-                    setShowSuccessToast(true);
-                    setTimeout(() => setShowSuccessToast(false), 5000);
-                  }}
-                  fullWidth
-                >
-                  Schedule
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/*
+          FIVE MODALS AND A SUCCESS TOAST DELETED: Schedule Report, Share with
+          Team, Delete, Rename, Email Report, and the "Report exported
+          successfully" / "Schedule created" toast they all fired.
 
-        {showShareModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Share Report</h3>
-              <p className="text-sm text-gray-600 mb-4">Report: <span className="font-medium">{selectedReport}</span></p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Share with</label>
-                  <select aria-label="Share with" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option>Entire Team</option>
-                    <option>Sales Team</option>
-                    <option>Specific Users...</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Permission</label>
-                  <select aria-label="Permission" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option>View Only</option>
-                    <option>Can Edit</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Sharing ${selectedReport}`);
-                    setShowShareModal(false);
-                    setSuccessMessage('Report shared with 2 people');
-                    setSuccessAction(
-                      <button className="text-sm underline hover:no-underline">View Details</button>
-                    );
-                    setShowSuccessToast(true);
-                    setTimeout(() => setShowSuccessToast(false), 3000);
-                  }}
-                  fullWidth
-                >
-                  Share
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+          None of them wrote anything — this page issues no requests except the
+          reads behind its figures — so each one collected input, closed, and
+          announced success. The Share modal picked recipients and a permission;
+          the Schedule modal picked a frequency and a delivery address; Delete
+          and Rename acted on reports that are hardcoded JSX and cannot be
+          deleted or renamed. A confirmation over an unchanged database is the
+          defect this whole remediation has been unwinding, and these were six
+          of them on one page.
 
-        {showDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Report</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Are you sure you want to delete <span className="font-medium">"{selectedReport}"</span>? This action cannot be undone.
-              </p>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    console.log(`Deleting ${selectedReport}`);
-                    setShowDeleteModal(false);
-                  }}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showRenameModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Rename Report</h3>
-              <p className="text-sm text-gray-600 mb-4">Current name: <span className="font-medium">{selectedReport}</span></p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">New Name</label>
-                <input aria-label="New Name"
-                  type="text"
-                  defaultValue={selectedReport || ''}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowRenameModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Renaming ${selectedReport}`);
-                    setShowRenameModal(false);
-                  }}
-                  fullWidth
-                >
-                  Rename
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showEmailModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Report</h3>
-              <p className="text-sm text-gray-600 mb-4">Report: <span className="font-medium">{selectedReport}</span></p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
-                  <input aria-label="To"
-                    type="email"
-                    placeholder="Enter email addresses..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Message (optional)</label>
-                  <textarea aria-label="Message (optional)"
-                    rows={3}
-                    placeholder="Add a message..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowEmailModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Emailing ${selectedReport}`);
-                    setShowEmailModal(false);
-                  }}
-                  fullWidth
-                >
-                  Send
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Toast */}
-        {showSuccessToast && (
-          <div className="fixed bottom-8 right-8 z-50 animate-fade-in">
-            <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg min-w-[320px]">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium">{successMessage}</p>
-                  {successAction && <div className="mt-2">{successAction}</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          They are removed rather than disabled: a disabled Share button still
+          advertises sharing. Their triggers went with the card action row.
+        */}
       </div>
     </div>
   );
 };
 
 // Empty State Components
-interface EmptyStateProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  actionLabel: string;
-  onAction: () => void;
-}
-
-const EmptyState: React.FC<EmptyStateProps> = ({
-  icon,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="text-6xl mb-4">{icon}</div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
-      <p className="text-sm text-gray-600 mb-6 text-center max-w-md">{description}</p>
-      <Button
-        onClick={onAction}
-        size="xl"
-      >
-        <Plus className="w-5 h-5" />
-        {actionLabel}
-      </Button>
-    </div>
-  );
-};
-
-interface NoResultsEmptyStateProps {
-  query: string;
-  onClear: () => void;
-}
-
-const NoResultsEmptyState: React.FC<NoResultsEmptyStateProps> = ({ query, onClear }) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="text-6xl mb-4">🔍</div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">No Reports Found</h3>
-      <p className="text-sm text-gray-600 mb-6 text-center max-w-md">
-        No reports match your search: <span className="font-medium">"{query}"</span>
-      </p>
-      <button
-        onClick={onClear}
-        className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2 transition-all"
-      >
-        Clear Search
-      </button>
-    </div>
-  );
-};
-
-interface NoCategoryReportsEmptyStateProps {
-  onViewAll: () => void;
-}
-
-const NoCategoryReportsEmptyState: React.FC<NoCategoryReportsEmptyStateProps> = ({ onViewAll }) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="text-6xl mb-4">📊</div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">No Reports Available</h3>
-      <p className="text-sm text-gray-600 mb-6 text-center max-w-md">
-        No reports available in this category.
-      </p>
-      <button
-        onClick={onViewAll}
-        className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2 transition-all"
-      >
-        View All Categories
-      </button>
-    </div>
-  );
-};
 
 // Wrapper component to simplify ReportCard usage
-interface SimpleReportCardProps {
-  title: string;
-  icon: string;
-  metrics: Array<{ label: string; value: string }>;
-  updated: string;
-  sparkline?: string;
-  progress?: string;
-  highlight?: boolean;
-  editable?: boolean;
-}
-
-const SimpleReportCard: React.FC<SimpleReportCardProps & {
-  onView: (title: string) => void;
-  onExport: (title: string) => void;
-  onSchedule: (title: string) => void;
-  onShare: (title: string) => void;
-  onDelete?: (title: string) => void;
-  onRename?: (title: string) => void;
-  onEdit?: (title: string) => void;
-  onRefresh: (title: string) => void;
-  onExportPDF: (title: string) => void;
-  onExportCSV: (title: string) => void;
-  onExportExcel: (title: string) => void;
-  onEmail: (title: string) => void;
-  showReportMenu: string | null;
-  showExportMenu: string | null;
-  setShowReportMenu: (title: string | null) => void;
-  setShowExportMenu: (title: string | null) => void;
-}> = (props) => {
-  const { title, showReportMenu, showExportMenu, setShowReportMenu, setShowExportMenu, ...rest } = props;
-
-  return (
-    <ReportCard
-      {...rest}
-      title={title}
-      showMoreMenu={showReportMenu === title}
-      showExportMenu={showExportMenu === title}
-      onMore={(t) => setShowReportMenu(showReportMenu === t ? null : t)}
-      onExport={(t) => setShowExportMenu(showExportMenu === t ? null : t)}
-    />
-  );
-};
-
 interface QuickStatCardProps {
   icon: React.ReactNode;
   label: string;
@@ -1842,30 +1160,31 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
   );
 };
 
+// SimpleReportCard and its props were deleted here: an unused wrapper around
+// ReportCard, flagged as dead by TS6133 long before this pass and kept only
+// because nothing forced the issue. Its own prop list still carried the
+// export/schedule/share callbacks, which is why trimming those from
+// ReportCardProps first hit the wrong interface.
+
 interface ReportCardProps {
   title: string;
   icon: string;
   metrics: Array<{ label: string; value: string }>;
-  updated: string;
+  /**
+   * A REAL freshness value, or absent. Optional on purpose: ten of these cards
+   * carried invented staleness — "5m", "10m", "1h", "Last run: 2h ago" — none of
+   * it measured from anything, on cards whose figures were not fetched either.
+   * Invented precision standing in for a timestamp that is not tracked is the
+   * same defect as an invented number, so the label is omitted rather than
+   * guessed. Only the card that actually reads live data reports its freshness.
+   */
+  updated?: string;
   sparkline?: string;
   progress?: string;
   highlight?: boolean;
   editable?: boolean;
   onView: (title: string) => void;
-  onExport: (title: string) => void;
   onEdit?: (title: string) => void;
-  onMore: (title: string) => void;
-  showMoreMenu: boolean;
-  showExportMenu: boolean;
-  onSchedule: (title: string) => void;
-  onShare: (title: string) => void;
-  onDelete?: (title: string) => void;
-  onRename?: (title: string) => void;
-  onRefresh: (title: string) => void;
-  onExportPDF: (title: string) => void;
-  onExportCSV: (title: string) => void;
-  onExportExcel: (title: string) => void;
-  onEmail: (title: string) => void;
 }
 
 const ReportCard: React.FC<ReportCardProps> = ({
@@ -1878,20 +1197,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
   highlight,
   editable,
   onView,
-  onExport,
   onEdit,
-  onMore,
-  showMoreMenu,
-  showExportMenu,
-  onSchedule,
-  onShare,
-  onDelete,
-  onRename,
-  onRefresh,
-  onExportPDF,
-  onExportCSV,
-  onExportExcel,
-  onEmail,
 }) => {
   return (
     <div
@@ -1924,11 +1230,35 @@ const ReportCard: React.FC<ReportCardProps> = ({
       )}
       <div className="flex-grow"></div>
       <div className="flex items-center justify-between pt-3 border-t border-gray-100 flex-shrink-0">
-        <div className="flex items-center gap-1 text-xs text-gray-500">
-          <Clock className="w-3 h-3" />
-          <span>{updated}</span>
-        </div>
+        {updated ? (
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Clock className="w-3 h-3" />
+            <span>{updated}</span>
+          </div>
+        ) : <div />}
       </div>
+      {/*
+        ONLY THE CONTROLS THAT DO SOMETHING.
+        Removed: Export (with its PDF / CSV / Excel / Email menu), Schedule
+        Report, Share with Team, Refresh Data, Rename and Delete.
+
+        Every one of them persisted NOTHING — this page performs no writes at
+        all — and the three exports were the worst of them: they
+        `console.log`ged and then rendered "Report exported successfully" with a
+        "View File" button, so a user would go looking on disk for a file that
+        was never created. A success toast over a no-op is this project's
+        signature defect, and here it pointed at a nonexistent artefact.
+
+        Export is NOT wired up instead, deliberately. The figures on the
+        remaining cards are still hardcoded until phase (c), and writing those
+        into a file the user keeps is worse than showing them on screen: on
+        screen they are surrounded by context, in a spreadsheet they become
+        someone's evidence. Export comes back when the numbers behind it are
+        real.
+
+        `View` stays because /crm/reports/:slug is a real route, and `Edit`
+        because it navigates to the custom-report builder.
+      */}
       <div className="flex items-center gap-2 mt-2 flex-shrink-0">
         <button
           onClick={(e) => {
@@ -1940,58 +1270,6 @@ const ReportCard: React.FC<ReportCardProps> = ({
           <Eye className="w-4 h-4 inline mr-1" />
           View
         </button>
-        <div className="relative">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onExport(title);
-            }}
-            className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium hover:bg-blue-50 rounded transition-colors"
-          >
-            <Download className="w-4 h-4 inline mr-1" />
-            Export
-          </button>
-          {showExportMenu && (
-            <div className="absolute bottom-full mb-2 left-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportPDF(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Export as PDF
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportCSV(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Export as CSV
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportExcel(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Export as Excel
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEmail(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Email Report
-              </button>
-            </div>
-          )}
-        </div>
         {editable && onEdit && (
           <button
             onClick={(e) => {
@@ -2004,75 +1282,6 @@ const ReportCard: React.FC<ReportCardProps> = ({
             Edit
           </button>
         )}
-        <div className="relative">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onMore(title);
-            }}
-            className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-          >
-            <MoreVertical className="w-4 h-4 text-gray-600" />
-          </button>
-          {showMoreMenu && (
-            <div className="absolute bottom-full mb-2 right-0 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSchedule(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule Report
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onShare(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Share2 className="w-4 h-4" />
-                Share with Team
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRefresh(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh Data
-              </button>
-              {editable && onRename && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRename(title);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  Rename Report
-                </button>
-              )}
-              {editable && onDelete && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(title);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-600"
-                >
-                  <AlertCircle className="w-4 h-4" />
-                  Delete Report
-                </button>
-              )}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

@@ -17,13 +17,19 @@ cd Frontend && npm run typecheck        # tsc -p tsconfig.app.json --noEmit
 cd Frontend && npm run typecheck:count  # just the number
 ```
 
-## Baseline: 240 errors at HEAD (2026-09-08)
+## Baseline: 229 errors at HEAD (2026-09-10)
 
 Lowered from 281 (357be5a). The gate only fails on a RISE, so a stale-high baseline
 quietly stops protecting anything — CI emits a notice asking for the number to be lowered
 whenever a build comes in under it, and this is that number being kept.
 
-The last 9 came off in the Team-pages rewiring: they were all `TS6133`
+Lowered again from 240 by ReportsPage phase (b): 11 more `TS6133`
+unused-declaration errors went with the dead export handlers, no-op modals,
+decorative filters and three unreachable empty-state components that were
+deleted there. Every one of them had been sitting in the "noise" bucket while
+marking a control that did nothing.
+
+The 9 before that came off in the Team-pages rewiring: they were all `TS6133`
 unused-declaration errors in `TeamMemberDetailPage`, and every one marked genuinely dead
 code — handlers, permission flags and helpers left behind by fabricated sections that had
 been deleted. That is the case for triaging by reachability rather than by error code: the
