@@ -4,13 +4,226 @@ import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
+import { useAuth } from '../../contexts/AuthContext';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { isWonWith, isLostWith, isOpenWith } from '../../utils/pipelinesApi';
 
+type ReportSection =
+  | 'sales' | 'pipeline' | 'activity' | 'leads' | 'revenue' | 'accounts' | 'custom';
+
+/**
+ * REPORTS WITH NO DATA SOURCE, and the specific reason each one has none.
+ *
+ * A `const`, not `useState`, and that is the whole point — the same pattern
+ * `DocumentDetailPage` and `DataContext`'s `employees` use. Nothing can ever
+ * populate it, so no future edit can quietly turn one of these back into a
+ * number: wiring one up means DELETING its entry and writing a real card, which
+ * is a visible change in a diff. A state array initialised empty could be
+ * filled by anything.
+ *
+ * WHAT THESE 17 CARDS USED TO SHOW: 100 hardcoded metric rows — "$847K Revenue
+ * +12%", "Team: 89% ✅ / Alex: 98% / Sarah: 95%", "Total: 247" activities,
+ * "Email Open: 42%", "Healthy: 45 (71%)". None came from a query. Three of them
+ * were not even internally consistent with this workspace: Contact Engagement
+ * summed to 147 against 20 contacts, Account Health to 63 against 15 accounts,
+ * and Lead Response Time to 156 against 38 leads.
+ *
+ * They sat directly beneath four CORRECT headline figures ($55K / 1 Deal /
+ * $1.56M / 50%), which is what made them dangerous rather than merely wrong —
+ * the real numbers vouched for the invented ones. That is the hybrid CLAUDE.md
+ * lesson 15 describes.
+ *
+ * EACH REASON NAMES WHAT IS ACTUALLY MISSING, never "coming soon". A reader
+ * should be able to tell whether the gap is empty data (fixable by using the
+ * product), an unset configuration (fixable in Settings), or an absent column
+ * (needs a schema change).
+ */
+const UNBACKED_REPORTS: ReadonlyArray<{
+  section: ReportSection;
+  title: string;
+  icon: string;
+  reason: string;
+  /** Where the user can go to make this report possible, when they can. */
+  action?: { label: string; to: string };
+}> = [
+  // ── Sales ────────────────────────────────────────────────────────────────
+  {
+    section: 'sales', title: 'Sales by Team', icon: '👔',
+    reason: 'No reporting lines are set, so there are no teams to roll up. Every '
+      + 'person in this workspace currently has no manager recorded.',
+    action: { label: 'Set reporting lines', to: '/crm/settings' },
+  },
+  {
+    section: 'sales', title: 'Quota Attainment', icon: '🎯',
+    // Deliberately period-specific: "no quota entered" for WHICH period is the
+    // difference between a state the user can fix and a vague absence.
+    reason: 'No quota has been entered for this period, so attainment cannot be '
+      + 'calculated. Quotas are set per person, per quarter.',
+    action: { label: 'Enter quotas', to: '/crm/forecast' },
+  },
+  {
+    section: 'sales', title: 'Sales Forecast', icon: '📈',
+    reason: 'Predicted revenue and confidence are not modelled. The Forecast page '
+      + 'shows real pipeline grouped by forecast category instead, which is the '
+      + 'closest thing this CRM computes.',
+    action: { label: 'Open Forecast', to: '/crm/forecast' },
+  },
+
+  // ── Pipeline ─────────────────────────────────────────────────────────────
+  {
+    section: 'pipeline', title: 'Pipeline Trends', icon: '📉',
+    reason: 'Month-over-month pipeline needs at least two forecast snapshots for '
+      + 'a period, and fewer than two have been taken.',
+    action: { label: 'Take a snapshot', to: '/crm/forecast' },
+  },
+
+  // ── Activity ─────────────────────────────────────────────────────────────
+  // The whole section is unbacked: `activities` holds no rows at all.
+  {
+    section: 'activity', title: 'Activity Summary', icon: '📊',
+    reason: 'No activities have been logged yet, so there is nothing to count by '
+      + 'call, email, meeting or task.',
+    action: { label: 'Log an activity', to: '/crm/activities' },
+  },
+  {
+    section: 'activity', title: 'Activity vs Revenue', icon: '💰',
+    reason: 'Correlating effort against revenue needs logged activity on closed '
+      + 'deals, and no activities have been logged yet.',
+  },
+  {
+    section: 'activity', title: 'Response Rates', icon: '📨',
+    reason: 'Email opens, call connections and meeting attendance are not tracked. '
+      + 'This CRM has no email or telephony integration, so there is no source '
+      + 'for these rates.',
+  },
+  {
+    section: 'activity', title: 'Meeting Analytics', icon: '🎤',
+    reason: 'No meetings have been logged yet. Attendance, no-shows and duration '
+      + 'come from logged activity.',
+    action: { label: 'Log a meeting', to: '/crm/meetings' },
+  },
+
+  // ── Leads & contacts ─────────────────────────────────────────────────────
+  {
+    section: 'leads', title: 'Lead Source ROI', icon: '📊',
+    reason: 'Revenue is not attributed back to a lead source. Deals do record a '
+      + 'source, but nothing links closed revenue to the source that originated '
+      + 'the lead.',
+  },
+  {
+    section: 'leads', title: 'Contact Engagement', icon: '💬',
+    reason: 'Contacts have no engagement score. Tiering them high, medium or low '
+      + 'needs per-contact interaction history, which is not recorded.',
+  },
+  {
+    section: 'leads', title: 'Lead Response Time', icon: '⏱️',
+    reason: 'First-response time is not recorded. Leads carry no timestamp for the '
+      + 'first outbound contact, so time-to-respond cannot be measured.',
+  },
+
+  // ── Revenue ──────────────────────────────────────────────────────────────
+  {
+    section: 'revenue', title: 'Revenue by Period', icon: '📅',
+    reason: 'Period-over-period comparison is not available: it needs a second '
+      + 'query against the previous period, and no endpoint offers one.',
+  },
+  {
+    section: 'revenue', title: 'Revenue Forecast vs Actual', icon: '🎯',
+    reason: 'No forecast has been recorded for a period that has since closed, so '
+      + 'there is nothing to compare actuals against.',
+    action: { label: 'Take a snapshot', to: '/crm/forecast' },
+  },
+
+  // ── Accounts ─────────────────────────────────────────────────────────────
+  {
+    section: 'accounts', title: 'Account Health Score', icon: '🏥',
+    // The one gap here that needs a SCHEMA change, not data or configuration.
+    reason: 'Accounts have no health score. There is no such column on companies, '
+      + 'and how health would be scored has not been decided — it is recorded as a '
+      + 'backlog item rather than invented here.',
+  },
+  {
+    section: 'accounts', title: 'Top Accounts', icon: '🏆',
+    reason: 'Revenue is not yet totalled per account. Deals do link to a company, '
+      + 'so this is computable — it simply is not computed yet.',
+  },
+  {
+    section: 'accounts', title: 'Account Growth Opportunities', icon: '🌱',
+    reason: 'Expansion, upsell and cross-sell are not tracked. Neither accounts nor '
+      + 'deals carry an opportunity-type field to group by.',
+  },
+
+  // ── Custom ───────────────────────────────────────────────────────────────
+  {
+    section: 'custom', title: 'My Q4 Goals Tracker', icon: '🎯',
+    reason: 'Personal goals are not stored. There is no goals table, so a target '
+      + 'and its progress cannot be saved or tracked.',
+  },
+];
+
+/**
+ * How many WORKING reports each section renders.
+ *
+ * Still a literal, and honestly so: the surviving cards are hand-written JSX
+ * rather than data, so nothing can count them at runtime. It is kept beside
+ * UNBACKED_REPORTS so the two halves of a section header are visibly maintained
+ * together, and the unavailable half IS derived. Making both derived means
+ * turning the working cards into data — a later phase, not this subtraction.
+ */
+const WORKING_REPORT_COUNTS: Record<ReportSection, number> = {
+  sales: 3, pipeline: 3, activity: 0, leads: 1, revenue: 2, accounts: 0, custom: 2,
+};
+
+/**
+ * A report that cannot be computed, saying why. Deliberately NOT a ReportCard:
+ * it has no metrics, no sparkline, and no View/Export/Schedule/Share controls,
+ * because every one of those would act on a report that does not exist.
+ */
+const UnbackedReportCard: React.FC<{
+  title: string; icon: string; reason: string;
+  action?: { label: string; to: string };
+  onNavigate: (to: string) => void;
+}> = ({ title, icon, reason, action, onNavigate }) => (
+  <div
+    className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 flex flex-col"
+    data-not-available={title}
+  >
+    <div className="flex items-start gap-3 mb-3">
+      <span className="text-xl grayscale opacity-60" aria-hidden="true">{icon}</span>
+      <div>
+        <h3 className="font-semibold text-gray-700">{title}</h3>
+        <p className="text-xs font-medium text-gray-500 mt-0.5">Not available yet</p>
+      </div>
+    </div>
+    <p className="text-sm text-gray-600 flex-1">{reason}</p>
+    {action && (
+      <button
+        onClick={() => onNavigate(action.to)}
+        className="mt-4 self-start text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+      >
+        {action.label} →
+      </button>
+    )}
+  </div>
+);
+
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   // Same hook the two dashboards read, so /crm/reports cannot drift from them.
-  const { leads, deals, contacts, loading: dataLoading, error: dataError, reload } = useDashboardData();
+  const {
+    leads, deals, contacts, loading: dataLoading, error: dataError, reload,
+    /*
+     * CONSUMED NOW, and it was not before. Every figure on this page is summed
+     * from a list fetched with a limit, so when a list comes back exactly at
+     * that limit the totals are LOWER BOUNDS rather than facts. The hook has
+     * always reported this; the page destructured everything except it, so a
+     * pipeline total that silently omitted deals past the limit was
+     * indistinguishable from a complete one. The Team pages surface the same
+     * flag — this page was the outlier.
+     */
+    truncated,
+  } = useDashboardData();
   const [selectedTimeframe, setSelectedTimeframe] = useState('month');
   const [selectedOwner, setSelectedOwner] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -149,10 +362,18 @@ const ReportsPage: React.FC = () => {
   };
 
   const handleRefreshAll = () => {
+    /*
+     * CALLS THE REAL RELOAD. This was `setTimeout(() => setIsRefreshing(false),
+     * 1500)` — a spinner that ran for a second and a half and refetched
+     * nothing, so the page looked refreshed while showing exactly the data it
+     * had before. `reload` was already imported and already used by the error
+     * banner's retry, so the capability was present and simply not called here.
+     *
+     * The spinner now follows the hook's own loading flag rather than a timer,
+     * which is the same correction the skeleton got.
+     */
     setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 1500);
+    reload();
   };
 
   const handleRetry = () => {
@@ -208,6 +429,27 @@ const ReportsPage: React.FC = () => {
     };
   }, [lookup, deals]);
 
+  /*
+   * The unbacked reports for a section, and an honest header count. The
+   * "unavailable" half is DERIVED from UNBACKED_REPORTS, so deleting an entry
+   * when a report is finally wired updates the header on its own.
+   */
+  const unbackedFor = (section: ReportSection) =>
+    UNBACKED_REPORTS.filter((r) => r.section === section);
+
+  const sectionCount = (section: ReportSection): string => {
+    const working = WORKING_REPORT_COUNTS[section];
+    const missing = unbackedFor(section).length;
+    if (missing === 0) return `(${working} ${working === 1 ? 'report' : 'reports'})`;
+    if (working === 0) return `(${missing} not available)`;
+    return `(${working} available · ${missing} not available)`;
+  };
+
+  const renderUnbacked = (section: ReportSection) =>
+    unbackedFor(section).map((r) => (
+      <UnbackedReportCard key={r.title} {...r} onNavigate={navigate} />
+    ));
+
   const money = (n: number): string =>
     n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
     : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
@@ -232,6 +474,8 @@ const ReportsPage: React.FC = () => {
   // parts of the page read it; it follows the hook now.
   React.useEffect(() => {
     setIsLoading(dataLoading);
+    // Ends the manual-refresh spinner on the REAL fetch completing.
+    if (!dataLoading) setIsRefreshing(false);
   }, [dataLoading]);
 
   // Keyboard shortcuts
@@ -417,7 +661,18 @@ const ReportsPage: React.FC = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">All Team</option>
-                  <option value="me">Me Only (Alex Rodriguez)</option>
+                  {/*
+                    The SIGNED-IN user, from the session — not a hardcoded name.
+                    This read "Me Only (Alex Rodriguez)" for every viewer, so it
+                    misidentified whoever was actually logged in; the same defect
+                    as the Team page's hardcoded "(You)". The remaining
+                    hardcoded colleagues below are a separate, tracked issue —
+                    they are at least real users, and this whole filter is
+                    inert until phase (b).
+                  */}
+                  <option value="me">
+                    {user?.name ? `Me Only (${user.name})` : 'Me Only'}
+                  </option>
                   <option value="sales">Sales Team</option>
                   <option value="sarah">Sarah Chen</option>
                   <option value="mike">Mike Johnson</option>
@@ -560,6 +815,26 @@ const ReportsPage: React.FC = () => {
           </div>
         )}
 
+        {/*
+          EVERY TOTAL ON THIS PAGE IS A SUM OVER A FETCHED LIST, so when a list
+          arrives at exactly its limit the totals below stop being facts and
+          become lower bounds. Saying so is the point: an understated pipeline
+          that looks precise is the same class of untruth as an invented one,
+          and it is the failure this page spent 107 hardcoded rows committing in
+          the other direction.
+        */}
+        {truncated && !dataError && (
+          <div
+            className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4"
+            role="alert"
+          >
+            <p className="text-sm text-amber-900">
+              More records exist than were loaded, so every total on this page is a
+              lower bound rather than an exact figure.
+            </p>
+          </div>
+        )}
+
         {/* Quick Stats */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
@@ -651,7 +926,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-green-700" />
                 <span className="text-lg font-semibold text-gray-900">💰 SALES PERFORMANCE</span>
-                <span className="text-sm text-gray-700">(6 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('sales')}</span>
               </div>
               {expandedSections.sales ? (
                 <ChevronUp className="w-5 h-5 text-green-700" />
@@ -663,6 +938,7 @@ const ReportsPage: React.FC = () => {
           {expandedSections.sales && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                {renderUnbacked('sales')}
                 <ReportCard
                   title="Sales Overview"
                   icon="📊"
@@ -712,57 +988,8 @@ const ReportsPage: React.FC = () => {
                   onExportExcel={handleExportExcel}
                   onEmail={handleEmailReport}
                 />
-                <ReportCard
-                  title="Sales by Team"
-                  icon="👔"
-                  metrics={[
-                    { label: 'Sales Team: $847K', value: '' },
-                    { label: '89% of quota ✅', value: '' },
-                    { label: 'Team progress', value: '███████████░' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales by Team"}
-                  showMoreMenu={showReportMenu === "Sales by Team"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Sales Forecast"
-                  icon="📈"
-                  metrics={[
-                    { label: 'Predicted: $1.2M', value: '' },
-                    { label: 'Confidence: 85%', value: '' },
-                    { label: 'Forecast trend', value: '' },
-                  ]}
-                  updated="10m"
-                  sparkline="▁▃▅▆▇█▇▅"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales Forecast"}
-                  showMoreMenu={showReportMenu === "Sales Forecast"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
                 <ReportCard
                   title="Win/Loss Analysis"
                   icon="📉"
@@ -777,31 +1004,6 @@ const ReportsPage: React.FC = () => {
                   onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
                   showExportMenu={showExportMenu === "Win/Loss Analysis"}
                   showMoreMenu={showReportMenu === "Win/Loss Analysis"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Quota Attainment"
-                  icon="🎯"
-                  metrics={[
-                    { label: 'Team: 89% ✅', value: '' },
-                    { label: 'Alex: 98% ✅', value: '' },
-                    { label: 'Sarah: 95% ✅', value: '' },
-                    { label: 'Mike: 76% ⚠️', value: '' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Quota Attainment"}
-                  showMoreMenu={showReportMenu === "Quota Attainment"}
                   onSchedule={handleScheduleReport}
                   onShare={handleShareReport}
                   onDelete={handleDeleteReport}
@@ -827,7 +1029,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <TrendingUp className="w-5 h-5 text-purple-700" />
                 <span className="text-lg font-semibold text-gray-900">📊 PIPELINE REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('pipeline')}</span>
               </div>
               {expandedSections.pipeline ? (
                 <ChevronUp className="w-5 h-5 text-purple-700" />
@@ -839,6 +1041,7 @@ const ReportsPage: React.FC = () => {
           {expandedSections.pipeline && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
+                {renderUnbacked('pipeline')}
                 <ReportCard
                   title="Pipeline Health"
                   icon="🏥"
@@ -918,31 +1121,6 @@ const ReportsPage: React.FC = () => {
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Pipeline Trends"
-                  icon="📈"
-                  metrics={[
-                    { label: 'Nov: $2.1M', value: '' },
-                    { label: 'Dec: $2.4M +14%', value: '' },
-                    { label: '6-month trend', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▂▃▅▆▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Pipeline Trends"}
-                  showMoreMenu={showReportMenu === "Pipeline Trends"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
@@ -958,7 +1136,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Activity className="w-5 h-5 text-orange-700" />
                 <span className="text-lg font-semibold text-gray-900">📞 ACTIVITY REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('activity')}</span>
               </div>
               {expandedSections.activity ? (
                 <ChevronUp className="w-5 h-5 text-orange-700" />
@@ -970,113 +1148,7 @@ const ReportsPage: React.FC = () => {
           {expandedSections.activity && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
-                <ReportCard
-                  title="Activity Summary"
-                  icon="📊"
-                  metrics={[
-                    { label: 'Total: 247', value: '' },
-                    { label: 'Calls: 78', value: '' },
-                    { label: 'Emails: 89', value: '' },
-                    { label: 'Meetings: 45', value: '' },
-                    { label: 'Tasks: 35', value: '' },
-                  ]}
-                  updated="1m"
-                  sparkline="████▆▅▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Activity Summary"}
-                  showMoreMenu={showReportMenu === "Activity Summary"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Activity vs Revenue"
-                  icon="💰"
-                  metrics={[
-                    { label: 'High activity =', value: '' },
-                    { label: 'High revenue ✅', value: '' },
-                    { label: 'Correlation: 87%', value: '' },
-                  ]}
-                  updated="30m"
-                  sparkline="▅█▆▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Activity vs Revenue"}
-                  showMoreMenu={showReportMenu === "Activity vs Revenue"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Response Rates"
-                  icon="📧"
-                  metrics={[
-                    { label: 'Email Open: 42%', value: '' },
-                    { label: 'Call Connect: 68%', value: '' },
-                    { label: 'Meeting Show: 92%', value: '' },
-                    { label: 'Industry avg:', value: '' },
-                    { label: '38%, 55%, 85%', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▅▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Response Rates"}
-                  showMoreMenu={showReportMenu === "Response Rates"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Meeting Analytics"
-                  icon="🎤"
-                  metrics={[
-                    { label: 'Total: 45', value: '' },
-                    { label: 'Completed: 42', value: '' },
-                    { label: 'No-shows: 3 (7%)', value: '' },
-                    { label: 'Avg duration: 28 min', value: '' },
-                    { label: '🤖 AI recorded: 38 (84%)', value: '' },
-                  ]}
-                  updated="15m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Meeting Analytics"}
-                  showMoreMenu={showReportMenu === "Meeting Analytics"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('activity')}
               </div>
             </div>
           )}
@@ -1092,7 +1164,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-blue-700" />
                 <span className="text-lg font-semibold text-gray-900">🎯 LEAD & CONTACT REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('leads')}</span>
               </div>
               {expandedSections.leads ? (
                 <ChevronUp className="w-5 h-5 text-blue-700" />
@@ -1104,6 +1176,7 @@ const ReportsPage: React.FC = () => {
           {expandedSections.leads && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
+                {renderUnbacked('leads')}
                 {/* Was the literals 156 / 147 / 78 / 23 / 15%. "Contacts: 147"
                     was the same fabricated number the CRM dashboard and the
                     contacts list carried. Now the live counts, from the hook the
@@ -1144,86 +1217,8 @@ const ReportsPage: React.FC = () => {
                   onExportExcel={handleExportExcel}
                   onEmail={handleEmailReport}
                 />
-                <ReportCard
-                  title="Lead Source ROI"
-                  icon="📊"
-                  metrics={[
-                    { label: '🎯 Lead Gen: 60%', value: '($298K revenue)' },
-                    { label: '🌐 Website: 31%', value: '($89K revenue)' },
-                    { label: '✍️ Manual: 9%', value: '($48K revenue)' },
-                  ]}
-                  updated="30m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Lead Source ROI"}
-                  showMoreMenu={showReportMenu === "Lead Source ROI"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Contact Engagement"
-                  icon="💬"
-                  metrics={[
-                    { label: 'High: 78 (53%)', value: '' },
-                    { label: 'Medium: 48 (33%)', value: '' },
-                    { label: 'Low: 21 (14%)', value: '' },
-                    { label: '⚠️ 21 contacts need re-engage', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="████▆▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Contact Engagement"}
-                  showMoreMenu={showReportMenu === "Contact Engagement"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Lead Response Time"
-                  icon="⏱️"
-                  metrics={[
-                    { label: 'Avg: 2.3 hours', value: '' },
-                    { label: 'Best: 12 mins', value: '' },
-                    { label: 'Target: <1 hour', value: '' },
-                    { label: '<1hr: 85 leads', value: '' },
-                    { label: '1-4hr: 42 leads', value: '' },
-                    { label: '4+hr: 29 leads ⚠️', value: '' },
-                    { label: '💡 Faster = 34% higher conversion', value: '' },
-                  ]}
-                  updated="20m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Lead Response Time"}
-                  showMoreMenu={showReportMenu === "Lead Response Time"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
@@ -1239,7 +1234,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-teal-700" />
                 <span className="text-lg font-semibold text-gray-900">💵 REVENUE REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('revenue')}</span>
               </div>
               {expandedSections.revenue ? (
                 <ChevronUp className="w-5 h-5 text-teal-700" />
@@ -1251,31 +1246,7 @@ const ReportsPage: React.FC = () => {
           {expandedSections.revenue && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
-                <ReportCard
-                  title="Revenue by Period"
-                  icon="📅"
-                  metrics={[
-                    { label: 'This Month: $847K', value: '' },
-                    { label: 'Last Month: $756K (+12%)', value: '' },
-                    { label: 'This Quarter: $2.1M', value: '' },
-                  ]}
-                  updated="5m"
-                  sparkline="▂▃▅▆▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue by Period"}
-                  showMoreMenu={showReportMenu === "Revenue by Period"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('revenue')}
                 <ReportCard
                   title="Revenue by Source"
                   icon="📊"
@@ -1329,32 +1300,6 @@ const ReportsPage: React.FC = () => {
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Revenue Forecast vs Actual"
-                  icon="🎯"
-                  metrics={[
-                    { label: 'Forecast: $950K', value: '' },
-                    { label: 'Actual: $847K', value: '' },
-                    { label: 'Accuracy: 89%', value: '' },
-                    { label: '💡 Forecast improving (+5%)', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▅█ vs ▅▇"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue Forecast vs Actual"}
-                  showMoreMenu={showReportMenu === "Revenue Forecast vs Actual"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
@@ -1370,7 +1315,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Building2 className="w-5 h-5 text-indigo-700" />
                 <span className="text-lg font-semibold text-gray-900">🏢 ACCOUNT REPORTS</span>
-                <span className="text-sm text-gray-700">(3 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('accounts')}</span>
               </div>
               {expandedSections.accounts ? (
                 <ChevronUp className="w-5 h-5 text-indigo-700" />
@@ -1382,85 +1327,7 @@ const ReportsPage: React.FC = () => {
           {expandedSections.accounts && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Account Health Score"
-                  icon="🏥"
-                  metrics={[
-                    { label: 'Healthy: 45 (71%)', value: '' },
-                    { label: 'At Risk: 12 (19%)', value: '' },
-                    { label: 'Critical: 6 (10%)', value: '' },
-                    { label: '⚠️ 6 accounts need immediate attention', value: '' },
-                  ]}
-                  updated="15m"
-                  sparkline="██████▃▂"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Account Health Score"}
-                  showMoreMenu={showReportMenu === "Account Health Score"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Top Accounts"
-                  icon="🌟"
-                  metrics={[
-                    { label: '1. DataFlow Inc - $95K', value: '' },
-                    { label: '2. BigCo Ent - $75K', value: '' },
-                    { label: '3. HealthPlus - $62K', value: '' },
-                    { label: '4. Acme Corp - $50K', value: '' },
-                    { label: '5. TechStart - $42K', value: '' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Top Accounts"}
-                  showMoreMenu={showReportMenu === "Top Accounts"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Account Growth Opportunities"
-                  icon="📈"
-                  metrics={[
-                    { label: 'Expansion: 12', value: '' },
-                    { label: 'Upsell: 8', value: '' },
-                    { label: 'Cross-sell: 15', value: '' },
-                    { label: 'Total potential: $428K', value: '' },
-                    { label: '💡 12 accounts ready for expansion NOW', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▇▆▅"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Account Growth Opportunities"}
-                  showMoreMenu={showReportMenu === "Account Growth Opportunities"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('accounts')}
               </div>
             </div>
           )}
@@ -1489,35 +1356,7 @@ const ReportsPage: React.FC = () => {
               {hasCustomReports ? (
                 <>
                   <div className="grid grid-cols-3 gap-6 mb-6">
-                    <ReportCard
-                      title="My Q4 Goals Tracker"
-                      icon="⭐"
-                      metrics={[
-                        { label: 'Created by: Me', value: '' },
-                        { label: 'Progress: 78%', value: '' },
-                        { label: 'Target: $500K', value: '' },
-                        { label: 'Current: $390K', value: '' },
-                        { label: '78% complete', value: '' },
-                      ]}
-                      updated="Last run: 1h ago"
-                      progress="████████▇░"
-                      editable
-                      onView={handleViewReport}
-                      onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                      onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                      showExportMenu={showExportMenu === "My Q4 Goals Tracker"}
-                      showMoreMenu={showReportMenu === "My Q4 Goals Tracker"}
-                      onSchedule={handleScheduleReport}
-                      onShare={handleShareReport}
-                      onDelete={handleDeleteReport}
-                      onRename={handleRenameReport}
-                      onRefresh={handleRefreshReport}
-                      onExportPDF={handleExportPDF}
-                      onExportCSV={handleExportCSV}
-                      onExportExcel={handleExportExcel}
-                      onEmail={handleEmailReport}
-                      onEdit={handleEditReport}
-                    />
+                    {renderUnbacked('custom')}
                     <ReportCard
                       title="SaaS Pipeline Report"
                       icon="📊"

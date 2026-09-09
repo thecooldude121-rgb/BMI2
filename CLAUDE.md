@@ -402,6 +402,24 @@ race was**: it discloses a row count, it does not lose data.
 - `EnhancedAccount` uses `billingAddress`, **not** `address` — an earlier bug had the edit
   form reading `address.street`, silently discarding saved addresses.
 - `companies` has **no** `accountOwner` or `accountStatus` columns.
+- **`companies` has no `health_score` column either, and the spec above says it does.**
+  Found during the ReportsPage audit (2026-09-09), where an "Account Health Score" card
+  reported "Healthy: 45 (71%) / At Risk: 12 / Critical: 6" from hardcoded literals. Two
+  separate problems, and the second is why this is a backlog item rather than a quick fix:
+  1. **The column does not exist**, so nothing on `companies` can be read as health. The
+     spec's `health_score INT DEFAULT 50` was never deployed. (`deals` does have one —
+     `health_score` is real there — which is probably how the spec acquired it for
+     `companies` too.)
+  2. **The numbers did not even sum.** 45 + 12 + 6 = 63 buckets against **15** accounts.
+     Any figure that disagrees with the row count by 4x was never derived from anything,
+     and two neighbouring cards had the same tell — Contact Engagement summed to 147
+     against 20 contacts, Lead Response Time to 156 against 38 leads.
+  **DO NOT add the column and backfill 50.** A default health score is a fabricated
+  metric wearing a schema: every account would render "50 — healthy" having been measured
+  by nothing, which is exactly the class of defect this project keeps removing. Deciding
+  what health MEANS here (engagement recency? open pipeline? support signals? none of
+  which are currently recorded) is the actual work, and it is a product decision, not a
+  migration. The card now states the gap instead.
 - `leads.status` in the database is `active | inactive | nurturing`. The frontend
   `Lead.status` carries a different *stage* vocabulary (qualified / won / lost). These are
   two different fields — do not conflate them when writing SQL.
