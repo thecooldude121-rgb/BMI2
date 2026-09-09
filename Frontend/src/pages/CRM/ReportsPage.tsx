@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, Filter, RefreshCw, Home, Edit } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
 import { useStageLookup } from '../../hooks/useStageLookup';
-import { isWonWith, isLostWith, isOpenWith } from '../../utils/pipelinesApi';
+import { isWonWith, isLostWith, isOpenWith, outcomeOf } from '../../utils/pipelinesApi';
+import {
+  reportsIn, dealsForReport, type ReportSection, type ReportData, type ReportDef,
+} from './reportDefinitions';
+import { ownerFilterOptions, ownerIdentityOf } from '../../utils/dealOwnership';
 
-type ReportSection =
-  | 'sales' | 'pipeline' | 'activity' | 'leads' | 'revenue' | 'accounts' | 'custom';
 
 /**
  * REPORTS WITH NO DATA SOURCE, and the specific reason each one has none.
@@ -171,6 +173,32 @@ const UNBACKED_REPORTS: ReadonlyArray<{
       + 'deals carry an opportunity-type field to group by.',
   },
 
+  /*
+   * ── The two the design report expected to BUILD, and did not ─────────────
+   *
+   * Both need deals joined to `companies.industry`, and the join key is not
+   * there: only 3 of the 24 live deals carry a `company_id`. A breakdown built
+   * on it would describe THREE deals and silently omit twenty-one while looking
+   * complete — worse than a truncation warning, which at least admits itself.
+   *
+   * Matching on `company_name` instead resolves exactly ONE more deal and
+   * reintroduces a display name as a join key, which is the defect migrations
+   * 039 through 043 exist to remove. So the honest answer is the coverage
+   * number, and the real fix is a `deals.company_id` backfill — a data task,
+   * tracked in CLAUDE.md.
+   */
+  {
+    section: 'revenue', title: 'Revenue by Industry', icon: '🏭',
+    reason: 'Revenue cannot be grouped by industry yet. Accounts all record an '
+      + 'industry, but only 3 of 24 deals are linked to an account, so a '
+      + 'breakdown would describe those three and omit the rest.',
+  },
+  {
+    section: 'custom', title: 'SaaS Pipeline Report', icon: '📊',
+    reason: 'Filtering pipeline by industry needs deals linked to accounts, and '
+      + 'only 3 of 24 currently are. The industry is on the account, not the deal.',
+  },
+
   // ── Custom ───────────────────────────────────────────────────────────────
   {
     section: 'custom', title: 'My Q4 Goals Tracker', icon: '🎯',
@@ -180,22 +208,9 @@ const UNBACKED_REPORTS: ReadonlyArray<{
 ];
 
 /**
- * How many WORKING reports each section renders.
- *
- * Still a literal, and honestly so: the surviving cards are hand-written JSX
- * rather than data, so nothing can count them at runtime. It is kept beside
- * UNBACKED_REPORTS so the two halves of a section header are visibly maintained
- * together, and the unavailable half IS derived. Making both derived means
- * turning the working cards into data — a later phase, not this subtraction.
- */
-const WORKING_REPORT_COUNTS: Record<ReportSection, number> = {
-  sales: 2, pipeline: 3, activity: 0, leads: 1, revenue: 2, accounts: 0, custom: 2,
-};
-
-/**
  * A report that cannot be computed, saying why. Deliberately NOT a ReportCard:
- * it has no metrics, no sparkline, and no View/Export/Schedule/Share controls,
- * because every one of those would act on a report that does not exist.
+ * it has no metrics, no sparkline, and no View control, because every one of
+ * those would act on a report that does not exist.
  */
 const UnbackedReportCard: React.FC<{
   title: string; icon: string; reason: string;
@@ -225,6 +240,55 @@ const UnbackedReportCard: React.FC<{
   </div>
 );
 
+/**
+ * DATE RANGES, MEASURED AGAINST `expected_close_date`.
+ *
+ * Which is the only date a deal has for this purpose: there is NO `closed_at`
+ * or `won_at` column, so "revenue won this month" is not answerable — only
+ * "deals whose EXPECTED close falls in this month". Every card that responds
+ * to this filter says "expected close" in its own words rather than implying
+ * an actual one, and 5 of the 24 live deals have no close date at all, so the
+ * count of what a range excluded travels with the data as a caveat.
+ *
+ * Ranges are inclusive of both ends and computed from local midnight.
+ */
+type DateRangeKey = 'all' | 'this-month' | 'this-quarter' | 'this-year' | 'next-30' | 'next-90';
+
+const DATE_RANGES: Array<{ key: DateRangeKey; label: string }> = [
+  { key: 'all',          label: 'Any expected close date' },
+  { key: 'this-month',   label: 'Expected close this month' },
+  { key: 'this-quarter', label: 'Expected close this quarter' },
+  { key: 'this-year',    label: 'Expected close this year' },
+  { key: 'next-30',      label: 'Expected close in next 30 days' },
+  { key: 'next-90',      label: 'Expected close in next 90 days' },
+];
+
+function dateRangeBounds(key: DateRangeKey, now = new Date()): { from: Date; to: Date } | null {
+  if (key === 'all') return null;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (key) {
+    case 'this-month':
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1),
+               to:   new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999) };
+    case 'this-quarter': {
+      const q = Math.floor(now.getMonth() / 3);
+      return { from: new Date(now.getFullYear(), q * 3, 1),
+               to:   new Date(now.getFullYear(), q * 3 + 3, 0, 23, 59, 59, 999) };
+    }
+    case 'this-year':
+      return { from: new Date(now.getFullYear(), 0, 1),
+               to:   new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999) };
+    case 'next-30': {
+      const to = new Date(start); to.setDate(to.getDate() + 30); to.setHours(23, 59, 59, 999);
+      return { from: start, to };
+    }
+    case 'next-90': {
+      const to = new Date(start); to.setDate(to.getDate() + 90); to.setHours(23, 59, 59, 999);
+      return { from: start, to };
+    }
+  }
+}
+
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
   // Same hook the two dashboards read, so /crm/reports cannot drift from them.
@@ -242,6 +306,17 @@ const ReportsPage: React.FC = () => {
     truncated,
   } = useDashboardData();
   const [selectedCategory, setSelectedCategory] = useState('all');
+  /*
+   * THE THREE FILTERS PHASE (b) REMOVED, BACK — and working this time.
+   *
+   * They were deleted precisely because they could not work: the cards were
+   * hand-written JSX, so there was nothing to filter and each control was
+   * bound to its own input and read by nobody. Now that a report is a
+   * `compute(data)` entry in REPORTS, all three are a predicate away.
+   */
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateRange, setDateRange] = useState<DateRangeKey>('all');
+  const [ownerKey, setOwnerKey] = useState('all');
 
   // Dropdown states
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -295,10 +370,6 @@ const ReportsPage: React.FC = () => {
 
 
 
-  const handleEditReport = (reportName: string) => {
-    const reportSlug = reportName.toLowerCase().replace(/\s+/g, '-');
-    navigate(`/crm/custom-report-builder?edit=${reportSlug}`);
-  };
 
 
   const handleRefreshAll = () => {
@@ -334,6 +405,81 @@ const ReportsPage: React.FC = () => {
    */
   const { lookup } = useStageLookup();
 
+  /*
+   * THE FILTERED DEAL SET every report computes from, plus what filtering
+   * excluded. Kept separate from `stats` on purpose: the four HEADLINE figures
+   * describe the whole workspace and are deliberately NOT filtered, so a
+   * narrowed report can always be compared against an unfiltered total.
+   */
+  const dateBounds = useMemo(() => dateRangeBounds(dateRange), [dateRange]);
+
+  /**
+   * How many deals a date range has to drop for having no expected close date
+   * at all — 5 of the 24 live deals. Counted once; only reports that actually
+   * use the date filter are told about it.
+   */
+  const excludedNoCloseDate = useMemo(() => {
+    if (!dateBounds) return 0;
+    return deals.filter(d => {
+      if (!d.expected_close_date) return true;
+      // An unparseable date counts as missing, never as in-range.
+      return !Number.isFinite(new Date(d.expected_close_date).getTime());
+    }).length;
+  }, [deals, dateBounds]);
+
+  /*
+   * Owner options built from the DEALS, not the roster — so a name that owns
+   * deals but is not a user ("John Smith", 15 of them) appears and is labelled
+   * as unmatched. The list this replaces named five colleagues, three of whom
+   * own nothing, and omitted him entirely.
+   */
+  const ownerOptions = useMemo(() => ownerFilterOptions(deals), [deals]);
+
+  /*
+   * DATA PER REPORT, NOT ONE SET FOR ALL OF THEM.
+   *
+   * `usesDateRange` and `usesOwner` decide which filters a report actually
+   * RECEIVES — they are not just labels. Handing every card the fully filtered
+   * set was a live bug: Aging Pipeline declares `usesDateRange: false`, because
+   * age is measured from creation and a close-date range says nothing about it,
+   * yet its totals moved from 22 deals / $1.56M to 10 / $567K the moment a
+   * quarter was selected. The card was quietly answering a different question
+   * from the one its own definition claimed.
+   *
+   * Caught by reading the rendered numbers against the unfiltered ones, not by
+   * the type system — `usesDateRange` was consulted for the footnote and
+   * nowhere else, which type-checks perfectly.
+   */
+  const dataFor = useCallback((def: ReportDef): ReportData => {
+    const working = dealsForReport(def, deals, {
+      bounds: dateBounds,
+      ownerKey,
+      ownerKeyOf: (d) => ownerIdentityOf(d).key,
+    });
+
+    return {
+      deals: working,
+      leads,
+      contactCount: contacts.length,
+      outcome: outcomeOf(lookup),
+      stageOf: lookup,
+      // Only meaningful for a report that is actually date-filtered.
+      excludedNoCloseDate: def.usesDateRange && dateBounds ? excludedNoCloseDate : 0,
+      dateFiltered: def.usesDateRange && dateBounds !== null,
+    };
+  }, [deals, dateBounds, ownerKey, leads, contacts, lookup, excludedNoCloseDate]);
+
+  /** Search matches a report's title; nothing else claims to be searched. */
+  const matchesSearch = (r: ReportDef) =>
+    searchQuery.trim() === ''
+    || r.title.toLowerCase().includes(searchQuery.trim().toLowerCase());
+
+  const visibleReports = (section: ReportSection) => reportsIn(section).filter(matchesSearch);
+  const visibleUnbacked = (section: ReportSection) =>
+    unbackedFor(section).filter(u =>
+      searchQuery.trim() === ''
+      || u.title.toLowerCase().includes(searchQuery.trim().toLowerCase()));
+
   const stats = useMemo(() => {
     // The win rate below divides won by (won + lost). Classifying by the
     // literal 'closed-won' meant a Renewals or Partnerships win landed in
@@ -365,9 +511,16 @@ const ReportsPage: React.FC = () => {
   const unbackedFor = (section: ReportSection) =>
     UNBACKED_REPORTS.filter((r) => r.section === section);
 
+  /*
+   * FULLY DERIVED NOW — both halves. The "available" half used to be a literal
+   * map that had to be edited by hand, because the working cards were JSX and
+   * nothing could count them. They are entries in REPORTS, so both halves come
+   * from data and a section header cannot drift from what it renders.
+   */
   const sectionCount = (section: ReportSection): string => {
-    const working = WORKING_REPORT_COUNTS[section];
-    const missing = unbackedFor(section).length;
+    const working = visibleReports(section).length;
+    const missing = visibleUnbacked(section).length;
+    if (working + missing === 0) return '(no matching reports)';
     if (missing === 0) return `(${working} ${working === 1 ? 'report' : 'reports'})`;
     if (working === 0) return `(${missing} not available)`;
     return `(${working} available · ${missing} not available)`;
@@ -380,29 +533,59 @@ const ReportsPage: React.FC = () => {
    * It needs no data to work, which is why it is the one filter kept.
    */
   const showSection = (section: ReportSection) =>
-    selectedCategory === 'all' || selectedCategory === section;
+    (selectedCategory === 'all' || selectedCategory === section)
+    // Hidden when a search matches nothing in it, so the result of a search is
+    // the matching reports rather than seven headers with one card between them.
+    && (visibleReports(section).length + visibleUnbacked(section).length) > 0;
 
   const renderUnbacked = (section: ReportSection) =>
-    unbackedFor(section).map((r) => (
+    visibleUnbacked(section).map((r) => (
       <UnbackedReportCard key={r.title} {...r} onNavigate={navigate} />
     ));
+
+  /*
+   * A COMPUTED report. One code path for all eight, so a card physically
+   * cannot carry a number that did not come out of its own compute function.
+   *
+   * `unavailable` is handled here rather than by the caller: a report that CAN
+   * compute but has nothing to compute from today (no won deals, no open
+   * pipeline) renders the same honest sentence as a permanently-unbacked one,
+   * decided at run time from real data instead of being hardcoded.
+   */
+  const renderReports = (section: ReportSection) =>
+    visibleReports(section).map((def) => {
+      const result = def.compute(dataFor(def));
+      return (
+        <ReportCard
+          key={def.id}
+          title={def.title}
+          icon={def.icon}
+          metrics={(result.rows ?? []).map(r => ({ label: r.label, value: r.value, muted: r.muted }))}
+          unavailable={result.unavailable}
+          caveat={result.caveat}
+          // Only the one report that is genuinely live-per-render says so; the
+          // rest carry no freshness claim at all, per phase (b).
+          updated={def.id === 'lead-funnel' ? (dataLoading ? 'loading' : 'live') : undefined}
+          filteredBy={[
+            def.usesDateRange && dateBounds ? 'expected close date' : null,
+            def.usesOwner && ownerKey !== 'all' ? 'owner' : null,
+          ].filter(Boolean) as string[]}
+          onView={handleViewReport}
+        />
+      );
+    });
 
   const money = (n: number): string =>
     n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
     : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
     : `$${n.toLocaleString()}`;
 
-  /** Lead-stage counts for the conversion funnel. */
-  const funnel = useMemo(() => {
-    const byStatus = (v: string) => leads.filter(l => l.status === v).length;
-    return {
-      leads: leads.length,
-      contacts: contacts.length,
-      qualified: byStatus('qualified'),
-      won: byStatus('won'),
-      lost: byStatus('lost'),
-    };
-  }, [leads, contacts]);
+  /*
+   * The funnel memo that was here is now the `lead-funnel` entry in
+   * reportDefinitions, computed the same way from the same fields. It moved so
+   * that every report on the page is defined in one place and can be filtered,
+   * searched and unit-tested like the rest.
+   */
 
   // The skeleton below now tracks the REAL fetch. It used to be
   //   setTimeout(() => setIsLoading(false), 2000)
@@ -558,73 +741,117 @@ const ReportsPage: React.FC = () => {
         )}
 
         {/*
-          ONE FILTER, AND IT WORKS. Four were here; three are gone.
-
-          REMOVED — Date Range, Owner and Search. All three were bound to their
-          <select>/<input> `value` and read by NOTHING: no computation, no
-          render decision. Date Range offered eight options including "Custom
-          Date Range…", Owner listed five colleagues, and Search had a `/`
-          shortcut to focus it — none of which changed a single figure. A
-          control that claims to filter and does not is worse than its absence,
-          because the reader trusts the number that follows it.
-
-          They are not wired up instead, because none of them CAN be yet. Date
-          Range and Owner need per-period and per-owner rollups, which is the
-          phase (c) build. Search needs the report cards to be data rather than
-          hand-written JSX — the same refactor. `hasSearchResults` was
-          hardcoded `searchQuery === '' || true`, which also made its
-          no-results empty state unreachable dead code; both went with it.
-
-          KEPT AND WIRED — Category, which needs no data at all: it gates which
-          SECTIONS render, and now actually does.
+          ALL FOUR FILTERS, ALL OF THEM WORKING.
+          Phase (b) deleted three of these because they could not work against
+          hand-written cards — bound to their inputs and read by nobody. Now
+          that a report is a compute() entry, each one is a predicate:
+            Search      matches a report TITLE, and only claims that.
+            Date Range  narrows deals by EXPECTED close date (no actual close
+                        date exists), and cards say so when it is active.
+            Owner       narrows by the shared COALESCE ownership key, with
+                        options built from the DEALS rather than the roster.
+            Category    gates which sections render.
         */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 flex items-center gap-3">
-          <Filter className="w-4 h-4 text-gray-500 shrink-0" aria-hidden="true" />
-          <label htmlFor="report-category" className="text-sm font-medium text-gray-700 shrink-0">
-            Category:
-          </label>
-          <select
-            id="report-category"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="all">All Reports</option>
-            <option value="sales">Sales Performance</option>
-            <option value="pipeline">Pipeline Reports</option>
-            <option value="activity">Activity Reports</option>
-            <option value="leads">Lead &amp; Contact Reports</option>
-            <option value="revenue">Revenue Reports</option>
-            <option value="accounts">Account Reports</option>
-            <option value="custom">My Custom Reports</option>
-          </select>
-          {selectedCategory !== 'all' && (
-            <button
-              onClick={() => setSelectedCategory('all')}
-              className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
-            >
-              Show all
-            </button>
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label htmlFor="report-search" className="block text-sm font-medium text-gray-700 mb-2">
+                Search:
+              </label>
+              <input
+                id="report-search"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search report names…"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="report-date" className="block text-sm font-medium text-gray-700 mb-2">
+                Expected close:
+              </label>
+              <select
+                id="report-date"
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value as DateRangeKey)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {DATE_RANGES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="report-owner" className="block text-sm font-medium text-gray-700 mb-2">
+                Owner:
+              </label>
+              <select
+                id="report-owner"
+                value={ownerKey}
+                onChange={(e) => setOwnerKey(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">Everyone</option>
+                {/*
+                  From the deals, so a name that owns deals but is not a user
+                  appears and is labelled — "John Smith" owns 15 and is not a
+                  user. A roster-built list would omit him, which is what the
+                  deleted hardcoded list of five colleagues did.
+                */}
+                {ownerOptions.map(o => (
+                  <option key={o.key} value={o.key}>
+                    {o.name}{o.unresolved && o.name !== 'Unassigned' ? ' (unmatched name)' : ''} · {o.count}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="report-category" className="block text-sm font-medium text-gray-700 mb-2">
+                Category:
+              </label>
+              <select
+                id="report-category"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Reports</option>
+                <option value="sales">Sales Performance</option>
+                <option value="pipeline">Pipeline Reports</option>
+                <option value="activity">Activity Reports</option>
+                <option value="leads">Lead &amp; Contact Reports</option>
+                <option value="revenue">Revenue Reports</option>
+                <option value="accounts">Account Reports</option>
+                <option value="custom">My Custom Reports</option>
+              </select>
+            </div>
+          </div>
+
+          {(searchQuery || dateRange !== 'all' || ownerKey !== 'all' || selectedCategory !== 'all') && (
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setSearchQuery(''); setDateRange('all');
+                  setOwnerKey('all'); setSelectedCategory('all');
+                }}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                Clear filters
+              </button>
+              {/*
+                The headline figures above are deliberately NOT filtered, so a
+                narrowed report can always be read against a whole-workspace
+                total. Said out loud, because a reader would otherwise
+                reasonably assume the filters apply to everything on screen.
+              */}
+              <span className="text-xs text-gray-500">
+                Filters apply to the report cards below, not to the four totals above.
+              </span>
+            </div>
           )}
         </div>
-
-        {/* A failed request must not render as $0 / 0 deals. The hook reports
-            which part failed; without this the cards would silently show zeros,
-            which is the same untruth as the literals they replaced. */}
-        {dataError && (
-          <div
-            className="mb-6 flex items-start justify-between gap-4 rounded-lg border border-yellow-300 bg-yellow-50 p-4"
-            role="alert"
-          >
-            <p className="text-sm text-yellow-900">{dataError}</p>
-            <button
-              onClick={reload}
-              className="shrink-0 text-sm font-semibold text-yellow-900 underline hover:no-underline"
-            >
-              Retry
-            </button>
-          </div>
-        )}
 
         {/*
           EVERY TOTAL ON THIS PAGE IS A SUM OVER A FETCHED LIST, so when a list
@@ -747,29 +974,9 @@ const ReportsPage: React.FC = () => {
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                 {renderUnbacked('sales')}
-                <ReportCard
-                  title="Sales by Rep"
-                  icon="👥"
-                  metrics={[
-                    { label: 'Alex: $342K #1', value: '' },
-                    { label: 'Sarah: $298K #2', value: '' },
-                    { label: 'Mike: $207K #3', value: '' },
-                  ]}
-                  sparkline="▇▇▇▆▅▄▃"
-                  onView={handleViewReport}
-                />
+                {renderReports('sales')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Win/Loss Analysis"
-                  icon="📉"
-                  metrics={[
-                    { label: 'Won: 23 (68%)', value: '' },
-                    { label: 'Lost: 11 (32%)', value: '' },
-                    { label: 'Win vs Loss', value: '████ vs ██' },
-                  ]}
-                  onView={handleViewReport}
-                />
               </div>
             </div>
           )}
@@ -798,41 +1005,7 @@ const ReportsPage: React.FC = () => {
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
                 {renderUnbacked('pipeline')}
-                <ReportCard
-                  title="Pipeline Health"
-                  icon="🏥"
-                  metrics={[
-                    { label: 'Total: $2.4M', value: '' },
-                    { label: 'Qualified: $620K', value: '' },
-                    { label: 'Proposal: $890K', value: '' },
-                    { label: 'Negotiation: $890K', value: '' },
-                  ]}
-                  sparkline="▇▇▇▆▅"
-                  onView={handleViewReport}
-                />
-                <ReportCard
-                  title="Pipeline by Owner"
-                  icon="👤"
-                  metrics={[
-                    { label: 'Alex: $892K', value: '' },
-                    { label: 'Sarah: $745K', value: '' },
-                    { label: 'Mike: $563K', value: '' },
-                    { label: 'Emily: $200K', value: '' },
-                  ]}
-                  sparkline="████▇▆▃"
-                  onView={handleViewReport}
-                />
-                <ReportCard
-                  title="Aging Pipeline"
-                  icon="⏳"
-                  metrics={[
-                    { label: '30-60 days: 8', value: '' },
-                    { label: '60-90 days: 5', value: '' },
-                    { label: '90+ days: 3 ⚠️', value: '' },
-                  ]}
-                  sparkline="▅▅▄▄▃"
-                  onView={handleViewReport}
-                />
+                {renderReports('pipeline')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               </div>
@@ -863,6 +1036,7 @@ const ReportsPage: React.FC = () => {
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
                 {renderUnbacked('activity')}
+                {renderReports('activity')}
               </div>
             </div>
           )}
@@ -891,6 +1065,7 @@ const ReportsPage: React.FC = () => {
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
                 {renderUnbacked('leads')}
+                {renderReports('leads')}
                 {/* Was the literals 156 / 147 / 78 / 23 / 15%. "Contacts: 147"
                     was the same fabricated number the CRM dashboard and the
                     contacts list carried. Now the live counts, from the hook the
@@ -899,25 +1074,6 @@ const ReportsPage: React.FC = () => {
                     "Conversion" is won / DECIDED leads, and reads "—" until at
                     least one lead is decided: dividing by all leads gives a rate
                     that can only climb as open leads are added. */}
-                <ReportCard
-                  title="Lead Conversion Funnel"
-                  icon="🔄"
-                  metrics={[
-                    { label: `Leads: ${funnel.leads}`, value: '' },
-                    { label: `Contacts: ${funnel.contacts}`, value: '' },
-                    { label: `Qualified: ${funnel.qualified}`, value: '' },
-                    { label: `Won: ${funnel.won}`, value: '' },
-                    { label: `Lost: ${funnel.lost}`, value: '' },
-                    {
-                      label: (funnel.won + funnel.lost) > 0
-                        ? `Conversion: ${Math.round((funnel.won / (funnel.won + funnel.lost)) * 100)}%`
-                        : 'Conversion: —',
-                      value: '',
-                    },
-                  ]}
-                  updated={dataLoading ? 'loading' : 'live'}
-                  onView={handleViewReport}
-                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               </div>
@@ -948,29 +1104,7 @@ const ReportsPage: React.FC = () => {
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
                 {renderUnbacked('revenue')}
-                <ReportCard
-                  title="Revenue by Source"
-                  icon="📊"
-                  metrics={[
-                    { label: '🎯 Lead Gen: $298K (69%)', value: '' },
-                    { label: '🌐 Website: $89K (20%)', value: '' },
-                    { label: '✍️ Manual: $48K (11%)', value: '' },
-                  ]}
-                  onView={handleViewReport}
-                />
-                <ReportCard
-                  title="Revenue by Industry"
-                  icon="🏭"
-                  metrics={[
-                    { label: 'SaaS: $342K (40%)', value: '' },
-                    { label: 'Enterprise: $298K', value: '' },
-                    { label: 'Healthcare: $142K', value: '' },
-                    { label: 'Finance: $65K', value: '' },
-                    { label: '💡 SaaS highest growth: +28%', value: '' },
-                  ]}
-                  sparkline="█████▇▅▃"
-                  onView={handleViewReport}
-                />
+                {renderReports('revenue')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               </div>
@@ -1001,6 +1135,7 @@ const ReportsPage: React.FC = () => {
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {renderUnbacked('accounts')}
+                {renderReports('accounts')}
               </div>
             </div>
           )}
@@ -1035,34 +1170,7 @@ const ReportsPage: React.FC = () => {
               <>
                   <div className="grid grid-cols-3 gap-6 mb-6">
                     {renderUnbacked('custom')}
-                    <ReportCard
-                      title="SaaS Pipeline Report"
-                      icon="📊"
-                      metrics={[
-                        { label: 'Created by: Me', value: '' },
-                        { label: 'SaaS Deals: 15', value: '' },
-                        { label: 'Value: $687K', value: '' },
-                        { label: 'Avg: $45.8K', value: '' },
-                      ]}
-                      sparkline="▅▆▇█▆"
-                      editable
-                      onView={handleViewReport}
-                      onEdit={handleEditReport}
-                    />
-                    <ReportCard
-                      title="High Priority Deals"
-                      icon="🎯"
-                      metrics={[
-                        { label: 'Created by: Me', value: '' },
-                        { label: 'Priority: 18', value: '' },
-                        { label: 'Total: $892K', value: '' },
-                        { label: 'Close This Week: 5 deals', value: '' },
-                      ]}
-                      sparkline="▇▇▅▃"
-                      editable
-                      onView={handleViewReport}
-                      onEdit={handleEditReport}
-                    />
+                    {renderReports('custom')}
                   </div>
                   <button
                     onClick={handleNavigateToCustomReportBuilder}
@@ -1169,7 +1277,21 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
 interface ReportCardProps {
   title: string;
   icon: string;
-  metrics: Array<{ label: string; value: string }>;
+  metrics: Array<{ label: string; value: string; muted?: boolean }>;
+  /**
+   * Set when the report CAN be computed but has nothing to compute from right
+   * now. Renders instead of the rows, so an empty result never shows as zeros.
+   */
+  unavailable?: string;
+  /**
+   * Set when the figures are real but incomplete — deals excluded for having no
+   * expected close date, an approximation being used, unclassifiable rows. It
+   * renders WITH the numbers rather than replacing them, because the point is
+   * that the reader sees both.
+   */
+  caveat?: string;
+  /** Which active filters narrowed this card, named so the reader knows. */
+  filteredBy?: string[];
   /**
    * A REAL freshness value, or absent. Optional on purpose: ten of these cards
    * carried invented staleness — "5m", "10m", "1h", "Last run: 2h ago" — none of
@@ -1191,6 +1313,9 @@ const ReportCard: React.FC<ReportCardProps> = ({
   title,
   icon,
   metrics,
+  unavailable,
+  caveat,
+  filteredBy = [],
   updated,
   sparkline,
   progress,
@@ -1212,16 +1337,39 @@ const ReportCard: React.FC<ReportCardProps> = ({
           <h3 className="text-base font-semibold text-gray-900 mb-2">{title}</h3>
         </div>
       </div>
-      <div className="space-y-1 mb-3 text-sm overflow-y-auto max-h-[80px] flex-shrink-0">
-        {metrics.map((metric, index) => (
-          <div key={index} className="flex items-center justify-between text-gray-700">
-            <span className={metric.label.startsWith('💡') || metric.label.startsWith('⚠️') ? 'font-medium' : ''}>
-              {metric.label}
-            </span>
-            {metric.value && <span className="text-gray-600">{metric.value}</span>}
-          </div>
-        ))}
-      </div>
+      {/*
+        UNAVAILABLE REPLACES THE ROWS; a caveat sits WITH them. The distinction
+        is the whole design: "nothing has closed yet" must not render as 0%,
+        and "5 deals have no close date" must not hide behind figures that look
+        complete.
+      */}
+      {unavailable ? (
+        <div className="mb-3 flex-shrink-0 rounded border border-dashed border-gray-300 bg-gray-50 p-3">
+          <p className="text-sm text-gray-600">{unavailable}</p>
+        </div>
+      ) : (
+        <div className="space-y-1 mb-3 text-sm overflow-y-auto max-h-[80px] flex-shrink-0">
+          {metrics.map((metric, index) => (
+            <div key={index} className="flex items-center justify-between text-gray-700">
+              {/* Muted rows are facts about what ISN'T recorded, not results. */}
+              <span className={metric.muted ? 'text-gray-400 italic' : ''}>
+                {metric.label}
+              </span>
+              {metric.value && (
+                <span className={metric.muted ? 'text-gray-400' : 'text-gray-600'}>{metric.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {caveat && (
+        <p className="mb-2 flex-shrink-0 text-xs text-amber-700">{caveat}</p>
+      )}
+      {filteredBy.length > 0 && !unavailable && (
+        <p className="mb-2 flex-shrink-0 text-xs text-gray-500">
+          Filtered by {filteredBy.join(' and ')}.
+        </p>
+      )}
       {sparkline && (
         <div className="text-xs text-gray-400 mb-2 font-mono tracking-wider h-[20px] flex-shrink-0">{sparkline}</div>
       )}

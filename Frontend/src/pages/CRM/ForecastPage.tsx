@@ -22,6 +22,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { outcomeOf, type StageLookup } from '../../utils/pipelinesApi';
+import { ownerIdentityOf, UNASSIGNED_LABEL } from '../../utils/dealOwnership';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ChevronLeft, ChevronRight, TrendingUp, DollarSign,
@@ -450,7 +451,7 @@ const ForecastPage: React.FC = () => {
           // user), and falls back to the legacy string otherwise. 'Unassigned'
           // is a truthful label here: 20 of 25 live deals have no resolved
           // owner, and this page groups by owner.
-          owner:    d.assigned_to || 'Unassigned',
+          owner:    d.assigned_to || UNASSIGNED_LABEL,
           ownerUserId: d.assigned_to_user_id ?? null,
           value:    parseFloat(d.value) || 0,
           stage:    d.stage || '',
@@ -505,11 +506,24 @@ const ForecastPage: React.FC = () => {
      */
     const map = new Map<string, RepRow>();
     forecastDeals.forEach(d => {
-      const key = d.ownerUserId != null ? `id:${d.ownerUserId}` : `name:${d.owner}`;
+      /*
+       * The key, the user id and the display name now come from
+       * `utils/dealOwnership.ts`, which was extracted FROM this block when the
+       * Reports page needed the same grouping. Only the forecast-category
+       * accumulation below is specific to this page.
+       *
+       * Behaviour is unchanged: same `id:` / `name:` prefixes, same fallback to
+       * the owner name, same Unassigned label. Verified by re-running this
+       * page's own suite after the repoint, not just the new tests.
+       */
+      const { key, userId, name } = ownerIdentityOf({
+        assigned_to_user_id: d.ownerUserId ?? null,
+        assigned_to: d.owner,
+      });
       const existing = map.get(key) ?? {
         key,
-        userId: d.ownerUserId ?? null,
-        name: d.owner,
+        userId,
+        name,
         pipeline: 0, bestCase: 0, commit: 0, closed: 0, dealCount: 0,
       };
       existing.dealCount += 1;
@@ -520,8 +534,8 @@ const ForecastPage: React.FC = () => {
       map.set(key, existing);
     });
     return Array.from(map.values()).sort((a, b) => {
-      if (a.name === 'Unassigned') return 1;
-      if (b.name === 'Unassigned') return -1;
+      if (a.name === UNASSIGNED_LABEL) return 1;
+      if (b.name === UNASSIGNED_LABEL) return -1;
       return (b.commit + b.closed) - (a.commit + a.closed);
     });
   }, [forecastDeals]);
@@ -535,7 +549,7 @@ const ForecastPage: React.FC = () => {
   const repInspectionFlags = useMemo((): Map<string, string[]> => {
     const map = new Map<string, string[]>();
     repRows.forEach(rep => {
-      if (rep.name === 'Unassigned') return;
+      if (rep.name === UNASSIGNED_LABEL) return;
       const flags: string[] = [];
       // Past mid-quarter with best-case but zero commit
       if (quarterPacing.isCurrent && quarterPacing.pct > 50 && rep.commit === 0 && rep.bestCase > 0) {
@@ -968,7 +982,7 @@ const ForecastPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {repRows.map((rep, i) => {
-                    const isUnassigned = rep.name === 'Unassigned';
+                    const isUnassigned = rep.name === UNASSIGNED_LABEL;
                     const rowTotal  = rep.pipeline + rep.bestCase + rep.commit + rep.closed;
                     const barWidth  = Math.round((rowTotal / maxRepTotal) * 100);
                     // Matched by USER ID (migration 042). Matching by name

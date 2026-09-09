@@ -40,6 +40,34 @@ export interface DashboardDeal {
   expected_close_date?: string | null;
   next_step?: string | null;
   probability?: number | null;
+  /*
+   * ── Fields that were ALWAYS ARRIVING and merely undeclared ────────────────
+   *
+   * `fetchDeals` returns the raw rows (`any[]`) and the API projects `SELECT
+   * d.*`, so every one of these has been present at runtime all along. This
+   * type was the only thing hiding them, which is why the Reports page
+   * "could not" compute per-owner or per-source figures and carried hardcoded
+   * ones instead. Declaring them needs no new query and no new endpoint.
+   */
+  /**
+   * REQUIRED FOR CORRECT WON/LOST CLASSIFICATION, not a nicety.
+   * `buildStageLookup` resolves a stage by slug alone ONLY when that slug is
+   * unique across every pipeline; otherwise it returns null and `outcomeOf`
+   * falls back to 'open', silently counting a won deal as open. No tenant has
+   * duplicate slugs today, so this was latent rather than live — but
+   * per-tenant configurable stages actively invite two pipelines that both
+   * have a "qualified", and the failure is invisible when it happens.
+   */
+  pipeline_id?: string | null;
+  /** Owner as a reference (migration 039). Null when ownership is only a name. */
+  assigned_to_user_id?: number | string | null;
+  /** Owner as a display name — the pre-039 form, still set on 20 of 24 deals. */
+  assigned_to?: string | null;
+  /** Normalised to a fixed vocabulary by migration 040. Null on 15 of 24. */
+  source?: string | null;
+  priority?: string | null;
+  /** The real account link. Set on only 3 of 24 deals — see CLAUDE.md. */
+  company_id?: string | number | null;
 }
 
 export interface DashboardData {

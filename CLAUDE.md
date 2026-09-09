@@ -589,6 +589,19 @@ very case it breaks, not by review. It is keyed by position now. `roundTrip.fore
 (12 tests) pins all of the above; the re-keyed index was mutation-tested by restoring the
 old constraint, which fails the shared-name test.
 
+- **`deals.company_id` needs a backfill, and two reports are waiting on it.**
+  Only **3 of 24** deals carry a `company_id`; 9 have a free-text `company_name`, and
+  matching on that name resolves exactly **1** more. So "Revenue by Industry" and the
+  "SaaS Pipeline Report" cannot be built: `industry` lives on `companies` (all 15 have
+  one), and the join key to reach it is missing on 87% of deals. A breakdown built anyway
+  would describe three deals and omit twenty-one **while looking complete** — worse than a
+  truncation warning, which at least admits itself. Matching on `company_name` was
+  rejected for the reason migrations 039-043 exist: a display name is not a key.
+  Both cards sit in ReportsPage's `UNBACKED_REPORTS` stating the coverage number. The fix
+  is a data task (link existing deals to accounts), not a build, and it unblocks both at
+  once. Same treatment as the document-telemetry and BANT items: real, structural, not
+  urgent.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
