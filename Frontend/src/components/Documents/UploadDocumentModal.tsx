@@ -92,8 +92,15 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
    * `record_id` is a single polymorphic pair.
    *
    * Made single-valued in STATE rather than policed in the submit handler, so
-   * the discard cannot happen: picking a second record replaces the first, and
-   * the user can see which one is attached.
+   * the discard cannot happen.
+   *
+   * HOW IT IS ENFORCED, precisely — because the imprecise version of this
+   * sentence was wrong and got repeated: attaching a record REPLACES THE
+   * SEARCH INPUT WITH A CHIP, so a second record cannot be picked at all until
+   * the first is explicitly removed. It is not "the second selection
+   * overwrites the first" — there is no second selection to make. The
+   * distinction matters to anyone changing this: rendering the input beside
+   * the chip would silently restore the old two-selection state.
    *
    * Whether a document should be able to relate to several records at once is a
    * schema question (it would need a join table) and is tracked in CLAUDE.md

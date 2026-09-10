@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import ShareDocumentModal from './ShareDocumentModal';
 import { toShareTarget } from '../../hooks/useWorkspaceMembers';
 import type { WorkspaceMember } from '../../utils/usersApi';
@@ -127,6 +127,34 @@ describe('ShareDocumentModal — the picker offers real people', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent('Could not load workspace members.');
     expect(screen.queryByText(/No other members/)).not.toBeInTheDocument();
+  });
+
+  it('INCLUDES THE SIGNED-IN USER, like the other two share surfaces', () => {
+    /*
+     * A regression I introduced and live testing caught. While consolidating
+     * the three hardcoded lists onto one fetch, I added a self-filter to the
+     * DETAIL page only — on a rule I invented in passing ("never offer to
+     * share with yourself") and applied to one of three surfaces. The result:
+     * the signed-in admin (David Kumar) was missing from the detail page's
+     * picker while appearing in the library's and the upload modal's.
+     *
+     * That is the same "lists that must agree will disagree" defect the
+     * consolidation existed to remove, reintroduced one layer up. The roster
+     * is passed through whole now; whether self-share should be offered is a
+     * product decision for the real sharing feature, not something to differ
+     * on per screen.
+     */
+    // REAL_ROSTER already includes David Kumar, the signed-in admin.
+    render(<ShareDocumentModal {...props} teamMembers={REAL_ROSTER.map(toShareTarget)} />);
+
+    expect(screen.getByRole('option', { name: /David Kumar — admin/ })).toBeInTheDocument();
+
+    // Scoped to the MEMBER select: the modal also renders a visibility select,
+    // so an unscoped getAllByRole('option') counts both and the assertion
+    // silently measures the wrong thing.
+    const picker = screen.getByLabelText('Share with Team Member');
+    // Every member the caller passed is offered — the component filters nobody.
+    expect(within(picker).getAllByRole('option')).toHaveLength(REAL_ROSTER.length + 1); // + placeholder
   });
 
   it('cannot share until a real member is picked', () => {

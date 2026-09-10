@@ -181,11 +181,22 @@ const DocumentDetailPage: React.FC = () => {
    * lists used to claim and how far they disagreed.
    */
   const { members, loading: membersLoading, error: membersError } = useWorkspaceMembers();
-  const teamMembers = useMemo(
-    // Never offer to share a document with yourself.
-    () => members.filter(m => String(m.id) !== String(user?.id)).map(toShareTarget),
-    [members, user?.id],
-  );
+  /*
+   * THE WHOLE ROSTER, INCLUDING THE SIGNED-IN USER.
+   *
+   * This filtered `user.id` out, on a rule I invented in passing — "never
+   * offer to share a document with yourself" — and applied to exactly ONE of
+   * the three share surfaces. DocumentsLibrary and the upload modal both list
+   * everyone, so the same workspace showed a different set of people
+   * depending on which screen you opened, and an admin sharing from the detail
+   * page could not see themselves in a list they appear in elsewhere.
+   *
+   * That is the same "two lists that must agree will disagree" defect this
+   * file was changed to FIX, reintroduced one layer up while fixing it. The
+   * rule was mine, undocumented, and unilateral; consistency across the three
+   * surfaces is worth more than a self-share being a no-op.
+   */
+  const teamMembers = useMemo(() => members.map(toShareTarget), [members]);
 
   useEffect(() => {
     if (documentId) {
