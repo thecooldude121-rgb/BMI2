@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -11,6 +11,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import { IntegrationsProvider } from './contexts/IntegrationsContext';
 import Sidebar from './components/Layout/Sidebar';
 import TopBar from './components/Layout/TopBar';
+import MobileNavDrawer from './components/Layout/MobileNavDrawer';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 
@@ -74,11 +75,21 @@ const RouteShell = ({ children }: { children: React.ReactNode }) => {
 };
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
+  const { pathname } = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Close on navigation. The drawer's own links already call onClose, but a
+  // route change can also come from a breadcrumb, a redirect or the back
+  // button, and a drawer left open over the destination is the bug the close
+  // handler exists to prevent.
+  useEffect(() => { setMobileNavOpen(false); }, [pathname]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar />
+      <MobileNavDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex flex-col flex-1 min-w-0">
-        <TopBar />
+        <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 overflow-y-auto px-4 pb-4 lg:px-6 lg:pb-6">
           {/* Inside Layout on purpose: a page-level error must not take the
               sidebar and top bar down with it — the user needs to navigate away. */}

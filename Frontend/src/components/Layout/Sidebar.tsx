@@ -15,7 +15,17 @@ interface NavItem {
   children?: { name: string; href: string; icon: React.ElementType }[];
 }
 
-const navGroups: { label?: string; items: NavItem[] }[] = [
+/**
+ * THE navigation list. Exported so the mobile drawer renders these exact rows
+ * rather than a second copy of them.
+ *
+ * A duplicated nav list is the same defect class as the duplicated
+ * assignable-roles list CLAUDE.md records: two lists that must agree will
+ * disagree, and the failure is silent — a destination added here and forgotten
+ * there is simply missing on phones, with no type error and no failing test.
+ * `MobileNavDrawer` therefore renders `<SidebarNav />`, not its own markup.
+ */
+export const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     items: [
       { name: 'Dashboard', href: '/crm/dashboard', icon: LayoutDashboard },
@@ -27,7 +37,7 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
       { name: 'Leads',     href: '/crm/leads',     icon: UserPlus },
       { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
       // Was '/accounts', which rendered a placeholder telling the user to
-      // "navigate to CRM \u2192 Accounts" \u2014 a sidebar entry that does not exist.
+      // "navigate to CRM → Accounts" — a sidebar entry that does not exist.
       // The real accounts list is CRMModule's /crm/accounts.
       { name: 'Accounts',  href: '/crm/accounts',  icon: Building },
       { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
@@ -70,9 +80,19 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   },
 ];
 
-const Sidebar: React.FC = () => {
-  const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+/**
+ * The scrolling nav list plus the pinned Settings row — everything below the
+ * logo. Shared verbatim by the desktop sidebar and the mobile drawer.
+ *
+ * `onNavigate` fires on every destination click. The desktop sidebar passes
+ * nothing; the drawer passes its close handler, because a drawer that stays
+ * open over the page it just navigated to is a drawer the user has to dismiss
+ * before they can see what they asked for.
+ */
+export const SidebarNav: React.FC<{
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}> = ({ collapsed = false, onNavigate }) => {
   const [expandedItems, setExpandedItems] = useState<string[]>(['Activities']);
 
   const toggleExpand = (name: string) => {
@@ -82,42 +102,7 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <aside
-      className={`relative hidden lg:flex flex-col min-h-screen bg-gray-900 text-gray-300 shrink-0 transition-all duration-300 ease-in-out ${
-        collapsed ? 'w-14' : 'w-56'
-      }`}
-    >
-      {/* Logo + Toggle button row */}
-      <div className={`flex items-center border-b border-gray-700 h-14 shrink-0 ${collapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
-        {/* Logo — hidden when collapsed */}
-        {!collapsed && (
-          <div
-            className="flex items-center gap-2 cursor-pointer overflow-hidden"
-            onClick={() => navigate('/crm/dashboard')}
-          >
-            <div className="flex items-center justify-center w-7 h-7 bg-brand-600 rounded-lg shrink-0">
-              <Building2 className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-sm font-bold text-white tracking-tight whitespace-nowrap">
-              BMI Platform
-            </span>
-          </div>
-        )}
-
-        {/* Collapse / Expand toggle */}
-        <button
-          onClick={() => setCollapsed(prev => !prev)}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shrink-0"
-        >
-          {collapsed
-            ? <PanelLeftOpen className="h-4 w-4" />
-            : <PanelLeftClose className="h-4 w-4" />
-          }
-        </button>
-      </div>
-
-      {/* Nav */}
+    <>
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-4">
         {navGroups.map((group, gi) => (
           <div key={gi}>
@@ -158,6 +143,7 @@ const Sidebar: React.FC = () => {
                     <li key={item.name}>
                       <button
                         onClick={() => toggleExpand(item.name)}
+                        aria-expanded={isItemExpanded}
                         className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
                       >
                         <span className="flex items-center gap-3">
@@ -176,6 +162,7 @@ const Sidebar: React.FC = () => {
                               <li key={child.name}>
                                 <NavLink
                                   to={child.href}
+                                  onClick={onNavigate}
                                   className={({ isActive }) =>
                                     `flex items-center gap-3 pl-10 pr-4 py-2 text-sm transition-colors ${
                                       isActive
@@ -202,6 +189,7 @@ const Sidebar: React.FC = () => {
                     <NavLink
                       to={item.href!}
                       end={item.href === '/crm/dashboard'}
+                      onClick={onNavigate}
                       title={collapsed ? item.name : undefined}
                       className={({ isActive }) =>
                         `flex items-center py-2 text-sm transition-colors ${
@@ -237,9 +225,10 @@ const Sidebar: React.FC = () => {
         * lesson 5 in its original form: the fix was verified at one route while
         * the nav pointed at another.
         */}
-      <div className="border-t border-gray-700 py-2">
+      <div className="border-t border-gray-700 py-2 shrink-0">
         <NavLink
           to="/crm/settings"
+          onClick={onNavigate}
           title={collapsed ? 'Settings' : undefined}
           className={({ isActive }) =>
             `flex items-center py-2.5 text-sm transition-colors ${
@@ -255,6 +244,56 @@ const Sidebar: React.FC = () => {
           {!collapsed && <span className="whitespace-nowrap">Settings</span>}
         </NavLink>
       </div>
+    </>
+  );
+};
+
+/**
+ * The desktop sidebar. `hidden lg:flex` — below 1024px it does not render at
+ * all, which is why `MobileNavDrawer` exists.
+ */
+const Sidebar: React.FC = () => {
+  const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <aside
+      className={`relative hidden lg:flex flex-col min-h-screen bg-gray-900 text-gray-300 shrink-0 transition-all duration-300 ease-in-out ${
+        collapsed ? 'w-14' : 'w-56'
+      }`}
+    >
+      {/* Logo + Toggle button row */}
+      <div className={`flex items-center border-b border-gray-700 h-14 shrink-0 ${collapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
+        {/* Logo — hidden when collapsed */}
+        {!collapsed && (
+          <div
+            className="flex items-center gap-2 cursor-pointer overflow-hidden"
+            onClick={() => navigate('/crm/dashboard')}
+          >
+            <div className="flex items-center justify-center w-7 h-7 bg-brand-600 rounded-lg shrink-0">
+              <Building2 className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-sm font-bold text-white tracking-tight whitespace-nowrap">
+              BMI Platform
+            </span>
+          </div>
+        )}
+
+        {/* Collapse / Expand toggle */}
+        <button
+          onClick={() => setCollapsed(prev => !prev)}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shrink-0"
+        >
+          {collapsed
+            ? <PanelLeftOpen className="h-4 w-4" />
+            : <PanelLeftClose className="h-4 w-4" />
+          }
+        </button>
+      </div>
+
+      <SidebarNav collapsed={collapsed} />
     </aside>
   );
 };
