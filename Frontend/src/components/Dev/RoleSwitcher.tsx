@@ -26,17 +26,33 @@ const STORAGE_KEY = 'dev:roleSwitcherOpen';
  * Dev-only role switcher. Rendered from App.tsx behind `import.meta.env.DEV`, so
  * Vite strips it from production builds entirely.
  *
- * Collapsed by default, and deliberately so. This sits at bottom-left, which is
- * on top of the Sidebar, and when it rendered its full panel unconditionally it
- * covered the last nav items ("Integrations", "Leaderboard") and swallowed clicks
- * meant for them — a dev widget quietly degrading the project's own "verify
- * through the same entry point a real user uses" standard, because the entry point
- * was unreachable. Two rules keep that from coming back:
+ * ANCHORED BOTTOM-RIGHT, and that is the point of this note.
  *
- *   1. The wrapper is `pointer-events-none`; only the badge and the buttons opt
- *      back in. Padding and gaps can never eat a click aimed at the nav beneath.
- *   2. Collapsed is the default state, so the resting footprint is one small pill
- *      below the nav list rather than a 130px panel across it.
+ * It used to sit bottom-left, on top of the Sidebar. Two mitigations were added
+ * then — `pointer-events-none` on the wrapper so only the badge and buttons take
+ * clicks, and collapsed-by-default so the resting footprint is one pill — and
+ * both are still here and still correct. Neither was sufficient. `open` is
+ * persisted in localStorage, so a developer who expands it once has a panel
+ * covering "Integrations" and "Leaderboard" in every session from then on; that
+ * is exactly the state the UI/UX audit found it in on a live machine. A widget
+ * that cannot be clicked through is still a widget you cannot read the nav
+ * through.
+ *
+ * Bottom-right overlaps no navigation chrome at any breakpoint: the sidebar is
+ * on the left, the top bar is at the top, and the mobile drawer opens from the
+ * left. Three rules now keep it out of the way:
+ *
+ *   1. Anchored bottom-RIGHT, away from every nav surface.
+ *   2. The wrapper is `pointer-events-none`; only the badge and the buttons opt
+ *      back in. Padding and gaps can never eat a click aimed at what is beneath.
+ *   3. Collapsed is the default state for a first-time reader.
+ *
+ * Kept rather than deleted: it is real, working, deliberately-documented
+ * scaffolding, already stripped from production builds by `import.meta.env.DEV`
+ * at BOTH the render site in App.tsx and inside CurrentUserContext, which
+ * refuses to read or write the override outside development. The permission
+ * model has four roles the backend cannot currently issue, and this is the only
+ * way to exercise them.
  */
 export default function RoleSwitcher() {
   const { currentUser, setRole } = useCurrentUser();
@@ -65,7 +81,7 @@ export default function RoleSwitcher() {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 z-[200] flex flex-col items-start gap-1.5 select-none pointer-events-none">
+    <div className="fixed bottom-4 right-4 z-[200] flex flex-col items-end gap-1.5 select-none pointer-events-none">
       {open && (
         <div className="pointer-events-auto bg-white border border-gray-200 rounded-xl shadow-xl px-3 py-2.5 flex flex-col gap-1">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 px-0.5">
