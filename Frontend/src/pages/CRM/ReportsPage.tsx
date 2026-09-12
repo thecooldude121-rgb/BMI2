@@ -564,8 +564,14 @@ const ReportsPage: React.FC = () => {
           unavailable={result.unavailable}
           caveat={result.caveat}
           // Only the one report that is genuinely live-per-render says so; the
-          // rest carry no freshness claim at all, per phase (b).
-          updated={def.id === 'lead-funnel' ? (dataLoading ? 'loading' : 'live') : undefined}
+          // rest carry no freshness claim at all, per phase (b). On a failed
+          // load it says nothing rather than 'live' — the same lie as the header
+          // badge, one card down.
+          updated={
+            def.id === 'lead-funnel'
+              ? (dataError ? undefined : dataLoading ? 'loading' : 'live')
+              : undefined
+          }
           filteredBy={[
             def.usesDateRange && dateBounds ? 'expected close date' : null,
             def.usesOwner && ownerKey !== 'all' ? 'owner' : null,
@@ -660,8 +666,29 @@ const ReportsPage: React.FC = () => {
                     WAS the fixed string "Last updated: 5 minutes ago", which
                     never moved and was never measured. Nothing records when
                     this page last fetched, so it reports only what it knows.
+
+                    THEN it was a two-state ternary on `dataLoading` alone, which
+                    is the bug this replaces: with the API unreachable the page
+                    made FOURTEEN failed requests and rendered "Figures are live"
+                    above "REVENUE WON $0 · From 0 closed-won deals". A badge
+                    asserting provenance is worse than a wrong number, because it
+                    tells the reader the zeros were measured.
+
+                    Failure is checked first for robustness, NOT because the
+                    other order is currently broken — a mutation test proved that
+                    and is worth recording rather than quietly keeping a comment
+                    that overstates its own necessity. `useDashboardData` calls
+                    `setError` and then `setLoading(false)` in one batch, so the
+                    two never disagree and `dataLoading ? … : dataError ? …`
+                    behaves identically today. It stops behaving identically the
+                    moment the hook keeps `loading` true alongside an error — a
+                    retry in flight over a failed load, which is exactly what the
+                    "Try again" button below invites — so the order is kept and
+                    the reason is stated honestly.
                   */}
-                  <span>{dataLoading ? 'Loading…' : 'Figures are live'}</span>
+                  <span className={dataError ? 'text-red-700 font-medium' : undefined}>
+                    {dataError ? "Couldn't load live figures" : dataLoading ? 'Loading…' : 'Figures are live'}
+                  </span>
                   {isRefreshing && (
                     <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
                   )}
@@ -852,6 +879,39 @@ const ReportsPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/*
+          A FAILED LOAD HAD NO INDICATION ANYWHERE ON THIS PAGE. `dataError` was
+          destructured and used for exactly one thing — suppressing the
+          truncation notice below — so with the API unreachable the page rendered
+          "REVENUE WON $0 / From 0 closed-won deals" and "DEALS WON 0 / No deals
+          closed yet" and said nothing about the fourteen requests that had
+          failed. Those subtitles are claims ABOUT THE DATA, not about the
+          request, so a reader cannot tell a true zero from a broken one.
+
+          The header badge alone is not enough, which is why this is a banner and
+          not just a label: the badge is one line of grey text beside an H1, and
+          the cards below it keep their confident zeros regardless. `reload` is
+          offered because a transient failure is the common case and the only
+          alternative the reader has is a full page refresh.
+        */}
+        {dataError && (
+          <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4" role="alert">
+            <p className="text-sm font-semibold text-red-900">Couldn't load live figures</p>
+            <p className="mt-1 text-sm text-red-800">
+              {dataError} Every figure below is therefore missing rather than zero — nothing on
+              this page was measured from your data.
+            </p>
+            <button
+              type="button"
+              onClick={() => { void reload(); }}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Try again
+            </button>
+          </div>
+        )}
 
         {/*
           EVERY TOTAL ON THIS PAGE IS A SUM OVER A FETCHED LIST, so when a list

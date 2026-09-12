@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +21,12 @@ const AccountsPage: React.FC = () => {
     executeBulkAction,
     getKPIs,
     deleteAccount,
-    dealStats
+    dealStats,
+    loading,
+    refreshing,
+    lastLoadedAt,
+    error,
+    refreshAccounts,
   } = useAccounts();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +42,28 @@ const AccountsPage: React.FC = () => {
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
   const [showBulkTagModal, setShowBulkTagModal] = useState(false);
   const [displayCount, setDisplayCount] = useState(3);
+
+  /**
+   * REVALIDATE ON MOUNT, and this is the engineering call worth recording.
+   *
+   * The audit measured ZERO requests when navigating to this page, while every
+   * other CRM page fired 2-14. That is not a cache: `AccountsProvider` wraps the
+   * whole of CRMModule, so its one `refreshAccounts()` runs when the CRM module
+   * mounts and never again for the life of the session. Navigating in from Deals
+   * at 17:00 therefore rendered figures fetched at 09:00 — "Total Accounts 15 /
+   * Open Deals 24 / Open Pipeline $1.6M" whose only claim to being current was
+   * that nothing said otherwise.
+   *
+   * A timestamp alone would have been an admission with no remedy: "these are
+   * eight hours old" and no way to act on it but a full page reload. So the page
+   * asks again on mount AND says when the data is from.
+   *
+   * Stale-while-revalidate, not a blocking refetch — the context sets
+   * `refreshing` rather than `loading` once a load has succeeded, so an existing
+   * table is never blanked on a revisit. A failed revalidation leaves the old
+   * timestamp standing, because the data on screen really is from then.
+   */
+  useEffect(() => { void refreshAccounts(); }, [refreshAccounts]);
 
   const kpis = getKPIs();
 
@@ -271,7 +298,50 @@ const AccountsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Stats Bar - 6 KPI Cards */}
+      {/*
+        THE PAGE USED TO RENDER NEITHER OF THESE. `AccountsContext` tracks
+        `loading` and `error` and its own comment says the error exists to
+        "distinguish broken from no accounts" — and this page destructured
+        neither, so a failed load showed the previous figures, or zeros, with no
+        indication at all.
+      */}
+      {error && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4" role="alert">
+          <p className="text-sm font-semibold text-red-900">Couldn't load accounts</p>
+          <p className="mt-1 text-sm text-red-800">
+            {error}{' '}
+            {lastLoadedAt
+              ? 'The figures below are from the last successful load and may be out of date.'
+              : 'Nothing below was loaded from your data.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => { void refreshAccounts(); }}
+            disabled={refreshing}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+          >
+            {refreshing ? 'Retrying…' : 'Try again'}
+          </button>
+        </div>
+      )}
+
+      {/* When the figures are from, stated rather than implied. Only ever shows a
+          timestamp a successful load actually set. */}
+      {!error && lastLoadedAt && (
+        <p className="text-xs text-gray-500">
+          {refreshing
+            ? 'Refreshing…'
+            : `Showing data loaded at ${new Date(lastLoadedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
+        </p>
+      )}
+
+      {/* Stats Bar - 6 KPI Cards. Hidden on the very first load, where there are
+          no figures yet and zeros would be a claim rather than a count. */}
+      {loading && !lastLoadedAt ? (
+        <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500">
+          Loading accounts…
+        </div>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         <div
           onClick={() => handleKPIClick('total')}
@@ -350,6 +420,7 @@ const AccountsPage: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 md:p-6 space-y-4">

@@ -192,6 +192,24 @@ const DocumentsLibrary: React.FC = () => {
    * counting a page is not counting the set. Noted here so that is a decision
    * rather than a surprise.
    */
+  /**
+   * A FACET COUNT WITH NO SOURCE BEHIND IT RENDERS `—`, NOT A NUMBER.
+   *
+   * Every count in this sidebar is tallied from `documents`, so a failed fetch
+   * turned all of them into confident zeros: "All Documents (0)", "Proposal (0)",
+   * "Contract (0)" and so on, beside a list whose empty state said the same
+   * thing. An empty library and a broken request were indistinguishable — and
+   * this sidebar is already on record in CLAUDE.md as a fabrication site, having
+   * once advertised 247 documents over a correctly-empty list.
+   *
+   * One helper rather than the same ternary at five call sites, because five
+   * copies of a rule is five chances for one of them to drift.
+   *
+   * `—` is the repo's existing idiom for an unsourced figure (AccountsPage's
+   * `{dealStats ? kpis.totalDeals : '—'}`).
+   */
+  const facetCount = (n: number): string => (error || isLoading ? '—' : String(n));
+
   const facets = useMemo(() => {
     const tally = (values: (string | null | undefined)[]) => {
       const out = new Map<string, number>();
@@ -1354,8 +1372,19 @@ const DocumentsLibrary: React.FC = () => {
               <span className={`flex-1 ${selectedFilter === filter.id ? 'font-semibold' : ''}`} style={{ color: selectedFilter === filter.id ? '#667eea' : '#4b5563' }}>
                 {filter.label}
               </span>
+              {/*
+                A COUNT IS OMITTED, NOT ZEROED, WHEN NOTHING LOADED. With the API
+                unreachable this sidebar read "All Documents (0)" — a count
+                derived from an empty array, sitting beside a list whose empty
+                state says the same thing, so a reader cannot tell an empty
+                library from a broken request. `—` is the repo's idiom for a
+                figure with no source (AccountsPage's `{dealStats ? … : '—'}`).
+
+                Favorites is exempt: `starredDocs` is local per-viewer state, not
+                fetched, so it is genuinely known even when the fetch failed.
+              */}
               <span className="text-[13px]" style={{ color: '#6b7280' }}>
-                ({filter.id === 'favorites' ? starredDocs.size : filter.count})
+                ({filter.id === 'favorites' ? starredDocs.size : facetCount(filter.count)})
               </span>
             </button>
           ))}
@@ -1387,7 +1416,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{cat.icon} {cat.name}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({facets.category(cat.name)})</span>
+              <span className="text-[13px] text-[#6b7280]">({facetCount(facets.category(cat.name))})</span>
             </button>
           ))}
         </div>
@@ -1418,7 +1447,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{ft.label}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({facets.fileType(ft.type)})</span>
+              <span className="text-[13px] text-[#6b7280]">({facetCount(facets.fileType(ft.type))})</span>
             </button>
           ))}
         </div>
@@ -1449,7 +1478,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{rt.label}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({facets.relatedTo(rt.type)})</span>
+              <span className="text-[13px] text-[#6b7280]">({facetCount(facets.relatedTo(rt.type))})</span>
             </button>
           ))}
         </div>
@@ -1501,7 +1530,7 @@ const DocumentsLibrary: React.FC = () => {
                 )}
                 <span>{range.label}</span>
               </div>
-              <span className="text-[13px] text-[#6b7280]">({facets.dateRange(range.label)})</span>
+              <span className="text-[13px] text-[#6b7280]">({facetCount(facets.dateRange(range.label))})</span>
             </button>
           ))}
         </div>

@@ -83,13 +83,30 @@ const ContactsPage: React.FC = () => {
   // activeDeals / fromLeadGen / fromHRMS stay 0 until contacts carry deal links
   // and a source column — reporting a number with no data behind it is what
   // Phase 0 removed everywhere else.
-  const stats = useMemo(() => ({
-    total: contacts.length,
-    activeDeals: contacts.filter(c => c.activeDeal).length,
-    fromLeadGen: contacts.filter(c => c.source === 'lead-gen').length,
-    fromHRMS: contacts.filter(c => c.source === 'hrms').length,
-    vip: contacts.filter(c => c.tags?.includes('VIP')).length,
-  }), [contacts]);
+  /**
+   * The KPI tiles, as STRINGS, because a failed fetch has no number to show.
+   *
+   * With the API unreachable this page rendered "0 Total Contacts · 0 Active
+   * Deals · 0 From Lead Gen · 0 From HRMS · 0 VIP Contacts" — five confident
+   * zeros derived from an empty array. The table below it already had three
+   * distinct states (its error banner predates this change), so the same screen
+   * said "could not load contacts" underneath five tiles saying "you have none".
+   *
+   * `—` is the repo's existing idiom for a figure with no source behind it, from
+   * AccountsPage's `{dealStats ? kpis.totalDeals : '—'}`. Loading is unknown for
+   * the same reason failure is: nothing fetched yet is not zero.
+   */
+  const stats = useMemo(() => {
+    const unknown = Boolean(loadError) || loading;
+    const count = (n: number) => (unknown ? '—' : String(n));
+    return {
+      total: count(contacts.length),
+      activeDeals: count(contacts.filter(c => c.activeDeal).length),
+      fromLeadGen: count(contacts.filter(c => c.source === 'lead-gen').length),
+      fromHRMS: count(contacts.filter(c => c.source === 'hrms').length),
+      vip: count(contacts.filter(c => c.tags?.includes('VIP')).length),
+    };
+  }, [contacts, loadError, loading]);
 
   // Filter and sort contacts
   const filteredContacts = useMemo(() => {
