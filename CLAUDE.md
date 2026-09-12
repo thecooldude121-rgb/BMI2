@@ -402,6 +402,24 @@ race was**: it discloses a row count, it does not lose data.
 - `EnhancedAccount` uses `billingAddress`, **not** `address` — an earlier bug had the edit
   form reading `address.street`, silently discarding saved addresses.
 - `companies` has **no** `accountOwner` or `accountStatus` columns.
+- **`companies` has no `health_score` column either, and the spec above says it does.**
+  Found during the ReportsPage audit (2026-09-09), where an "Account Health Score" card
+  reported "Healthy: 45 (71%) / At Risk: 12 / Critical: 6" from hardcoded literals. Two
+  separate problems, and the second is why this is a backlog item rather than a quick fix:
+  1. **The column does not exist**, so nothing on `companies` can be read as health. The
+     spec's `health_score INT DEFAULT 50` was never deployed. (`deals` does have one —
+     `health_score` is real there — which is probably how the spec acquired it for
+     `companies` too.)
+  2. **The numbers did not even sum.** 45 + 12 + 6 = 63 buckets against **15** accounts.
+     Any figure that disagrees with the row count by 4x was never derived from anything,
+     and two neighbouring cards had the same tell — Contact Engagement summed to 147
+     against 20 contacts, Lead Response Time to 156 against 38 leads.
+  **DO NOT add the column and backfill 50.** A default health score is a fabricated
+  metric wearing a schema: every account would render "50 — healthy" having been measured
+  by nothing, which is exactly the class of defect this project keeps removing. Deciding
+  what health MEANS here (engagement recency? open pipeline? support signals? none of
+  which are currently recorded) is the actual work, and it is a product decision, not a
+  migration. The card now states the gap instead.
 - `leads.status` in the database is `active | inactive | nurturing`. The frontend
   `Lead.status` carries a different *stage* vocabulary (qualified / won / lost). These are
   two different fields — do not conflate them when writing SQL.
@@ -570,6 +588,19 @@ the table, reintroduced one layer up in the code removing it — caught by the t
 very case it breaks, not by review. It is keyed by position now. `roundTrip.forecastSnapshots.test.ts`
 (12 tests) pins all of the above; the re-keyed index was mutation-tested by restoring the
 old constraint, which fails the shared-name test.
+
+- **`deals.company_id` needs a backfill, and two reports are waiting on it.**
+  Only **3 of 24** deals carry a `company_id`; 9 have a free-text `company_name`, and
+  matching on that name resolves exactly **1** more. So "Revenue by Industry" and the
+  "SaaS Pipeline Report" cannot be built: `industry` lives on `companies` (all 15 have
+  one), and the join key to reach it is missing on 87% of deals. A breakdown built anyway
+  would describe three deals and omit twenty-one **while looking complete** — worse than a
+  truncation warning, which at least admits itself. Matching on `company_name` was
+  rejected for the reason migrations 039-043 exist: a display name is not a key.
+  Both cards sit in ReportsPage's `UNBACKED_REPORTS` stating the coverage number. The fix
+  is a data task (link existing deals to accounts), not a build, and it unblocks both at
+  once. Same treatment as the document-telemetry and BANT items: real, structural, not
+  urgent.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

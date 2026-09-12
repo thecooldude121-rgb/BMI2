@@ -1,55 +1,338 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Share2, Settings, MoreVertical, Plus, Search, Filter, RefreshCw, CheckCircle, Home, Edit } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
 import { useStageLookup } from '../../hooks/useStageLookup';
-import { isWonWith, isLostWith, isOpenWith } from '../../utils/pipelinesApi';
+import { isWonWith, isLostWith, isOpenWith, outcomeOf } from '../../utils/pipelinesApi';
+import {
+  reportsIn, dealsForReport, type ReportSection, type ReportData, type ReportDef,
+} from './reportDefinitions';
+import { ownerFilterOptions, ownerIdentityOf } from '../../utils/dealOwnership';
+
+
+/**
+ * REPORTS WITH NO DATA SOURCE, and the specific reason each one has none.
+ *
+ * A `const`, not `useState`, and that is the whole point — the same pattern
+ * `DocumentDetailPage` and `DataContext`'s `employees` use. Nothing can ever
+ * populate it, so no future edit can quietly turn one of these back into a
+ * number: wiring one up means DELETING its entry and writing a real card, which
+ * is a visible change in a diff. A state array initialised empty could be
+ * filled by anything.
+ *
+ * WHAT THESE 17 CARDS USED TO SHOW: 100 hardcoded metric rows — "$847K Revenue
+ * +12%", "Team: 89% ✅ / Alex: 98% / Sarah: 95%", "Total: 247" activities,
+ * "Email Open: 42%", "Healthy: 45 (71%)". None came from a query. Three of them
+ * were not even internally consistent with this workspace: Contact Engagement
+ * summed to 147 against 20 contacts, Account Health to 63 against 15 accounts,
+ * and Lead Response Time to 156 against 38 leads.
+ *
+ * They sat directly beneath four CORRECT headline figures ($55K / 1 Deal /
+ * $1.56M / 50%), which is what made them dangerous rather than merely wrong —
+ * the real numbers vouched for the invented ones. That is the hybrid CLAUDE.md
+ * lesson 15 describes.
+ *
+ * EACH REASON NAMES WHAT IS ACTUALLY MISSING, never "coming soon". A reader
+ * should be able to tell whether the gap is empty data (fixable by using the
+ * product), an unset configuration (fixable in Settings), or an absent column
+ * (needs a schema change).
+ */
+const UNBACKED_REPORTS: ReadonlyArray<{
+  section: ReportSection;
+  title: string;
+  icon: string;
+  reason: string;
+  /** Where the user can go to make this report possible, when they can. */
+  action?: { label: string; to: string };
+}> = [
+  // ── Sales ────────────────────────────────────────────────────────────────
+  {
+    section: 'sales', title: 'Sales Overview', icon: '📊',
+    /*
+     * The LAST card contradicting its neighbours, and why it is here rather
+     * than half-blanked: it read "$847K Revenue +12% ⬆️" and "89% to quota"
+     * while the card beside it said no quota has been entered, and the real
+     * headline figure above it said $55K. Two of its three rows cannot be
+     * computed at all — a month-over-month change needs a previous-period
+     * query no endpoint offers, and quota progress needs a quota. The third,
+     * revenue won, is already reported correctly in the headline row, so
+     * leaving the card as a single real number would duplicate that and
+     * nothing more.
+     */
+    reason: 'Revenue won is already shown in the headline figures above. This '
+      + 'card also needs a month-over-month change, which requires a query '
+      + 'against the previous period that no endpoint offers, and quota '
+      + 'progress, which needs a quota to have been entered.',
+    action: { label: 'Enter quotas', to: '/crm/forecast' },
+  },
+  {
+    section: 'sales', title: 'Sales by Team', icon: '👔',
+    reason: 'No reporting lines are set, so there are no teams to roll up. Every '
+      + 'person in this workspace currently has no manager recorded.',
+    action: { label: 'Set reporting lines', to: '/crm/settings' },
+  },
+  {
+    section: 'sales', title: 'Quota Attainment', icon: '🎯',
+    // Deliberately period-specific: "no quota entered" for WHICH period is the
+    // difference between a state the user can fix and a vague absence.
+    reason: 'No quota has been entered for this period, so attainment cannot be '
+      + 'calculated. Quotas are set per person, per quarter.',
+    action: { label: 'Enter quotas', to: '/crm/forecast' },
+  },
+  {
+    section: 'sales', title: 'Sales Forecast', icon: '📈',
+    reason: 'Predicted revenue and confidence are not modelled. The Forecast page '
+      + 'shows real pipeline grouped by forecast category instead, which is the '
+      + 'closest thing this CRM computes.',
+    action: { label: 'Open Forecast', to: '/crm/forecast' },
+  },
+
+  // ── Pipeline ─────────────────────────────────────────────────────────────
+  {
+    section: 'pipeline', title: 'Pipeline Trends', icon: '📉',
+    reason: 'Month-over-month pipeline needs at least two forecast snapshots for '
+      + 'a period, and fewer than two have been taken.',
+    action: { label: 'Take a snapshot', to: '/crm/forecast' },
+  },
+
+  // ── Activity ─────────────────────────────────────────────────────────────
+  // The whole section is unbacked: `activities` holds no rows at all.
+  {
+    section: 'activity', title: 'Activity Summary', icon: '📊',
+    reason: 'No activities have been logged yet, so there is nothing to count by '
+      + 'call, email, meeting or task.',
+    action: { label: 'Log an activity', to: '/crm/activities' },
+  },
+  {
+    section: 'activity', title: 'Activity vs Revenue', icon: '💰',
+    reason: 'Correlating effort against revenue needs logged activity on closed '
+      + 'deals, and no activities have been logged yet.',
+  },
+  {
+    section: 'activity', title: 'Response Rates', icon: '📨',
+    reason: 'Email opens, call connections and meeting attendance are not tracked. '
+      + 'This CRM has no email or telephony integration, so there is no source '
+      + 'for these rates.',
+  },
+  {
+    section: 'activity', title: 'Meeting Analytics', icon: '🎤',
+    reason: 'No meetings have been logged yet. Attendance, no-shows and duration '
+      + 'come from logged activity.',
+    action: { label: 'Log a meeting', to: '/crm/meetings' },
+  },
+
+  // ── Leads & contacts ─────────────────────────────────────────────────────
+  {
+    section: 'leads', title: 'Lead Source ROI', icon: '📊',
+    reason: 'Revenue is not attributed back to a lead source. Deals do record a '
+      + 'source, but nothing links closed revenue to the source that originated '
+      + 'the lead.',
+  },
+  {
+    section: 'leads', title: 'Contact Engagement', icon: '💬',
+    reason: 'Contacts have no engagement score. Tiering them high, medium or low '
+      + 'needs per-contact interaction history, which is not recorded.',
+  },
+  {
+    section: 'leads', title: 'Lead Response Time', icon: '⏱️',
+    reason: 'First-response time is not recorded. Leads carry no timestamp for the '
+      + 'first outbound contact, so time-to-respond cannot be measured.',
+  },
+
+  // ── Revenue ──────────────────────────────────────────────────────────────
+  {
+    section: 'revenue', title: 'Revenue by Period', icon: '📅',
+    reason: 'Period-over-period comparison is not available: it needs a second '
+      + 'query against the previous period, and no endpoint offers one.',
+  },
+  {
+    section: 'revenue', title: 'Revenue Forecast vs Actual', icon: '🎯',
+    reason: 'No forecast has been recorded for a period that has since closed, so '
+      + 'there is nothing to compare actuals against.',
+    action: { label: 'Take a snapshot', to: '/crm/forecast' },
+  },
+
+  // ── Accounts ─────────────────────────────────────────────────────────────
+  {
+    section: 'accounts', title: 'Account Health Score', icon: '🏥',
+    // The one gap here that needs a SCHEMA change, not data or configuration.
+    reason: 'Accounts have no health score. There is no such column on companies, '
+      + 'and how health would be scored has not been decided — it is recorded as a '
+      + 'backlog item rather than invented here.',
+  },
+  {
+    section: 'accounts', title: 'Top Accounts', icon: '🏆',
+    reason: 'Revenue is not yet totalled per account. Deals do link to a company, '
+      + 'so this is computable — it simply is not computed yet.',
+  },
+  {
+    section: 'accounts', title: 'Account Growth Opportunities', icon: '🌱',
+    reason: 'Expansion, upsell and cross-sell are not tracked. Neither accounts nor '
+      + 'deals carry an opportunity-type field to group by.',
+  },
+
+  /*
+   * ── The two the design report expected to BUILD, and did not ─────────────
+   *
+   * Both need deals joined to `companies.industry`, and the join key is not
+   * there: only 3 of the 24 live deals carry a `company_id`. A breakdown built
+   * on it would describe THREE deals and silently omit twenty-one while looking
+   * complete — worse than a truncation warning, which at least admits itself.
+   *
+   * Matching on `company_name` instead resolves exactly ONE more deal and
+   * reintroduces a display name as a join key, which is the defect migrations
+   * 039 through 043 exist to remove. So the honest answer is the coverage
+   * number, and the real fix is a `deals.company_id` backfill — a data task,
+   * tracked in CLAUDE.md.
+   */
+  {
+    section: 'revenue', title: 'Revenue by Industry', icon: '🏭',
+    reason: 'Revenue cannot be grouped by industry yet. Accounts all record an '
+      + 'industry, but only 3 of 24 deals are linked to an account, so a '
+      + 'breakdown would describe those three and omit the rest.',
+  },
+  {
+    section: 'custom', title: 'SaaS Pipeline Report', icon: '📊',
+    reason: 'Filtering pipeline by industry needs deals linked to accounts, and '
+      + 'only 3 of 24 currently are. The industry is on the account, not the deal.',
+  },
+
+  // ── Custom ───────────────────────────────────────────────────────────────
+  {
+    section: 'custom', title: 'My Q4 Goals Tracker', icon: '🎯',
+    reason: 'Personal goals are not stored. There is no goals table, so a target '
+      + 'and its progress cannot be saved or tracked.',
+  },
+];
+
+/**
+ * A report that cannot be computed, saying why. Deliberately NOT a ReportCard:
+ * it has no metrics, no sparkline, and no View control, because every one of
+ * those would act on a report that does not exist.
+ */
+const UnbackedReportCard: React.FC<{
+  title: string; icon: string; reason: string;
+  action?: { label: string; to: string };
+  onNavigate: (to: string) => void;
+}> = ({ title, icon, reason, action, onNavigate }) => (
+  <div
+    className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 flex flex-col"
+    data-not-available={title}
+  >
+    <div className="flex items-start gap-3 mb-3">
+      <span className="text-xl grayscale opacity-60" aria-hidden="true">{icon}</span>
+      <div>
+        <h3 className="font-semibold text-gray-700">{title}</h3>
+        <p className="text-xs font-medium text-gray-500 mt-0.5">Not available yet</p>
+      </div>
+    </div>
+    <p className="text-sm text-gray-600 flex-1">{reason}</p>
+    {action && (
+      <button
+        onClick={() => onNavigate(action.to)}
+        className="mt-4 self-start text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+      >
+        {action.label} →
+      </button>
+    )}
+  </div>
+);
+
+/**
+ * DATE RANGES, MEASURED AGAINST `expected_close_date`.
+ *
+ * Which is the only date a deal has for this purpose: there is NO `closed_at`
+ * or `won_at` column, so "revenue won this month" is not answerable — only
+ * "deals whose EXPECTED close falls in this month". Every card that responds
+ * to this filter says "expected close" in its own words rather than implying
+ * an actual one, and 5 of the 24 live deals have no close date at all, so the
+ * count of what a range excluded travels with the data as a caveat.
+ *
+ * Ranges are inclusive of both ends and computed from local midnight.
+ */
+type DateRangeKey = 'all' | 'this-month' | 'this-quarter' | 'this-year' | 'next-30' | 'next-90';
+
+const DATE_RANGES: Array<{ key: DateRangeKey; label: string }> = [
+  { key: 'all',          label: 'Any expected close date' },
+  { key: 'this-month',   label: 'Expected close this month' },
+  { key: 'this-quarter', label: 'Expected close this quarter' },
+  { key: 'this-year',    label: 'Expected close this year' },
+  { key: 'next-30',      label: 'Expected close in next 30 days' },
+  { key: 'next-90',      label: 'Expected close in next 90 days' },
+];
+
+function dateRangeBounds(key: DateRangeKey, now = new Date()): { from: Date; to: Date } | null {
+  if (key === 'all') return null;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (key) {
+    case 'this-month':
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1),
+               to:   new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999) };
+    case 'this-quarter': {
+      const q = Math.floor(now.getMonth() / 3);
+      return { from: new Date(now.getFullYear(), q * 3, 1),
+               to:   new Date(now.getFullYear(), q * 3 + 3, 0, 23, 59, 59, 999) };
+    }
+    case 'this-year':
+      return { from: new Date(now.getFullYear(), 0, 1),
+               to:   new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999) };
+    case 'next-30': {
+      const to = new Date(start); to.setDate(to.getDate() + 30); to.setHours(23, 59, 59, 999);
+      return { from: start, to };
+    }
+    case 'next-90': {
+      const to = new Date(start); to.setDate(to.getDate() + 90); to.setHours(23, 59, 59, 999);
+      return { from: start, to };
+    }
+  }
+}
 
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
   // Same hook the two dashboards read, so /crm/reports cannot drift from them.
-  const { leads, deals, contacts, loading: dataLoading, error: dataError, reload } = useDashboardData();
-  const [selectedTimeframe, setSelectedTimeframe] = useState('month');
-  const [selectedOwner, setSelectedOwner] = useState('all');
+  const {
+    leads, deals, contacts, loading: dataLoading, error: dataError, reload,
+    /*
+     * CONSUMED NOW, and it was not before. Every figure on this page is summed
+     * from a list fetched with a limit, so when a list comes back exactly at
+     * that limit the totals are LOWER BOUNDS rather than facts. The hook has
+     * always reported this; the page destructured everything except it, so a
+     * pipeline total that silently omitted deals past the limit was
+     * indistinguishable from a complete one. The Team pages surface the same
+     * flag — this page was the outlier.
+     */
+    truncated,
+  } = useDashboardData();
   const [selectedCategory, setSelectedCategory] = useState('all');
+  /*
+   * THE THREE FILTERS PHASE (b) REMOVED, BACK — and working this time.
+   *
+   * They were deleted precisely because they could not work: the cards were
+   * hand-written JSX, so there was nothing to filter and each control was
+   * bound to its own input and read by nobody. Now that a report is a
+   * `compute(data)` entry in REPORTS, all three are a predicate away.
+   */
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateRange, setDateRange] = useState<DateRangeKey>('all');
+  const [ownerKey, setOwnerKey] = useState('all');
 
   // Dropdown states
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showTimeframeDropdown, setShowTimeframeDropdown] = useState(false);
-  const [showOwnerDropdown, setShowOwnerDropdown] = useState(false);
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [showReportMenu, setShowReportMenu] = useState<string | null>(null);
-  const [showExportMenu, setShowExportMenu] = useState<string | null>(null);
 
   // Modal states
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showRenameModal, setShowRenameModal] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<string | null>(null);
 
   // Loading & Error states
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [hasError, setHasError] = useState(false);
   const [hasNetworkError, setHasNetworkError] = useState(false);
-  const [failedReports, setFailedReports] = useState<string[]>([]);
 
   // Success states
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [successAction, setSuccessAction] = useState<React.ReactNode>(null);
 
   // Mobile filter menu
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Keyboard navigation
-  const [selectedCardIndex, setSelectedCardIndex] = useState(0);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   const [expandedSections, setExpandedSections] = useState({
     sales: true,
@@ -83,95 +366,32 @@ const ReportsPage: React.FC = () => {
     navigate(`/crm/reports/${reportSlug}`);
   };
 
-  const handleExportPDF = (reportName: string) => {
-    console.log(`Exporting ${reportName} as PDF`);
-    setSuccessMessage('Report exported successfully');
-    setSuccessAction(
-      <button className="text-sm underline hover:no-underline">View File</button>
-    );
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleExportCSV = (reportName: string) => {
-    console.log(`Exporting ${reportName} as CSV`);
-    setSuccessMessage('Report exported successfully');
-    setSuccessAction(
-      <button className="text-sm underline hover:no-underline">View File</button>
-    );
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleExportExcel = (reportName: string) => {
-    console.log(`Exporting ${reportName} as Excel`);
-    setSuccessMessage('Report exported successfully');
-    setSuccessAction(
-      <button className="text-sm underline hover:no-underline">View File</button>
-    );
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleEmailReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowEmailModal(true);
-  };
 
-  const handleScheduleReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowScheduleModal(true);
-  };
 
-  const handleShareReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowShareModal(true);
-  };
-
-  const handleDeleteReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowDeleteModal(true);
-  };
-
-  const handleRenameReport = (reportName: string) => {
-    setSelectedReport(reportName);
-    setShowRenameModal(true);
-  };
-
-  const handleEditReport = (reportName: string) => {
-    const reportSlug = reportName.toLowerCase().replace(/\s+/g, '-');
-    navigate(`/crm/custom-report-builder?edit=${reportSlug}`);
-  };
-
-  const handleRefreshReport = (reportName: string) => {
-    console.log(`Refreshing ${reportName}`);
-    // Implementation would refresh report data
-  };
 
   const handleRefreshAll = () => {
+    /*
+     * CALLS THE REAL RELOAD. This was `setTimeout(() => setIsRefreshing(false),
+     * 1500)` — a spinner that ran for a second and a half and refetched
+     * nothing, so the page looked refreshed while showing exactly the data it
+     * had before. `reload` was already imported and already used by the error
+     * banner's retry, so the capability was present and simply not called here.
+     *
+     * The spinner now follows the hook's own loading flag rather than a timer,
+     * which is the same correction the skeleton got.
+     */
     setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-    }, 1500);
+    reload();
   };
 
   const handleRetry = () => {
-    setHasError(false);
+    // Was three local flags plus a one-second timer that pretended to retry.
+    // `reload` is the actual retry, and the banner already uses it.
     setHasNetworkError(false);
-    setFailedReports([]);
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-  };
-
-  // Empty state handlers
-  const handleClearSearch = () => {
-    setSearchQuery('');
-  };
-
-  const handleViewAllCategories = () => {
-    setSelectedCategory('all');
+    reload();
   };
 
   /**
@@ -184,6 +404,81 @@ const ReportsPage: React.FC = () => {
    * $2.4M was the same fabricated pipeline figure the CRM dashboard carried.
    */
   const { lookup } = useStageLookup();
+
+  /*
+   * THE FILTERED DEAL SET every report computes from, plus what filtering
+   * excluded. Kept separate from `stats` on purpose: the four HEADLINE figures
+   * describe the whole workspace and are deliberately NOT filtered, so a
+   * narrowed report can always be compared against an unfiltered total.
+   */
+  const dateBounds = useMemo(() => dateRangeBounds(dateRange), [dateRange]);
+
+  /**
+   * How many deals a date range has to drop for having no expected close date
+   * at all — 5 of the 24 live deals. Counted once; only reports that actually
+   * use the date filter are told about it.
+   */
+  const excludedNoCloseDate = useMemo(() => {
+    if (!dateBounds) return 0;
+    return deals.filter(d => {
+      if (!d.expected_close_date) return true;
+      // An unparseable date counts as missing, never as in-range.
+      return !Number.isFinite(new Date(d.expected_close_date).getTime());
+    }).length;
+  }, [deals, dateBounds]);
+
+  /*
+   * Owner options built from the DEALS, not the roster — so a name that owns
+   * deals but is not a user ("John Smith", 15 of them) appears and is labelled
+   * as unmatched. The list this replaces named five colleagues, three of whom
+   * own nothing, and omitted him entirely.
+   */
+  const ownerOptions = useMemo(() => ownerFilterOptions(deals), [deals]);
+
+  /*
+   * DATA PER REPORT, NOT ONE SET FOR ALL OF THEM.
+   *
+   * `usesDateRange` and `usesOwner` decide which filters a report actually
+   * RECEIVES — they are not just labels. Handing every card the fully filtered
+   * set was a live bug: Aging Pipeline declares `usesDateRange: false`, because
+   * age is measured from creation and a close-date range says nothing about it,
+   * yet its totals moved from 22 deals / $1.56M to 10 / $567K the moment a
+   * quarter was selected. The card was quietly answering a different question
+   * from the one its own definition claimed.
+   *
+   * Caught by reading the rendered numbers against the unfiltered ones, not by
+   * the type system — `usesDateRange` was consulted for the footnote and
+   * nowhere else, which type-checks perfectly.
+   */
+  const dataFor = useCallback((def: ReportDef): ReportData => {
+    const working = dealsForReport(def, deals, {
+      bounds: dateBounds,
+      ownerKey,
+      ownerKeyOf: (d) => ownerIdentityOf(d).key,
+    });
+
+    return {
+      deals: working,
+      leads,
+      contactCount: contacts.length,
+      outcome: outcomeOf(lookup),
+      stageOf: lookup,
+      // Only meaningful for a report that is actually date-filtered.
+      excludedNoCloseDate: def.usesDateRange && dateBounds ? excludedNoCloseDate : 0,
+      dateFiltered: def.usesDateRange && dateBounds !== null,
+    };
+  }, [deals, dateBounds, ownerKey, leads, contacts, lookup, excludedNoCloseDate]);
+
+  /** Search matches a report's title; nothing else claims to be searched. */
+  const matchesSearch = (r: ReportDef) =>
+    searchQuery.trim() === ''
+    || r.title.toLowerCase().includes(searchQuery.trim().toLowerCase());
+
+  const visibleReports = (section: ReportSection) => reportsIn(section).filter(matchesSearch);
+  const visibleUnbacked = (section: ReportSection) =>
+    unbackedFor(section).filter(u =>
+      searchQuery.trim() === ''
+      || u.title.toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
   const stats = useMemo(() => {
     // The win rate below divides won by (won + lost). Classifying by the
@@ -208,22 +503,89 @@ const ReportsPage: React.FC = () => {
     };
   }, [lookup, deals]);
 
+  /*
+   * The unbacked reports for a section, and an honest header count. The
+   * "unavailable" half is DERIVED from UNBACKED_REPORTS, so deleting an entry
+   * when a report is finally wired updates the header on its own.
+   */
+  const unbackedFor = (section: ReportSection) =>
+    UNBACKED_REPORTS.filter((r) => r.section === section);
+
+  /*
+   * FULLY DERIVED NOW — both halves. The "available" half used to be a literal
+   * map that had to be edited by hand, because the working cards were JSX and
+   * nothing could count them. They are entries in REPORTS, so both halves come
+   * from data and a section header cannot drift from what it renders.
+   */
+  const sectionCount = (section: ReportSection): string => {
+    const working = visibleReports(section).length;
+    const missing = visibleUnbacked(section).length;
+    if (working + missing === 0) return '(no matching reports)';
+    if (missing === 0) return `(${working} ${working === 1 ? 'report' : 'reports'})`;
+    if (working === 0) return `(${missing} not available)`;
+    return `(${working} available · ${missing} not available)`;
+  };
+
+  /*
+   * THE CATEGORY FILTER, ACTUALLY GATING THE RENDER. CLAUDE.md's design rules
+   * say a view toggle that only restyles its own control is a bug; this one
+   * previously did not even restyle — `selectedCategory` was read by nothing.
+   * It needs no data to work, which is why it is the one filter kept.
+   */
+  const showSection = (section: ReportSection) =>
+    (selectedCategory === 'all' || selectedCategory === section)
+    // Hidden when a search matches nothing in it, so the result of a search is
+    // the matching reports rather than seven headers with one card between them.
+    && (visibleReports(section).length + visibleUnbacked(section).length) > 0;
+
+  const renderUnbacked = (section: ReportSection) =>
+    visibleUnbacked(section).map((r) => (
+      <UnbackedReportCard key={r.title} {...r} onNavigate={navigate} />
+    ));
+
+  /*
+   * A COMPUTED report. One code path for all eight, so a card physically
+   * cannot carry a number that did not come out of its own compute function.
+   *
+   * `unavailable` is handled here rather than by the caller: a report that CAN
+   * compute but has nothing to compute from today (no won deals, no open
+   * pipeline) renders the same honest sentence as a permanently-unbacked one,
+   * decided at run time from real data instead of being hardcoded.
+   */
+  const renderReports = (section: ReportSection) =>
+    visibleReports(section).map((def) => {
+      const result = def.compute(dataFor(def));
+      return (
+        <ReportCard
+          key={def.id}
+          title={def.title}
+          icon={def.icon}
+          metrics={(result.rows ?? []).map(r => ({ label: r.label, value: r.value, muted: r.muted }))}
+          unavailable={result.unavailable}
+          caveat={result.caveat}
+          // Only the one report that is genuinely live-per-render says so; the
+          // rest carry no freshness claim at all, per phase (b).
+          updated={def.id === 'lead-funnel' ? (dataLoading ? 'loading' : 'live') : undefined}
+          filteredBy={[
+            def.usesDateRange && dateBounds ? 'expected close date' : null,
+            def.usesOwner && ownerKey !== 'all' ? 'owner' : null,
+          ].filter(Boolean) as string[]}
+          onView={handleViewReport}
+        />
+      );
+    });
+
   const money = (n: number): string =>
     n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
     : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
     : `$${n.toLocaleString()}`;
 
-  /** Lead-stage counts for the conversion funnel. */
-  const funnel = useMemo(() => {
-    const byStatus = (v: string) => leads.filter(l => l.status === v).length;
-    return {
-      leads: leads.length,
-      contacts: contacts.length,
-      qualified: byStatus('qualified'),
-      won: byStatus('won'),
-      lost: byStatus('lost'),
-    };
-  }, [leads, contacts]);
+  /*
+   * The funnel memo that was here is now the `lead-funnel` entry in
+   * reportDefinitions, computed the same way from the same fields. It moved so
+   * that every report on the page is defined in one place and can be filtered,
+   * searched and unit-tested like the rest.
+   */
 
   // The skeleton below now tracks the REAL fetch. It used to be
   //   setTimeout(() => setIsLoading(false), 2000)
@@ -232,28 +594,16 @@ const ReportsPage: React.FC = () => {
   // parts of the page read it; it follows the hook now.
   React.useEffect(() => {
     setIsLoading(dataLoading);
+    // Ends the manual-refresh spinner on the REAL fetch completing.
+    if (!dataLoading) setIsRefreshing(false);
   }, [dataLoading]);
 
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Close modals with Esc
-      if (e.key === 'Escape') {
-        setShowScheduleModal(false);
-        setShowShareModal(false);
-        setShowDeleteModal(false);
-        setShowRenameModal(false);
-        setShowEmailModal(false);
-        setShowMobileFilters(false);
-        return;
-      }
-
-      // Focus search with /
-      if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        return;
-      }
+      // Esc had closed five report modals and a mobile filter sheet, all of
+      // which are gone; and `/` focused a search box that is gone too. Only
+      // the two shortcuts that still act on something remain.
 
       // Create custom report with C
       if (e.key === 'c' && !e.ctrlKey && !e.metaKey && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
@@ -275,13 +625,10 @@ const ReportsPage: React.FC = () => {
   }, []);
 
   // Check if there are any custom reports
-  const hasCustomReports = true; // TODO: Replace with actual check from data
 
   // Check if search has results
-  const hasSearchResults = searchQuery === '' || true; // TODO: Implement actual search logic
 
   // Check if category has reports
-  const hasCategoryReports = true; // TODO: Implement category filtering logic
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -309,7 +656,12 @@ const ReportsPage: React.FC = () => {
                 <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <Clock className="w-4 h-4" />
-                  <span>Last updated: 5 minutes ago</span>
+                  {/*
+                    WAS the fixed string "Last updated: 5 minutes ago", which
+                    never moved and was never measured. Nothing records when
+                    this page last fetched, so it reports only what it knows.
+                  */}
+                  <span>{dataLoading ? 'Loading…' : 'Figures are live'}</span>
                   {isRefreshing && (
                     <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
                   )}
@@ -388,175 +740,136 @@ const ReportsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Filters Bar - Desktop */}
-        <div className="hidden md:block bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select aria-label="Date Range:"
-                  value={selectedTimeframe}
-                  onChange={(e) => setSelectedTimeframe(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="quarter">This Quarter</option>
-                  <option value="year">This Year</option>
-                  <option value="last30">Last 30 Days</option>
-                  <option value="last90">Last 90 Days</option>
-                  <option value="custom">Custom Date Range...</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select aria-label="Owner:"
-                  value={selectedOwner}
-                  onChange={(e) => setSelectedOwner(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Team</option>
-                  <option value="me">Me Only (Alex Rodriguez)</option>
-                  <option value="sales">Sales Team</option>
-                  <option value="sarah">Sarah Chen</option>
-                  <option value="mike">Mike Johnson</option>
-                  <option value="emily">Emily Davis</option>
-                </select>
-              </div>
+        {/*
+          ALL FOUR FILTERS, ALL OF THEM WORKING.
+          Phase (b) deleted three of these because they could not work against
+          hand-written cards — bound to their inputs and read by nobody. Now
+          that a report is a compute() entry, each one is a predicate:
+            Search      matches a report TITLE, and only claims that.
+            Date Range  narrows deals by EXPECTED close date (no actual close
+                        date exists), and cards say so when it is active.
+            Owner       narrows by the shared COALESCE ownership key, with
+                        options built from the DEALS rather than the roster.
+            Category    gates which sections render.
+        */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label htmlFor="report-search" className="block text-sm font-medium text-gray-700 mb-2">
+                Search:
+              </label>
+              <input
+                id="report-search"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search report names…"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select aria-label="Category:"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Reports</option>
-                  <option value="sales">Sales Performance</option>
-                  <option value="pipeline">Pipeline Reports</option>
-                  <option value="activity">Activity Reports</option>
-                  <option value="leads">Lead & Contact Reports</option>
-                  <option value="revenue">Revenue Reports</option>
-                  <option value="accounts">Account Reports</option>
-                  <option value="custom">My Custom Reports</option>
-                  <option value="favorites">Favorites Only</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Search:</label>
-                <div className="relative">
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search reports..."
-                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3" />
-                </div>
-              </div>
+
+            <div>
+              <label htmlFor="report-date" className="block text-sm font-medium text-gray-700 mb-2">
+                Expected close:
+              </label>
+              <select
+                id="report-date"
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value as DateRangeKey)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {DATE_RANGES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="report-owner" className="block text-sm font-medium text-gray-700 mb-2">
+                Owner:
+              </label>
+              <select
+                id="report-owner"
+                value={ownerKey}
+                onChange={(e) => setOwnerKey(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">Everyone</option>
+                {/*
+                  From the deals, so a name that owns deals but is not a user
+                  appears and is labelled — "John Smith" owns 15 and is not a
+                  user. A roster-built list would omit him, which is what the
+                  deleted hardcoded list of five colleagues did.
+                */}
+                {ownerOptions.map(o => (
+                  <option key={o.key} value={o.key}>
+                    {o.name}{o.unresolved && o.name !== 'Unassigned' ? ' (unmatched name)' : ''} · {o.count}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="report-category" className="block text-sm font-medium text-gray-700 mb-2">
+                Category:
+              </label>
+              <select
+                id="report-category"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">All Reports</option>
+                <option value="sales">Sales Performance</option>
+                <option value="pipeline">Pipeline Reports</option>
+                <option value="activity">Activity Reports</option>
+                <option value="leads">Lead &amp; Contact Reports</option>
+                <option value="revenue">Revenue Reports</option>
+                <option value="accounts">Account Reports</option>
+                <option value="custom">My Custom Reports</option>
+              </select>
             </div>
           </div>
-        </div>
 
-        {/* Mobile Filters Toggle */}
-        <div className="md:hidden mb-6">
-          <button
-            onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="w-full bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <Filter className="w-5 h-5 text-gray-600" />
-              <span className="font-medium text-gray-900">Filters</span>
-            </div>
-            {showMobileFilters ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
-          {showMobileFilters && (
-            <div className="mt-2 bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-                <select aria-label="Date Range:"
-                  value={selectedTimeframe}
-                  onChange={(e) => setSelectedTimeframe(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="quarter">This Quarter</option>
-                  <option value="year">This Year</option>
-                  <option value="last30">Last 30 Days</option>
-                  <option value="last90">Last 90 Days</option>
-                  <option value="custom">Custom Date Range...</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-                <select aria-label="Owner:"
-                  value={selectedOwner}
-                  onChange={(e) => setSelectedOwner(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Team Members</option>
-                  <option value="me">My Reports</option>
-                  <option value="alex">Alex Thompson</option>
-                  <option value="sarah">Sarah Chen</option>
-                  <option value="mike">Mike Johnson</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category:</label>
-                <select aria-label="Category:"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Reports</option>
-                  <option value="sales">Sales Performance</option>
-                  <option value="pipeline">Pipeline Reports</option>
-                  <option value="activity">Activity Reports</option>
-                  <option value="leads">Lead & Contact Reports</option>
-                  <option value="revenue">Revenue Reports</option>
-                  <option value="accounts">Account Reports</option>
-                  <option value="custom">My Custom Reports</option>
-                  <option value="favorites">Favorites Only</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Search:</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search reports..."
-                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <Search className="w-4 h-4 text-gray-400 absolute right-3 top-3" />
-                </div>
-              </div>
+          {(searchQuery || dateRange !== 'all' || ownerKey !== 'all' || selectedCategory !== 'all') && (
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setSearchQuery(''); setDateRange('all');
+                  setOwnerKey('all'); setSelectedCategory('all');
+                }}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                Clear filters
+              </button>
+              {/*
+                The headline figures above are deliberately NOT filtered, so a
+                narrowed report can always be read against a whole-workspace
+                total. Said out loud, because a reader would otherwise
+                reasonably assume the filters apply to everything on screen.
+              */}
+              <span className="text-xs text-gray-500">
+                Filters apply to the report cards below, not to the four totals above.
+              </span>
             </div>
           )}
         </div>
 
-        {/* A failed request must not render as $0 / 0 deals. The hook reports
-            which part failed; without this the cards would silently show zeros,
-            which is the same untruth as the literals they replaced. */}
-        {dataError && (
+        {/*
+          EVERY TOTAL ON THIS PAGE IS A SUM OVER A FETCHED LIST, so when a list
+          arrives at exactly its limit the totals below stop being facts and
+          become lower bounds. Saying so is the point: an understated pipeline
+          that looks precise is the same class of untruth as an invented one,
+          and it is the failure this page spent 107 hardcoded rows committing in
+          the other direction.
+        */}
+        {truncated && !dataError && (
           <div
-            className="mb-6 flex items-start justify-between gap-4 rounded-lg border border-yellow-300 bg-yellow-50 p-4"
+            className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4"
             role="alert"
           >
-            <p className="text-sm text-yellow-900">{dataError}</p>
-            <button
-              onClick={reload}
-              className="shrink-0 text-sm font-semibold text-yellow-900 underline hover:no-underline"
-            >
-              Retry
-            </button>
+            <p className="text-sm text-amber-900">
+              More records exist than were loaded, so every total on this page is a
+              lower bound rather than an exact figure.
+            </p>
           </div>
         )}
 
@@ -626,23 +939,20 @@ const ReportsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Empty States */}
-        {!hasSearchResults && searchQuery && (
-          <div className="mb-6">
-            <NoResultsEmptyState query={searchQuery} onClear={handleClearSearch} />
-          </div>
-        )}
-
-        {!hasCategoryReports && selectedCategory !== 'all' && hasSearchResults && (
-          <div className="mb-6">
-            <NoCategoryReportsEmptyState onViewAll={handleViewAllCategories} />
-          </div>
-        )}
+        {/*
+          THE TWO EMPTY STATES HERE WERE UNREACHABLE. Both were gated on
+          `hasSearchResults` / `hasCategoryReports`, which were hardcoded
+          `true` behind `// TODO` comments, so neither could ever render. They
+          and their components are deleted rather than left as dead code that
+          reads like a considered edge case. Every section has at least one
+          card, available or not, so "this category has no reports" cannot
+          happen either.
+        */}
 
         {/* Sales Performance Section */}
-        {(hasSearchResults || !searchQuery) && (hasCategoryReports || selectedCategory === 'all') && (
+        {true && (
         <>
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('sales') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('sales')}
@@ -651,7 +961,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-green-700" />
                 <span className="text-lg font-semibold text-gray-900">💰 SALES PERFORMANCE</span>
-                <span className="text-sm text-gray-700">(6 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('sales')}</span>
               </div>
               {expandedSections.sales ? (
                 <ChevronUp className="w-5 h-5 text-green-700" />
@@ -663,162 +973,17 @@ const ReportsPage: React.FC = () => {
           {expandedSections.sales && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-                <ReportCard
-                  title="Sales Overview"
-                  icon="📊"
-                  metrics={[
-                    { label: '$847K Revenue', value: '+12% ⬆️' },
-                    { label: 'Progress bar', value: '████████░░' },
-                    { label: '89% to quota', value: '' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales Overview"}
-                  showMoreMenu={showReportMenu === "Sales Overview"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Sales by Rep"
-                  icon="👥"
-                  metrics={[
-                    { label: 'Alex: $342K #1', value: '' },
-                    { label: 'Sarah: $298K #2', value: '' },
-                    { label: 'Mike: $207K #3', value: '' },
-                  ]}
-                  updated="5m"
-                  sparkline="▇▇▇▆▅▄▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales by Rep"}
-                  showMoreMenu={showReportMenu === "Sales by Rep"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Sales by Team"
-                  icon="👔"
-                  metrics={[
-                    { label: 'Sales Team: $847K', value: '' },
-                    { label: '89% of quota ✅', value: '' },
-                    { label: 'Team progress', value: '███████████░' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales by Team"}
-                  showMoreMenu={showReportMenu === "Sales by Team"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('sales')}
+                {renderReports('sales')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Sales Forecast"
-                  icon="📈"
-                  metrics={[
-                    { label: 'Predicted: $1.2M', value: '' },
-                    { label: 'Confidence: 85%', value: '' },
-                    { label: 'Forecast trend', value: '' },
-                  ]}
-                  updated="10m"
-                  sparkline="▁▃▅▆▇█▇▅"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Sales Forecast"}
-                  showMoreMenu={showReportMenu === "Sales Forecast"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Win/Loss Analysis"
-                  icon="📉"
-                  metrics={[
-                    { label: 'Won: 23 (68%)', value: '' },
-                    { label: 'Lost: 11 (32%)', value: '' },
-                    { label: 'Win vs Loss', value: '████ vs ██' },
-                  ]}
-                  updated="1h"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Win/Loss Analysis"}
-                  showMoreMenu={showReportMenu === "Win/Loss Analysis"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Quota Attainment"
-                  icon="🎯"
-                  metrics={[
-                    { label: 'Team: 89% ✅', value: '' },
-                    { label: 'Alex: 98% ✅', value: '' },
-                    { label: 'Sarah: 95% ✅', value: '' },
-                    { label: 'Mike: 76% ⚠️', value: '' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Quota Attainment"}
-                  showMoreMenu={showReportMenu === "Quota Attainment"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
         </div>
 
         {/* Pipeline Reports Section */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('pipeline') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('pipeline')}
@@ -827,7 +992,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <TrendingUp className="w-5 h-5 text-purple-700" />
                 <span className="text-lg font-semibold text-gray-900">📊 PIPELINE REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('pipeline')}</span>
               </div>
               {expandedSections.pipeline ? (
                 <ChevronUp className="w-5 h-5 text-purple-700" />
@@ -839,117 +1004,17 @@ const ReportsPage: React.FC = () => {
           {expandedSections.pipeline && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
-                <ReportCard
-                  title="Pipeline Health"
-                  icon="🏥"
-                  metrics={[
-                    { label: 'Total: $2.4M', value: '' },
-                    { label: 'Qualified: $620K', value: '' },
-                    { label: 'Proposal: $890K', value: '' },
-                    { label: 'Negotiation: $890K', value: '' },
-                  ]}
-                  updated="2m"
-                  sparkline="▇▇▇▆▅"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Pipeline Health"}
-                  showMoreMenu={showReportMenu === "Pipeline Health"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Pipeline by Owner"
-                  icon="👤"
-                  metrics={[
-                    { label: 'Alex: $892K', value: '' },
-                    { label: 'Sarah: $745K', value: '' },
-                    { label: 'Mike: $563K', value: '' },
-                    { label: 'Emily: $200K', value: '' },
-                  ]}
-                  updated="5m"
-                  sparkline="████▇▆▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Pipeline by Owner"}
-                  showMoreMenu={showReportMenu === "Pipeline by Owner"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Aging Pipeline"
-                  icon="⏳"
-                  metrics={[
-                    { label: '30-60 days: 8', value: '' },
-                    { label: '60-90 days: 5', value: '' },
-                    { label: '90+ days: 3 ⚠️', value: '' },
-                  ]}
-                  updated="15m"
-                  sparkline="▅▅▄▄▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Aging Pipeline"}
-                  showMoreMenu={showReportMenu === "Aging Pipeline"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('pipeline')}
+                {renderReports('pipeline')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Pipeline Trends"
-                  icon="📈"
-                  metrics={[
-                    { label: 'Nov: $2.1M', value: '' },
-                    { label: 'Dec: $2.4M +14%', value: '' },
-                    { label: '6-month trend', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▂▃▅▆▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Pipeline Trends"}
-                  showMoreMenu={showReportMenu === "Pipeline Trends"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
         </div>
 
         {/* Activity Reports Section */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('activity') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('activity')}
@@ -958,7 +1023,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Activity className="w-5 h-5 text-orange-700" />
                 <span className="text-lg font-semibold text-gray-900">📞 ACTIVITY REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('activity')}</span>
               </div>
               {expandedSections.activity ? (
                 <ChevronUp className="w-5 h-5 text-orange-700" />
@@ -970,120 +1035,15 @@ const ReportsPage: React.FC = () => {
           {expandedSections.activity && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
-                <ReportCard
-                  title="Activity Summary"
-                  icon="📊"
-                  metrics={[
-                    { label: 'Total: 247', value: '' },
-                    { label: 'Calls: 78', value: '' },
-                    { label: 'Emails: 89', value: '' },
-                    { label: 'Meetings: 45', value: '' },
-                    { label: 'Tasks: 35', value: '' },
-                  ]}
-                  updated="1m"
-                  sparkline="████▆▅▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Activity Summary"}
-                  showMoreMenu={showReportMenu === "Activity Summary"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Activity vs Revenue"
-                  icon="💰"
-                  metrics={[
-                    { label: 'High activity =', value: '' },
-                    { label: 'High revenue ✅', value: '' },
-                    { label: 'Correlation: 87%', value: '' },
-                  ]}
-                  updated="30m"
-                  sparkline="▅█▆▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Activity vs Revenue"}
-                  showMoreMenu={showReportMenu === "Activity vs Revenue"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Response Rates"
-                  icon="📧"
-                  metrics={[
-                    { label: 'Email Open: 42%', value: '' },
-                    { label: 'Call Connect: 68%', value: '' },
-                    { label: 'Meeting Show: 92%', value: '' },
-                    { label: 'Industry avg:', value: '' },
-                    { label: '38%, 55%, 85%', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▅▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Response Rates"}
-                  showMoreMenu={showReportMenu === "Response Rates"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Meeting Analytics"
-                  icon="🎤"
-                  metrics={[
-                    { label: 'Total: 45', value: '' },
-                    { label: 'Completed: 42', value: '' },
-                    { label: 'No-shows: 3 (7%)', value: '' },
-                    { label: 'Avg duration: 28 min', value: '' },
-                    { label: '🤖 AI recorded: 38 (84%)', value: '' },
-                  ]}
-                  updated="15m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Meeting Analytics"}
-                  showMoreMenu={showReportMenu === "Meeting Analytics"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('activity')}
+                {renderReports('activity')}
               </div>
             </div>
           )}
         </div>
 
         {/* Lead & Contact Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('leads') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('leads')}
@@ -1092,7 +1052,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Users className="w-5 h-5 text-blue-700" />
                 <span className="text-lg font-semibold text-gray-900">🎯 LEAD & CONTACT REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('leads')}</span>
               </div>
               {expandedSections.leads ? (
                 <ChevronUp className="w-5 h-5 text-blue-700" />
@@ -1104,6 +1064,8 @@ const ReportsPage: React.FC = () => {
           {expandedSections.leads && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
+                {renderUnbacked('leads')}
+                {renderReports('leads')}
                 {/* Was the literals 156 / 147 / 78 / 23 / 15%. "Contacts: 147"
                     was the same fabricated number the CRM dashboard and the
                     contacts list carried. Now the live counts, from the hook the
@@ -1112,125 +1074,15 @@ const ReportsPage: React.FC = () => {
                     "Conversion" is won / DECIDED leads, and reads "—" until at
                     least one lead is decided: dividing by all leads gives a rate
                     that can only climb as open leads are added. */}
-                <ReportCard
-                  title="Lead Conversion Funnel"
-                  icon="🔄"
-                  metrics={[
-                    { label: `Leads: ${funnel.leads}`, value: '' },
-                    { label: `Contacts: ${funnel.contacts}`, value: '' },
-                    { label: `Qualified: ${funnel.qualified}`, value: '' },
-                    { label: `Won: ${funnel.won}`, value: '' },
-                    { label: `Lost: ${funnel.lost}`, value: '' },
-                    {
-                      label: (funnel.won + funnel.lost) > 0
-                        ? `Conversion: ${Math.round((funnel.won / (funnel.won + funnel.lost)) * 100)}%`
-                        : 'Conversion: —',
-                      value: '',
-                    },
-                  ]}
-                  updated={dataLoading ? 'loading' : 'live'}
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Lead Conversion Funnel"}
-                  showMoreMenu={showReportMenu === "Lead Conversion Funnel"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Lead Source ROI"
-                  icon="📊"
-                  metrics={[
-                    { label: '🎯 Lead Gen: 60%', value: '($298K revenue)' },
-                    { label: '🌐 Website: 31%', value: '($89K revenue)' },
-                    { label: '✍️ Manual: 9%', value: '($48K revenue)' },
-                  ]}
-                  updated="30m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Lead Source ROI"}
-                  showMoreMenu={showReportMenu === "Lead Source ROI"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Contact Engagement"
-                  icon="💬"
-                  metrics={[
-                    { label: 'High: 78 (53%)', value: '' },
-                    { label: 'Medium: 48 (33%)', value: '' },
-                    { label: 'Low: 21 (14%)', value: '' },
-                    { label: '⚠️ 21 contacts need re-engage', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="████▆▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Contact Engagement"}
-                  showMoreMenu={showReportMenu === "Contact Engagement"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Lead Response Time"
-                  icon="⏱️"
-                  metrics={[
-                    { label: 'Avg: 2.3 hours', value: '' },
-                    { label: 'Best: 12 mins', value: '' },
-                    { label: 'Target: <1 hour', value: '' },
-                    { label: '<1hr: 85 leads', value: '' },
-                    { label: '1-4hr: 42 leads', value: '' },
-                    { label: '4+hr: 29 leads ⚠️', value: '' },
-                    { label: '💡 Faster = 34% higher conversion', value: '' },
-                  ]}
-                  updated="20m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Lead Response Time"}
-                  showMoreMenu={showReportMenu === "Lead Response Time"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
         </div>
 
         {/* Revenue Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('revenue') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-teal-50 to-teal-100 border border-teal-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('revenue')}
@@ -1239,7 +1091,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <DollarSign className="w-5 h-5 text-teal-700" />
                 <span className="text-lg font-semibold text-gray-900">💵 REVENUE REPORTS</span>
-                <span className="text-sm text-gray-700">(4 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('revenue')}</span>
               </div>
               {expandedSections.revenue ? (
                 <ChevronUp className="w-5 h-5 text-teal-700" />
@@ -1251,117 +1103,17 @@ const ReportsPage: React.FC = () => {
           {expandedSections.revenue && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-3 gap-6 mb-6">
-                <ReportCard
-                  title="Revenue by Period"
-                  icon="📅"
-                  metrics={[
-                    { label: 'This Month: $847K', value: '' },
-                    { label: 'Last Month: $756K (+12%)', value: '' },
-                    { label: 'This Quarter: $2.1M', value: '' },
-                  ]}
-                  updated="5m"
-                  sparkline="▂▃▅▆▇█"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue by Period"}
-                  showMoreMenu={showReportMenu === "Revenue by Period"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Revenue by Source"
-                  icon="📊"
-                  metrics={[
-                    { label: '🎯 Lead Gen: $298K (69%)', value: '' },
-                    { label: '🌐 Website: $89K (20%)', value: '' },
-                    { label: '✍️ Manual: $48K (11%)', value: '' },
-                  ]}
-                  updated="10m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue by Source"}
-                  showMoreMenu={showReportMenu === "Revenue by Source"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Revenue by Industry"
-                  icon="🏭"
-                  metrics={[
-                    { label: 'SaaS: $342K (40%)', value: '' },
-                    { label: 'Enterprise: $298K', value: '' },
-                    { label: 'Healthcare: $142K', value: '' },
-                    { label: 'Finance: $65K', value: '' },
-                    { label: '💡 SaaS highest growth: +28%', value: '' },
-                  ]}
-                  updated="30m"
-                  sparkline="█████▇▅▃"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue by Industry"}
-                  showMoreMenu={showReportMenu === "Revenue by Industry"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('revenue')}
+                {renderReports('revenue')}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Revenue Forecast vs Actual"
-                  icon="🎯"
-                  metrics={[
-                    { label: 'Forecast: $950K', value: '' },
-                    { label: 'Actual: $847K', value: '' },
-                    { label: 'Accuracy: 89%', value: '' },
-                    { label: '💡 Forecast improving (+5%)', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▅█ vs ▅▇"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Revenue Forecast vs Actual"}
-                  showMoreMenu={showReportMenu === "Revenue Forecast vs Actual"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
               </div>
             </div>
           )}
         </div>
 
         {/* Account Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('accounts') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 border border-indigo-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('accounts')}
@@ -1370,7 +1122,7 @@ const ReportsPage: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Building2 className="w-5 h-5 text-indigo-700" />
                 <span className="text-lg font-semibold text-gray-900">🏢 ACCOUNT REPORTS</span>
-                <span className="text-sm text-gray-700">(3 reports)</span>
+                <span className="text-sm text-gray-700">{sectionCount('accounts')}</span>
               </div>
               {expandedSections.accounts ? (
                 <ChevronUp className="w-5 h-5 text-indigo-700" />
@@ -1382,92 +1134,15 @@ const ReportsPage: React.FC = () => {
           {expandedSections.accounts && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <ReportCard
-                  title="Account Health Score"
-                  icon="🏥"
-                  metrics={[
-                    { label: 'Healthy: 45 (71%)', value: '' },
-                    { label: 'At Risk: 12 (19%)', value: '' },
-                    { label: 'Critical: 6 (10%)', value: '' },
-                    { label: '⚠️ 6 accounts need immediate attention', value: '' },
-                  ]}
-                  updated="15m"
-                  sparkline="██████▃▂"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Account Health Score"}
-                  showMoreMenu={showReportMenu === "Account Health Score"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Top Accounts"
-                  icon="🌟"
-                  metrics={[
-                    { label: '1. DataFlow Inc - $95K', value: '' },
-                    { label: '2. BigCo Ent - $75K', value: '' },
-                    { label: '3. HealthPlus - $62K', value: '' },
-                    { label: '4. Acme Corp - $50K', value: '' },
-                    { label: '5. TechStart - $42K', value: '' },
-                  ]}
-                  updated="5m"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Top Accounts"}
-                  showMoreMenu={showReportMenu === "Top Accounts"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
-                <ReportCard
-                  title="Account Growth Opportunities"
-                  icon="📈"
-                  metrics={[
-                    { label: 'Expansion: 12', value: '' },
-                    { label: 'Upsell: 8', value: '' },
-                    { label: 'Cross-sell: 15', value: '' },
-                    { label: 'Total potential: $428K', value: '' },
-                    { label: '💡 12 accounts ready for expansion NOW', value: '' },
-                  ]}
-                  updated="1h"
-                  sparkline="▇▆▅"
-                  onView={handleViewReport}
-                  onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                  onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                  showExportMenu={showExportMenu === "Account Growth Opportunities"}
-                  showMoreMenu={showReportMenu === "Account Growth Opportunities"}
-                  onSchedule={handleScheduleReport}
-                  onShare={handleShareReport}
-                  onDelete={handleDeleteReport}
-                  onRename={handleRenameReport}
-                  onRefresh={handleRefreshReport}
-                  onExportPDF={handleExportPDF}
-                  onExportCSV={handleExportCSV}
-                  onExportExcel={handleExportExcel}
-                  onEmail={handleEmailReport}
-                />
+                {renderUnbacked('accounts')}
+                {renderReports('accounts')}
               </div>
             </div>
           )}
         </div>
 
         {/* Custom Reports */}
-        <div className="mb-6">
+        <div className={`mb-6 ${showSection('custom') ? '' : 'hidden'}`}>
           <div className="bg-gradient-to-r from-pink-50 to-pink-100 border border-pink-200 rounded-t-lg p-4">
             <button
               onClick={() => toggleSection('custom')}
@@ -1486,94 +1161,16 @@ const ReportsPage: React.FC = () => {
           </div>
           {expandedSections.custom && (
             <div className="bg-white border border-t-0 border-gray-200 rounded-b-lg p-6">
-              {hasCustomReports ? (
-                <>
+              {/*
+                Was gated on `hasCustomReports = true`, a hardcoded stub, so the
+                EmptyState branch below it could never render. The branch is
+                dropped with the stub — there are custom reports here, they are
+                just still hardcoded until phase (c).
+              */}
+              <>
                   <div className="grid grid-cols-3 gap-6 mb-6">
-                    <ReportCard
-                      title="My Q4 Goals Tracker"
-                      icon="⭐"
-                      metrics={[
-                        { label: 'Created by: Me', value: '' },
-                        { label: 'Progress: 78%', value: '' },
-                        { label: 'Target: $500K', value: '' },
-                        { label: 'Current: $390K', value: '' },
-                        { label: '78% complete', value: '' },
-                      ]}
-                      updated="Last run: 1h ago"
-                      progress="████████▇░"
-                      editable
-                      onView={handleViewReport}
-                      onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                      onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                      showExportMenu={showExportMenu === "My Q4 Goals Tracker"}
-                      showMoreMenu={showReportMenu === "My Q4 Goals Tracker"}
-                      onSchedule={handleScheduleReport}
-                      onShare={handleShareReport}
-                      onDelete={handleDeleteReport}
-                      onRename={handleRenameReport}
-                      onRefresh={handleRefreshReport}
-                      onExportPDF={handleExportPDF}
-                      onExportCSV={handleExportCSV}
-                      onExportExcel={handleExportExcel}
-                      onEmail={handleEmailReport}
-                      onEdit={handleEditReport}
-                    />
-                    <ReportCard
-                      title="SaaS Pipeline Report"
-                      icon="📊"
-                      metrics={[
-                        { label: 'Created by: Me', value: '' },
-                        { label: 'SaaS Deals: 15', value: '' },
-                        { label: 'Value: $687K', value: '' },
-                        { label: 'Avg: $45.8K', value: '' },
-                      ]}
-                      updated="Last run: 2h ago"
-                      sparkline="▅▆▇█▆"
-                      editable
-                      onView={handleViewReport}
-                      onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                      onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                      showExportMenu={showExportMenu === "SaaS Pipeline Report"}
-                      showMoreMenu={showReportMenu === "SaaS Pipeline Report"}
-                      onSchedule={handleScheduleReport}
-                      onShare={handleShareReport}
-                      onDelete={handleDeleteReport}
-                      onRename={handleRenameReport}
-                      onRefresh={handleRefreshReport}
-                      onExportPDF={handleExportPDF}
-                      onExportCSV={handleExportCSV}
-                      onExportExcel={handleExportExcel}
-                      onEmail={handleEmailReport}
-                      onEdit={handleEditReport}
-                    />
-                    <ReportCard
-                      title="High Priority Deals"
-                      icon="🎯"
-                      metrics={[
-                        { label: 'Created by: Me', value: '' },
-                        { label: 'Priority: 18', value: '' },
-                        { label: 'Total: $892K', value: '' },
-                        { label: 'Close This Week: 5 deals', value: '' },
-                      ]}
-                      updated="Last run: 30m ago"
-                      sparkline="▇▇▅▃"
-                      editable
-                      onView={handleViewReport}
-                      onExport={(title) => setShowExportMenu(showExportMenu === title ? null : title)}
-                      onMore={(title) => setShowReportMenu(showReportMenu === title ? null : title)}
-                      showExportMenu={showExportMenu === "High Priority Deals"}
-                      showMoreMenu={showReportMenu === "High Priority Deals"}
-                      onSchedule={handleScheduleReport}
-                      onShare={handleShareReport}
-                      onDelete={handleDeleteReport}
-                      onRename={handleRenameReport}
-                      onRefresh={handleRefreshReport}
-                      onExportPDF={handleExportPDF}
-                      onExportCSV={handleExportCSV}
-                      onExportExcel={handleExportExcel}
-                      onEmail={handleEmailReport}
-                      onEdit={handleEditReport}
-                    />
+                    {renderUnbacked('custom')}
+                    {renderReports('custom')}
                   </div>
                   <button
                     onClick={handleNavigateToCustomReportBuilder}
@@ -1582,16 +1179,7 @@ const ReportsPage: React.FC = () => {
                     <Plus className="w-5 h-5" />
                     Create New Custom Report
                   </button>
-                </>
-              ) : (
-                <EmptyState
-                  icon="📝"
-                  title="No Custom Reports Yet"
-                  description="Create your first custom report to track metrics that matter to you."
-                  actionLabel="Create Custom Report"
-                  onAction={handleNavigateToCustomReportBuilder}
-                />
-              )}
+              </>
             </div>
           )}
         </div>
@@ -1599,354 +1187,31 @@ const ReportsPage: React.FC = () => {
         )}
 
         {/* Modals */}
-        {showScheduleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Schedule Report Delivery</h3>
-              <p className="text-sm text-gray-600 mb-4">Report: <span className="font-medium">{selectedReport}</span></p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
-                  <select aria-label="Frequency" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option>Daily</option>
-                    <option>Weekly</option>
-                    <option>Monthly</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Recipients</label>
-                  <input aria-label="Recipients"
-                    type="text"
-                    placeholder="Enter email addresses..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Scheduling ${selectedReport}`);
-                    setShowScheduleModal(false);
-                    setSuccessMessage('Report scheduled');
-                    setSuccessAction(
-                      <div className="text-sm text-green-100">
-                        <p>Delivery: Weekly on Mondays at 9:00 AM</p>
-                        <button className="underline hover:no-underline mt-1">Manage Schedule</button>
-                      </div>
-                    );
-                    setShowSuccessToast(true);
-                    setTimeout(() => setShowSuccessToast(false), 5000);
-                  }}
-                  fullWidth
-                >
-                  Schedule
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/*
+          FIVE MODALS AND A SUCCESS TOAST DELETED: Schedule Report, Share with
+          Team, Delete, Rename, Email Report, and the "Report exported
+          successfully" / "Schedule created" toast they all fired.
 
-        {showShareModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Share Report</h3>
-              <p className="text-sm text-gray-600 mb-4">Report: <span className="font-medium">{selectedReport}</span></p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Share with</label>
-                  <select aria-label="Share with" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option>Entire Team</option>
-                    <option>Sales Team</option>
-                    <option>Specific Users...</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Permission</label>
-                  <select aria-label="Permission" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option>View Only</option>
-                    <option>Can Edit</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Sharing ${selectedReport}`);
-                    setShowShareModal(false);
-                    setSuccessMessage('Report shared with 2 people');
-                    setSuccessAction(
-                      <button className="text-sm underline hover:no-underline">View Details</button>
-                    );
-                    setShowSuccessToast(true);
-                    setTimeout(() => setShowSuccessToast(false), 3000);
-                  }}
-                  fullWidth
-                >
-                  Share
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+          None of them wrote anything — this page issues no requests except the
+          reads behind its figures — so each one collected input, closed, and
+          announced success. The Share modal picked recipients and a permission;
+          the Schedule modal picked a frequency and a delivery address; Delete
+          and Rename acted on reports that are hardcoded JSX and cannot be
+          deleted or renamed. A confirmation over an unchanged database is the
+          defect this whole remediation has been unwinding, and these were six
+          of them on one page.
 
-        {showDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Report</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Are you sure you want to delete <span className="font-medium">"{selectedReport}"</span>? This action cannot be undone.
-              </p>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowDeleteModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    console.log(`Deleting ${selectedReport}`);
-                    setShowDeleteModal(false);
-                  }}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showRenameModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Rename Report</h3>
-              <p className="text-sm text-gray-600 mb-4">Current name: <span className="font-medium">{selectedReport}</span></p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">New Name</label>
-                <input aria-label="New Name"
-                  type="text"
-                  defaultValue={selectedReport || ''}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowRenameModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Renaming ${selectedReport}`);
-                    setShowRenameModal(false);
-                  }}
-                  fullWidth
-                >
-                  Rename
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showEmailModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Email Report</h3>
-              <p className="text-sm text-gray-600 mb-4">Report: <span className="font-medium">{selectedReport}</span></p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">To</label>
-                  <input aria-label="To"
-                    type="email"
-                    placeholder="Enter email addresses..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Message (optional)</label>
-                  <textarea aria-label="Message (optional)"
-                    rows={3}
-                    placeholder="Add a message..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={() => setShowEmailModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={() => {
-                    console.log(`Emailing ${selectedReport}`);
-                    setShowEmailModal(false);
-                  }}
-                  fullWidth
-                >
-                  Send
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Toast */}
-        {showSuccessToast && (
-          <div className="fixed bottom-8 right-8 z-50 animate-fade-in">
-            <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg min-w-[320px]">
-              <div className="flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium">{successMessage}</p>
-                  {successAction && <div className="mt-2">{successAction}</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          They are removed rather than disabled: a disabled Share button still
+          advertises sharing. Their triggers went with the card action row.
+        */}
       </div>
     </div>
   );
 };
 
 // Empty State Components
-interface EmptyStateProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  actionLabel: string;
-  onAction: () => void;
-}
-
-const EmptyState: React.FC<EmptyStateProps> = ({
-  icon,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="text-6xl mb-4">{icon}</div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
-      <p className="text-sm text-gray-600 mb-6 text-center max-w-md">{description}</p>
-      <Button
-        onClick={onAction}
-        size="xl"
-      >
-        <Plus className="w-5 h-5" />
-        {actionLabel}
-      </Button>
-    </div>
-  );
-};
-
-interface NoResultsEmptyStateProps {
-  query: string;
-  onClear: () => void;
-}
-
-const NoResultsEmptyState: React.FC<NoResultsEmptyStateProps> = ({ query, onClear }) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="text-6xl mb-4">🔍</div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">No Reports Found</h3>
-      <p className="text-sm text-gray-600 mb-6 text-center max-w-md">
-        No reports match your search: <span className="font-medium">"{query}"</span>
-      </p>
-      <button
-        onClick={onClear}
-        className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2 transition-all"
-      >
-        Clear Search
-      </button>
-    </div>
-  );
-};
-
-interface NoCategoryReportsEmptyStateProps {
-  onViewAll: () => void;
-}
-
-const NoCategoryReportsEmptyState: React.FC<NoCategoryReportsEmptyStateProps> = ({ onViewAll }) => {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="text-6xl mb-4">📊</div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">No Reports Available</h3>
-      <p className="text-sm text-gray-600 mb-6 text-center max-w-md">
-        No reports available in this category.
-      </p>
-      <button
-        onClick={onViewAll}
-        className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium flex items-center gap-2 transition-all"
-      >
-        View All Categories
-      </button>
-    </div>
-  );
-};
 
 // Wrapper component to simplify ReportCard usage
-interface SimpleReportCardProps {
-  title: string;
-  icon: string;
-  metrics: Array<{ label: string; value: string }>;
-  updated: string;
-  sparkline?: string;
-  progress?: string;
-  highlight?: boolean;
-  editable?: boolean;
-}
-
-const SimpleReportCard: React.FC<SimpleReportCardProps & {
-  onView: (title: string) => void;
-  onExport: (title: string) => void;
-  onSchedule: (title: string) => void;
-  onShare: (title: string) => void;
-  onDelete?: (title: string) => void;
-  onRename?: (title: string) => void;
-  onEdit?: (title: string) => void;
-  onRefresh: (title: string) => void;
-  onExportPDF: (title: string) => void;
-  onExportCSV: (title: string) => void;
-  onExportExcel: (title: string) => void;
-  onEmail: (title: string) => void;
-  showReportMenu: string | null;
-  showExportMenu: string | null;
-  setShowReportMenu: (title: string | null) => void;
-  setShowExportMenu: (title: string | null) => void;
-}> = (props) => {
-  const { title, showReportMenu, showExportMenu, setShowReportMenu, setShowExportMenu, ...rest } = props;
-
-  return (
-    <ReportCard
-      {...rest}
-      title={title}
-      showMoreMenu={showReportMenu === title}
-      showExportMenu={showExportMenu === title}
-      onMore={(t) => setShowReportMenu(showReportMenu === t ? null : t)}
-      onExport={(t) => setShowExportMenu(showExportMenu === t ? null : t)}
-    />
-  );
-};
-
 interface QuickStatCardProps {
   icon: React.ReactNode;
   label: string;
@@ -2003,56 +1268,61 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
   );
 };
 
+// SimpleReportCard and its props were deleted here: an unused wrapper around
+// ReportCard, flagged as dead by TS6133 long before this pass and kept only
+// because nothing forced the issue. Its own prop list still carried the
+// export/schedule/share callbacks, which is why trimming those from
+// ReportCardProps first hit the wrong interface.
+
 interface ReportCardProps {
   title: string;
   icon: string;
-  metrics: Array<{ label: string; value: string }>;
-  updated: string;
+  metrics: Array<{ label: string; value: string; muted?: boolean }>;
+  /**
+   * Set when the report CAN be computed but has nothing to compute from right
+   * now. Renders instead of the rows, so an empty result never shows as zeros.
+   */
+  unavailable?: string;
+  /**
+   * Set when the figures are real but incomplete — deals excluded for having no
+   * expected close date, an approximation being used, unclassifiable rows. It
+   * renders WITH the numbers rather than replacing them, because the point is
+   * that the reader sees both.
+   */
+  caveat?: string;
+  /** Which active filters narrowed this card, named so the reader knows. */
+  filteredBy?: string[];
+  /**
+   * A REAL freshness value, or absent. Optional on purpose: ten of these cards
+   * carried invented staleness — "5m", "10m", "1h", "Last run: 2h ago" — none of
+   * it measured from anything, on cards whose figures were not fetched either.
+   * Invented precision standing in for a timestamp that is not tracked is the
+   * same defect as an invented number, so the label is omitted rather than
+   * guessed. Only the card that actually reads live data reports its freshness.
+   */
+  updated?: string;
   sparkline?: string;
   progress?: string;
   highlight?: boolean;
   editable?: boolean;
   onView: (title: string) => void;
-  onExport: (title: string) => void;
   onEdit?: (title: string) => void;
-  onMore: (title: string) => void;
-  showMoreMenu: boolean;
-  showExportMenu: boolean;
-  onSchedule: (title: string) => void;
-  onShare: (title: string) => void;
-  onDelete?: (title: string) => void;
-  onRename?: (title: string) => void;
-  onRefresh: (title: string) => void;
-  onExportPDF: (title: string) => void;
-  onExportCSV: (title: string) => void;
-  onExportExcel: (title: string) => void;
-  onEmail: (title: string) => void;
 }
 
 const ReportCard: React.FC<ReportCardProps> = ({
   title,
   icon,
   metrics,
+  unavailable,
+  caveat,
+  filteredBy = [],
   updated,
   sparkline,
   progress,
   highlight,
   editable,
   onView,
-  onExport,
   onEdit,
-  onMore,
-  showMoreMenu,
-  showExportMenu,
-  onSchedule,
-  onShare,
-  onDelete,
-  onRename,
-  onRefresh,
-  onExportPDF,
-  onExportCSV,
-  onExportExcel,
-  onEmail,
 }) => {
   return (
     <div
@@ -2067,16 +1337,39 @@ const ReportCard: React.FC<ReportCardProps> = ({
           <h3 className="text-base font-semibold text-gray-900 mb-2">{title}</h3>
         </div>
       </div>
-      <div className="space-y-1 mb-3 text-sm overflow-y-auto max-h-[80px] flex-shrink-0">
-        {metrics.map((metric, index) => (
-          <div key={index} className="flex items-center justify-between text-gray-700">
-            <span className={metric.label.startsWith('💡') || metric.label.startsWith('⚠️') ? 'font-medium' : ''}>
-              {metric.label}
-            </span>
-            {metric.value && <span className="text-gray-600">{metric.value}</span>}
-          </div>
-        ))}
-      </div>
+      {/*
+        UNAVAILABLE REPLACES THE ROWS; a caveat sits WITH them. The distinction
+        is the whole design: "nothing has closed yet" must not render as 0%,
+        and "5 deals have no close date" must not hide behind figures that look
+        complete.
+      */}
+      {unavailable ? (
+        <div className="mb-3 flex-shrink-0 rounded border border-dashed border-gray-300 bg-gray-50 p-3">
+          <p className="text-sm text-gray-600">{unavailable}</p>
+        </div>
+      ) : (
+        <div className="space-y-1 mb-3 text-sm overflow-y-auto max-h-[80px] flex-shrink-0">
+          {metrics.map((metric, index) => (
+            <div key={index} className="flex items-center justify-between text-gray-700">
+              {/* Muted rows are facts about what ISN'T recorded, not results. */}
+              <span className={metric.muted ? 'text-gray-400 italic' : ''}>
+                {metric.label}
+              </span>
+              {metric.value && (
+                <span className={metric.muted ? 'text-gray-400' : 'text-gray-600'}>{metric.value}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {caveat && (
+        <p className="mb-2 flex-shrink-0 text-xs text-amber-700">{caveat}</p>
+      )}
+      {filteredBy.length > 0 && !unavailable && (
+        <p className="mb-2 flex-shrink-0 text-xs text-gray-500">
+          Filtered by {filteredBy.join(' and ')}.
+        </p>
+      )}
       {sparkline && (
         <div className="text-xs text-gray-400 mb-2 font-mono tracking-wider h-[20px] flex-shrink-0">{sparkline}</div>
       )}
@@ -2085,11 +1378,35 @@ const ReportCard: React.FC<ReportCardProps> = ({
       )}
       <div className="flex-grow"></div>
       <div className="flex items-center justify-between pt-3 border-t border-gray-100 flex-shrink-0">
-        <div className="flex items-center gap-1 text-xs text-gray-500">
-          <Clock className="w-3 h-3" />
-          <span>{updated}</span>
-        </div>
+        {updated ? (
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <Clock className="w-3 h-3" />
+            <span>{updated}</span>
+          </div>
+        ) : <div />}
       </div>
+      {/*
+        ONLY THE CONTROLS THAT DO SOMETHING.
+        Removed: Export (with its PDF / CSV / Excel / Email menu), Schedule
+        Report, Share with Team, Refresh Data, Rename and Delete.
+
+        Every one of them persisted NOTHING — this page performs no writes at
+        all — and the three exports were the worst of them: they
+        `console.log`ged and then rendered "Report exported successfully" with a
+        "View File" button, so a user would go looking on disk for a file that
+        was never created. A success toast over a no-op is this project's
+        signature defect, and here it pointed at a nonexistent artefact.
+
+        Export is NOT wired up instead, deliberately. The figures on the
+        remaining cards are still hardcoded until phase (c), and writing those
+        into a file the user keeps is worse than showing them on screen: on
+        screen they are surrounded by context, in a spreadsheet they become
+        someone's evidence. Export comes back when the numbers behind it are
+        real.
+
+        `View` stays because /crm/reports/:slug is a real route, and `Edit`
+        because it navigates to the custom-report builder.
+      */}
       <div className="flex items-center gap-2 mt-2 flex-shrink-0">
         <button
           onClick={(e) => {
@@ -2101,58 +1418,6 @@ const ReportCard: React.FC<ReportCardProps> = ({
           <Eye className="w-4 h-4 inline mr-1" />
           View
         </button>
-        <div className="relative">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onExport(title);
-            }}
-            className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium hover:bg-blue-50 rounded transition-colors"
-          >
-            <Download className="w-4 h-4 inline mr-1" />
-            Export
-          </button>
-          {showExportMenu && (
-            <div className="absolute bottom-full mb-2 left-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportPDF(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Export as PDF
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportCSV(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Export as CSV
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportExcel(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Export as Excel
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEmail(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50"
-              >
-                Email Report
-              </button>
-            </div>
-          )}
-        </div>
         {editable && onEdit && (
           <button
             onClick={(e) => {
@@ -2165,75 +1430,6 @@ const ReportCard: React.FC<ReportCardProps> = ({
             Edit
           </button>
         )}
-        <div className="relative">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onMore(title);
-            }}
-            className="p-1.5 hover:bg-gray-100 rounded transition-colors"
-          >
-            <MoreVertical className="w-4 h-4 text-gray-600" />
-          </button>
-          {showMoreMenu && (
-            <div className="absolute bottom-full mb-2 right-0 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSchedule(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule Report
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onShare(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Share2 className="w-4 h-4" />
-                Share with Team
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRefresh(title);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh Data
-              </button>
-              {editable && onRename && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRename(title);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  Rename Report
-                </button>
-              )}
-              {editable && onDelete && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(title);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-600"
-                >
-                  <AlertCircle className="w-4 h-4" />
-                  Delete Report
-                </button>
-              )}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
