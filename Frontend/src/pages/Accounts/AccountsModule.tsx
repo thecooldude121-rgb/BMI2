@@ -35,6 +35,11 @@ const AccountsModule: React.FC = () => {
     <AccountsProvider>
       <Routes>
         <Route path="/" element={<AccountsListRedirect />} />
+        {/* Declared before the id route so the create form is reachable at the
+            URL the "+ New" menu used to point at. The form itself lives under
+            /crm, which is where every other create flow lives, so this is a
+            redirect rather than a second mount of the same page. */}
+        <Route path="/new" element={<Navigate to="/crm/accounts/new" replace />} />
         <Route path="/:accountId" element={<EnhancedAccountDetailView />} />
       </Routes>
     </AccountsProvider>

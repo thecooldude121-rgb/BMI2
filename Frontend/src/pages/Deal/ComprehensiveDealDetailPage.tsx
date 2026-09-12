@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Button } from '../../components/ui/Button';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { isReservedRecordSegment } from '../../utils/reservedRouteSegments';
 import {
   getDeal, updateDeal, createDeal,
   transitionDealStage, fetchDealStageHistory,
@@ -81,7 +82,7 @@ const TABS = [
   { id: 'deal-info',   label: 'Deal Info' },
 ] as const;
 
-export const ComprehensiveDealDetailPage: React.FC = () => {
+const DealDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -1580,6 +1581,24 @@ export const ComprehensiveDealDetailPage: React.FC = () => {
       )}
     </div>
   );
+};
+
+/**
+ * `new`, `add`, `create` and `edit` are route segments, never deal ids — see
+ * `utils/reservedRouteSegments`. Without this, "+ New Deal" fell through to this
+ * page and rendered "Could not load deal — Deal not found" for a record the user
+ * had just asked to create.
+ *
+ * A WRAPPER, not an early return inside `DealDetail`. The detail component calls
+ * a dozen hooks before it ever reads `id`, and a `return` above them is the
+ * "Rendered more hooks than during the previous render" crash CLAUDE.md records
+ * as lesson 13. Guarding outside means `DealDetail` keeps its hooks
+ * unconditional and never mounts with a non-id at all.
+ */
+export const ComprehensiveDealDetailPage: React.FC = () => {
+  const { id } = useParams();
+  if (isReservedRecordSegment(id)) return <Navigate to="/crm/deals/new" replace />;
+  return <DealDetail />;
 };
 
 export default ComprehensiveDealDetailPage;
