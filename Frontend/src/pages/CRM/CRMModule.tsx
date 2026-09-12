@@ -63,12 +63,19 @@ const CRMModule = () => {
           <Route path="/contacts/:id/edit" element={<AddEditContactPage />} />
           <Route path="/contacts/:id" element={<ContactDetailView />} />
           <Route path="/accounts" element={<AccountsPage />} />
+          {/* `new` alongside the existing `add`. Both render the same form —
+              `new` is what the "+ New" menu and every hand-typed URL reach for,
+              and without it the segment fell through to /accounts/:accountId and
+              rendered "Account not found". React Router ranks the static segment
+              above the dynamic one, so declaration order here is not load-bearing. */}
+          <Route path="/accounts/new" element={<AccountFormPage />} />
           <Route path="/accounts/add" element={<AccountFormPage />} />
           <Route path="/accounts/:accountId" element={<EnhancedAccountDetailView />} />
           <Route path="/accounts/:accountId/edit" element={<AccountFormPage />} />
           <Route path="/accounts/:accountId/merge" element={<AccountMergePage />} />
           <Route path="/accounts/import-export" element={<AccountImportExport />} />
           <Route path="/deals" element={<DealsKanbanPage />} />
+          <Route path="/deals/new" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/add" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/create" element={<ComprehensiveDealFormPage />} />
           <Route path="/deals/:id/edit" element={<ComprehensiveDealFormPage />} />

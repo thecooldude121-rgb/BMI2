@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { isReservedRecordSegment } from '../../utils/reservedRouteSegments';
 import {
   ArrowLeft, Building2, Globe, MapPin, Phone, Edit, MoreVertical,
   Eye, Users, DollarSign, MessageSquare, FileText, GitMerge, Trash2,
@@ -96,7 +97,7 @@ const TABS = [
   // every account rendered the panel's invented defaults or nothing at all.
 ] as const;
 
-const EnhancedAccountDetailView: React.FC = () => {
+const AccountDetail: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
   const { getAccountById, deleteAccount, loading: accountsLoading, error: accountsError } = useAccounts();
@@ -680,6 +681,23 @@ const AccountDeals: React.FC<{
     );
   }
   return <ActiveDealsSection deals={deals} onDealClick={onDealClick} onAddDeal={onAddDeal} />;
+};
+
+/**
+ * Same reservation as the deal detail page, and this module needs it MORE: the
+ * App-level route is `/accounts/*`, whose own table declares only `/` and
+ * `/:accountId`. "+ New Account" pointed at `/accounts/new`, matched the id
+ * route, and rendered "Account not found" for an account nobody had created yet.
+ * Declaring `/new` there fixes that link; this guard covers the rest of the
+ * class, in a module where a reserved word has nowhere else to be caught.
+ *
+ * A wrapper rather than an early return, for the hook-ordering reason spelled
+ * out on the deal page.
+ */
+const EnhancedAccountDetailView: React.FC = () => {
+  const { accountId } = useParams<{ accountId: string }>();
+  if (isReservedRecordSegment(accountId)) return <Navigate to="/crm/accounts/new" replace />;
+  return <AccountDetail />;
 };
 
 export default EnhancedAccountDetailView;

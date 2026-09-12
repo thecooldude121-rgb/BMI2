@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { CheckSquare, Clock, AlertTriangle, Plus, CalendarDays, Trash2, Pencil } from 'lucide-react';
 import {
@@ -107,6 +108,7 @@ const TasksPage: React.FC = () => {
   const [bucket, setBucket] = useState<BucketId>('all');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TaskRecord | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [notice, setNotice] = useState<string | null>(null);
   /** The task awaiting delete confirmation. */
   const [confirming, setConfirming] = useState<TaskRecord | null>(null);
@@ -115,6 +117,24 @@ const TasksPage: React.FC = () => {
   const [related, setRelated] = useState<Record<'contact' | 'company' | 'deal' | 'lead', RelatedOption[]>>({
     contact: [], company: [], deal: [], lead: [],
   });
+
+  /**
+   * `?new=1` opens the create form. This is how the global "+ New → New Task"
+   * item works: there is no task create PAGE, because creating a task is
+   * `TaskFormModal` and it already exists here.
+   *
+   * The parameter is stripped once consumed, with `replace` so it leaves no
+   * history entry. Without that, Back would land on the same URL and reopen a
+   * form the user had just dismissed, and a refresh would reopen it too.
+   */
+  useEffect(() => {
+    if (searchParams.get('new') === null) return;
+    setEditing(null);
+    setFormOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const load = useCallback(async () => {
     setLoading(true);

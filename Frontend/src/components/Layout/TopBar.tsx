@@ -30,12 +30,28 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   return { label: 'BMI Platform' };
 };
 
-const NEW_MENU_ITEMS = [
+export const NEW_MENU_ITEMS = [
+/**
+ * Three of these five were broken, and two of them failed in the worst possible
+ * way — `/crm/deals/new` and `/accounts/new` had no route, fell through to
+ * `/deals/:id` and `/accounts/:accountId`, and rendered "Could not load deal —
+ * Deal not found" and "Account not found" for records the user had just asked to
+ * create. `/crm/tasks/new` had no route at all and rendered a blank page.
+ *
+ * `new` is now a declared route on deals and accounts (and reserved against ever
+ * reading as an id again — see `utils/reservedRouteSegments`).
+ *
+ * Task is the odd one out ON PURPOSE. There is no task create PAGE and there
+ * should not be: creating a task is `TaskFormModal`, already built, already
+ * wired to the API, and already opened by "New task" on the tasks list. So this
+ * item goes to the list and asks it to open that modal, rather than inventing a
+ * second create surface for the same record.
+ */
   { label: 'New Deal',    icon: DollarSign,  href: '/crm/deals/new' },
   { label: 'New Contact', icon: Users,        href: '/crm/contacts/new' },
   { label: 'New Lead',    icon: UserPlus,     href: '/crm/leads/new' },
-  { label: 'New Account', icon: Building2,    href: '/accounts/new' },
-  { label: 'New Task',    icon: CheckSquare,  href: '/crm/tasks/new' },
+  { label: 'New Account', icon: Building2,    href: '/crm/accounts/new' },
+  { label: 'New Task',    icon: CheckSquare,  href: '/crm/tasks?new=1' },
 ];
 
 const MOCK_NOTIFICATIONS = [

@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
+import { NotAvailableBadge } from '../../components/common/NotAvailable';
 
 interface Activity {
   id: string;
@@ -61,9 +62,34 @@ interface Activity {
   };
 }
 
+/**
+ * The four view modes that have buttons and no renders. Listed here rather than
+ * inline so the set is countable, and so adding a real view means DELETING a row
+ * from this list — which is a smaller, more obvious edit than remembering to
+ * remove a disabled button somewhere in the markup.
+ */
+const UNBUILT_VIEWS = [
+  { label: 'By Type',    icon: BarChart3 },
+  { label: 'By Owner',   icon: Users },
+  { label: 'By Account', icon: Building2 },
+  { label: 'Calendar',   icon: Calendar },
+] as const;
+
 const ActivitiesPage: React.FC = () => {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<'timeline' | 'byType' | 'byOwner' | 'byAccount' | 'calendar'>('timeline');
+  /**
+   * ONLY 'timeline' exists. The type says so deliberately: the other four modes
+   * were in this union, set by four buttons, and rendered NOTHING — the timeline
+   * block is gated on `viewMode === 'timeline'` and no other block was ever
+   * written, so choosing By Type / By Owner / By Account / Calendar restyled a
+   * button and blanked the page.
+   *
+   * Narrowing the union is what makes that unbuildable rather than merely fixed:
+   * `setViewMode('byType')` is now a type error, so the next person cannot
+   * reintroduce a mode by adding a button. Adding one back means writing the
+   * render at the same time.
+   */
+  const [viewMode, setViewMode] = useState<'timeline'>('timeline');
   const [filterType, setFilterType] = useState('All');
   const [filterDate, setFilterDate] = useState('All');
   const [filterOwner, setFilterOwner] = useState('All');
@@ -865,10 +891,25 @@ const ActivitiesPage: React.FC = () => {
           </div>
         </div>
 
+        {/*
+          * AccountsPage's pattern, applied verbatim: a view that exists gates the
+          * render; a view that does not is DISABLED and labelled, never left as a
+          * live button that changes nothing. CLAUDE.md states the rule — "a
+          * List/Grid/Kanban toggle that only restyles its buttons is a bug… if a
+          * view isn't built, disable the button and label it".
+          *
+          * These four are not built. Grouping activities by type, owner or
+          * account is a real feature with real questions behind it (what are the
+          * buckets, how are they ordered, what happens to unassigned rows) and a
+          * calendar is a bigger one still. None of that should be guessed at
+          * while removing a dead control.
+          */}
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Activity view">
             <button
+              type="button"
               onClick={() => setViewMode('timeline')}
+              aria-pressed={viewMode === 'timeline'}
               className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
                 viewMode === 'timeline'
                   ? 'bg-blue-600 text-white'
@@ -878,50 +919,21 @@ const ActivitiesPage: React.FC = () => {
               <Clock className="w-4 h-4" />
               Timeline
             </button>
-            <button
-              onClick={() => setViewMode('byType')}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
-                viewMode === 'byType'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" />
-              By Type
-            </button>
-            <button
-              onClick={() => setViewMode('byOwner')}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
-                viewMode === 'byOwner'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              By Owner
-            </button>
-            <button
-              onClick={() => setViewMode('byAccount')}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
-                viewMode === 'byAccount'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              By Account
-            </button>
-            <button
-              onClick={() => setViewMode('calendar')}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
-                viewMode === 'calendar'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              Calendar
-            </button>
+
+            {UNBUILT_VIEWS.map(({ label, icon: Icon }) => (
+              <button
+                key={label}
+                type="button"
+                disabled
+                aria-disabled="true"
+                title={`${label} is not available yet`}
+                className="px-4 py-2 rounded-lg flex items-center gap-2 font-medium bg-gray-50 text-gray-400 cursor-not-allowed"
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+                <NotAvailableBadge label="Soon" />
+              </button>
+            ))}
           </div>
         </div>
 
