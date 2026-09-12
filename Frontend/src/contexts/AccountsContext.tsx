@@ -1,5 +1,5 @@
 import { fetchPipelines, buildStageLookup, isOpenWith } from '../utils/pipelinesApi';
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import {
   EnhancedAccount,
   AccountActivity,
@@ -34,7 +34,21 @@ interface AccountsContextType {
   dealStats: { openCount: number; openValue: number } | null;
   /** True while accounts are being fetched. Show a skeleton, not an empty list. */
   loading: boolean;
-  /** Non-null when the fetch failed. Distinguish "broken" from "no accounts". */
+  /**
+   * True for a REVALIDATION — a refresh while data is already on screen.
+   * Separate from `loading` on purpose: this provider wraps the whole CRM
+   * module, so it mounts once and its data can be hours old by the time someone
+   * opens the accounts list. Revalidating on that page's mount is the fix, and
+   * reusing `loading` for it would blank a populated table on every visit.
+   */
+  refreshing: boolean;
+  /**
+   * When the last SUCCESSFUL load completed, or null if none has. Recorded
+   * because the page showed `Total Accounts 15 / Open Deals 24 / Open Pipeline
+   * $1.6M` with the API unreachable and no indication of age — figures whose
+   * only claim to being current was that nothing said otherwise.
+   */
+  lastLoadedAt: number | null;
   error: string | null;
   refreshAccounts: () => Promise<void>;
   filteredAccounts: EnhancedAccount[];
@@ -131,7 +145,15 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
    */
   const [accounts, setAccounts] = useState<EnhancedAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Whether a load has ever succeeded. A REF, not state: `refreshAccounts` must
+   * read it without depending on it, or the callback is recreated on every load
+   * and the mount effect that calls it fires again — forever.
+   */
+  const hasLoadedRef = useRef(false);
 
   // No API for account-level activities, notes or documents as first-class
   // account records. The account detail page reads the REAL /activities and
@@ -206,7 +228,10 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 
   const refreshAccounts = useCallback(async (): Promise<void> => {
-    setLoading(true);
+    // First load blocks and shows a skeleton; every later one revalidates
+    // underneath the data already on screen.
+    if (hasLoadedRef.current) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
       // Accounts, their contacts and the deal pipeline together. allSettled so a
@@ -301,10 +326,18 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
         relatedContacts: contactsByAccount ? (contactsByAccount.get(a.id) ?? []) : undefined,
         relatedDeals: dealsByAccount ? (dealsByAccount.get(a.id) ?? []) : undefined,
       })));
+
+      // Only a SUCCESSFUL load stamps the clock. A failed revalidation leaves
+      // the previous timestamp standing, which is the truth: the data on screen
+      // really is from then, and moving the stamp would relabel stale figures as
+      // fresh — the same defect as the "Figures are live" badge.
+      hasLoadedRef.current = true;
+      setLastLoadedAt(Date.now());
     } catch (e: any) {
       setError(e?.message ?? 'Could not load accounts');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -857,7 +890,9 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
   const value: AccountsContextType = {
     accounts,
     dealStats,
-    loading,
+        loading,
+        refreshing,
+        lastLoadedAt,
     error,
     refreshAccounts,
     filteredAccounts,
