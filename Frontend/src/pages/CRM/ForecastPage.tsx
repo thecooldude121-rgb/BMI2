@@ -55,6 +55,26 @@ interface ForecastDeal {
 }
 
 interface RepRow {
+  /**
+   * TRANSITION MEASURE — NOT THE PERMANENT SHAPE.
+   *
+   * Rows are grouped by `COALESCE(assigned_to_user_id, assigned_to)`, so this
+   * is a user id where ownership is resolved and a NAME where it is not. That
+   * is deliberate and temporary: 20 of 25 live deals still carry no owner id
+   * (15 of them name "John Smith", who was never a user — see migration 039),
+   * and grouping by id alone would fold $1.39M of real pipeline into a single
+   * "Unassigned" line overnight.
+   *
+   * Keeping the name fallback preserves those as visible lines WHILE ownership
+   * is being resolved. Once it is, this should collapse to `userId: number`
+   * and the fallback should be REVISITED AND REMOVED — not left as settled
+   * design. A key that is sometimes an id and sometimes a name is exactly the
+   * ambiguity migrations 039 and 042 exist to remove; it is tolerated here only
+   * because the alternative hides real pipeline today.
+   */
+  key: string;
+  /** Present only where ownership resolved to a real user. */
+  userId: number | null;
   name: string;
   pipeline: number;
   bestCase: number;
@@ -70,11 +90,25 @@ interface QuarterBounds {
 }
 
 interface QuotaRow {
-  rep_name: string;
+  /** Migration 042: quotas key on the user, not the display name. */
+  user_id: number;
+  /** Projected by the server from the joined user — never stored, never resolved here. */
+  rep_name: string | null;
   quota_amount: number;
 }
 
 interface SnapshotRow {
+  /**
+   * Migration 043: the snapshot's rep identity. Null for a row whose ownership
+   * was only a name when the snapshot was taken, which is the same transition
+   * state `RepRow.key` describes.
+   */
+  user_id: number | null;
+  /**
+   * What that rep was CALLED on the snapshot date — a recorded historical fact,
+   * not the identity key it used to be. Resolving `user_id` gives today's name;
+   * this gives the one on that forecast call.
+   */
   rep_name: string;
   snapshot_date: string;
   pipeline: number;
@@ -274,6 +308,12 @@ const ForecastPage: React.FC = () => {
   const [quotas, setQuotas]                         = useState<QuotaRow[]>([]);
   const [editingQuota, setEditingQuota]             = useState<string | null>(null);
   const [editingQuotaValue, setEditingQuotaValue]   = useState('');
+  /**
+   * A quota save can now be REFUSED for a reason worth showing: the row has no
+   * owner on record (migration 042 keys quotas on a user id). Previously any
+   * string was storable, so there was nothing to report.
+   */
+  const [quotaError, setQuotaError]                 = useState<string | null>(null);
   const [savingQuota, setSavingQuota]               = useState(false);
 
   const [snapshots, setSnapshots]           = useState<SnapshotRow[]>([]);
@@ -322,13 +362,48 @@ const ForecastPage: React.FC = () => {
       fetch(`${API_BASE}/forecast/snapshots?period=${encoded}`, { headers: authHeaders() })
         .then(r => r.json()).then(j => j.success ? j.data : []).catch(() => []),
     ]).then(([q, s]) => {
-      setQuotas(q.map((r: any) => ({ rep_name: r.rep_name, quota_amount: parseFloat(r.quota_amount) || 0 })));
+      setQuotas(q.map((r: any) => ({
+        user_id: Number(r.user_id),
+        rep_name: r.rep_name ?? null,
+        quota_amount: parseFloat(r.quota_amount) || 0,
+      })));
+      /*
+       * Keyed by the SAME identity the server is keyed on (migration 043):
+       * the user id where there is one, the name where there is not, with the
+       * `id:`/`name:` prefixes that stop a user id of 5 colliding with a rep
+       * called "5" — the same guard `repRows` uses.
+       *
+       * This used to key on `row.rep_name` alone, which merged two people
+       * sharing a display name into one snapshot row and lost a renamed rep's
+       * own history. Rows arrive newest-first, so the first one seen per rep is
+       * the latest.
+       */
       const latest = new Map<string, SnapshotRow>();
       (s as any[]).forEach((row: any) => {
-        if (!latest.has(row.rep_name)) {
-          latest.set(row.rep_name, {
+        const uid = row.user_id == null ? null : Number(row.user_id);
+        const key = uid != null ? `id:${uid}` : `name:${row.rep_name}`;
+        if (!latest.has(key)) {
+          latest.set(key, {
+            user_id:       uid,
             rep_name:      row.rep_name,
-            snapshot_date: row.snapshot_date,
+            /*
+             * A BARE 'YYYY-MM-DD', which the renderer needs because it builds a
+             * local-midnight Date by concatenating 'T00:00:00'.
+             *
+             * The real fix is server-side (`snapshot_date::text`): a Postgres
+             * `date` arrived as a JS Date at local midnight and serialised to a
+             * UTC-shifted ISO string, so the panel first read
+             * "Snapshot: Invalid Date" and then, once parsed, the WRONG DAY.
+             * The slice stays as a cheap guard so a future change to that
+             * projection degrades to a readable date rather than to garbage.
+             *
+             * PRE-EXISTING, not caused by migration 043 — neither this line nor
+             * the renderer was touched by it. Fixed here only because 043 is
+             * what first put rows in the table for this panel to render at all,
+             * and shipping a newly-reachable panel with a broken header was the
+             * alternative.
+             */
+            snapshot_date: String(row.snapshot_date).slice(0, 10),
             pipeline:  parseFloat(row.pipeline)  || 0,
             best_case: parseFloat(row.best_case) || 0,
             commit:    parseFloat(row.commit)    || 0,
@@ -415,17 +490,34 @@ const ForecastPage: React.FC = () => {
   }), [categorized]);
 
   const repRows = useMemo((): RepRow[] => {
+    /*
+     * GROUPED BY COALESCE(assigned_to_user_id, assigned_to) — A TRANSITION
+     * MEASURE, STATED AS SUCH. See the note on RepRow.key.
+     *
+     * Prefer the resolved user id; fall back to the owner NAME when there is
+     * none. Grouping by id alone today would collapse 20 of 25 deals — $1.39M,
+     * including 15 named "John Smith" — into one "Unassigned" row and remove
+     * lines a forecast reader currently relies on.
+     *
+     * The prefix on the key matters: without it a user id of 5 and a rep
+     * literally named "5" would collide. Cheap, and the kind of thing that is
+     * invisible until it is not.
+     */
     const map = new Map<string, RepRow>();
     forecastDeals.forEach(d => {
-      const existing = map.get(d.owner) ?? {
-        name: d.owner, pipeline: 0, bestCase: 0, commit: 0, closed: 0, dealCount: 0,
+      const key = d.ownerUserId != null ? `id:${d.ownerUserId}` : `name:${d.owner}`;
+      const existing = map.get(key) ?? {
+        key,
+        userId: d.ownerUserId ?? null,
+        name: d.owner,
+        pipeline: 0, bestCase: 0, commit: 0, closed: 0, dealCount: 0,
       };
       existing.dealCount += 1;
       if (d.category === 'pipeline')  existing.pipeline += d.value;
       if (d.category === 'best-case') existing.bestCase  += d.value;
       if (d.category === 'commit')    existing.commit    += d.value;
       if (d.category === 'closed')    existing.closed    += d.value;
-      map.set(d.owner, existing);
+      map.set(key, existing);
     });
     return Array.from(map.values()).sort((a, b) => {
       if (a.name === 'Unassigned') return 1;
@@ -464,24 +556,57 @@ const ForecastPage: React.FC = () => {
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleRefresh = () => setRefreshKey(k => k + 1);
 
-  const handleSaveQuota = async (repName: string) => {
+  /**
+   * PUT /quotas — now keyed by user id (migration 042).
+   *
+   * A quota can only be set for a row whose ownership RESOLVED to a real user.
+   * That is a real consequence of keying on identity rather than on a name: the
+   * "John Smith" line and the "Unassigned" line have no user to attach a quota
+   * to, so the cell is not editable for them. Previously any string could be
+   * stored, which is why quotas could exist for people who did not.
+   *
+   * The caller is expected to have checked `rep.userId` before offering the
+   * control; this refuses anyway rather than sending a request that would 400.
+   */
+  const handleSaveQuota = async (rep: RepRow) => {
+    if (rep.userId == null) {
+      setQuotaError('This line has no owner on record yet, so a quota cannot be set for it.');
+      setEditingQuota(null);
+      return;
+    }
     const amount = parseFloat(editingQuotaValue.replace(/[^0-9.]/g, ''));
     if (isNaN(amount) || amount < 0) return;
     setSavingQuota(true);
+    setQuotaError(null);
     try {
       const res = await fetch(`${API_BASE}/quotas`, {
         method: 'PUT',
         headers: authHeaders(),
-        body: JSON.stringify({ rep_name: repName, period_label: quarter.label, quota_amount: amount }),
+        body: JSON.stringify({
+          user_id: rep.userId,
+          period_label: quarter.label,
+          quota_amount: amount,
+        }),
       });
       const json = await res.json();
       if (json.success) {
+        // Patch from the SERVER'S row: `rep_name` is projected from the joined
+        // user, so the client must not construct it — doing so would bypass the
+        // tenant-matched join that produces it.
+        const saved: QuotaRow = {
+          user_id: Number(json.data.user_id),
+          rep_name: json.data.rep_name ?? null,
+          quota_amount: parseFloat(json.data.quota_amount) || 0,
+        };
         setQuotas(prev => {
-          const idx = prev.findIndex(q => q.rep_name === repName);
-          const updated = { rep_name: repName, quota_amount: amount };
-          return idx >= 0 ? prev.map((q, i) => i === idx ? updated : q) : [...prev, updated];
+          const idx = prev.findIndex(q => q.user_id === saved.user_id);
+          return idx >= 0 ? prev.map((q, i) => (i === idx ? saved : q)) : [...prev, saved];
         });
+      } else {
+        setQuotaError(json.message || 'Could not save that quota.');
       }
+    } catch {
+      setQuotaError('Could not reach the server. The quota was not saved.');
     } finally {
       setSavingQuota(false);
       setEditingQuota(null);
@@ -491,7 +616,19 @@ const ForecastPage: React.FC = () => {
   const handleTakeSnapshot = async () => {
     setTakingSnapshot(true);
     try {
+      /*
+       * SNAPSHOTS CARRY THE REFERENCE NOW (migration 043), closing the
+       * inconsistency this comment used to record as scheduled work.
+       *
+       * `user_id` is sent where ownership is resolved and omitted where it is
+       * not — 20 of the 24 live deals still carry only a name, and dropping
+       * those rows would take ~$1.39M of pipeline out of every snapshot. The
+       * server keeps `rep_name` required for exactly that reason and stores it
+       * as the name AS AT the snapshot date, so this send is unchanged in that
+       * respect.
+       */
       const reps = repRows.map(r => ({
+        user_id:    r.userId ?? undefined,
         rep_name:   r.name,
         pipeline:   r.pipeline,
         best_case:  r.bestCase,
@@ -799,6 +936,15 @@ const ForecastPage: React.FC = () => {
             <span className="text-[11px] text-gray-400">{quarter.label}</span>
           </div>
 
+          {/* A refused quota save says why, inline and verbatim from the server
+              where it has something to add. Silent failure on a save is the
+              failure class this codebase keeps removing. */}
+          {quotaError && (
+            <p role="alert" className="mb-3 rounded border border-amber-200 bg-amber-50 p-3 text-[13px] text-amber-900">
+              {quotaError}
+            </p>
+          )}
+
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             {repRows.length === 0 ? (
               <div className="py-12 text-center">
@@ -825,12 +971,18 @@ const ForecastPage: React.FC = () => {
                     const isUnassigned = rep.name === 'Unassigned';
                     const rowTotal  = rep.pipeline + rep.bestCase + rep.commit + rep.closed;
                     const barWidth  = Math.round((rowTotal / maxRepTotal) * 100);
-                    const quotaRow  = quotas.find(q => q.rep_name === rep.name);
+                    // Matched by USER ID (migration 042). Matching by name
+                    // meant two people sharing a display name shared a quota,
+                    // and a renamed user silently lost theirs. A row with no
+                    // resolved owner has no quota by construction.
+                    const quotaRow  = rep.userId == null
+                      ? undefined
+                      : quotas.find(q => q.user_id === rep.userId);
                     const quota     = quotaRow?.quota_amount ?? 0;
                     // P1: projected = closed + commit (not just closed)
                     const projected = rep.closed + rep.commit;
                     const attainPct = quota > 0 ? Math.round((projected / quota) * 100) : null;
-                    const isEditing = editingQuota === rep.name;
+                    const isEditing = editingQuota === rep.key;
                     const flags     = repInspectionFlags.get(rep.name) ?? [];
                     const initials  = isUnassigned
                       ? '–'
@@ -896,22 +1048,40 @@ const ForecastPage: React.FC = () => {
                                 value={editingQuotaValue}
                                 onChange={e => setEditingQuotaValue(e.target.value)}
                                 onKeyDown={e => {
-                                  if (e.key === 'Enter') handleSaveQuota(rep.name);
+                                  if (e.key === 'Enter') void handleSaveQuota(rep);
                                   if (e.key === 'Escape') setEditingQuota(null);
                                 }}
                                 className="w-24 text-right text-[12px] border border-indigo-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                                 placeholder="e.g. 200000"
                               />
-                              <button onClick={() => handleSaveQuota(rep.name)} disabled={savingQuota} className="text-emerald-600 hover:text-emerald-700">
+                              <button onClick={() => void handleSaveQuota(rep)} disabled={savingQuota} className="text-emerald-600 hover:text-emerald-700">
                                 <Check className="h-3 w-3" />
                               </button>
                               <button onClick={() => setEditingQuota(null)} className="text-gray-400 hover:text-gray-600">
                                 <X className="h-3 w-3" />
                               </button>
                             </div>
+                          ) : rep.userId == null ? (
+                            /*
+                             * NO OWNER ON RECORD, SO NO QUOTA CELL — a real
+                             * consequence of keying quotas on identity
+                             * (migration 042) rather than a regression. The
+                             * "Unassigned" line and the name-only lines such as
+                             * "John Smith" have no user to attach a quota to.
+                             *
+                             * Plain text rather than a disabled control: a
+                             * disabled pencil advertises an action that does
+                             * not exist for this row. The title says why.
+                             */
+                            <span
+                              className="ml-auto text-[12px] italic text-gray-300"
+                              title="No owner on record for this line, so a quota cannot be set. Assign the deals to a user first."
+                            >
+                              No owner
+                            </span>
                           ) : (
                             <button
-                              onClick={() => { setEditingQuota(rep.name); setEditingQuotaValue(quota > 0 ? quota.toString() : ''); }}
+                              onClick={() => { setEditingQuota(rep.key); setEditingQuotaValue(quota > 0 ? quota.toString() : ''); setQuotaError(null); }}
                               className="group flex items-center gap-1 ml-auto text-[13px] font-medium text-gray-700 hover:text-indigo-600 transition-colors"
                               title="Click to set quota"
                             >
@@ -1036,13 +1206,28 @@ const ForecastPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {snapshots.map((snap, i) => {
-                    const current    = repRows.find(r => r.name === snap.rep_name);
+                    /*
+                     * MATCHED BY REFERENCE, falling back to the name only for a
+                     * snapshot that never had one (migration 043).
+                     *
+                     * This was `r.name === snap.rep_name`, which is the defect
+                     * 042 removed from quotas, still live here: a renamed rep
+                     * silently stopped matching their own history, and the
+                     * slippage column then compared their past commit against
+                     * `nowCommit ?? 0` — reading as if they had dropped their
+                     * entire forecast rather than as a failed match. Two people
+                     * sharing a display name matched each other's rows.
+                     */
+                    const current    = snap.user_id != null
+                      ? repRows.find(r => r.userId === snap.user_id)
+                      : repRows.find(r => r.userId == null && r.name === snap.rep_name);
                     const nowCommit  = current?.commit ?? 0;
                     const nowClosed  = current?.closed ?? 0;
                     const slippage   = snap.commit - nowCommit;
                     const deltaClose = nowClosed - snap.closed;
                     return (
-                      <tr key={snap.rep_name} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <tr key={snap.user_id != null ? `id:${snap.user_id}` : `name:${snap.rep_name}`}
+                          className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-4 py-2.5 text-[13px] font-medium text-gray-800">{snap.rep_name}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-[12px] text-gray-500">{fmtCell(snap.commit)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-medium text-gray-800">{fmtCell(nowCommit)}</td>

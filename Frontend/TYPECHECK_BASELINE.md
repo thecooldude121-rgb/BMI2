@@ -17,7 +17,17 @@ cd Frontend && npm run typecheck        # tsc -p tsconfig.app.json --noEmit
 cd Frontend && npm run typecheck:count  # just the number
 ```
 
-## Baseline: 281 errors at 357be5a (2026-09-05)
+## Baseline: 240 errors at HEAD (2026-09-08)
+
+Lowered from 281 (357be5a). The gate only fails on a RISE, so a stale-high baseline
+quietly stops protecting anything — CI emits a notice asking for the number to be lowered
+whenever a build comes in under it, and this is that number being kept.
+
+The last 9 came off in the Team-pages rewiring: they were all `TS6133`
+unused-declaration errors in `TeamMemberDetailPage`, and every one marked genuinely dead
+code — handlers, permission flags and helpers left behind by fabricated sections that had
+been deleted. That is the case for triaging by reachability rather than by error code: the
+"noise" codes were pointing at the dead surface the whole time.
 
 This is a **pre-existing backlog**, not damage from the pipeline-stage work — measured by
 stashing and re-running against a clean tree. It is recorded so a regression is visible as

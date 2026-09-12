@@ -99,6 +99,11 @@ export interface UserRow {
   created_at: string;
   /** Server-decided: may the CALLER change this person's role? */
   can_change_role?: boolean;
+  /** Migration 041. Server-decided, same rule as can_change_role. */
+  can_change_manager?: boolean;
+  manager_id?: number | null;
+  /** Resolved by the server through a tenant-matched join. */
+  manager_name?: string | null;
 }
 
 /** What the UI renders: the nine real fields, plus two derived for display. */
@@ -128,6 +133,21 @@ export interface WorkspaceMember {
    * support question; absence says the same thing without the tease.
    */
   canChangeRole: boolean;
+  /**
+   * Whether THIS caller may change who this person reports to. Served by the
+   * same `canActOn` the endpoint enforces with — see canChangeRole above.
+   */
+  canChangeManager: boolean;
+  /** null when nobody is recorded above them, which is a real state. */
+  managerId: string | null;
+  /**
+   * The manager's display name, resolved SERVER-SIDE through a tenant-matched
+   * join, never by the client. Null when there is no manager — and also null
+   * when the stored manager_id points outside this workspace, because the join
+   * refuses to resolve it. Resolving this from the roster client-side would
+   * bypass that predicate and leak a cross-workspace name.
+   */
+  managerName: string | null;
 }
 
 /** Tailwind gradients, picked by id hash — stable, and carries no data. */
@@ -168,6 +188,12 @@ export function toMember(row: UserRow): WorkspaceMember {
     // Absent means false. An older server that does not send the field must
     // not be read as "everything is permitted".
     canChangeRole: row.can_change_role === true,
+    // Migration 041. Absent means false / null, for the same reason: an older
+    // server that does not send these must not be read as permitting anything,
+    // nor as having no manager on record when it simply did not say.
+    canChangeManager: row.can_change_manager === true,
+    managerId: row.manager_id === null || row.manager_id === undefined ? null : String(row.manager_id),
+    managerName: row.manager_name ?? null,
   };
 }
 
@@ -188,6 +214,18 @@ export interface Roster {
    * refused. Empty for a caller who may not change roles at all.
    */
   assignableRoles: string[];
+  /**
+   * Whether this caller may set anyone's manager at all (migration 041). The
+   * per-row `canChangeManager` says WHICH people; this says whether the control
+   * is rendered anywhere.
+   *
+   * There is deliberately no separate list of candidate managers — everyone in
+   * the workspace is one, so the picker filters the roster it already has. What
+   * it cannot work out for itself is which candidates would close a reporting
+   * loop, since that needs the whole line: the server answers 409 and the
+   * picker renders that refusal rather than trying to predict it.
+   */
+  canManageManagers: boolean;
 }
 
 export async function fetchRoster(includeInactive = true): Promise<Roster> {
@@ -200,6 +238,8 @@ export async function fetchRoster(includeInactive = true): Promise<Roster> {
     // Not `?? ALL_ROLES`: an absent field means the server did not grant
     // anything, and defaulting to a full list would offer options it refuses.
     assignableRoles: (json.assignable_roles ?? []) as string[],
+    // Same reasoning: absent means not granted.
+    canManageManagers: json.can_manage_managers === true,
   };
 }
 
@@ -223,6 +263,33 @@ export async function fetchMembers(includeInactive = true): Promise<WorkspaceMem
  * OFFERING a role the server would refuse — a different thing, driven by the
  * server's own `assignable_roles`.
  */
+/**
+ * PATCH /users/:id/manager. Migration 041.
+ *
+ * Pass `null` to clear the manager — that is a real operation, since the top of
+ * a reporting line has nobody above them. OMITTING the field is a 400 server
+ * side, deliberately, so an accidental empty body cannot silently unlink
+ * someone; this function always sends the key.
+ *
+ * THE 409 IS THE ONE TO SURFACE VERBATIM. It means the chosen manager already
+ * reports to this person, directly or indirectly, so the edge would close a
+ * loop. That is an actionable answer, not a generic failure — and it is
+ * deliberately NOT pre-checked here: detecting it needs the whole reporting
+ * line, which only the server has. Predicting it client-side is the drift this
+ * codebase keeps paying for.
+ */
+export async function changeMemberManager(
+  id: string,
+  managerId: string | null,
+): Promise<WorkspaceMember> {
+  const res = await fetch(`${API_BASE}/users/${encodeURIComponent(id)}/manager`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ manager_id: managerId === null ? null : Number(managerId) }),
+  });
+  return toMember(await unwrap<UserRow>(res));
+}
+
 export async function changeMemberRole(id: string, role: string): Promise<WorkspaceMember> {
   const res = await fetch(`${API_BASE}/users/${id}/role`, {
     method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({ role }),
