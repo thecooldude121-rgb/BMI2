@@ -159,6 +159,22 @@ const ActivitiesPage: React.FC = () => {
   // annotation TS narrows it to `never` and the render's stat.trend.startsWith
   // stops compiling. Typed so a real period-over-period trend can be added
   // without touching the render.
+  /**
+   * The KPI tiles.
+   *
+   * A FAILED FETCH MUST NOT RENDER A COUNT. With the API unreachable this page
+   * showed "0 Total · 0 Today · 0 This Week · 0 Overdue" — derived from an empty
+   * `records` array, so every tile was a confident zero about data that had never
+   * arrived. The timeline below already distinguished loading, failed and
+   * genuinely empty; the tiles above it did not, so the same screen said "we
+   * could not load this" and "you have none" at once.
+   *
+   * `—` is the repo's existing idiom for a figure with no source — AccountsPage
+   * renders `{dealStats ? kpis.totalDeals : '—'}` for exactly this reason — so it
+   * is reused rather than a new convention being invented.
+   *
+   * Loading counts as unknown too: zero rows fetched so far is not zero rows.
+   */
   const stats = useMemo((): Array<{ label: string; value: string; trend: string | null; alert?: boolean }> => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -169,21 +185,26 @@ const ActivitiesPage: React.FC = () => {
     const inRange = (r: ActivityRecord, from: Date) => new Date(when(r)) >= from;
     const isToday = (r: ActivityRecord) => inRange(r, startOfToday);
 
+    const unknown = Boolean(loadError) || loading;
+    const count = (n: number) => (unknown ? '—' : String(n));
+
     return [
-      { label: 'Total', value: String(records.length), trend: null },
-      { label: 'Today', value: String(records.filter(isToday).length), trend: null },
-      { label: 'This Week', value: String(records.filter(r => inRange(r, startOfWeek)).length), trend: null },
+      { label: 'Total', value: count(records.length), trend: null },
+      { label: 'Today', value: count(records.filter(isToday).length), trend: null },
+      { label: 'This Week', value: count(records.filter(r => inRange(r, startOfWeek)).length), trend: null },
       {
         label: 'Overdue',
-        value: String(records.filter(r =>
+        value: count(records.filter(r =>
           r.status === 'planned' && r.scheduled_at && new Date(r.scheduled_at) < now).length),
         trend: null,
-        alert: true,
+        // An unknown count is not an alert. Tinting the tile orange around a
+        // dash would read as "overdue work exists and we cannot show it".
+        alert: !unknown,
       },
-      { label: 'Meetings Today', value: String(records.filter(r => r.type === 'meeting' && isToday(r)).length), trend: null },
-      { label: 'Calls Today', value: String(records.filter(r => r.type === 'call' && isToday(r)).length), trend: null },
+      { label: 'Meetings Today', value: count(records.filter(r => r.type === 'meeting' && isToday(r)).length), trend: null },
+      { label: 'Calls Today', value: count(records.filter(r => r.type === 'call' && isToday(r)).length), trend: null },
     ];
-  }, [records]);
+  }, [records, loadError, loading]);
 
   /**
    * PHASE 2: ~200 lines of inline fixture activities used to sit here. The
