@@ -4,6 +4,7 @@ import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi'
 import { useNavigate } from 'react-router-dom';
 import { Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
 import { NotAvailableBadge } from '../../components/common/NotAvailable';
+import { groupActivities, groupingCoverage, type ActivityGroup, type ActivityGroupMode } from '../../utils/activityGrouping';
 
 interface Activity {
   id: string;
@@ -68,28 +69,36 @@ interface Activity {
  * from this list — which is a smaller, more obvious edit than remembering to
  * remove a disabled button somewhere in the markup.
  */
+/** The grouped views, each backed by `utils/activityGrouping`. */
+const GROUPED_VIEWS: { mode: ActivityGroupMode; label: string; icon: React.ElementType }[] = [
+  { mode: 'type',    label: 'By Type',    icon: BarChart3 },
+  { mode: 'owner',   label: 'By Owner',   icon: Users },
+  { mode: 'account', label: 'By Account', icon: Building2 },
+];
+
+/**
+ * Still not built, and still disabled rather than left as a dead button.
+ *
+ * Calendar is not a regrouping of the rows already on the page — it needs a
+ * month/week grid, a decision about which timestamp positions an activity
+ * (`scheduled_at` for planned work, `completed_at` for done work, and they
+ * disagree), and an answer for all-day and multi-day items. That is a design
+ * task, not a `groupBy`.
+ */
 const UNBUILT_VIEWS = [
-  { label: 'By Type',    icon: BarChart3 },
-  { label: 'By Owner',   icon: Users },
-  { label: 'By Account', icon: Building2 },
-  { label: 'Calendar',   icon: Calendar },
+  { label: 'Calendar', icon: Calendar },
 ] as const;
 
 const ActivitiesPage: React.FC = () => {
   const navigate = useNavigate();
   /**
-   * ONLY 'timeline' exists. The type says so deliberately: the other four modes
-   * were in this union, set by four buttons, and rendered NOTHING — the timeline
-   * block is gated on `viewMode === 'timeline'` and no other block was ever
-   * written, so choosing By Type / By Owner / By Account / Calendar restyled a
-   * button and blanked the page.
-   *
-   * Narrowing the union is what makes that unbuildable rather than merely fixed:
-   * `setViewMode('byType')` is now a type error, so the next person cannot
-   * reintroduce a mode by adding a button. Adding one back means writing the
-   * render at the same time.
+   * The modes that RENDER. Four buttons used to set modes with no render behind
+   * them at all, blanking the page; the union was narrowed to 'timeline' alone
+   * so a mode could not be reintroduced without its render, and it is widened
+   * here by exactly the three that now have one. Calendar is still absent from
+   * the union on purpose — `setViewMode('calendar')` remains a type error.
    */
-  const [viewMode, setViewMode] = useState<'timeline'>('timeline');
+  const [viewMode, setViewMode] = useState<'timeline' | ActivityGroupMode>('timeline');
   const [filterType, setFilterType] = useState('All');
   const [filterDate, setFilterDate] = useState('All');
   const [filterOwner, setFilterOwner] = useState('All');
@@ -231,7 +240,10 @@ const ActivitiesPage: React.FC = () => {
     const startOfYesterday = new Date(startOfToday);
     startOfYesterday.setDate(startOfYesterday.getDate() - 1);
 
-    const byDay = new Map<string, { key: string; label: string; sortKey: number; items: Activity[] }>();
+    // Shaped as an ActivityGroup (plus a sortKey) so the timeline and the three
+    // grouped views are ONE type at the render site — otherwise the union leaks
+    // into `groupingCoverage` and every consumer needs a narrowing check.
+    const byDay = new Map<string, ActivityGroup<Activity> & { sortKey: number }>();
 
     records.forEach((r, idx) => {
       const activity = activities[idx];
@@ -251,11 +263,33 @@ const ActivitiesPage: React.FC = () => {
 
       const existing = byDay.get(key);
       if (existing) existing.items.push(activity);
-      else byDay.set(key, { key, label, sortKey: dayStart.getTime(), items: [activity] });
+      else byDay.set(key, { key, label, sortKey: dayStart.getTime(), items: [activity], isUnattributed: false });
     });
 
     return Array.from(byDay.values()).sort((a, b) => b.sortKey - a.sortKey);
   }, [records, activities]);
+
+  /**
+   * The groups the active view renders. Timeline keeps its by-day grouping;
+   * the other three delegate to the pure module, which is where the bucketing
+   * rules and their reasoning live.
+   */
+  const visibleGroups = useMemo(
+    () => (viewMode === 'timeline' ? activityGroups : groupActivities(viewMode, records, activities)),
+    [viewMode, activityGroups, records, activities],
+  );
+
+  /**
+   * Rendered above a grouped view. By Account is expected to attribute very
+   * little — activities hang off exactly one parent, so a deal's activity has no
+   * `company_id` — and a view that groups a fraction of the rows while looking
+   * complete is the failure mode ReportsPage's UNBACKED_REPORTS exists to
+   * prevent. Null for the timeline, which attributes everything by definition.
+   */
+  const coverage = useMemo(
+    () => (viewMode === 'timeline' ? null : groupingCoverage(visibleGroups)),
+    [viewMode, visibleGroups],
+  );
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -898,11 +932,11 @@ const ActivitiesPage: React.FC = () => {
           * List/Grid/Kanban toggle that only restyles its buttons is a bug… if a
           * view isn't built, disable the button and label it".
           *
-          * These four are not built. Grouping activities by type, owner or
-          * account is a real feature with real questions behind it (what are the
-          * buckets, how are they ordered, what happens to unassigned rows) and a
-          * calendar is a bigger one still. None of that should be guessed at
-          * while removing a dead control.
+          * By Type / By Owner / By Account are now built, and the questions that
+          * were open when they were disabled — what the buckets are, how they
+          * order, where unattributed rows go — are answered in
+          * `utils/activityGrouping`, not guessed at here. Calendar stays
+          * disabled; see UNBUILT_VIEWS for why it is not the same kind of work.
           */}
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
           <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Activity view">
@@ -919,6 +953,23 @@ const ActivitiesPage: React.FC = () => {
               <Clock className="w-4 h-4" />
               Timeline
             </button>
+
+            {GROUPED_VIEWS.map(({ mode, label, icon: Icon }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                aria-pressed={viewMode === mode}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
+                  viewMode === mode
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
 
             {UNBUILT_VIEWS.map(({ label, icon: Icon }) => (
               <button
@@ -1100,8 +1151,10 @@ const ActivitiesPage: React.FC = () => {
           </div>
         )}
 
-        {viewMode === 'timeline' && (
-          <>
+        {/* Loading, failed and genuinely empty are SHARED by all four views —
+            they describe the fetch, not the grouping. A failed fetch must not read
+            as "no activity" in any of them. */}
+        <>
             {/* Three distinct states. A failed fetch must not read as "no activity". */}
             {loadError && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-4">
@@ -1128,13 +1181,34 @@ const ActivitiesPage: React.FC = () => {
                 with a footer reading "Showing 9 of 247". Real dates never match
                 those, so the feed would have rendered empty. Grouped by actual
                 day now, newest first, with Today/Yesterday named as such. */}
-            {!loading && !loadError && activityGroups.length > 0 && (
+            {!loading && !loadError && visibleGroups.length > 0 && (
               <div className="space-y-6">
-                {activityGroups.map(group => (
+                {/* What this grouping could NOT attribute, stated before the
+                    groups rather than discovered at the bottom of them. */}
+                {coverage && coverage.unattributed > 0 && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                    {coverage.attributed} of {coverage.total}{' '}
+                    {coverage.total === 1 ? 'activity' : 'activities'} grouped into {coverage.buckets}{' '}
+                    {coverage.buckets === 1 ? 'group' : 'groups'}.{' '}
+                    {coverage.unattributed} {coverage.unattributed === 1 ? 'has' : 'have'} no{' '}
+                    {viewMode === 'account' ? 'account linked' : viewMode === 'owner' ? 'owner assigned' : 'type recorded'}
+                    {viewMode === 'account'
+                      ? ' — an activity logged against a deal, contact or lead carries no account of its own.'
+                      : '.'}
+                  </p>
+                )}
+                {visibleGroups.map(group => (
                   <div key={group.key}>
                     <div className="flex items-center gap-4 mb-6">
                       <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
-                      <h2 className="text-base font-bold text-gray-900 tracking-wider px-3">{group.label}</h2>
+                      <h2 className={`text-base font-bold tracking-wider px-3 ${
+                        group.isUnattributed ? 'text-gray-500 italic' : 'text-gray-900'
+                      }`}>
+                        {group.label}
+                        {viewMode !== 'timeline' && (
+                          <span className="ml-2 text-sm font-semibold text-gray-500">{group.items.length}</span>
+                        )}
+                      </h2>
                       <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
                     </div>
                     <div className="space-y-4">
@@ -1148,7 +1222,6 @@ const ActivitiesPage: React.FC = () => {
               </div>
             )}
           </>
-        )}
       </div>
     </div>
   );
