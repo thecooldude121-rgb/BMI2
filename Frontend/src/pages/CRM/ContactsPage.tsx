@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Upload, Search, ChevronDown, Mail, Phone, Eye, Target, Building2, Globe, Edit, Download, Trash2, Tag, Grid, List, Columns, UserPlus, Archive, Calendar } from 'lucide-react';
+import { NotAvailableBadge } from '../../components/common/NotAvailable';
 import type { LucideIcon } from 'lucide-react';
 import { Contact, ContactFilters, ContactStatus, ContactSource } from '../../types/contact';
 import {
@@ -20,7 +21,6 @@ import ContactActionMenu from '../../components/CRM/ContactActionMenu';
 import ReengagementModal from '../../components/CRM/ReengagementModal';
 import AssignOwnerModal from '../../components/CRM/AssignOwnerModal';
 
-type ViewMode = 'list' | 'grid' | 'kanban';
 
 
 const ContactsPage: React.FC = () => {
@@ -48,7 +48,18 @@ const ContactsPage: React.FC = () => {
   }, [reloadKey]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [expandedContact, setExpandedContact] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  /**
+   * ONLY 'list' renders. The union used to carry 'grid' and 'kanban' too, and
+   * all three `viewMode ===` uses in this file were button styling — clicking
+   * Kanban set the state, restyled the button, and left `main.innerHTML`
+   * BYTE-IDENTICAL: same table, same 20 rows, 37,090 characters before and
+   * after. Verified by clicking it in the running app, not by reading the file.
+   *
+   * Narrowed rather than merely fixed, for the same reason as ActivitiesPage:
+   * `setViewMode('grid')` is now a type error, so a mode cannot be reintroduced
+   * by adding a button without the render that makes it mean something.
+   */
+  const [viewMode, setViewMode] = useState<'list'>('list');
 
   const [showContactForm, setShowContactForm] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -564,9 +575,25 @@ const ContactsPage: React.FC = () => {
               <option value="company">Sort: Company</option>
               <option value="createdAt">Sort: Date Added</option>
             </select>
-            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+            {/*
+              * AccountsPage's pattern, applied verbatim: the view that exists
+              * gates the render; the views that do not are DISABLED and
+              * labelled. CLAUDE.md: "a List/Grid/Kanban toggle that only
+              * restyles its buttons is a bug… if a view isn't built, disable the
+              * button and label it."
+              *
+              * Grid and Kanban are not built and are NOT being invented here.
+              * AccountsPage could offer Grid because it already had card markup
+              * for its mobile layout to gate on; this page has a table and
+              * nothing else, so a grid means designing a contact card — and a
+              * kanban means first deciding what the columns are (status? owner?
+              * lead score?), which is a product question, not a layout one.
+              */}
+            <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1" role="group" aria-label="View mode">
               <button
+                type="button"
                 onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
                 className={`px-3 py-1.5 rounded-md transition-colors font-medium text-sm flex items-center space-x-1 ${
                   viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                 }`}
@@ -574,31 +601,31 @@ const ContactsPage: React.FC = () => {
                 <List className="h-4 w-4" />
                 <span>List</span>
               </button>
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 rounded-md transition-colors font-medium text-sm flex items-center space-x-1 ${
-                  viewMode === 'grid' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Grid className="h-4 w-4" />
-                <span>Grid</span>
-              </button>
-              <button
-                onClick={() => setViewMode('kanban')}
-                className={`px-3 py-1.5 rounded-md transition-colors font-medium text-sm flex items-center space-x-1 ${
-                  viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <Columns className="h-4 w-4" />
-                <span>Kanban</span>
-              </button>
+              {([
+                { label: 'Grid',   Icon: Grid },
+                { label: 'Kanban', Icon: Columns },
+              ] as const).map(({ label, Icon }) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  title={`${label} view is not available yet`}
+                  className="px-3 py-1.5 rounded-md font-medium text-sm flex items-center space-x-1 text-gray-400 cursor-not-allowed"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{label}</span>
+                  <NotAvailableBadge label="Soon" />
+                </button>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Contacts Table */}
-      <div className="px-8 py-6">
+      {/* Contacts Table. Gated on the view rather than rendered unconditionally
+          — that gate is the whole point of the toggle above. */}
+      <div className="px-8 py-6" hidden={viewMode !== 'list'}>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           {/* An error must not look like an empty list — that is precisely how the
               broken lead endpoints stayed hidden. Loading, failed and genuinely
