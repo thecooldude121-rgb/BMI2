@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Bell, Mail, Settings, LogOut, ChevronDown, Plus,
   DollarSign, Users, UserPlus, Building2, CheckSquare,
-  AlertCircle, Sparkles, X
+  AlertCircle, Sparkles, X, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -46,7 +46,12 @@ const MOCK_NOTIFICATIONS = [
   { id: 'a1', group: 'AI INSIGHT', icon: Sparkles,    color: 'text-indigo-500', text: 'Win probability on Meridian deal dropped 12% this week',       time: '1d' },
 ];
 
-const TopBar: React.FC = () => {
+/**
+ * `onOpenMobileNav` is supplied by Layout below the `lg` breakpoint, where the
+ * sidebar does not render. It is optional so TopBar still mounts standalone in
+ * tests and in any future shell that has no drawer.
+ */
+const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -75,9 +80,26 @@ const TopBar: React.FC = () => {
   })).filter(g => g.items.length > 0);
 
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-40 sticky top-0">
+    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between gap-2 px-4 lg:px-6 shrink-0 z-40 sticky top-0">
       {/* Breadcrumb — left */}
       <div className="flex items-center gap-1.5 min-w-0">
+        {/*
+          * Below `lg` the sidebar is `hidden`, so this button is the ONLY way to
+          * reach any other page. It is inside the breadcrumb group rather than
+          * the actions group so it stays pinned to the left edge and can never
+          * be pushed off-screen by the actions, which is exactly what happened
+          * to the mail button and the profile menu before.
+          */}
+        {onOpenMobileNav && (
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            aria-label="Open navigation menu"
+            className="lg:hidden -ml-1 mr-1 flex items-center justify-center h-9 w-9 shrink-0 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
         {crumb.parent && (
           <>
             <span className="text-sm text-gray-400 font-medium">{crumb.parent}</span>
@@ -88,10 +110,13 @@ const TopBar: React.FC = () => {
       </div>
 
       {/* Actions — right */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
 
-        {/* Search */}
-        <div className="relative w-64">
+        {/* Search. Hidden below `md`: at 390px the full actions row measured
+            482px inside a 390px shell whose parent is `overflow-hidden`, and
+            this input was 234px of that — the single biggest contributor to
+            the mail button and profile menu being clipped out of reach. */}
+        <div className="relative w-64 hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
           <input
             type="text"

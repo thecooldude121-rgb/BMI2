@@ -1121,3 +1121,32 @@ something directly, do that instead of reasoning about what should be true.**
    fetched*, which is answered per figure, not per file. This is lesson 3 and lesson 9 one
    level out: there, data could not reach a consumer that bypassed or ignored it; here, a
    consumer reads real data for some values and literals for the rest.
+
+16. **A gate that ran BEFORE your last edit has not gated that edit. Re-run the full
+   gate as the final step, after every change — comments included.** The full gate is
+   tests + typecheck + `lint:hooks` + a build or browser check, and the last of those is
+   not optional padding: it is the only member that catches a file which no longer
+   parses.
+
+   Earned on the mobile-nav commit. 547 tests, `lint:hooks` and a typecheck error-set
+   diff all ran clean; *then* a z-index note was added as a JSX comment placed directly
+   under `return (`, which is a syntax error. Vite refused to compile the module and
+   served an error page in its place. Nothing in the already-passing gate knew: the run
+   predated the edit, and the edit looked like the safest category of change there is.
+   It was caught only because a browser check happened afterwards for an unrelated
+   reason, and it would otherwise have been committed as a non-compiling file behind a
+   green report.
+
+   Three things this generalises to, all of which this project has the scars for:
+
+   - **"It's only a comment" is not a safety argument.** A comment is a token stream
+     edit like any other. Lesson 7 is the same failure with a backtick instead of a
+     brace — twice, both times inside a comment quoting SQL.
+   - **The claim you publish is the state you last measured, not the state on disk.**
+     Reporting a gate result from before the final edit is the same defect as a success
+     toast over an unchanged database (lesson 2) and a 200 that vouches for a rendered
+     value it never produced (lesson 4): evidence attached to the wrong moment.
+   - **Order the gate so the cheap parse check is last, not first.** `tsc` passes on a
+     file Babel/Vite cannot parse in JSX position, and vitest never imported the module
+     at all, so neither one was ever going to catch this. Load the page, or run the
+     build.
