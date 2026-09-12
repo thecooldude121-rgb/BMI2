@@ -66,13 +66,33 @@ export interface DocumentShareRequest {
   permission?: 'view' | 'edit' | 'download';
 }
 
+/**
+ * THE SERVER'S `module` VOCABULARY, as a type rather than a convention.
+ *
+ * `documents.module` is a single lowercase value and the API rejects anything
+ * else with "module must be one of: lead, deal, contact, account, activity".
+ * The upload form used to send 'Deal' / 'Account' / 'Contact' — capitalised
+ * labels, appended to the request verbatim — so EVERY upload with a related
+ * record failed a validation the client could not see.
+ *
+ * A union rather than a lowercase() call at the boundary, deliberately: a
+ * runtime fix would leave the next caller free to send 'Deal' again and find
+ * out from a 400. This way a capitalised value does not compile.
+ *
+ * Keep in step with `VALID_MODULES` in Backend/src/controllers/documentsController.ts.
+ * That is a second list that must agree with this one — unavoidable across the
+ * HTTP boundary, so it is named here rather than left implicit.
+ */
+export type DocumentModule = 'lead' | 'deal' | 'contact' | 'account' | 'activity';
+
 export interface UploadDocumentRequest {
   name: string;
   file: File;
   category: string;
   description?: string;
   owner_name: string;
-  related_entity_type?: string;
+  /** Typed, so 'Deal' is a compile error rather than a 400. */
+  related_entity_type?: DocumentModule;
   related_entity_id?: string;
   related_entity_name?: string;
   activity_id?: string;
@@ -184,7 +204,7 @@ export const documentsService = {
     file_type?: string;
     file_size?: number;
     file_url?: string;
-    module?: string;
+    module?: DocumentModule;
     record_id?: string;
     tags?: string[];
   }): Promise<Document> {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchDocument, downloadDocument, DocumentRecord } from '../../utils/documentsApi';
@@ -7,6 +7,7 @@ import { Eye, Download, Share2, Edit, Trash2, ChevronRight, FileText, Calendar, 
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import ShareDocumentModal from '../../components/Documents/ShareDocumentModal';
+import { useWorkspaceMembers, toShareTarget } from '../../hooks/useWorkspaceMembers';
 
 /**
  * The document shape is now the API's, not a local invention.
@@ -149,34 +150,53 @@ const DocumentDetailPage: React.FC = () => {
   const aiInsight = null as AIInsight | null;
   const [showShareModal, setShowShareModal] = useState(false);
 
+  /*
+   * THE SIGNED-IN USER, from the session.
+   *
+   * This was a hardcoded object — "Alex Rodriguez", `user_alex`,
+   * alex.rodriguez@bmi.com, "Sales Rep" — so it misidentified EVERY viewer who
+   * was not Alex, and the email domain was wrong too (@bmi.com; the workspace
+   * is @bmicrm.com). It is written into the activity log below, so every
+   * recorded action was attributed to a person who was not doing it.
+   *
+   * Same defect class as the Reports page's "Me Only (Alex Rodriguez)" filter
+   * and the Team page's hardcoded "(You)" — a fabricated identity is not a
+   * fabricated metric, but it misleads in the same way and is fixed the same
+   * way: ask the session.
+   */
   const currentUser = {
-    user_id: "user_alex",
-    user_name: "Alex Rodriguez",
-    user_avatar: "AR",
-    user_email: "alex.rodriguez@bmi.com",
-    user_role: "Sales Rep"
+    user_id: user?.id ?? '',
+    user_name: user?.name ?? 'Unknown user',
+    // Initials from the real name rather than a stored literal.
+    user_avatar: (user?.name ?? '?')
+      .split(/\s+/).filter(Boolean).slice(0, 2)
+      .map(w => w.charAt(0).toUpperCase()).join('') || '?',
+    user_email: user?.email ?? '',
+    user_role: user?.role ?? 'Unknown',
   };
 
-  const teamMembers = [
-    {
-      user_id: "user_emily",
-      user_name: "Emily Davis",
-      user_avatar: "ED",
-      user_email: "emily.davis@bmi.com"
-    },
-    {
-      user_id: "user_david",
-      user_name: "David Wilson",
-      user_avatar: "DW",
-      user_email: "david.wilson@bmi.com"
-    },
-    {
-      user_id: "user_lisa",
-      user_name: "Lisa Brown",
-      user_avatar: "LB",
-      user_email: "lisa.brown@bmi.com"
-    }
-  ];
+  /*
+   * The share picker's people, from ONE fetched source shared with
+   * DocumentsLibrary — see `useWorkspaceMembers` for what the two hardcoded
+   * lists used to claim and how far they disagreed.
+   */
+  const { members, loading: membersLoading, error: membersError } = useWorkspaceMembers();
+  /*
+   * THE WHOLE ROSTER, INCLUDING THE SIGNED-IN USER.
+   *
+   * This filtered `user.id` out, on a rule I invented in passing — "never
+   * offer to share a document with yourself" — and applied to exactly ONE of
+   * the three share surfaces. DocumentsLibrary and the upload modal both list
+   * everyone, so the same workspace showed a different set of people
+   * depending on which screen you opened, and an admin sharing from the detail
+   * page could not see themselves in a list they appear in elsewhere.
+   *
+   * That is the same "two lists that must agree will disagree" defect this
+   * file was changed to FIX, reintroduced one layer up while fixing it. The
+   * rule was mine, undocumented, and unilateral; consistency across the three
+   * surfaces is worth more than a self-share being a no-op.
+   */
+  const teamMembers = useMemo(() => members.map(toShareTarget), [members]);
 
   useEffect(() => {
     if (documentId) {
@@ -1321,6 +1341,14 @@ const DocumentDetailPage: React.FC = () => {
         onShare={handleShareDocument}
         documentName={document?.name || ''}
         teamMembers={teamMembers}
+        /*
+         * An empty picker because the roster failed to load is NOT the same as
+         * an empty picker because you have no colleagues, so the modal is told
+         * which. Without this the fetch failing looks identical to a one-person
+         * workspace — the same class of ambiguity as a $0 that means "unknown".
+         */
+        membersLoading={membersLoading}
+        membersError={membersError}
       />
     </div>
   );

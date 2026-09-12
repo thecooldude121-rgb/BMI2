@@ -7,6 +7,8 @@ interface TeamMember {
   user_name: string;
   user_avatar: string;
   user_email: string;
+  /** The server's own role string, shown as-is. Optional for older callers. */
+  user_role?: string;
 }
 
 interface ShareDocumentModalProps {
@@ -15,6 +17,10 @@ interface ShareDocumentModalProps {
   onShare: (userId: string, visibility: string, message: string) => void;
   documentName: string;
   teamMembers?: TeamMember[];
+  /** Distinguishes "still loading" from "nobody to share with". */
+  membersLoading?: boolean;
+  /** Distinguishes "the roster failed" from "you work alone". */
+  membersError?: string | null;
 }
 
 const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
@@ -22,19 +28,29 @@ const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
   onClose,
   onShare,
   documentName,
-  teamMembers = []
+  teamMembers = [],
+  membersLoading = false,
+  membersError = null,
 }) => {
   const [selectedUser, setSelectedUser] = useState('');
   const [visibility, setVisibility] = useState('team');
   const [message, setMessage] = useState('');
 
-  const defaultTeamMembers = [
-    { user_id: 'user_4', user_name: 'Emily Davis', user_avatar: 'ED', user_email: 'emily.davis@bmi.com' },
-    { user_id: 'user_5', user_name: 'David Wilson', user_avatar: 'DW', user_email: 'david.wilson@bmi.com' },
-    { user_id: 'user_6', user_name: 'Lisa Brown', user_avatar: 'LB', user_email: 'lisa.brown@bmi.com' }
-  ];
-
-  const members = teamMembers.length > 0 ? teamMembers : defaultTeamMembers;
+  /*
+   * A THIRD hardcoded colleague list used to live here — the same invented
+   * Emily Davis / David Wilson / Lisa Brown on @bmi.com — behind
+   *
+   *     teamMembers.length > 0 ? teamMembers : defaultTeamMembers
+   *
+   * which made it the worst of the three: a caller passing a REAL but empty
+   * roster silently got the fabricated people instead. A fallback that
+   * activates precisely when the true answer is "nobody" cannot be noticed by
+   * the caller, and both callers were themselves passing hardcoded lists, so
+   * nothing ever exercised this branch honestly.
+   *
+   * The list now comes from the caller or it is empty, and empty says so.
+   */
+  const members = teamMembers;
 
   const visibilityOptions = [
     { value: 'private', label: 'Private (Only me)' },
@@ -87,13 +103,31 @@ const ShareDocumentModal: React.FC<ShareDocumentModalProps> = ({
               onChange={(e) => setSelectedUser(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
             >
-              <option value="">Select user...</option>
+              <option value="">
+                {membersLoading ? 'Loading members…'
+                  : membersError ? 'Members unavailable'
+                  : members.length === 0 ? 'No other members in this workspace'
+                  : 'Select user...'}
+              </option>
               {members.map((member) => (
                 <option key={member.user_id} value={member.user_id}>
-                  {member.user_name} ({member.user_email})
+                  {member.user_name}
+                  {member.user_role ? ` — ${member.user_role}` : ''} ({member.user_email})
                 </option>
               ))}
             </select>
+            {/*
+              Three different empty pickers, said apart. Previously all three
+              looked the same — and one of them showed invented people.
+            */}
+            {membersError && (
+              <p role="alert" className="mt-1 text-xs text-red-600">{membersError}</p>
+            )}
+            {!membersLoading && !membersError && members.length === 0 && (
+              <p className="mt-1 text-xs text-gray-500">
+                Invite colleagues from Settings → Team to share documents with them.
+              </p>
+            )}
           </div>
 
           <div>

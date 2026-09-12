@@ -133,6 +133,58 @@ describe('Documents — round trip', () => {
     expect(res.body.message).toMatch(/module must be one of/);
   });
 
+  /*
+   * THE UPLOAD BUG, PINNED AT THE BOUNDARY IT FAILED AT.
+   *
+   * The upload form sent CAPITALISED modules — 'Deal', 'Account', 'Contact' —
+   * because `related_entity_type` was an untyped string and nothing normalised
+   * it. `VALID_MODULES.includes('Deal')` is false, so every upload carrying a
+   * related record was rejected with a message that named an internal field
+   * and gave the user no way to know the client had sent the wrong case.
+   *
+   * This case is now unreachable from the form (`DocumentModule` is a union of
+   * the lowercase values, so 'Deal' does not compile), but the SERVER contract
+   * is what actually rejected it, and a future client can still get this wrong.
+   * Tested against every module rather than just the reported one, because the
+   * bug report named Contact and the defect was in all of them.
+   */
+  it("negative: a CAPITALISED module is refused — 'Deal' is not 'deal'", async () => {
+    for (const bad of ['Deal', 'Account', 'Contact', 'Activity', 'Lead', 'DEAL']) {
+      const res = await request(app).post('/api/v1/documents').set(auth(ws))
+        .send({ name: `Cased ${bad}.pdf`, module: bad, record_id: dealId });
+      expect(res.status, `module '${bad}' should be refused: ${JSON.stringify(res.body)}`).toBe(400);
+      expect(res.body.message).toMatch(/module must be one of/);
+    }
+  });
+
+  it("the same request with a LOWERCASE module and a real id succeeds", async () => {
+    // The other half of the proof: nothing else about the payload was wrong,
+    // so the casing was the whole difference between 400 and 201.
+    const res = await request(app).post('/api/v1/documents').set(auth(ws))
+      .send({ name: `Cased ok ${Date.now()}.pdf`, module: 'deal', record_id: dealId });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.data.module).toBe('deal');
+    expect(res.body.data.record_id).toBe(dealId);
+  });
+
+  it('negative: a lowercase module with a FABRICATED record_id is still refused', async () => {
+    /*
+     * The second blocker, which sat behind the first. The picker offered
+     * hardcoded ids — deal_acme_001, contact_john_smith, account_acme — none
+     * of which exists in any workspace. So fixing the casing alone moved the
+     * failure one validation down rather than fixing the upload, which is why
+     * the picker had to start fetching real records.
+     */
+    for (const fake of ['deal_acme_001', 'deal_bigco_001', 'deal_health_001']) {
+      const res = await request(app).post('/api/v1/documents').set(auth(ws))
+        .send({ name: 'Fabricated parent.pdf', module: 'deal', record_id: fake });
+      expect(res.status, `${fake}: ${JSON.stringify(res.body)}`).toBe(400);
+      expect(res.body.message).toMatch(/does not name a deal in this workspace/);
+      // Names the field only — never that the row exists somewhere else.
+      expect(res.body.message).not.toMatch(/exists|another workspace/i);
+    }
+  });
+
   it('negative: a parent record from another workspace is refused, naming the field only', async () => {
     const wsB = await setupWorkspace('docs-foreign');
     try {

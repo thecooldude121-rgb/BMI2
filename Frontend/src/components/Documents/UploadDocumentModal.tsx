@@ -1,5 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Tag, Users, Building2, TrendingUp, Phone, FileText, AlertCircle, Link2 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useWorkspaceMembers } from '../../hooks/useWorkspaceMembers';
+import {
+  useRelatedRecordOptions, MODULE_LABEL, type RelatedRecordOption,
+} from '../../hooks/useRelatedRecordOptions';
+import { X, Upload, Tag, FileText, AlertCircle, Link2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { documentsService } from '../../services/documentsService';
 
@@ -34,45 +39,22 @@ const CATEGORIES = [
   'Other'
 ];
 
-const MOCK_DEALS = [
-  { id: 'deal_acme_001', name: 'Acme Corp - $50K' },
-  { id: 'deal_techstart_001', name: 'TechStart - $42K' },
-  { id: 'deal_bigco_001', name: 'BigCo - $75K' },
-  { id: 'deal_innovate_001', name: 'InnovateLabs - $38K' },
-  { id: 'deal_startco_001', name: 'StartCo - $28K' },
-  { id: 'deal_health_001', name: 'HealthPlus - $62K' }
-];
-
-const MOCK_ACCOUNTS = [
-  { id: 'account_acme', name: 'Acme Corp' },
-  { id: 'account_techstart', name: 'TechStart Inc' },
-  { id: 'account_bigco', name: 'BigCo Enterprise' },
-  { id: 'account_dataflow', name: 'DataFlow Inc' },
-  { id: 'account_innovate', name: 'InnovateLabs' },
-  { id: 'account_startco', name: 'StartCo' },
-  { id: 'account_health', name: 'HealthPlus' }
-];
-
-const MOCK_CONTACTS = [
-  { id: 'contact_john_smith', name: 'John Smith - Acme Corp' },
-  { id: 'contact_sarah_lee', name: 'Sarah Lee - TechStart Inc' },
-  { id: 'contact_mike_chen', name: 'Mike Chen - BigCo Enterprise' },
-  { id: 'contact_david_park', name: 'David Park - InnovateLabs' },
-  { id: 'contact_lisa_martinez', name: 'Lisa Martinez - StartCo' },
-  { id: 'contact_amanda_foster', name: 'Amanda Foster - HealthPlus' }
-];
-
-const MOCK_ACTIVITIES = [
-  { id: 'act_bigco_001', name: 'Discovery Call (Dec 7) - BigCo' },
-  { id: 'act_acme_meeting_001', name: 'Demo Meeting (Nov 28) - Acme' },
-  { id: 'act_techstart_003', name: 'Discovery Call (Dec 3) - TechStart' }
-];
-
-const TEAM_MEMBERS = [
-  { id: 'user_sarah_chen', name: 'Sarah Chen' },
-  { id: 'user_mike', name: 'Mike Johnson' },
-  { id: 'user_emily', name: 'Emily Davis' }
-];
+/*
+ * FIVE HARDCODED LISTS WERE DELETED HERE.
+ *
+ * MOCK_DEALS / MOCK_ACCOUNTS / MOCK_CONTACTS / MOCK_ACTIVITIES offered ids
+ * that DO NOT EXIST — deal_acme_001, account_acme, contact_john_smith,
+ * act_bigco_001 — where real ids in this workspace are D002, C002, CT001.
+ * Picking any of them sent the server a record_id pointing at nothing, so a
+ * related upload could not succeed even once the module casing was fixed.
+ * They come from `useRelatedRecordOptions` now, which fetches the four real
+ * lists.
+ *
+ * TEAM_MEMBERS was a FOURTH hardcoded colleague list — Sarah Chen, Mike
+ * Johnson, Emily Davis again, and `selectedTeamMembers` defaulted to two of
+ * them PRE-CHECKED. It joins `useWorkspaceMembers`, the same single source
+ * the other two document pickers now read.
+ */
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const SUPPORTED_TYPES = ['pdf', 'docx', 'pptx', 'xlsx', 'jpg', 'jpeg', 'png', 'mp4', 'mp3'];
@@ -100,14 +82,33 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
   const [applySameSettings, setApplySameSettings] = useState(true);
   const [documentName, setDocumentName] = useState('');
   const [category, setCategory] = useState('Proposal');
-  const [dealSearch, setDealSearch] = useState('');
-  const [accountSearch, setAccountSearch] = useState('');
-  const [contactSearch, setContactSearch] = useState('');
-  const [activitySearch, setActivitySearch] = useState('');
-  const [selectedDeal, setSelectedDeal] = useState<any>(null);
-  const [selectedAccount, setSelectedAccount] = useState<any>(null);
-  const [selectedContact, setSelectedContact] = useState<any>(null);
-  const [selectedActivity, setSelectedActivity] = useState<any>(null);
+  /*
+   * ONE RELATED RECORD, NOT FOUR.
+   *
+   * There were four independent `selectedX` states, and the payload was built
+   * from an `else if` chain over them — so selecting a Deal AND a Contact
+   * silently DISCARDED the Contact with nothing on screen to say so. The UI
+   * offered a choice the server cannot represent: `documents.module` /
+   * `record_id` is a single polymorphic pair.
+   *
+   * Made single-valued in STATE rather than policed in the submit handler, so
+   * the discard cannot happen.
+   *
+   * HOW IT IS ENFORCED, precisely — because the imprecise version of this
+   * sentence was wrong and got repeated: attaching a record REPLACES THE
+   * SEARCH INPUT WITH A CHIP, so a second record cannot be picked at all until
+   * the first is explicitly removed. It is not "the second selection
+   * overwrites the first" — there is no second selection to make. The
+   * distinction matters to anyone changing this: rendering the input beside
+   * the chip would silently restore the old two-selection state.
+   *
+   * Whether a document should be able to relate to several records at once is a
+   * schema question (it would need a join table) and is tracked in CLAUDE.md
+   * alongside the module/record_id FK decision — deliberately not inferred
+   * from this bug.
+   */
+  const [relatedSearch, setRelatedSearch] = useState('');
+  const [relatedRecord, setRelatedRecord] = useState<RelatedRecordOption | null>(null);
   const [description, setDescription] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -115,31 +116,44 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
   // Pre-fill context when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      if (contextDeal) {
-        setSelectedDeal(contextDeal);
-        setDealSearch(contextDeal.name);
-      }
-      if (contextAccount) {
-        setSelectedAccount(contextAccount);
-        setAccountSearch(contextAccount.name);
-      }
-      if (contextContact) {
-        setSelectedContact(contextContact);
-        setContactSearch(contextContact.name);
-      }
-      if (contextActivity) {
-        setSelectedActivity(contextActivity);
-        setActivitySearch(contextActivity.name);
+      /*
+       * FIRST context wins, and only one is applied. Opening from a page that
+       * supplied two contexts previously set two selections and then silently
+       * dropped one at submit time.
+       */
+      const ctx: RelatedRecordOption | null =
+        contextDeal     ? { module: 'deal',     id: String(contextDeal.id),     name: contextDeal.name }
+        : contextAccount  ? { module: 'account',  id: String(contextAccount.id),  name: contextAccount.name }
+        : contextContact  ? { module: 'contact',  id: String(contextContact.id),  name: contextContact.name }
+        : contextActivity ? { module: 'activity', id: String(contextActivity.id), name: contextActivity.name }
+        : null;
+      if (ctx) {
+        setRelatedRecord(ctx);
+        setRelatedSearch(ctx.name);
       }
     }
   }, [isOpen, contextDeal, contextAccount, contextContact, contextActivity]);
   const [visibility, setVisibility] = useState<'private' | 'team' | 'company'>('team');
-  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>(['user_sarah_chen', 'user_mike']);
+  /*
+   * Starts EMPTY. It defaulted to ['user_sarah_chen', 'user_mike'] — two
+   * fabricated ids, pre-checked, so the modal opened already proposing to
+   * share with two people who do not exist under those ids.
+   */
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
 
-  const [showDealDropdown, setShowDealDropdown] = useState(false);
-  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-  const [showContactDropdown, setShowContactDropdown] = useState(false);
-  const [showActivityDropdown, setShowActivityDropdown] = useState(false);
+  /** The signed-in user — for the uploader name, which was hardcoded. */
+  const { user } = useAuth();
+
+  /** The four real record lists, fetched only while the modal is open. */
+  const {
+    options: relatedOptions, loading: relatedLoading, failed: relatedFailed,
+  } = useRelatedRecordOptions(isOpen);
+
+  /** The same single member source the other two document pickers read. */
+  const { members: workspaceMembers, loading: membersLoading, error: membersError } =
+    useWorkspaceMembers();
+
+  const [showRelatedDropdown, setShowRelatedDropdown] = useState(false);
 
   React.useEffect(() => {
     if (preloadedFiles.length > 0 && isOpen) {
@@ -253,21 +267,72 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     );
   };
 
-  const filteredDeals = MOCK_DEALS.filter(deal =>
-    deal.name.toLowerCase().includes(dealSearch.toLowerCase())
-  );
+  /*
+   * ONE searchable list across all four record types, from the real fetches.
+   * Four separate filtered lists became one because the SELECTION is now one
+   * value — see `relatedRecord`.
+   */
+  /*
+   * A PLAIN COMPUTATION, NOT A HOOK, and deliberately.
+   *
+   * This was `React.useMemo`, and it sat BELOW `if (!isOpen) return null` a
+   * hundred lines up — so the hook was called conditionally and the modal
+   * would throw "Rendered more hooks than during the previous render" on
+   * open/close. `lint:hooks` caught it; neither tsc nor the test suite said a
+   * word, which is exactly the case CLAUDE.md lesson 13 records.
+   *
+   * Fixed by removing the hook rather than moving it: filtering at most a few
+   * hundred options while a modal is open is not worth memoising, and a plain
+   * const cannot be mis-ordered by the next person editing this file.
+   */
+  const q = relatedSearch.trim().toLowerCase();
+  const matchingRecords = (q
+    ? relatedOptions.filter(o =>
+        o.name.toLowerCase().includes(q)
+        || (o.detail ?? '').toLowerCase().includes(q)
+        || MODULE_LABEL[o.module].toLowerCase().includes(q))
+    : relatedOptions
+  // Capped so a large workspace cannot render thousands of rows into a
+  // dropdown; the search narrows it rather than paging.
+  ).slice(0, 50);
 
-  const filteredAccounts = MOCK_ACCOUNTS.filter(account =>
-    account.name.toLowerCase().includes(accountSearch.toLowerCase())
-  );
-
-  const filteredContacts = MOCK_CONTACTS.filter(contact =>
-    contact.name.toLowerCase().includes(contactSearch.toLowerCase())
-  );
-
-  const filteredActivities = MOCK_ACTIVITIES.filter(activity =>
-    activity.name.toLowerCase().includes(activitySearch.toLowerCase())
-  );
+  /**
+   * Turns a server validation message into something the user can act on.
+   *
+   * The upload used to surface the API's own wording verbatim — "module must be
+   * one of: lead, deal, contact, account, activity" — which names an internal
+   * field, lists internal values, and says nothing about what the person
+   * should change. It was also, in that specific case, reporting a CLIENT bug
+   * (a capitalised module) as though the user had done something wrong.
+   *
+   * Anything unrecognised is passed through unchanged rather than replaced by
+   * a vague catch-all: a message we have not seen is more useful raw than
+   * flattened into "something went wrong".
+   */
+  const explainUploadError = (raw: string): string => {
+    const m = (raw || '').toLowerCase();
+    if (m.includes('module must be one of') || m.includes('module and record_id')) {
+      // Now unreachable from this form — the module is typed and the pair is
+      // sent together — so if it appears, it is a real client/server mismatch
+      // and should say so rather than blaming the file.
+      return 'The related record could not be attached (unexpected link format). '
+        + 'Remove it and upload again, and report this — the form should not be '
+        + 'able to produce it.';
+    }
+    if (m.includes('does not name a')) {
+      return 'The related record no longer exists in this workspace. '
+        + 'Pick a different one, or remove the link and upload without it.';
+    }
+    if (m.includes('name is required')) return 'Give the document a name before uploading.';
+    if (m.includes('the limit is 25 mb') || m.includes('too large')) return raw;
+    if (m.includes('could not be reached') || m.includes('failed to fetch')) {
+      return 'The server could not be reached. Nothing was uploaded — try again.';
+    }
+    if (m.includes('storage is not configured') || m.includes('not available yet')) {
+      return 'File storage is not configured on the server yet, so the file could not be saved.';
+    }
+    return raw;
+  };
 
   const handleUpload = async () => {
     const validFiles = selectedFiles.filter(f => f.isValid);
@@ -287,23 +352,22 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
       setUploadProgress(0);
       setCurrentFileIndex(0);
 
-      let relatedEntityType: string | undefined;
-      let relatedEntityId: string | undefined;
-      let relatedEntityName: string | undefined;
-
-      if (selectedDeal) {
-        relatedEntityType = 'Deal';
-        relatedEntityId = selectedDeal.id;
-        relatedEntityName = selectedDeal.name;
-      } else if (selectedAccount) {
-        relatedEntityType = 'Account';
-        relatedEntityId = selectedAccount.id;
-        relatedEntityName = selectedAccount.name;
-      } else if (selectedContact) {
-        relatedEntityType = 'Contact';
-        relatedEntityId = selectedContact.id;
-        relatedEntityName = selectedContact.name;
-      }
+      /*
+       * THE BUG THIS FIX EXISTS FOR. These were 'Deal' / 'Account' / 'Contact'
+       * — capitalised labels — appended to the request verbatim, while the
+       * server's allowlist is lowercase:
+       *
+       *     VALID_MODULES = ['lead','deal','contact','account','activity']
+       *
+       * so `VALID_MODULES.includes('Contact')` was false and EVERY upload with
+       * a related record failed with "module must be one of: …", a message that
+       * gave the user no way to know the client had sent the wrong case.
+       * `module` is now typed (`DocumentModule`), so a capitalised value does
+       * not compile rather than failing at runtime.
+       */
+      const relatedEntityType = relatedRecord?.module;
+      const relatedEntityId = relatedRecord?.id;
+      const relatedEntityName = relatedRecord?.name;
 
       const uploadedDocs = [];
 
@@ -327,11 +391,14 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
               file: fileData.file,
               category,
               description,
-              owner_name: 'Alex Rodriguez',
+              // The signed-in user. Was hardcoded 'Alex Rodriguez' — the same
+              // fabricated identity removed from DocumentDetailPage, and the
+              // server overrides it from the token anyway (`resolveActorName`),
+              // so sending a name at all is belt-and-braces.
+              owner_name: user?.name ?? '',
               related_entity_type: relatedEntityType,
               related_entity_id: relatedEntityId,
               related_entity_name: relatedEntityName,
-              activity_id: selectedActivity?.id,
               tags,
             },
             (progress) => {
@@ -362,10 +429,11 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
             file_url: uploadedDoc.file_url || '',
             category: uploadedDoc.category,
             tags,
-            deal_id: selectedDeal?.id || null,
-            account_id: selectedAccount?.id || null,
-            contact_id: selectedContact?.id || null,
-            activity_id: selectedActivity?.id || null,
+            /*
+             * deal_id / account_id / contact_id / activity_id are NOT columns
+             * on `documents` — only `module` and `record_id` are. They are
+             * dropped rather than sent; the pair above is the real link.
+             */
             related_entity_type: relatedEntityType,
             related_entity_id: relatedEntityId,
             related_entity_name: relatedEntityName,
@@ -387,10 +455,13 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
           // Mark this file as error but continue with others
           setSelectedFiles(prev => prev.map(f =>
             f.id === fileData.id
-              ? { ...f, status: 'error', error: error.message || 'Upload failed' }
+              ? { ...f, status: 'error', error: explainUploadError(error.message) || 'Upload failed' }
               : f
           ));
-          showToast(`Failed to upload ${fileData.file.name}: ${error.message}`, 'error');
+          showToast(
+            `${fileData.file.name} was not uploaded. ${explainUploadError(error.message)}`,
+            'error',
+          );
         }
       }
 
@@ -400,8 +471,19 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
       const failedCount = validFiles.length - uploadedDocs.length;
       if (failedCount > 0 && uploadedDocs.length === 0) {
         // Don't lead with "0 uploaded successfully" when nothing uploaded.
+        /*
+         * "Nothing was uploaded" was accurate but unhelpful: each file fails
+         * independently, so when every one fails for the SAME reason the user
+         * saw the count and had to infer the cause from a separate technical
+         * toast. The shared reason is now stated here, once.
+         */
+        const reasons = new Set(
+          selectedFiles.filter(f => f.status === 'error' && f.error).map(f => f.error as string),
+        );
         showToast(
-          `Nothing was uploaded — all ${failedCount} file(s) failed`,
+          reasons.size === 1
+            ? `Nothing was uploaded. ${[...reasons][0]}`
+            : `Nothing was uploaded — all ${failedCount} file(s) failed. See each file for why.`,
           'error'
         );
       } else if (failedCount > 0) {
@@ -434,19 +516,14 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     setDocumentName('');
     setApplySameSettings(true);
     setCategory('Proposal');
-    setDealSearch('');
-    setAccountSearch('');
-    setContactSearch('');
-    setActivitySearch('');
-    setSelectedDeal(null);
-    setSelectedAccount(null);
-    setSelectedContact(null);
-    setSelectedActivity(null);
+    setRelatedSearch('');
+    setRelatedRecord(null);
+    setShowRelatedDropdown(false);
     setDescription('');
     setTagInput('');
     setTags([]);
     setVisibility('team');
-    setSelectedTeamMembers(['user_sarah_chen', 'user_mike']);
+    setSelectedTeamMembers([]);   // was two pre-checked fabricated ids
     setUploading(false);
     setUploadProgress(0);
     setUploadComplete(false);
@@ -459,14 +536,9 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
     setDocumentName('');
     setApplySameSettings(true);
     setCategory('Proposal');
-    setDealSearch('');
-    setAccountSearch('');
-    setContactSearch('');
-    setActivitySearch('');
-    setSelectedDeal(null);
-    setSelectedAccount(null);
-    setSelectedContact(null);
-    setSelectedActivity(null);
+    setRelatedSearch('');
+    setRelatedRecord(null);
+    setShowRelatedDropdown(false);
     setDescription('');
     setTagInput('');
     setTags([]);
@@ -886,215 +958,112 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
               </div>
             )}
 
-            {/* Deal */}
+            {/*
+              ONE PICKER, replacing four near-identical dropdowns (212 lines).
+              Single-select by construction: choosing a record replaces
+              whatever was attached, so the silent discard the `else if` chain
+              used to perform cannot occur. The type is shown on every row and
+              on the chip, because "Acme Corp" alone does not say whether it is
+              an account or a deal.
+            */}
             <div className="mb-3 relative">
-              <label className="block text-sm mb-1" style={{ color: '#6b7280' }}>Deal:</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={selectedDeal ? selectedDeal.name : dealSearch}
-                  onChange={(e) => {
-                    setDealSearch(e.target.value);
-                    setSelectedDeal(null);
-                    setShowDealDropdown(true);
-                  }}
-                  onFocus={() => setShowDealDropdown(true)}
-                  placeholder="Search deals..."
-                  className="w-full px-3 py-2 pr-8 rounded-lg focus:outline-none focus:ring-2"
-                  style={{ border: '1px solid #e5e7eb', color: '#1f2937' }}
-                  disabled={uploading}
-                />
-                <TrendingUp className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: '#9ca3af' }} />
-              </div>
-              {showDealDropdown && !selectedDeal && filteredDeals.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ border: '1px solid #e5e7eb' }}>
-                  {filteredDeals.map(deal => (
-                    <button
-                      key={deal.id}
-                      onClick={() => {
-                        setSelectedDeal(deal);
-                        setDealSearch('');
-                        setShowDealDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                      style={{ color: '#1f2937' }}
-                    >
-                      {deal.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedDeal && (
-                <div className="mt-1 flex items-center gap-2 text-sm" style={{ color: '#667eea' }}>
-                  <TrendingUp className="w-3 h-3" />
-                  <span>{selectedDeal.name}</span>
-                  <button
-                    onClick={() => setSelectedDeal(null)}
-                    className="ml-auto text-xs hover:underline"
-                    style={{ color: '#ef4444' }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              )}
-            </div>
+              <label htmlFor="related-record" className="block text-sm mb-1" style={{ color: '#6b7280' }}>
+                Related record: <span className="text-xs" style={{ color: '#9ca3af' }}>(optional — one only)</span>
+              </label>
 
-            {/* Account */}
-            <div className="mb-3 relative">
-              <label className="block text-sm mb-1" style={{ color: '#6b7280' }}>Account:</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={selectedAccount ? selectedAccount.name : accountSearch}
-                  onChange={(e) => {
-                    setAccountSearch(e.target.value);
-                    setSelectedAccount(null);
-                    setShowAccountDropdown(true);
-                  }}
-                  onFocus={() => setShowAccountDropdown(true)}
-                  placeholder="Search accounts..."
-                  className="w-full px-3 py-2 pr-8 rounded-lg focus:outline-none focus:ring-2"
-                  style={{ border: '1px solid #e5e7eb', color: '#1f2937' }}
-                  disabled={uploading}
-                />
-                <Building2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: '#9ca3af' }} />
-              </div>
-              {showAccountDropdown && !selectedAccount && filteredAccounts.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ border: '1px solid #e5e7eb' }}>
-                  {filteredAccounts.map(account => (
-                    <button
-                      key={account.id}
-                      onClick={() => {
-                        setSelectedAccount(account);
-                        setAccountSearch('');
-                        setShowAccountDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                      style={{ color: '#1f2937' }}
+              {relatedRecord ? (
+                <div
+                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg"
+                  style={{ border: '1px solid #c7d2fe', backgroundColor: '#eef2ff' }}
+                >
+                  <span className="text-sm" style={{ color: '#1f2937' }}>
+                    <span
+                      className="mr-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                      style={{ backgroundColor: '#e0e7ff', color: '#4338ca' }}
                     >
-                      {account.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedAccount && (
-                <div className="mt-1 flex items-center gap-2 text-sm" style={{ color: '#667eea' }}>
-                  <Building2 className="w-3 h-3" />
-                  <span>{selectedAccount.name}</span>
+                      {MODULE_LABEL[relatedRecord.module]}
+                    </span>
+                    {relatedRecord.name}
+                  </span>
                   <button
-                    onClick={() => setSelectedAccount(null)}
-                    className="ml-auto text-xs hover:underline"
-                    style={{ color: '#ef4444' }}
+                    type="button"
+                    onClick={() => { setRelatedRecord(null); setRelatedSearch(''); }}
+                    disabled={uploading}
+                    aria-label="Remove related record"
+                    className="shrink-0 hover:text-red-600"
+                    style={{ color: '#6b7280' }}
                   >
-                    Remove
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
-              )}
-            </div>
+              ) : (
+                <>
+                  <input
+                    id="related-record"
+                    type="text"
+                    value={relatedSearch}
+                    onChange={(e) => { setRelatedSearch(e.target.value); setShowRelatedDropdown(true); }}
+                    onFocus={() => setShowRelatedDropdown(true)}
+                    placeholder="Search deals, accounts, contacts or activities…"
+                    disabled={uploading}
+                    className="w-full px-3 py-2 rounded-lg focus:outline-none focus:ring-2"
+                    style={{ border: '1px solid #e5e7eb', color: '#1f2937' }}
+                  />
 
-            {/* Contact */}
-            <div className="mb-3 relative">
-              <label className="block text-sm mb-1" style={{ color: '#6b7280' }}>Contact:</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={selectedContact ? selectedContact.name : contactSearch}
-                  onChange={(e) => {
-                    setContactSearch(e.target.value);
-                    setSelectedContact(null);
-                    setShowContactDropdown(true);
-                  }}
-                  onFocus={() => setShowContactDropdown(true)}
-                  placeholder="Search contacts..."
-                  className="w-full px-3 py-2 pr-8 rounded-lg focus:outline-none focus:ring-2"
-                  style={{ border: '1px solid #e5e7eb', color: '#1f2937' }}
-                  disabled={uploading}
-                />
-                <Users className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: '#9ca3af' }} />
-              </div>
-              {showContactDropdown && !selectedContact && filteredContacts.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ border: '1px solid #e5e7eb' }}>
-                  {filteredContacts.map(contact => (
-                    <button
-                      key={contact.id}
-                      onClick={() => {
-                        setSelectedContact(contact);
-                        setContactSearch('');
-                        setShowContactDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                      style={{ color: '#1f2937' }}
+                  {showRelatedDropdown && (
+                    <div
+                      className="absolute z-20 w-full mt-1 rounded-lg shadow-lg max-h-56 overflow-y-auto"
+                      style={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb' }}
                     >
-                      {contact.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedContact && (
-                <div className="mt-1 flex items-center gap-2 text-sm" style={{ color: '#667eea' }}>
-                  <Users className="w-3 h-3" />
-                  <span>{selectedContact.name}</span>
-                  <button
-                    onClick={() => setSelectedContact(null)}
-                    className="ml-auto text-xs hover:underline"
-                    style={{ color: '#ef4444' }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Activity */}
-            <div className="relative">
-              <label className="block text-sm mb-1" style={{ color: '#6b7280' }}>Activity:</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={selectedActivity ? selectedActivity.name : activitySearch}
-                  onChange={(e) => {
-                    setActivitySearch(e.target.value);
-                    setSelectedActivity(null);
-                    setShowActivityDropdown(true);
-                  }}
-                  onFocus={() => setShowActivityDropdown(true)}
-                  placeholder="Search activities..."
-                  className="w-full px-3 py-2 pr-8 rounded-lg focus:outline-none focus:ring-2"
-                  style={{ border: '1px solid #e5e7eb', color: '#1f2937' }}
-                  disabled={uploading}
-                />
-                <Phone className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: '#9ca3af' }} />
-              </div>
-              {showActivityDropdown && !selectedActivity && filteredActivities.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white rounded-lg shadow-lg max-h-48 overflow-y-auto" style={{ border: '1px solid #e5e7eb' }}>
-                  {filteredActivities.map(activity => (
-                    <button
-                      key={activity.id}
-                      onClick={() => {
-                        setSelectedActivity(activity);
-                        setActivitySearch('');
-                        setShowActivityDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                      style={{ color: '#1f2937' }}
-                    >
-                      {activity.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedActivity && (
-                <div className="mt-1 flex items-center gap-2 text-sm" style={{ color: '#667eea' }}>
-                  <Phone className="w-3 h-3" />
-                  <span>{selectedActivity.name}</span>
-                  <button
-                    onClick={() => setSelectedActivity(null)}
-                    className="ml-auto text-xs hover:underline"
-                    style={{ color: '#ef4444' }}
-                  >
-                    Remove
-                  </button>
-                </div>
+                      {/*
+                        Four states said apart. Previously an empty dropdown
+                        meant only "no match" — and the list it filtered was
+                        fabricated, so it always had something to show.
+                      */}
+                      {relatedLoading && (
+                        <p className="px-3 py-2 text-sm" style={{ color: '#6b7280' }}>Loading records…</p>
+                      )}
+                      {!relatedLoading && relatedFailed.length > 0 && (
+                        <p role="alert" className="px-3 py-2 text-sm" style={{ color: '#b91c1c' }}>
+                          Could not load {relatedFailed.join(', ')}. Those records are not listed.
+                        </p>
+                      )}
+                      {!relatedLoading && matchingRecords.length === 0 && relatedFailed.length === 0 && (
+                        <p className="px-3 py-2 text-sm" style={{ color: '#6b7280' }}>
+                          {relatedSearch.trim()
+                            ? 'No record matches that search.'
+                            : 'No deals, accounts, contacts or activities yet.'}
+                        </p>
+                      )}
+                      {matchingRecords.map((opt) => (
+                        <button
+                          key={`${opt.module}:${opt.id}`}
+                          type="button"
+                          onClick={() => {
+                            // Replaces, never adds.
+                            setRelatedRecord(opt);
+                            setRelatedSearch(opt.name);
+                            setShowRelatedDropdown(false);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <span
+                            className="shrink-0 px-1.5 py-0.5 rounded text-xs font-medium"
+                            style={{ backgroundColor: '#f3f4f6', color: '#4b5563' }}
+                          >
+                            {MODULE_LABEL[opt.module]}
+                          </span>
+                          <span className="text-sm truncate" style={{ color: '#1f2937' }}>
+                            {opt.name}
+                            {opt.detail && (
+                              <span className="ml-1 text-xs" style={{ color: '#9ca3af' }}>· {opt.detail}</span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -1205,7 +1174,24 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                 Share with:
               </label>
               <div className="space-y-2">
-                {TEAM_MEMBERS.map(member => (
+                {/*
+                  REAL workspace members, from the same `useWorkspaceMembers`
+                  the DocumentsLibrary and DocumentDetailPage pickers read.
+                  This was the fourth hardcoded copy of Sarah Chen / Mike
+                  Johnson / Emily Davis in this codebase.
+                */}
+                {membersLoading && (
+                  <p className="text-sm" style={{ color: '#6b7280' }}>Loading members…</p>
+                )}
+                {membersError && (
+                  <p role="alert" className="text-sm" style={{ color: '#b91c1c' }}>{membersError}</p>
+                )}
+                {!membersLoading && !membersError && workspaceMembers.length === 0 && (
+                  <p className="text-sm" style={{ color: '#6b7280' }}>
+                    No other members in this workspace.
+                  </p>
+                )}
+                {workspaceMembers.map(member => (
                   <label key={member.id} className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1215,7 +1201,10 @@ const UploadDocumentModal: React.FC<UploadDocumentModalProps> = ({
                       style={{ accentColor: '#667eea' }}
                       disabled={uploading}
                     />
-                    <span className="text-sm" style={{ color: '#1f2937' }}>{member.name}</span>
+                    <span className="text-sm" style={{ color: '#374151' }}>
+                      {member.name || member.email}
+                      <span style={{ color: '#9ca3af' }}> — {member.role}</span>
+                    </span>
                   </label>
                 ))}
               </div>

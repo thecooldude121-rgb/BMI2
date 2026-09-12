@@ -7,6 +7,7 @@ import DragDropOverlay from '../../components/Documents/DragDropOverlay';
 import RecentDocumentsSection from '../../components/Documents/RecentDocumentsSection';
 import DocumentPreviewModal from '../../components/Documents/DocumentPreviewModal';
 import { documentsService, Document as ServiceDocument } from '../../services/documentsService';
+import { useWorkspaceMembers, toShareTarget } from '../../hooks/useWorkspaceMembers';
 
 interface Document {
   id?: string;
@@ -270,6 +271,8 @@ const DocumentsLibrary: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  /** Chosen share recipients — nothing is selected by default. */
+  const [shareRecipients, setShareRecipients] = useState<Set<string>>(new Set());
   const [shareDocument, setShareDocument] = useState<Document | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editDocument, setEditDocument] = useState<Document | null>(null);
@@ -1040,48 +1043,49 @@ const DocumentsLibrary: React.FC = () => {
     setDeleteModalOpen(false);
   };
 
+  /*
+   * Workspace members for the share picker, from the SAME hook
+   * DocumentDetailPage uses — one list, one source. See
+   * `useWorkspaceMembers` for what the three hardcoded lists claimed.
+   */
+  const { members, loading: membersLoading, error: membersError } = useWorkspaceMembers();
+  const shareTargets = useMemo(() => members.map(toShareTarget), [members]);
+
+  const toggleShareRecipient = (userId: string) => {
+    setShareRecipients(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId); else next.add(userId);
+      return next;
+    });
+  };
+
   const getSelectedDocuments = () => {
     return documents.filter(doc => selectedDocs.has(doc.document_id));
   };
 
-  const getRelatedEntityName = (doc: Document): string | null => {
-    if (doc.related_entity_name) {
-      return doc.related_entity_name;
-    }
-    if (doc.deal_id) {
-      const dealNames: Record<string, string> = {
-        'deal_acme_001': 'Acme Corp - $50K',
-        'deal_techstart_001': 'TechStart - $42K',
-        'deal_bigco_001': 'BigCo - $75K',
-        'deal_innovate_001': 'InnovateLabs - $38K',
-        'deal_startco_001': 'StartCo - $28K',
-        'deal_health_001': 'HealthPlus - $62K'
-      };
-      return dealNames[doc.deal_id] || doc.deal_id;
-    }
-    if (doc.account_id) {
-      const accountNames: Record<string, string> = {
-        'account_acme': 'Acme Corp',
-        'account_techstart': 'TechStart Inc',
-        'account_bigco': 'BigCo Enterprise',
-        'account_dataflow': 'DataFlow Inc',
-        'account_innovate': 'InnovateLabs',
-        'account_startco': 'StartCo',
-        'account_health': 'HealthPlus'
-      };
-      return accountNames[doc.account_id] || doc.account_id;
-    }
-    return null;
-  };
-
-  const getActivityName = (activityId: string): string | null => {
-    const activities: Record<string, string> = {
-      'act_bigco_001': 'Discovery Call (Dec 7)',
-      'act_acme_meeting_001': 'Demo Meeting (Nov 28)',
-      'act_techstart_003': 'Discovery Call (Dec 3)'
-    };
-    return activities[activityId] || null;
-  };
+  /*
+   * `getRelatedEntityName` AND `getActivityName` WERE DELETED HERE, and they
+   * were a landmine rather than merely dead.
+   *
+   * Both were lookup tables of invented ids to invented content — and the
+   * content carried VALUES, not just names: 'deal_acme_001' -> 'Acme Corp -
+   * $50K', 'deal_health_001' -> 'HealthPlus - $62K', 'act_bigco_001' ->
+   * 'Discovery Call (Dec 7)'.
+   *
+   * They never fired, because they were keyed on `doc.deal_id`,
+   * `doc.account_id` and `doc.activity_id` — and NONE OF THOSE COLUMNS EXISTS.
+   * `documents` has `module` and `record_id` (verified against
+   * information_schema); the four separate id columns the old local `Document`
+   * type declared were never deployed.
+   *
+   * Deleted rather than left dead precisely BECAUSE they never fired: the
+   * moment someone adds a `deal_id` — which the tracked `module`/`record_id`
+   * FK work would plausibly do — every document pointing at an unknown deal
+   * would start rendering "Acme Corp - $50K" with nothing behind it, and the
+   * person adding the column would have no reason to suspect a fabricated
+   * fallback was waiting. Related-entity names belong to whatever resolves
+   * `module` + `record_id` for real; until then the column is simply absent.
+   */
 
   const handleNavigateToEntity = (e: React.MouseEvent, doc: Document) => {
     e.stopPropagation();
@@ -2030,8 +2034,15 @@ const DocumentsLibrary: React.FC = () => {
               {!isLoading && !error && viewMode === 'grid' && paginatedDocuments.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5" data-documents-grid>
                   {paginatedDocuments.map((doc, index) => {
-                    const relatedEntity = getRelatedEntityName(doc);
-                    const activityName = doc.activity_id ? getActivityName(doc.activity_id) : null;
+                    /*
+                     * `relatedEntity` and `activityName` came from the deleted
+                     * lookup tables above. `documents` has no deal/account/
+                     * activity id column to resolve, so both are null until
+                     * `module` + `record_id` are resolved for real — which is
+                     * the tracked FK decision, not something a card can guess.
+                     */
+                    const relatedEntity: string | null = null;
+                    const activityName: string | null = null;
                     const isStarred = starredDocs.has(doc.document_id);
 
                     return (
@@ -2722,16 +2733,49 @@ const DocumentsLibrary: React.FC = () => {
                 />
               </div>
 
+              {/*
+                REAL WORKSPACE MEMBERS, from the same fetch DocumentDetailPage
+                uses. This was a hardcoded array of three strings —
+                'Sarah Chen (Sales Team)', 'Mike Johnson (Manager)',
+                'Emily Davis (Sales Rep)' — with the first TWO PRE-CHECKED, so
+                the modal opened already proposing to share with two specific
+                colleagues.
+                The roles were wrong as well as hardcoded: all three of those
+                people are `sales` on the server; none is a Manager. And
+                DocumentDetailPage carried a DIFFERENT invented list, so the
+                same product named two different teams on adjacent screens.
+                Nothing is pre-checked now: a default recipient is a decision,
+                not a convenience.
+              */}
               <div className="mb-4 space-y-2">
-                {['Sarah Chen (Sales Team)', 'Mike Johnson (Manager)', 'Emily Davis (Sales Rep)'].map((member, idx) => (
-                  <label key={idx} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer">
+                {membersLoading && (
+                  <p className="text-sm text-gray-500">Loading workspace members…</p>
+                )}
+                {membersError && (
+                  <p role="alert" className="text-sm text-red-600">{membersError}</p>
+                )}
+                {!membersLoading && !membersError && shareTargets.length === 0 && (
+                  <p className="text-sm text-gray-500">
+                    No other members in this workspace. Invite colleagues from
+                    Settings → Team to share documents with them.
+                  </p>
+                )}
+                {shareTargets.map((member) => (
+                  <label
+                    key={member.user_id}
+                    className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                  >
                     <input
                       type="checkbox"
-                      defaultChecked={idx < 2}
+                      checked={shareRecipients.has(member.user_id)}
+                      onChange={() => toggleShareRecipient(member.user_id)}
                       className="w-4 h-4"
                       style={{ accentColor: '#667eea' }}
                     />
-                    <span className="text-sm" style={{ color: '#1f2937' }}>{member}</span>
+                    <span className="text-sm" style={{ color: '#1f2937' }}>
+                      {member.user_name}
+                      <span className="text-gray-500"> — {member.user_role}</span>
+                    </span>
                   </label>
                 ))}
               </div>
