@@ -377,7 +377,9 @@ const ForecastPage: React.FC = () => {
       // Absent means none: an older server that does not send the field must
       // not be read as permitting every edit.
       setEditableQuotaUserIds(new Set(((q.editable_user_ids ?? []) as unknown[]).map(Number)));
-      setQuotas((q.data as any[]).map((r: any) => ({
+      // The server's row shape. quota_amount is NUMERIC, which node-postgres
+      // sends as a string — hence parseFloat below.
+      setQuotas((q.data as { user_id: number | string; rep_name: string | null; quota_amount: string }[]).map(r => ({
         user_id: Number(r.user_id),
         rep_name: r.rep_name ?? null,
         quota_amount: parseFloat(r.quota_amount) || 0,
