@@ -6,6 +6,8 @@ import {
   ACTIVITY_TARGET_KEYS, ACTIVITY_TARGET_MAX, SENIORITY_LEVELS, PERIOD_QUERY_MESSAGE,
   authorizeTargetWrite, canSetTargetsFor, parsePeriodLabel, repsSetOwnTargets,
 } from '../utils/targets';
+import { PROJECTION_RULES, projectTarget } from '../services/targetProjection';
+import { loadProjectionDeals } from '../services/targetProjectionData';
 
 /**
  * Per-user sales targets — the Settings half. Migration 044.
@@ -107,6 +109,52 @@ export const getTargets = async (req: AuthRequest, res: Response, next: NextFunc
       activity_target_keys: ACTIVITY_TARGET_KEYS,
       activity_target_max: ACTIVITY_TARGET_MAX,
       reps_set_own_targets: selfOn,
+    });
+  } catch (error) { next(error); }
+};
+
+/**
+ * GET /api/v1/targets/projection?period=Q3+2026
+ *
+ * The pipeline-coverage projection for every active person in the workspace,
+ * computed by services/targetProjection.ts from real closed-deal history. No
+ * UI consumes this yet — the Sales Intelligence Guide panel is later work —
+ * so the response carries the rules it was computed under, making every null
+ * explainable from the payload alone.
+ */
+export const getProjection = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const period = parsePeriodLabel(req.query.period);
+    if (!period) { res.status(400).json({ success: false, message: PERIOD_QUERY_MESSAGE }); return; }
+
+    const [users, deals] = await Promise.all([
+      pool.query(
+        `SELECT u.id, u.first_name, u.last_name, u.email, q.quota_amount, q.currency
+           FROM users u
+           LEFT JOIN quotas q
+             ON q.user_id = u.id AND q.tenant_id = u.tenant_id AND q.period_label = $2
+          WHERE u.tenant_id = $1 AND u.is_active = true
+          ORDER BY u.first_name, u.last_name`,
+        [tenantId, period.label],
+      ),
+      loadProjectionDeals(tenantId),
+    ]);
+
+    const now = new Date();
+    res.json({
+      success: true,
+      period: { label: period.label, start: period.start.toISOString(), end: period.end.toISOString() },
+      generated_at: now.toISOString(),
+      rules: PROJECTION_RULES,
+      data: users.rows.map(u => ({
+        name: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email,
+        ...projectTarget({
+          userId: Number(u.id), now, period,
+          quota: u.quota_amount === null ? null : { amount: Number(u.quota_amount), currency: u.currency },
+          ...deals,
+        }),
+      })),
     });
   } catch (error) { next(error); }
 };

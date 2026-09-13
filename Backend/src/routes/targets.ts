@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTargets, upsertProfile } from '../controllers/targetsController';
+import { getTargets, upsertProfile, getProjection } from '../controllers/targetsController';
 import { protect } from '../middleware/auth';
 
 const router = Router();
@@ -8,6 +8,10 @@ router.use(protect);
 
 // Reading is open to every authenticated role, like GET /quotas and GET /users.
 router.get('/', getTargets);
+
+// Computed from real closed-deal history (services/targetProjection.ts). Read
+// access matches GET / — the same open visibility question applies.
+router.get('/projection', getProjection);
 
 // No requireRole here ON PURPOSE: a sales rep may set their own profile when
 // the workspace allows it, so the coarse role gate would be wrong. The fine
