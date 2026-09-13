@@ -602,6 +602,42 @@ old constraint, which fails the shared-name test.
   once. Same treatment as the document-telemetry and BANT items: real, structural, not
   urgent.
 
+- **Agent Capability 2 foundation — user targets, one industry vocabulary, pipeline
+  projection. BUILT (migrations 044, 045). The dashboard "Sales Intelligence Guide" panel
+  that consumes it is NOT built, and is the next piece of work.** The decisions below were
+  agreed in the session that built it; they are recorded so they are neither re-litigated
+  nor guessed at:
+  - **Targets extend `quotas`, they do not duplicate it.** Per-period fields
+    (`quota_amount`, `currency`, `activity_targets`) live on `quotas`; per-person fields
+    (`seniority`, `ramp_start_date`, `territory`, `product_line`) in `user_sales_profiles`,
+    tenant-consistent by a COMPOSITE FK to `users(id, tenant_id)`. There is no
+    `user_targets` table. The reporting line is `users.manager_id` (041). `territories` and
+    `products` were NOT used — neither has a `tenant_id`, the `employees` defect again.
+  - **Who sets whose targets** — admin: anyone; manager: DIRECT reports only, not the
+    subtree; anyone: themselves, only when `tenants.settings.reps_set_own_targets` is on
+    (off by default). One function, `utils/targets.canSetTargetsFor`, served as
+    `editable_user_ids` / `can_edit`. `PUT /quotas` was open to every role before 044.
+  - **Projection bars** (`PROJECTION_RULES`): a win rate needs 10 closures with a RECORDED
+    close time in the trailing 365 days, at least one of them won; cycle length and deal
+    size need 5 won deals. The rep's own history first, else the workspace's (labelled),
+    else NULL plus a reason — never a default. A close time comes ONLY from
+    `deal_stage_history`; `createDeal` writes none, so a deal created directly in a won
+    stage is untimed — both live closed deals (D005, D006) are. Only deals in the quota's
+    currency count; the rest are reported by currency, never converted.
+  - **Industry**: `companies.industry` is constrained to 21 values (045) and served at
+    `GET /companies/industries`; the workspace's OWN industry is
+    `tenants.settings.business_industry`, same list.
+  - **Deferred, deliberately:** `ramp_start_date` is stored but NOT applied to the
+    projection (how a ramping rep's quota is prorated is undecided policy); no stored
+    "pipeline quota" (required pipeline is computed, and a typed one would be a second
+    answer); `leads.industry` (a different vocabulary in live use — Enterprise, Cloud,
+    Pharma…) and `deals.account_industry` (free text, NULL on all 25 deals) are not
+    constrained; `CompanyForm` / `CompaniesPage` are unrouted dead code carrying a stale
+    industry list; whether `createDeal` should write a history row when a deal is created
+    straight into a closed stage (which would make those closures datable) is its own
+    decision; the projection endpoint's read visibility follows `GET /quotas` (open to
+    every role) — the same open row-level question `middleware/auth.ts` records.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
@@ -962,6 +998,20 @@ in that suite two requests race to deactivate each other and the test accepts `[
 deactivation, and leave TWO privileged members where the test asserts exactly one — a
 failure that looks nothing like an auth problem in the output.
 
+**Observed 2026-09-13 and deliberately NOT counted as data points**, because part 3 was not
+met — nothing was orphaned. Four single-test 30-second timeouts, each in a different,
+unrelated test (`roundTrip.targets` "GET /quotas serves editable_user_ids", `roundTrip.rbac`
+"deleting a lead note", `roundTrip.profile` "negative: … short new_password",
+`roundTrip.tokenVersion` "attribution still works without the per-controller users
+query" — that file then passed 13/13 three times alone), plus one
+non-timeout failure (`roundTrip.userManagement` "lists the workspace members", 253 ms) whose
+assertion text was not captured. None reproduced on rerun. The first two coincided with a
+second vitest process started from a parallel shell call (lesson 17); the third and fourth
+happened in full runs with nothing else running. One thing for the debugging pass to weigh: part 3
+presumes the failure kills `afterAll`. A single test that times out still lets `afterAll`
+run, so a timeout-shaped instance of this flake would never orphan a tenant — the signature
+as written may be excluding exactly these.
+
 **It still deserves a dedicated debugging pass**, and the first thing to instrument is pool
 acquisition (`pool.totalCount` / `idleCount` / `waitingCount`) during a full run, not any
 individual test.
@@ -1274,3 +1324,21 @@ something directly, do that instead of reasoning about what should be true.**
      file Babel/Vite cannot parse in JSX position, and vitest never imported the module
      at all, so neither one was ever going to catch this. Load the page, or run the
      build.
+
+17. **Two shell commands issued in parallel share ONE working directory — so one of them
+   can run somewhere you did not send it.** In the targets session a frontend
+   `cd Frontend && npx vitest` ran inside `Backend/`, because the parallel backend call's
+   `cd` landed in between. It pointed the round-trip suite at `.env`'s `bmi_crm`, and the
+   only thing that kept it off live data was `src/__tests__/setup.ts` refusing any
+   `DB_NAME` not ending in `_test`. The tell was a "frontend" check printing backend file
+   names and an empty typecheck count. **Wrap every directory-dependent command in a
+   subshell — `(cd /abs/path && …)` — and never run two test suites in parallel calls;**
+   sequence them in one call, which also keeps timing evidence clean (see the flake
+   observations above).
+
+   The same session found the companion hazard: **the backend dev server
+   (`ts-node-dev --respawn`) restarts on any `src/` edit and applies pending migrations to
+   live `bmi_crm` on boot.** A migration is therefore applied to live the moment backend
+   code is touched after writing it — lesson 14 without a `db:migrate` ever being typed.
+   Finalise and validate the migration FIRST (apply it to `bmi_crm_iso_test`, and run it
+   against live inside a transaction that is rolled back), then edit backend source.
