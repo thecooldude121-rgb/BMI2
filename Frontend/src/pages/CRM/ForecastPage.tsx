@@ -316,6 +316,14 @@ const ForecastPage: React.FC = () => {
    */
   const [quotaError, setQuotaError]                 = useState<string | null>(null);
   const [savingQuota, setSavingQuota]               = useState(false);
+  /**
+   * Whose quota THIS viewer may set — served by GET /quotas as
+   * `editable_user_ids` (migration 044), never re-derived here. PUT /quotas was
+   * open to every role until then; now a rep can set only their own (and only
+   * when the workspace allows it) and a manager only their direct reports.
+   * Starts EMPTY, so nothing is editable until the server says so.
+   */
+  const [editableQuotaUserIds, setEditableQuotaUserIds] = useState<Set<number>>(new Set());
 
   const [snapshots, setSnapshots]           = useState<SnapshotRow[]>([]);
   const [takingSnapshot, setTakingSnapshot] = useState(false);
@@ -358,12 +366,18 @@ const ForecastPage: React.FC = () => {
   useEffect(() => {
     const encoded = encodeURIComponent(quarter.label);
     Promise.all([
+      // The whole envelope, not just `data`: `editable_user_ids` travels with it.
       fetch(`${API_BASE}/quotas?period=${encoded}`, { headers: authHeaders() })
-        .then(r => r.json()).then(j => j.success ? j.data : []).catch(() => []),
+        .then(r => r.json())
+        .then(j => (j.success ? j : { data: [], editable_user_ids: [] }))
+        .catch(() => ({ data: [], editable_user_ids: [] })),
       fetch(`${API_BASE}/forecast/snapshots?period=${encoded}`, { headers: authHeaders() })
         .then(r => r.json()).then(j => j.success ? j.data : []).catch(() => []),
     ]).then(([q, s]) => {
-      setQuotas(q.map((r: any) => ({
+      // Absent means none: an older server that does not send the field must
+      // not be read as permitting every edit.
+      setEditableQuotaUserIds(new Set(((q.editable_user_ids ?? []) as unknown[]).map(Number)));
+      setQuotas((q.data as any[]).map((r: any) => ({
         user_id: Number(r.user_id),
         rep_name: r.rep_name ?? null,
         quota_amount: parseFloat(r.quota_amount) || 0,
@@ -1092,6 +1106,19 @@ const ForecastPage: React.FC = () => {
                               title="No owner on record for this line, so a quota cannot be set. Assign the deals to a user first."
                             >
                               No owner
+                            </span>
+                          ) : !editableQuotaUserIds.has(rep.userId) ? (
+                            /*
+                             * THE VIEWER MAY NOT SET THIS QUOTA — the server
+                             * said so in `editable_user_ids`. Shown as plain
+                             * text, not a disabled pencil: a disabled control
+                             * advertises an action that does not exist for you.
+                             */
+                            <span
+                              className="ml-auto text-[13px] font-medium text-gray-700"
+                              title="Quotas are set by this person's manager or an admin."
+                            >
+                              {quota > 0 ? fmt(quota) : <span className="text-gray-300 italic text-[12px]">Not set</span>}
                             </span>
                           ) : (
                             <button

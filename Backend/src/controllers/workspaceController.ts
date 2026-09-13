@@ -20,6 +20,11 @@ import { requireTenantId } from '../middleware/tenant';
 interface WorkspaceSettings {
   timezone?: string;
   default_currency?: string;
+  /**
+   * May people set their OWN targets (migration 044)? Absent means false — the
+   * agreed default, and the safe direction: a missing key never grants it.
+   */
+  reps_set_own_targets?: boolean;
 }
 
 /**
@@ -97,6 +102,13 @@ function validate(body: Record<string, unknown>): string | null {
     }
   }
 
+  // A real boolean only. "false" as a string is truthy in every language that
+  // would later read it carelessly, so it is refused rather than coerced.
+  if (body.reps_set_own_targets !== undefined && body.reps_set_own_targets !== null
+      && typeof body.reps_set_own_targets !== 'boolean') {
+    return 'reps_set_own_targets must be true or false';
+  }
+
   return null;
 }
 
@@ -114,6 +126,8 @@ const shape = (row: {
   // indistinguishable from a deliberate choice.
   timezone: row.settings?.timezone ?? null,
   default_currency: row.settings?.default_currency ?? null,
+  // A boolean, never null: "unset" and "off" are the same permission.
+  reps_set_own_targets: row.settings?.reps_set_own_targets === true,
   created_at: row.created_at,
   updated_at: row.updated_at,
 });
@@ -175,6 +189,12 @@ export const updateWorkspace = async (req: AuthRequest, res: Response, next: Nex
       settingsPatch.default_currency = req.body.default_currency === null
         ? undefined
         : String(req.body.default_currency).trim().toUpperCase();
+    }
+    if (req.body.reps_set_own_targets !== undefined) {
+      // null clears the key, which reads back as false — same as never set.
+      settingsPatch.reps_set_own_targets = req.body.reps_set_own_targets === null
+        ? undefined
+        : req.body.reps_set_own_targets === true;
     }
     // A key set to undefined is dropped by JSON.stringify, which is how an
     // explicit null CLEARS a setting rather than storing a null into it.
