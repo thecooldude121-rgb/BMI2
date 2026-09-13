@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import {
   ACTIVITY_TARGET_KEYS, ACTIVITY_TARGET_MAX, SENIORITY_LEVELS, PERIOD_QUERY_MESSAGE,
@@ -109,6 +109,11 @@ export const getTargets = async (req: AuthRequest, res: Response, next: NextFunc
       activity_target_keys: ACTIVITY_TARGET_KEYS,
       activity_target_max: ACTIVITY_TARGET_MAX,
       reps_set_own_targets: selfOn,
+      // May this caller flip that toggle? PUT /workspace is gated on
+      // DESTRUCTIVE_ACTION_ROLES; serving the answer here means the Targets
+      // screen renders the control only where the server will accept it,
+      // rather than re-deriving the gate from a client-side role string.
+      can_change_self_service: (DESTRUCTIVE_ACTION_ROLES as readonly string[]).includes(actor.role),
     });
   } catch (error) { next(error); }
 };

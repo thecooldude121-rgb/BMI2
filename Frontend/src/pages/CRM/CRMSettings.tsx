@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, User, Palette, Plug, Bell, Lock, CreditCard, Database, Mail, Target, Wrench, Users } from 'lucide-react';
+import { Settings as SettingsIcon, User, Palette, Plug, Bell, Lock, CreditCard, Database, Mail, Target, Wrench, Users, TrendingUp } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ProfileSettings from './CRMSettings/ProfileSettings';
 import PasswordSettings from './CRMSettings/PasswordSettings';
@@ -36,6 +36,7 @@ import ContactsCustomFields from './CRMSettings/ContactsCustomFields';
 import AccountsCustomFields from './CRMSettings/AccountsCustomFields';
 import DealsCustomFields from './CRMSettings/DealsCustomFields';
 import TeamManagement from './CRMSettings/TeamManagement';
+import TargetsSettings from './CRMSettings/TargetsSettings';
 import { useAuth } from '../../contexts/AuthContext';
 
 type SettingsSection = {
@@ -129,6 +130,16 @@ const CRMSettings: React.FC = () => {
         { id: 'email-templates-all', label: 'All Email Templates' },
         { id: 'outreach', label: 'Outreach' },
         { id: 'follow-up', label: 'Follow-up' }
+      ]
+    },
+    {
+      // Not adminOnly: every role can see targets, and whether a given person
+      // can EDIT one is decided per row by the server (`can_edit`).
+      id: 'sales-targets',
+      label: 'SALES TARGETS',
+      icon: <TrendingUp className="h-4 w-4" />,
+      subsections: [
+        { id: 'targets', label: 'Targets' }
       ]
     },
     {
@@ -244,6 +255,8 @@ const CRMSettings: React.FC = () => {
         return <DealsCustomFields />;
       case 'team':
         return <TeamManagement />;
+      case 'targets':
+        return <TargetsSettings />;
       default:
         return <ProfileSettings />;
     }

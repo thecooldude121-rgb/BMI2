@@ -176,6 +176,11 @@ describe('Targets — quotas + sales profiles (migration 044)', () => {
     expect(res.body.activity_target_keys).toEqual(['calls_per_week', 'meetings_per_week', 'emails_per_week']);
     expect(res.body.reps_set_own_targets).toBe(false);
     expect(res.body.period.label).toBe(PERIOD);
+    // Served: a manager may flip the self-service toggle (PUT /workspace)...
+    expect(res.body.can_change_self_service).toBe(true);
+    // ...a sales rep may not, and is told so rather than shown a control.
+    const asSales = await request(app).get(`/api/v1/targets?period=${encodeURIComponent(PERIOD)}`).set(auth(stranger));
+    expect(asSales.body.can_change_self_service).toBe(false);
   });
 
   it('GET /targets reports a user with nothing recorded as null, not zeros', async () => {
