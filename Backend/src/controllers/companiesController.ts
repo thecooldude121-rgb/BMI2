@@ -6,6 +6,15 @@ import { requireTenantId } from '../middleware/tenant';
 import {
   MAX_IMPORT_ROWS, runImport, created, skipped, failed, tooLong, firstProblem,
 } from '../utils/csvImport';
+import { INDUSTRIES, INDUSTRY_MESSAGE, normalizeIndustry } from '../utils/industries';
+
+/**
+ * GET /companies/industries — the vocabulary companies.industry is constrained
+ * to (migration 045), served so no client keeps a copy of its own.
+ */
+export const getIndustries = (_req: AuthRequest, res: Response): void => {
+  res.json({ success: true, data: INDUSTRIES });
+};
 
 export const getCompanies = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -50,6 +59,13 @@ export const createCompany = async (req: AuthRequest, res: Response, next: NextF
       res.status(400).json({ success: false, message: `size must be one of: ${VALID_SIZES.join(', ')}` });
       return;
     }
+    // companies_industry_check (migration 045). Validated here so the caller
+    // gets a 400 naming the field rather than a 23514 masked as a 500.
+    const ind = normalizeIndustry(industry);
+    if (!ind.ok) {
+      res.status(400).json({ success: false, message: `industry ${INDUSTRY_MESSAGE}` });
+      return;
+    }
 
     // companies.id is a NOT NULL varchar with no default. It used to be taken
     // straight from the request body, so any POST without an id was a raw 23502
@@ -77,7 +93,7 @@ export const createCompany = async (req: AuthRequest, res: Response, next: NextF
     ];
     const vals: any[] = [
       ...(explicitId ? [id] : []),
-      name, domain, industry, size, revenue, website, phone,
+      name, domain, ind.value ?? null, size, revenue, website, phone,
       description, street, city, state, country, zip_code, tenantId,
     ];
     const result = await pool.query(
@@ -108,6 +124,16 @@ export const updateCompany = async (req: AuthRequest, res: Response, next: NextF
     if (req.body.name !== undefined && !String(req.body.name ?? '').trim()) {
       res.status(400).json({ success: false, message: 'name cannot be blank' });
       return;
+    }
+    // Same validator as createCompany, so the two paths cannot disagree — the
+    // create/update asymmetry this file has already fixed once for `size`.
+    if (req.body.industry !== undefined) {
+      const ind = normalizeIndustry(req.body.industry);
+      if (!ind.ok) {
+        res.status(400).json({ success: false, message: `industry ${INDUSTRY_MESSAGE}` });
+        return;
+      }
+      req.body.industry = ind.value;
     }
     const fields = ['name','domain','industry','size','revenue','website','phone','description','street','city','state','country','zip_code'];
     const updates: string[] = [];
@@ -259,6 +285,15 @@ export const importCompanies = async (req: AuthRequest, res: Response, next: Nex
           return failed(`"${size}" is not a valid company size. Use one of: ${VALID_SIZES.join(', ')}`);
         }
 
+        // companies_industry_check (migration 045). A per-row reason, the same
+        // shape as the size check above — one unrecognised industry fails that
+        // row, not the file, and the report says which value and what to use.
+        const rawIndustry = str(row.industry);
+        const industry = normalizeIndustry(rawIndustry);
+        if (!industry.ok) {
+          return failed(`"${rawIndustry}" is not a recognised industry. Use one of: ${INDUSTRIES.join(', ')}`);
+        }
+
         // revenue is a bigint. A non-numeric value would be a 22P02 the user
         // cannot read, and silently dropping it would lose data they supplied.
         let revenue: number | null = null;
@@ -297,7 +332,7 @@ export const importCompanies = async (req: AuthRequest, res: Response, next: Nex
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
            RETURNING id`,
           [
-            tenantId, name, orNull(str(row.domain)), orNull(str(row.industry)),
+            tenantId, name, orNull(str(row.domain)), industry.value ?? null,
             orNull(size), revenue, orNull(str(row.website)), orNull(str(row.phone)),
             orNull(str(row.description)), orNull(str(row.street)), orNull(str(row.city)),
             orNull(str(row.state)), orNull(str(row.country)), orNull(str(row.zip_code)),

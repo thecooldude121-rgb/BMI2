@@ -5,6 +5,7 @@ import { Save, X, Globe, Linkedin, Twitter, Building2 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
 import type { EnhancedAccount } from '../../types/accounts';
 import { useToast } from '../../contexts/ToastContext';
+import { fetchIndustries } from '../../utils/industriesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { validateURL, formatURL, formatLinkedInURL, formatPhoneNumber, calculateCompanyAge, calculateGrowthRate, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage } from '../../utils/accountFormUtils';
@@ -41,18 +42,14 @@ export interface FundingRound {
 }
 
 /**
- * Industry values the account form offers.
+ * Industry options are NOT listed here any more.
  *
- * Sourced from what `companies.industry` actually holds today, not invented:
- * the column is free-text VARCHAR(50) with no CHECK, so this is a convenience
- * list rather than a constraint, and the select additionally keeps any stored
- * value selectable (see the note at the control).
+ * This file used to hold a 16-value INDUSTRY_OPTIONS array while the unrouted
+ * CompanyForm held a different 10, and `companies.industry` was free text that
+ * agreed with neither. Migration 045 constrained the column, and the options now
+ * come from GET /companies/industries — the same list the server validates and
+ * the database enforces — so there is nothing here to drift.
  */
-const INDUSTRY_OPTIONS = [
-  'Automotive', 'Consulting', 'E-Commerce', 'Education', 'Energy', 'Finance',
-  'FinTech', 'Food & Beverage', 'Healthcare', 'Logistics', 'Manufacturing',
-  'Real Estate', 'Retail', 'SaaS', 'Technology', 'Travel',
-] as const as readonly string[];
 
 export interface AccountFormData {
   companyName: string;
@@ -110,6 +107,19 @@ const AccountFormPage: React.FC = () => {
 
   const isEditMode = !!accountId && accountId !== 'add';
   const existingAccount = isEditMode ? getAccountById(accountId) : null;
+
+  // The served industry vocabulary (migration 045). Empty until it loads; a
+  // failure is shown rather than replaced with a guessed list the server
+  // might refuse.
+  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
+  const [industryLoadError, setIndustryLoadError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchIndustries()
+      .then(list => { if (live) setIndustryOptions(list); })
+      .catch(e => { if (live) setIndustryLoadError(e instanceof Error ? e.message : 'Could not load the industry list'); });
+    return () => { live = false; };
+  }, []);
 
   const [formData, setFormData] = useState<AccountFormData>({
     companyName: existingAccount?.name || '',
@@ -904,21 +914,28 @@ const AccountFormPage: React.FC = () => {
                       asterisk further up the form. Found while verifying the
                       Company Size select, which is what it was blocking.
 
-                      INDUSTRY_OPTIONS below covers what the database actually
-                      contains. The extra option after it is the durable half of
+                      The options below now come from the server (GET
+                      /companies/industries, migration 045), which is also
+                      what the database constrains the column to. The extra option after it is the durable half of
                       the fix: whatever the stored industry is, it is always
                       selectable, so no future drift in this list can silently
                       strip an account's industry on edit.
                     */}
-                    {INDUSTRY_OPTIONS.map(opt => (
+                    {industryOptions.map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
                     ))}
-                    {formData.industry && !INDUSTRY_OPTIONS.includes(formData.industry) && (
+                    {formData.industry && !industryOptions.includes(formData.industry) && (
                       <option value={formData.industry}>{formData.industry}</option>
                     )}
                   </select>
                   {errors.industry && (
                     <p className="mt-1 text-sm text-red-600">{errors.industry}</p>
+                  )}
+                  {industryLoadError && (
+                    <p role="alert" className="mt-1 text-sm text-amber-700">
+                      The industry list could not be loaded ({industryLoadError}), so only this
+                      account&apos;s current industry can be shown. Reload to try again.
+                    </p>
                   )}
                 </div>
 

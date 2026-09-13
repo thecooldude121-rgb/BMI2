@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { INDUSTRY_MESSAGE, normalizeIndustry } from '../utils/industries';
 
 /**
  * Workspace settings — the workspace half of Phase 1's "Auth + Workspace shell".
@@ -25,6 +26,12 @@ interface WorkspaceSettings {
    * agreed default, and the safe direction: a missing key never grants it.
    */
   reps_set_own_targets?: boolean;
+  /**
+   * The industry the workspace's OWN business is in (migration 045). Not a
+   * client's industry — that is companies.industry. Same vocabulary, served at
+   * GET /companies/industries.
+   */
+  business_industry?: string;
 }
 
 /**
@@ -109,6 +116,10 @@ function validate(body: Record<string, unknown>): string | null {
     return 'reps_set_own_targets must be true or false';
   }
 
+  if (body.business_industry !== undefined && !normalizeIndustry(body.business_industry).ok) {
+    return `business_industry ${INDUSTRY_MESSAGE}`;
+  }
+
   return null;
 }
 
@@ -128,6 +139,8 @@ const shape = (row: {
   default_currency: row.settings?.default_currency ?? null,
   // A boolean, never null: "unset" and "off" are the same permission.
   reps_set_own_targets: row.settings?.reps_set_own_targets === true,
+  // null when unset — never defaulted to a guess about what the business does.
+  business_industry: row.settings?.business_industry ?? null,
   created_at: row.created_at,
   updated_at: row.updated_at,
 });
@@ -195,6 +208,12 @@ export const updateWorkspace = async (req: AuthRequest, res: Response, next: Nex
       settingsPatch.reps_set_own_targets = req.body.reps_set_own_targets === null
         ? undefined
         : req.body.reps_set_own_targets === true;
+    }
+    if (req.body.business_industry !== undefined) {
+      // validate() already refused anything off-list; this canonicalises case,
+      // and null or blank clears the key (undefined drops out of the JSON).
+      const ind = normalizeIndustry(req.body.business_industry);
+      settingsPatch.business_industry = ind.ok && ind.value ? ind.value : undefined;
     }
     // A key set to undefined is dropped by JSON.stringify, which is how an
     // explicit null CLEARS a setting rather than storing a null into it.

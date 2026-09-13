@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GeneralPreferences from './GeneralPreferences';
@@ -22,11 +22,28 @@ const ws = {
   slug: 'default-organization',
   timezone: null as string | null,
   default_currency: null as string | null,
+  business_industry: null as string | null,
+  reps_set_own_targets: false,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: null as string | null,
 };
 
-let fetchMock: ReturnType<typeof vi.fn>;
+/**
+ * Typed as a fetch-shaped function, not `ReturnType<typeof vi.fn>`: the router
+ * below CALLS these mocks, and the bare type admits a constructor and is not
+ * callable (TS2348).
+ */
+type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
+let fetchMock: Mock<FetchFn>;
+/**
+ * GET /companies/industries (migration 045) gets its OWN mock, routed by URL.
+ * The page now loads it alongside the workspace; routing it separately keeps
+ * `fetchMock`'s call indices meaning exactly what they meant before — call 0
+ * is the workspace GET, call 1 the PUT — so every existing assertion still
+ * tests the same thing rather than being renumbered around a new request.
+ */
+let industriesMock: Mock<FetchFn>;
+const SERVED_INDUSTRIES = ['EdTech', 'IT Services', 'Other'];
 
 /** The body of the Nth fetch call, parsed. */
 const bodyOf = (call: number) => JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
@@ -48,7 +65,12 @@ beforeEach(() => {
       json: async () => ({ success: true, data: { ...ws, ...patch } }),
     } as Response;
   });
-  vi.stubGlobal('fetch', fetchMock);
+  industriesMock = vi.fn(async () => ({
+    ok: true, status: 200, json: async () => ({ success: true, data: SERVED_INDUSTRIES }),
+  } as Response));
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => (
+    String(url).endsWith('/companies/industries') ? industriesMock(url, init) : fetchMock(url, init)
+  ));
 });
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -237,5 +259,56 @@ describe('GeneralPreferences — workspace settings', () => {
     await user.click(screen.getByRole('button', { name: /save preferences/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(Object.keys(bodyOf(1))).toEqual(['default_currency']);
+  });
+
+  // ── The workspace's OWN industry (migration 045) ──────────────────────────
+
+  it('offers the SERVED industries for the business, and saves only that field', async () => {
+    const user = userEvent.setup();
+    render(<GeneralPreferences />);
+    const select = await screen.findByLabelText("Your Business's Industry");
+    expect(industriesMock).toHaveBeenCalledTimes(1);
+    expect(select).toHaveValue('');   // unset is shown as unset
+
+    // Exactly the served options plus "Not set" — no local list mixed in.
+    const options = Array.from((select as HTMLSelectElement).options).map(o => o.value);
+    expect(options).toEqual(['', ...SERVED_INDUSTRIES]);
+
+    await user.selectOptions(select, 'IT Services');
+    await user.click(screen.getByRole('button', { name: /save preferences/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(bodyOf(1)).toEqual({ business_industry: 'IT Services' });
+    await waitFor(() => expect(screen.getByLabelText("Your Business's Industry")).toHaveValue('IT Services'));
+  });
+
+  it('a failed industry list is reported on its own, and the rest of the page still saves', async () => {
+    industriesMock.mockImplementation(async () => ({
+      ok: false, status: 500, json: async () => ({ success: false, message: 'Internal Server Error' }),
+    } as Response));
+    const user = userEvent.setup();
+    render(<GeneralPreferences />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/industry list could not be loaded/i);
+    // The workspace itself loaded — not replaced by a failed-load state.
+    expect(screen.getByLabelText('Workspace Name')).toHaveValue('Default Organization');
+    // And no guessed industries were substituted.
+    const options = Array.from((screen.getByLabelText("Your Business's Industry") as HTMLSelectElement).options);
+    expect(options.map(o => o.value)).toEqual(['']);
+
+    await user.selectOptions(screen.getByLabelText('Default Currency'), 'INR');
+    await user.click(screen.getByRole('button', { name: /save preferences/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(bodyOf(1)).toEqual({ default_currency: 'INR' });
+  });
+
+  it('a stored business industry is displayed even when the list did not load', async () => {
+    industriesMock.mockImplementation(async () => ({
+      ok: false, status: 500, json: async () => ({ success: false }),
+    } as Response));
+    fetchMock.mockImplementation(async () => ({
+      ok: true, status: 200, json: async () => ({ success: true, data: { ...ws, business_industry: 'EdTech' } }),
+    } as Response));
+    render(<GeneralPreferences />);
+    await waitFor(() => expect(screen.getByLabelText("Your Business's Industry")).toHaveValue('EdTech'));
   });
 });

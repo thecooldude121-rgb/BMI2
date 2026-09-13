@@ -37,11 +37,21 @@ export interface Workspace {
   timezone: string | null;
   /** null when unset. Drives the currency of newly created deals when set. */
   default_currency: string | null;
+  /**
+   * The industry THIS workspace's own business is in (migration 045) — not a
+   * client account's industry, which lives on each company. null when unset.
+   */
+  business_industry: string | null;
+  /**
+   * May people set their own targets (migration 044)? Always a boolean: the
+   * server reports "never set" as false, the same permission as "off".
+   */
+  reps_set_own_targets: boolean;
   created_at: string;
   updated_at: string | null;
 }
 
-/** Only these four are writable. Omit a field to leave it unchanged. */
+/** The writable fields. Omit a field to leave it unchanged. */
 export interface WorkspaceUpdate {
   name?: string;
   slug?: string;
@@ -49,6 +59,9 @@ export interface WorkspaceUpdate {
   timezone?: string | null;
   /** null clears it. */
   default_currency?: string | null;
+  /** Must be one of the served industries. null clears it. */
+  business_industry?: string | null;
+  reps_set_own_targets?: boolean;
 }
 
 /**
