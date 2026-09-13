@@ -42,14 +42,18 @@ const member = (
   createdAt: '2026-01-01T00:00:00.000Z',
   initials: name.split(' ').map(w => w[0]).join(''),
   avatarColor: 'from-blue-500 to-blue-600',
-  /*
-   * `canChangeRole` is the last field on `WorkspaceMember` on this branch.
-   * `canChangeManager` / `managerId` / `managerName` arrive with migration 041
-   * on the schema branch and are deliberately NOT set here — a fixture that
-   * over-specifies a type is a fixture that fails to compile on whichever
-   * branch it meets first.
-   */
   canChangeRole: false,
+  /*
+   * Migration 041's three fields. They were deliberately left off while this
+   * fixture lived on a branch that predated 041 — but both branches have since
+   * merged, and without them the fixture no longer satisfies `WorkspaceMember`
+   * (TS2739), which is the one error that put main above its typecheck
+   * baseline. Set to the "no manager, may not change it" state, which is what
+   * `toMember` produces for a row whose server omitted the flags.
+   */
+  canChangeManager: false,
+  managerId: null,
+  managerName: null,
 });
 
 const REAL_ROSTER = [
