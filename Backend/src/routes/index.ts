@@ -13,6 +13,7 @@ import usersRoutes from './users';
 import invitesRoutes from './invites';
 import quotasRoutes from './quotas';
 import forecastRoutes from './forecast';
+import targetsRoutes from './targets';
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/users', usersRoutes);
 router.use('/invites', invitesRoutes);
 router.use('/quotas', quotasRoutes);
 router.use('/forecast', forecastRoutes);
+router.use('/targets', targetsRoutes);
 
 export default router;

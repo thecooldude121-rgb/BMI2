@@ -10,6 +10,7 @@ import {
   CURRENCY_OPTIONS,
   type Workspace,
 } from '../../../utils/workspaceApi';
+import { fetchIndustries } from '../../../utils/industriesApi';
 
 /**
  * Workspace settings — the four fields the server actually stores.
@@ -28,7 +29,10 @@ import {
  */
 const GeneralPreferences: React.FC = () => {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [form, setForm] = useState({ name: '', slug: '', timezone: '', default_currency: '' });
+  const [form, setForm] = useState({ name: '', slug: '', timezone: '', default_currency: '', business_industry: '' });
+  // Served by GET /companies/industries (migration 045). No local fallback list.
+  const [industries, setIndustries] = useState<string[]>([]);
+  const [industriesError, setIndustriesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +42,16 @@ const GeneralPreferences: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const ws = await fetchWorkspace();
+      // The industry list failing must not take the whole page down with it —
+      // the other four settings are still loadable and editable.
+      const [ws, list] = await Promise.all([
+        fetchWorkspace(),
+        fetchIndustries().catch((e: unknown) => {
+          setIndustriesError(e instanceof Error ? e.message : 'Could not load the industry list');
+          return [] as string[];
+        }),
+      ]);
+      setIndustries(list);
       setWorkspace(ws);
       setForm({
         name: ws.name,
@@ -48,6 +61,7 @@ const GeneralPreferences: React.FC = () => {
         // below says so.
         timezone: ws.timezone ?? '',
         default_currency: ws.default_currency ?? '',
+        business_industry: ws.business_industry ?? '',
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load workspace settings');
@@ -62,7 +76,8 @@ const GeneralPreferences: React.FC = () => {
     form.name !== workspace.name ||
     form.slug !== workspace.slug ||
     form.timezone !== (workspace.timezone ?? '') ||
-    form.default_currency !== (workspace.default_currency ?? '')
+    form.default_currency !== (workspace.default_currency ?? '') ||
+    form.business_industry !== (workspace.business_industry ?? '')
   );
 
   const handleSave = async () => {
@@ -83,6 +98,9 @@ const GeneralPreferences: React.FC = () => {
       if (workspace && form.default_currency !== (workspace.default_currency ?? '')) {
         updates.default_currency = form.default_currency === '' ? null : form.default_currency;
       }
+      if (workspace && form.business_industry !== (workspace.business_industry ?? '')) {
+        updates.business_industry = form.business_industry === '' ? null : form.business_industry;
+      }
 
       // The server's response is the truth, not the form state. Rendering from
       // what came back is what makes a normalised value (a currency
@@ -94,6 +112,7 @@ const GeneralPreferences: React.FC = () => {
         slug: updated.slug,
         timezone: updated.timezone ?? '',
         default_currency: updated.default_currency ?? '',
+        business_industry: updated.business_industry ?? '',
       });
       setSaved(true);
     } catch (e) {
@@ -198,6 +217,38 @@ const GeneralPreferences: React.FC = () => {
               Applied to new deals that do not specify their own currency. Existing deals keep the
               currency they were created with.
             </p>
+          </div>
+
+          <div>
+            <label htmlFor="ws-industry" className="block text-sm font-medium text-gray-700 mb-2">
+              Your Business&apos;s Industry
+            </label>
+            <select
+              id="ws-industry"
+              value={form.business_industry}
+              onChange={(e) => setForm({ ...form, business_industry: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Not set</option>
+              {industries.map((i) => (
+                <option key={i} value={i}>{i}</option>
+              ))}
+              {/* The stored value is always an option, so a list that failed
+                  to load cannot make a set value render as "Not set". */}
+              {form.business_industry && !industries.includes(form.business_industry) && (
+                <option value={form.business_industry}>{form.business_industry}</option>
+              )}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              The industry your own company works in. This is not the industry of your client
+              accounts — each account records its own.
+            </p>
+            {industriesError && (
+              <p role="alert" className="mt-1 text-xs text-amber-700">
+                The industry list could not be loaded ({industriesError}). The rest of this page
+                still saves.
+              </p>
+            )}
           </div>
 
           <div className="pt-4 border-t border-gray-200 flex items-center gap-3">

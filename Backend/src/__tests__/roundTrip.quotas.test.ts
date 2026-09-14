@@ -32,7 +32,11 @@ describe('Quotas — keyed by user (migration 042)', () => {
   let ws: TestWorkspace;
   let other: TestWorkspace;
   let rep: TestWorkspace;
-  const PERIOD = `Q9 2099`;   // far-future label, so it cannot collide with real data
+  // Far-future label, so it cannot collide with real data. Was "Q9 2099" until
+  // migration 044 made PUT /quotas require a label that parses as a calendar
+  // quarter — a Q9 cannot be bounded, so nothing could ever be measured
+  // against it.
+  const PERIOD = `Q4 2099`;
 
   const nameOf = async (id: string | number) => (
     await pool.query(
@@ -115,8 +119,10 @@ describe('Quotas — keyed by user (migration 042)', () => {
     // Both halves of the project rule — the write creates the bad row, the join
     // is what leaks it. Plant it directly, bypassing the validated write path.
     await pool.query(
-      `INSERT INTO quotas (user_id, period_label, quota_amount, tenant_id)
-       VALUES ($1, $2, $3, $4)`,
+      // `currency` is NOT NULL with no default since migration 044 — every
+      // writer has to say what currency a quota is in, including this one.
+      `INSERT INTO quotas (user_id, period_label, quota_amount, tenant_id, currency)
+       VALUES ($1, $2, $3, $4, 'USD')`,
       [Number(other.userId), PERIOD, 999999, ws.tenantId]);
     try {
       const got = await list();
