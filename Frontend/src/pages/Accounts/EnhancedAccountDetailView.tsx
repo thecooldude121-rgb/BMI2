@@ -15,6 +15,7 @@ import { formatDisplayDate } from '../../utils/dateUtils';
 import type { Contact } from '../../types/contact';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import CompanyInformationPanel from '../../components/Accounts/CompanyInformationPanel';
+import AccountIntelligencePanel from '../../components/Accounts/AccountIntelligencePanel';
 import ActiveDealsSection, { type Deal as SectionDeal } from '../../components/Accounts/ActiveDealsSection';
 import AccountContactsSection from '../../components/Accounts/AccountContactsSection';
 import RecentActivitiesTimeline, { type ActivityItem } from '../../components/Accounts/RecentActivitiesTimeline';
@@ -496,6 +497,22 @@ const AccountDetail: React.FC = () => {
                    stockSymbol, fundingRound, totalFunding) are left unset for
                    the same reason. */
               />
+              {/*
+                * ACCOUNT INTELLIGENCE — Capability 5, currently SAMPLE CONTENT.
+                *
+                * Placed on the overview tab, below company information and
+                * above contacts: it is context ABOUT the account, so it belongs
+                * with the account's own facts rather than in the relationship
+                * sections beneath.
+                *
+                * It renders its own PREVIEW · SAMPLE CONTENT badge from the
+                * server's `preview` flag — this call site passes no such flag
+                * and cannot suppress it. That is deliberate: this page's own
+                * history is a component rendering fabricated data supplied by
+                * its DEFAULTS rather than its call site, which is a fabrication
+                * invisible from the page. Here the claim travels with the data.
+                */}
+              <AccountIntelligencePanel companyId={account.id} />
               <AccountContactsSection
                 contacts={contacts}
                 loading={contactsLoading}

@@ -752,6 +752,48 @@ old constraint, which fails the shared-name test.
   tree that `/settings` no longer reaches. Anything specified against "Reports' AI Insights
   Panel" has no existing surface to fill.
 
+- **TRACKED PLACEHOLDER DEBT — Account intelligence (Capability 5) is SAMPLE CONTENT, and
+  a second, more complete implementation exists on another branch. Both facts matter.**
+  Built 2026-09-14 on `feature/account-intelligence-mock`. `AccountIntelligencePanel`
+  renders on the account detail overview tab (`EnhancedAccountDetailView`, routed at
+  `/crm/accounts/:accountId`), fed by `GET /companies/:id/intelligence`, fed by
+  `services/accountIntelligence/` — whose ONLY implementation is a mock.
+  - **THIS MUST COME OUT BEFORE A REAL CUSTOMER SEES IT.** It is not a metric wearing a
+    PREVIEW badge; it is invented *news about a named company*, which is why the
+    placeholder-ness is defended in four independent places: the badge, the note, the word
+    "Sample" inside every headline (server-side, so it survives a copy-paste out of the
+    UI), and the deliberately NULL `source` / `url` / `published_at`. An item with an
+    outlet and a date is a fabricated story with a citation, and the badge does not travel
+    with a screenshot.
+  - **A REAL implementation lives on `feature/lead-gen-account-intelligence`**
+    (`services/leadGen/accountIntelligence.ts`) and is more complete than this one. The
+    two were built in parallel deliberately, on instruction, and **need reconciling — do
+    not let both survive.** The shapes were matched on purpose (client keyed on
+    `company_domain`, the same five `SIGNAL_CATEGORIES` including `news`, 8s timeout, no
+    retry, failures returned rather than thrown) so a swap is a provider change, not a
+    rewrite. `Frontend/src/utils/accountIntelligenceApi.ts` exists on BOTH branches at the
+    same path; that collision is intentional, so git forces the choice instead of letting
+    two clients coexist quietly.
+  - **The seam is `ACCOUNT_INTELLIGENCE_PROVIDER`.** Unset or `mock` serves the sample
+    content; `leadgen` THROWS at startup rather than falling back, for the same reason the
+    server refuses `EMAIL_TRANSPORT=log` in production — a silent fallback is how a
+    deployment shows placeholder news while its operator believes the integration is live.
+    The panel reads `preview` off the PAYLOAD, never from the provider's name, so the next
+    provider has to declare what it is.
+
+- **CORRECTION, recorded because it currently stands as fact in code: LEAD GEN IS NOT
+  RUNNING.** `services/leadGen/accountIntelligence.ts` on
+  `feature/lead-gen-account-intelligence` carries a comment beginning *"CONFIRMED AGAINST
+  THE RUNNING LEAD GEN SERVICE, not just its contract doc"*, and goes on to describe
+  observed response behaviour (a bare JSON array, `[]` rather than 404 for an unknown
+  domain, rows arriving newest-first, two accepted auth header styles). **Per Venkat,
+  2026-09-14, that overstates what was actually verified: Lead Gen does not exist as a
+  running service.** Whoever picks that branch up should treat those details as a
+  proposed contract, not as observed fact, and re-verify before relying on any of them.
+  Noted here rather than edited there: that branch has uncommitted work in progress and
+  is not ours to touch. The contract doc it cites,
+  `docs/crm-leadgen-integration-contract.md`, is not in this repo at all.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
@@ -1149,6 +1191,19 @@ interception layer — an HTTP proxy, a patched global `fetch`/agent, or an undi
 play for at least some requests under load. `HTTP_PROXY`/`HTTPS_PROXY` were NOT set in the
 shell that ran it, so if this is a proxy it is being installed by something else in the
 process.
+
+**SECOND CAPTURE, 2026-09-14, IN A DIFFERENT WORKTREE WITH A FRESH `node_modules`.** The
+identical body appeared again — same JSON, character for character — this time failing
+`roundTrip.leads` ("negative: blanking first_name on update") on a `POST /api/v1/leads` that
+expected 201. The file then passed 26/26 alone, the next full run passed 545/545, and zero
+`rt-` tenants were orphaned.
+
+That it reproduces in `/Users/venkatraj/Desktop/BMI2-claude` — a separate `git worktree`
+with its own freshly-installed dependency tree, against the same Postgres — **rules out a
+corrupted `node_modules` in the original checkout** and rules out anything specific to that
+directory. Whatever answers these requests is attached to the MACHINE or the process
+environment, not to the project tree. Two captures, two unrelated test files, one identical
+body.
 
 Two consequences for the eventual debugging pass:
 - **Instrumenting the pg pool may be looking in the wrong place.** Do it, but capture the

@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { getAccountIntelligenceProvider } from '../services/accountIntelligence';
 import {
   MAX_IMPORT_ROWS, runImport, created, skipped, failed, tooLong, firstProblem,
 } from '../utils/csvImport';
@@ -41,6 +42,77 @@ export const getCompanyById = async (req: AuthRequest, res: Response, next: Next
     ]);
     if (!company.rows[0]) { res.status(404).json({ success: false, message: 'Company not found' }); return; }
     res.json({ success: true, data: { ...company.rows[0], contacts: contacts.rows } });
+  } catch (error) { next(error); }
+};
+
+/**
+ * GET /api/v1/companies/:id/intelligence
+ *
+ * Account intelligence (news and other signals) for one company. Capability 5.
+ *
+ * TENANT SCOPING FIRST, AND IT IS THE WHOLE POINT OF THIS ENDPOINT EXISTING.
+ * The provider is keyed on a COMPANY DOMAIN, and a domain is not a secret — so
+ * if the browser called the provider itself, any caller could ask about any
+ * domain, and the CRM would have no say. Resolving the id inside the caller's
+ * workspace first means the only domains anyone can ask about are the ones
+ * their own workspace already holds. It is also where a real provider's API key
+ * will live, which must never reach a browser.
+ *
+ * FOUR OUTCOMES, KEPT APART. A blank list is only ever the last of them:
+ *   404  the company is not in this workspace (or does not exist — the same
+ *        answer, deliberately, as everywhere else here)
+ *   200 + status 'no_domain'  the account has no domain recorded, so there is
+ *        no key to ask about. Not an error, and not "no signals".
+ *   200 + status 'error'      the provider could not answer. A transport
+ *        failure is not an empty result.
+ *   200 + status 'ok'         the provider answered; `signals` may legitimately
+ *        be empty, and THAT is the only case meaning "nothing recorded".
+ *
+ * The provider never throws into this handler — see services/accountIntelligence.
+ */
+export const getCompanyIntelligence = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const company = await pool.query(
+      'SELECT id, name, domain FROM companies WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, tenantId],
+    );
+    const row = company.rows[0];
+    if (!row) { res.status(404).json({ success: false, message: 'Company not found' }); return; }
+
+    const domain = (row.domain ?? '').trim();
+    const provider = getAccountIntelligenceProvider();
+
+    if (!domain) {
+      res.json({
+        success: true,
+        data: {
+          status: 'no_domain',
+          company_domain: null,
+          provider: provider.name,
+          preview: provider.isPreview,
+          signals: [],
+          preview_note: null,
+          detail: 'This account has no website domain recorded, so there is nothing to look up.',
+        },
+      });
+      return;
+    }
+
+    const result = await provider.fetchSignals(domain);
+    res.json({
+      success: true,
+      data: {
+        ...result,
+        company_domain: domain,
+        provider: provider.name,
+        // Served from the PROVIDER, not inferred by the client from its name:
+        // a future provider must declare whether its rows are real.
+        preview: provider.isPreview,
+        signals: result.status === 'ok' ? result.signals : [],
+        preview_note: result.status === 'ok' ? result.preview_note : null,
+      },
+    });
   } catch (error) { next(error); }
 };
 

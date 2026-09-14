@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, importCompanies, getIndustries } from '../controllers/companiesController';
+import { getCompanies, getCompanyById,
+  getCompanyIntelligence, createCompany, updateCompany, deleteCompany, importCompanies, getIndustries } from '../controllers/companiesController';
 import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 
 const router = Router();
@@ -13,6 +14,9 @@ router.post('/import', importCompanies);
 // "industries" and answer 404.
 router.get('/industries', getIndustries);
 router.get('/:id', getCompanyById);
+// Declared AFTER /:id but matched independently — Express routes on the full
+// path, so this cannot be swallowed by the one above.
+router.get('/:id/intelligence', getCompanyIntelligence);
 router.post('/', createCompany);
 router.put('/:id', updateCompany);
 router.delete('/:id', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteCompany);
