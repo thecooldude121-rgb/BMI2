@@ -325,6 +325,17 @@ const ForecastPage: React.FC = () => {
    */
   const [editableQuotaUserIds, setEditableQuotaUserIds] = useState<Set<number>>(new Set());
 
+  /**
+   * Whose quota this viewer may SEE — served by GET /quotas as
+   * `visible_user_ids`. Reads are scoped to the reporting line: your own, your
+   * subtree's, everyone's if you are an admin.
+   *
+   * This is NOT the same question as `editableQuotaUserIds`, and conflating
+   * them would reintroduce the defect it exists to prevent: an absent quota row
+   * means "not set" for someone you can see and "not yours to see" for someone
+   * you cannot, and the cell must not claim the first when the second is true.
+   */
+  const [visibleQuotaUserIds, setVisibleQuotaUserIds]   = useState<Set<number>>(new Set());
   const [snapshots, setSnapshots]           = useState<SnapshotRow[]>([]);
   const [takingSnapshot, setTakingSnapshot] = useState(false);
   const [snapshotTaken, setSnapshotTaken]   = useState(false);
@@ -369,14 +380,15 @@ const ForecastPage: React.FC = () => {
       // The whole envelope, not just `data`: `editable_user_ids` travels with it.
       fetch(`${API_BASE}/quotas?period=${encoded}`, { headers: authHeaders() })
         .then(r => r.json())
-        .then(j => (j.success ? j : { data: [], editable_user_ids: [] }))
-        .catch(() => ({ data: [], editable_user_ids: [] })),
+        .then(j => (j.success ? j : { data: [], editable_user_ids: [], visible_user_ids: [] }))
+        .catch(() => ({ data: [], editable_user_ids: [], visible_user_ids: [] })),
       fetch(`${API_BASE}/forecast/snapshots?period=${encoded}`, { headers: authHeaders() })
         .then(r => r.json()).then(j => j.success ? j.data : []).catch(() => []),
     ]).then(([q, s]) => {
       // Absent means none: an older server that does not send the field must
       // not be read as permitting every edit.
       setEditableQuotaUserIds(new Set(((q.editable_user_ids ?? []) as unknown[]).map(Number)));
+      setVisibleQuotaUserIds(new Set(((q.visible_user_ids ?? []) as unknown[]).map(Number)));
       // The server's row shape. quota_amount is NUMERIC, which node-postgres
       // sends as a string — hence parseFloat below.
       setQuotas((q.data as { user_id: number | string; rep_name: string | null; quota_amount: string }[]).map(r => ({
@@ -683,7 +695,28 @@ const ForecastPage: React.FC = () => {
   const totalQuota    = quotas.reduce((s, q) => s + q.quota_amount, 0);
   const teamProjected = totals.closed + totals.commit;
   const teamGap       = Math.max(0, totalQuota - teamProjected);
-  const showGapBanner = !loading && totalQuota > 0;
+
+  /**
+   * DOES THE QUOTA TOTAL COVER THE SAME PEOPLE AS THE PROJECTED TOTAL?
+   *
+   * `teamProjected` comes from DEALS, which every member of the workspace can
+   * see. `totalQuota` comes from quotas, which since the reporting-line read
+   * rule are scoped to what THIS viewer may see. For an admin the two
+   * populations are identical and nothing changes. For a manager or a rep they
+   * are not, and dividing one by the other produces a percentage of nothing:
+   * the whole team's pipeline against one person's target.
+   *
+   * So the banner and the footer total are shown only when the populations
+   * agree, and a note takes their place when they do not. Comparing like with
+   * like for a SUBTREE — a real per-scope forecast — is a larger change to how
+   * this page aggregates and is recorded as follow-up rather than guessed at
+   * here. A row with no owner on record can never carry a quota, so it does not
+   * count against coverage.
+   */
+  const hiddenQuotaRows = repRows.filter(r => r.userId != null && !visibleQuotaUserIds.has(r.userId));
+  const quotaScopeComplete = hiddenQuotaRows.length === 0;
+  const showGapBanner = !loading && totalQuota > 0 && quotaScopeComplete;
+  const showScopeNote = !loading && !quotaScopeComplete;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -830,6 +863,25 @@ const ForecastPage: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/*
+          * The gap banner's population caveat. Not a styled warning: it is a
+          * statement of what this view can and cannot tell you, in the place
+          * the number would otherwise have been.
+          */}
+        {showScopeNote && (
+          <div className="rounded-lg border border-gray-200 bg-white px-5 py-3">
+            <p className="text-[12px] text-gray-600">
+              No team gap-to-goal shown: quotas are visible only for you and anyone in your
+              reporting line, so a workspace total would compare the whole team&rsquo;s pipeline
+              against part of its target.{' '}
+              <span className="text-gray-400">
+                {hiddenQuotaRows.length} {hiddenQuotaRows.length === 1 ? 'person' : 'people'} on this
+                forecast {hiddenQuotaRows.length === 1 ? 'has a quota' : 'have quotas'} you cannot see.
+              </span>
+            </p>
+          </div>
+        )}
 
         {/* ── P1: Gap-to-goal banner ────────────────────────────────────────── */}
         {showGapBanner && (
@@ -1109,12 +1161,36 @@ const ForecastPage: React.FC = () => {
                             >
                               No owner
                             </span>
+                          ) : !visibleQuotaUserIds.has(rep.userId) ? (
+                            /*
+                             * THE VIEWER MAY NOT SEE THIS QUOTA — they are not
+                             * this person, not above them in the reporting
+                             * line, and not an admin, so GET /quotas did not
+                             * return the row.
+                             *
+                             * This branch must come BEFORE the not-editable one
+                             * and must not fall through to it: an absent row
+                             * would otherwise render "Not set", which asserts
+                             * something this client cannot know and is very
+                             * likely false. `visible_user_ids` is what tells
+                             * the two absences apart.
+                             */
+                            <span
+                              className="ml-auto text-[12px] italic text-gray-300"
+                              title="Quotas are visible to the person themselves, to their managers, and to admins."
+                            >
+                              Not visible
+                            </span>
                           ) : !editableQuotaUserIds.has(rep.userId) ? (
                             /*
                              * THE VIEWER MAY NOT SET THIS QUOTA — the server
                              * said so in `editable_user_ids`. Shown as plain
                              * text, not a disabled pencil: a disabled control
                              * advertises an action that does not exist for you.
+                             *
+                             * "Not set" is honest here and only here: the row
+                             * was visible to this caller, so its absence is the
+                             * absence of a quota.
                              */
                             <span
                               className="ml-auto text-[13px] font-medium text-gray-700"
@@ -1189,14 +1265,20 @@ const ForecastPage: React.FC = () => {
                     </td>
                     {(() => {
                       // P1: footer attainment also uses projected (Closed + Commit)
-                      const totalAttain = totalQuota > 0
+                      // Same population rule as the banner: a workspace-wide
+                      // attainment percentage computed from a partial quota
+                      // total is not a smaller number, it is a wrong one.
+                      const totalAttain = totalQuota > 0 && quotaScopeComplete
                         ? Math.round(((totals.closed + totals.commit) / totalQuota) * 100)
                         : null;
                       return (
                         <>
                           <td className="px-4 py-3 text-right tabular-nums">
-                            <span className="text-[12px] font-semibold text-gray-900">
-                              {totalQuota > 0 ? fmt(totalQuota) : '—'}
+                            <span
+                              className="text-[12px] font-semibold text-gray-900"
+                              title={quotaScopeComplete ? undefined : 'Not totalled: some quotas on this forecast are outside your reporting line.'}
+                            >
+                              {totalQuota > 0 && quotaScopeComplete ? fmt(totalQuota) : '—'}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums">

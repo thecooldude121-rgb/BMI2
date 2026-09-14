@@ -89,3 +89,73 @@ export async function directReports(
   );
   return result.rows;
 }
+
+/** One row of the reporting graph: a user and who they report to. */
+export interface ManagerEdge { id: number; manager_id: number | null }
+
+/**
+ * THE REPORTING GRAPH FOR ONE WORKSPACE, as edges.
+ *
+ * Deliberately NOT filtered by `is_active`. A deactivated middle manager must
+ * not sever the chain: their own manager still oversees everyone beneath them,
+ * and dropping the edge would silently shrink a VP's subtree to the people who
+ * happen to report through active nodes. Whether a given person may sign in is
+ * a separate question, answered by `protect`, not by graph shape.
+ *
+ * One query rather than a walk of N round trips, because every caller here
+ * needs the answer for a whole roster (GET /targets, GET /quotas, the
+ * projection) and a per-level SELECT would multiply that by the org depth.
+ */
+export async function loadManagerEdges(
+  tenantId: string,
+  client?: PoolClient,
+): Promise<ManagerEdge[]> {
+  const q = client ?? pool;
+  const r = await q.query('SELECT id, manager_id FROM users WHERE tenant_id = $1', [tenantId]);
+  return r.rows.map(row => ({
+    id: Number(row.id),
+    manager_id: row.manager_id === null ? null : Number(row.manager_id),
+  }));
+}
+
+/**
+ * The ids strictly ABOVE `userId` in the reporting line, nearest first:
+ * [their manager, that manager's manager, ...]. Empty at the top of the tree.
+ *
+ * This is the ONE definition of "in someone's management chain", and both
+ * decisions on targets are expressed with it — the write rule (a manager sets
+ * targets for anyone beneath them) and the read rule (a person's targets are
+ * visible to everyone above them) are the same relation read in the two
+ * directions. `A` is above `B` exactly when `chainAbove(edges, B)` contains A.
+ *
+ * PURE, so the boundary can be tested without a database, and cycle-safe by the
+ * same `seen`/MAX_DEPTH discipline as wouldCreateCycle: migration 041's CHECK
+ * stops A -> A but nothing in Postgres stops A -> B -> A, and an unguarded walk
+ * of that data does not terminate. A cycle STOPS the walk rather than throwing —
+ * the ids collected up to that point are genuinely above `userId`, and refusing
+ * to answer would take a whole workspace's targets offline over one bad edge.
+ *
+ * `wouldCreateCycle` keeps its own per-level walk on purpose: it runs inside the
+ * transaction that is writing the edge, against rows that are not committed yet,
+ * so it cannot read a roster snapshot.
+ */
+export function chainAbove(edges: ManagerEdge[], userId: number): number[] {
+  const managerOf = new Map<number, number | null>();
+  for (const e of edges) managerOf.set(Number(e.id), e.manager_id === null ? null : Number(e.manager_id));
+
+  const chain: number[] = [];
+  const seen = new Set<number>([Number(userId)]);
+  let current = managerOf.get(Number(userId)) ?? null;
+
+  for (let depth = 0; depth < MAX_DEPTH && current !== null; depth++) {
+    if (seen.has(current)) break;          // a cycle: stop, keep what is real
+    // An id with no row in this workspace is not an ancestor and is never
+    // collected. `edges` is already tenant-scoped, so this is how a
+    // cross-workspace manager_id terminates the walk.
+    if (!managerOf.has(current)) break;
+    seen.add(current);
+    chain.push(current);
+    current = managerOf.get(current) ?? null;
+  }
+  return chain;
+}

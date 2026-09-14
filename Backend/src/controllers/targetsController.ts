@@ -4,7 +4,8 @@ import { AuthRequest, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import {
   ACTIVITY_TARGET_KEYS, ACTIVITY_TARGET_MAX, SENIORITY_LEVELS, PERIOD_QUERY_MESSAGE,
-  authorizeTargetWrite, canSetTargetsFor, parsePeriodLabel, repsSetOwnTargets,
+  authorizeTargetWrite, canSetTargetsFor, chainAbove, loadManagerEdges, parsePeriodLabel,
+  repsSetOwnTargets, targetReadFilter,
 } from '../utils/targets';
 import { PROJECTION_RULES, projectTarget } from '../services/targetProjection';
 import { loadProjectionDeals } from '../services/targetProjectionData';
@@ -21,11 +22,17 @@ import { loadProjectionDeals } from '../services/targetProjectionData';
  * PUT /quotas, which is the single write path for them — deliberately not
  * duplicated here.
  *
- * READS ARE OPEN TO EVERY AUTHENTICATED ROLE, matching GET /quotas and GET
- * /users today. Whether a sales rep should see a colleague's quota is the same
- * row-level-visibility question middleware/auth.ts records as an open product
- * decision; answering it here, for one endpoint, would make targets the one
- * place with a different policy.
+ * READS ARE FILTERED, and this is the one place in the CRM where row-level
+ * visibility is settled rather than open. Both GETs here return only the people
+ * a caller may see: themselves, anyone beneath them in the reporting line to
+ * any depth, and — for an admin — everyone. Targets and the projection they
+ * feed are compensation-adjacent, which is why they do not follow GET /users'
+ * open roster; the general row-level question middleware/auth.ts records stays
+ * open for the rest of the CRM.
+ *
+ * A person the caller may not see is ABSENT from the list. Not redacted, not a
+ * 403 — the same reason the FK rejection names only the field: a redaction
+ * confirms who exists.
  */
 
 const TEXT_MAX = 100; // territory / product_line are VARCHAR(100)
@@ -41,7 +48,8 @@ export const getTargets = async (req: AuthRequest, res: Response, next: NextFunc
       return;
     }
 
-    const [rows, selfOn] = await Promise.all([
+    const actor = { id: Number(req.user?.id), role: String(req.user?.role ?? '') };
+    const [rows, selfOn, edges, canRead] = await Promise.all([
       pool.query(
         `SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.manager_id,
                 NULLIF(btrim(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), '')
@@ -64,13 +72,13 @@ export const getTargets = async (req: AuthRequest, res: Response, next: NextFunc
         [tenantId, period.label],
       ),
       repsSetOwnTargets(tenantId),
+      loadManagerEdges(tenantId),
+      targetReadFilter(tenantId, actor),
     ]);
-
-    const actor = { id: Number(req.user?.id), role: String(req.user?.role ?? '') };
 
     res.json({
       success: true,
-      data: rows.rows.map(r => ({
+      data: rows.rows.filter(r => canRead(Number(r.id))).map(r => ({
         user_id: Number(r.id),
         name: [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || r.email,
         email: r.email,
@@ -97,9 +105,12 @@ export const getTargets = async (req: AuthRequest, res: Response, next: NextFunc
               currency: r.currency,
               activity_targets: r.activity_targets ?? {},
             },
+        // Editable implies readable — a row you may edit is never filtered
+        // out above — so this is only ever asked about rows that survived the
+        // filter. roundTrip.targetsVisibility pins that containment.
         can_edit: canSetTargetsFor(
           actor,
-          { id: Number(r.id), role: r.role, manager_id: r.manager_id === null ? null : Number(r.manager_id) },
+          { id: Number(r.id), role: r.role, managerChain: chainAbove(edges, Number(r.id)) },
           selfOn,
         ),
       })),
@@ -121,11 +132,15 @@ export const getTargets = async (req: AuthRequest, res: Response, next: NextFunc
 /**
  * GET /api/v1/targets/projection?period=Q3+2026
  *
- * The pipeline-coverage projection for every active person in the workspace,
- * computed by services/targetProjection.ts from real closed-deal history. No
- * UI consumes this yet — the Sales Intelligence Guide panel is later work —
- * so the response carries the rules it was computed under, making every null
+ * The pipeline-coverage projection for every active person in the workspace THE
+ * CALLER MAY SEE (getTargets' rule, applied through the same predicate),
+ * computed by services/targetProjection.ts from real closed-deal history. The
+ * response carries the rules it was computed under, making every null
  * explainable from the payload alone.
+ *
+ * Filtering matters more here than on the raw quota: a projection combines
+ * someone's quota with their win rate, cycle length and average deal size, so
+ * an unfiltered response is a performance profile of every colleague.
  */
 export const getProjection = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -133,7 +148,8 @@ export const getProjection = async (req: AuthRequest, res: Response, next: NextF
     const period = parsePeriodLabel(req.query.period);
     if (!period) { res.status(400).json({ success: false, message: PERIOD_QUERY_MESSAGE }); return; }
 
-    const [users, deals] = await Promise.all([
+    const actor = { id: Number(req.user?.id), role: String(req.user?.role ?? '') };
+    const [users, deals, canRead] = await Promise.all([
       pool.query(
         `SELECT u.id, u.first_name, u.last_name, u.email, q.quota_amount, q.currency
            FROM users u
@@ -144,6 +160,7 @@ export const getProjection = async (req: AuthRequest, res: Response, next: NextF
         [tenantId, period.label],
       ),
       loadProjectionDeals(tenantId),
+      targetReadFilter(tenantId, actor),
     ]);
 
     const now = new Date();
@@ -152,7 +169,7 @@ export const getProjection = async (req: AuthRequest, res: Response, next: NextF
       period: { label: period.label, start: period.start.toISOString(), end: period.end.toISOString() },
       generated_at: now.toISOString(),
       rules: PROJECTION_RULES,
-      data: users.rows.map(u => ({
+      data: users.rows.filter(u => canRead(Number(u.id))).map(u => ({
         name: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email,
         ...projectTarget({
           userId: Number(u.id), now, period,

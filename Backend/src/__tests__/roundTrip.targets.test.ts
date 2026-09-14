@@ -9,10 +9,13 @@ import {
  * Per-user targets. Migration 044.
  *
  * WHAT THESE PIN:
- *  1. WHO MAY SET WHOSE TARGETS — admin: anyone; manager: direct reports only;
- *     anyone: themselves, only when the workspace toggle is on. PUT /quotas was
- *     open to every role before this, so the sales-sets-someone-else case is
- *     the regression that matters most.
+ *  1. WHO MAY SET WHOSE TARGETS — admin: anyone; manager: anyone in their
+ *     reporting subtree; anyone: themselves, only when the workspace toggle is
+ *     on. PUT /quotas was open to every role before this, so the
+ *     sales-sets-someone-else case is the regression that matters most. The
+ *     DEPTH of the subtree rule is pinned next door in
+ *     roundTrip.targetsVisibility.test.ts, which builds a four-level org; the
+ *     fixture here is one level and cannot tell the two rules apart.
  *  2. The rule is SERVED (editable_user_ids, can_edit) and agrees with what the
  *     write path enforces.
  *  3. Activity targets and currency are validated, and PARTIAL: ForecastPage's
@@ -97,7 +100,7 @@ describe('Targets — quotas + sales profiles (migration 044)', () => {
     const before = await storedQuota(stranger.userId);
     const res = await putQuota(manager, { user_id: Number(stranger.userId), quota_amount: 1 });
     expect(res.status, JSON.stringify(res.body)).toBe(403);
-    expect(res.body.message).toMatch(/report directly to you/);
+    expect(res.body.message).toMatch(/reporting line/);
     expect(Number((await storedQuota(stranger.userId)).quota_amount)).toBe(Number(before.quota_amount));
   });
 
@@ -165,12 +168,17 @@ describe('Targets — quotas + sales profiles (migration 044)', () => {
     const ids = res.body.data.map((r: { user_id: number }) => r.user_id);
     expect(ids).toContain(Number(report.userId));
     expect(ids).not.toContain(Number(other.userId));
+    // `stranger` reports to nobody, so a manager may not SEE them at all now —
+    // the list is filtered by the same chain that governs the write.
+    expect(ids).not.toContain(Number(stranger.userId));
 
     const r = res.body.data.find((x: { user_id: number }) => x.user_id === Number(report.userId));
     expect(r.can_edit).toBe(true);
     expect(r.manager_id).toBe(Number(manager.userId));
-    const s = res.body.data.find((x: { user_id: number }) => x.user_id === Number(stranger.userId));
-    expect(s.can_edit).toBe(false);
+    // can_edit is not blanket-true on a filtered list: the manager's OWN row is
+    // visible and not editable, because self-service is off.
+    const self = res.body.data.find((x: { user_id: number }) => x.user_id === Number(manager.userId));
+    expect(self.can_edit).toBe(false);
 
     expect(res.body.seniority_levels).toEqual(['junior', 'mid', 'senior', 'lead']);
     expect(res.body.activity_target_keys).toEqual(['calls_per_week', 'meetings_per_week', 'emails_per_week']);
