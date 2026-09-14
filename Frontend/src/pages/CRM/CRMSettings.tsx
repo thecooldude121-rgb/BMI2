@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings as SettingsIcon, User, Palette, Plug, Bell, Lock, CreditCard, Database, Mail, Target, Wrench, Users, TrendingUp } from 'lucide-react';
+import { Settings as SettingsIcon, User, Palette, Plug, Bell, Lock, CreditCard, Database, Mail, Target, Wrench, Users, TrendingUp, Link2 } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ProfileSettings from './CRMSettings/ProfileSettings';
 import PasswordSettings from './CRMSettings/PasswordSettings';
@@ -37,6 +37,7 @@ import AccountsCustomFields from './CRMSettings/AccountsCustomFields';
 import DealsCustomFields from './CRMSettings/DealsCustomFields';
 import TeamManagement from './CRMSettings/TeamManagement';
 import TargetsSettings from './CRMSettings/TargetsSettings';
+import ConnectedModules from './CRMSettings/ConnectedModules';
 import { useAuth } from '../../contexts/AuthContext';
 
 type SettingsSection = {
@@ -45,6 +46,13 @@ type SettingsSection = {
   icon: React.ReactNode;
   subsections?: { id: string; label: string }[];
   adminOnly?: boolean;
+  /**
+   * Admin OR Manager, mirroring the server's DESTRUCTIVE_ACTION_ROLES.
+   * `adminOnly` above is narrower (Admin alone); a section the API lets a
+   * manager use must not be hidden from managers, or the screen is
+   * unreachable for someone the server would have allowed.
+   */
+  administrativeOnly?: boolean;
 };
 
 const CRMSettings: React.FC = () => {
@@ -172,11 +180,25 @@ const CRMSettings: React.FC = () => {
       icon: <Users className="h-4 w-4" />,
       subsections: [],
       adminOnly: true
+    },
+    {
+      // Administrative, not admin-only: minting a setup code and disconnecting
+      // are both gated on DESTRUCTIVE_ACTION_ROLES ('admin','manager') by the
+      // API, so the nav matches that rather than being stricter than the
+      // server and hiding a working screen from managers.
+      id: 'connected-modules',
+      label: 'CONNECTED MODULES',
+      icon: <Link2 className="h-4 w-4" />,
+      subsections: [],
+      administrativeOnly: true
     }
   ];
 
   // Filter sections based on user role - only show admin-only sections to Admin users
   const sections = allSections.filter(section => {
+    if (section.administrativeOnly) {
+      return user?.role === 'Admin' || user?.role === 'Manager';
+    }
     if (section.adminOnly) {
       return user?.role === 'Admin';
     }
@@ -257,6 +279,8 @@ const CRMSettings: React.FC = () => {
         return <TeamManagement />;
       case 'targets':
         return <TargetsSettings />;
+      case 'connected-modules':
+        return <ConnectedModules />;
       default:
         return <ProfileSettings />;
     }
