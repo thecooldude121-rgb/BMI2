@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, TrendingUp, DollarSign, Building2, AlertTriangle } from 'lucide-react';
+import { Users, TrendingUp, DollarSign, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
 import { useStageLookup } from '../../hooks/useStageLookup';
+import SalesIntelligenceGuide from '../../components/Dashboard/SalesIntelligenceGuide';
 import { isOpenWith } from '../../utils/pipelinesApi';
 import { sortActivitiesNewestFirst } from '../../utils/activitiesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -240,29 +241,10 @@ const CRMDashboard: React.FC = () => {
 
   // ── Not yet on real data ──────────────────────────────────────────────────
   //
-  // aiInsights: two fixed sentences. One of them ("N deals need attention") is
-  // computable from real data; the other needs close-rate history that no
-  // endpoint provides. Labelled as a preview in the panel below.
-  //
-  // A third read "2 high-value leads from HRMS ready to contact" and is GONE,
-  // not relabelled: HRMS is a separate platform over SSO, so there is no
-  // integration for it to ever become true about. Sample copy for a feature
-  // that is merely unbuilt can be labelled; sample copy for a feature that will
-  // never exist here is just wrong.
-  const aiInsights = [
-    {
-      icon: AlertTriangle,
-      message: '3 deals need attention - No activity in 5 days',
-      action: 'View Deals',
-      type: 'warning'
-    },
-    {
-      icon: TrendingUp,
-      message: 'Your close rate is up 12% this month - Great job!',
-      action: null,
-      type: 'success'
-    }
-  ];
+  // `aiInsights` stood here: two fixed sentences rendered by the preview panel
+  // this dashboard no longer has. Deleted with it rather than left behind —
+  // an unused fixture is the next session's "why is this here", and TS6133
+  // would have reported it as noise.
 
   // gamificationData: points, rank, level, streak, daily challenge and team
   // celebrations, all invented. There is a gamification_points table and a
@@ -537,68 +519,24 @@ const CRMDashboard: React.FC = () => {
           })}
         </div>
 
-        {/* ── AI Insights: PREVIEW, not a working feature ────────────────────
-            These three sentences are fixed literals. Nothing computes them:
+        {/* ── Sales Intelligence Guide ──────────────────────────────────────
+            REPLACES the "AI Insights" preview that stood here: two fixed
+            sentences ("3 deals need attention", "close rate up 12% this
+            month"), labelled PREVIEW · SAMPLE CONTENT because nothing computed
+            them, with two buttons that pointed at query parameters no page
+            read.
 
-              "3 deals need attention"   -> computable today from
-                                            deals.days_since_contact, but not
-                                            wired; the number shown is invented.
-              "close rate up 12%"        -> needs period-over-period close-rate
-                                            history, which no endpoint provides.
+            What replaces them is not an AI feature and is not named as one. It
+            is arithmetic over the workspace's own closed deals and quotas
+            (GET /targets/projection), and every figure it shows arrives with
+            the numbers behind it or is not shown at all. Where the history is
+            too thin the panel says so in those words rather than estimating —
+            which on live data today is what it will say for everyone, because
+            no quota has been set yet.
 
-            The two action buttons navigated to /crm/deals?filter=needs-attention
-            and /crm/leads?filter=hrms-source. NOTHING read either query
-            parameter — grep was conclusive — so each button promised a filtered
-            view and delivered the plain unfiltered page. They are gone: a
-            labelled preview whose buttons still act real is only half honest.
-            The HRMS line itself is gone too, for a stronger reason than being
-            unwired — see the comment on `aiInsights`.
-
-            Kept visible rather than deleted because the shape of the feature is
-            a real product decision worth showing. Marked so it cannot be read as
-            working. Wiring the first line is a small, non-AI change if wanted —
-            it is a filter, not a model. */}
-        <div
-          className="rounded-xl p-6 mb-8 text-white"
-          style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)' }}
-          data-preview="AI Insights"
-          aria-describedby="ai-insights-preview-note"
-        >
-          <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h2 className="font-bold flex items-center" style={{ fontSize: '24px' }}>
-              <span className="mr-2" aria-hidden="true">🤖</span> AI Insights
-            </h2>
-            <span className="rounded-full bg-white/25 px-3 py-1 text-xs font-bold uppercase tracking-wide">
-              Preview · sample content
-            </span>
-          </div>
-          <p id="ai-insights-preview-note" className="text-sm text-white/90 mb-4">
-            Examples of what this panel will show. <strong>These are not calculated from your
-            data</strong> and the numbers are illustrative — the scoring behind them is not built yet.
-          </p>
-          <div className="space-y-3">
-            {aiInsights.map((insight, index) => {
-              const Icon = insight.icon;
-              return (
-                <div
-                  key={index}
-                  className="rounded-lg border border-dashed border-white/40 bg-white/5 p-4"
-                  style={{ borderRadius: '10px' }}
-                >
-                  <div className="flex items-start">
-                    <Icon className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0 opacity-70" aria-hidden="true" />
-                    <div>
-                      <span className="text-white/80 italic">{insight.message}</span>
-                      <span className="ml-2 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold uppercase align-middle">
-                        Example
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+            It fetches nothing of its own beyond that one endpoint, whose
+            response is already scoped to the people the caller may see. */}
+        <SalesIntelligenceGuide />
 
         {/* ── Gamification: PREVIEW, not a working feature ───────────────────
             Every figure in these three cards is a literal in `gamificationData`

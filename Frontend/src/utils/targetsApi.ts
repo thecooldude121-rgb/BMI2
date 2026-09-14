@@ -93,6 +93,47 @@ export async function fetchTargets(period: string): Promise<TargetsRoster> {
   };
 }
 
+/**
+ * GET /targets/projection — the pipeline-coverage projection, plus the activity
+ * targets and whether they can be measured at all.
+ *
+ * SAME ENDPOINT, SAME PERMISSION PATH as the roster: the server returns only
+ * the people this caller may see (themselves, their reporting subtree, or
+ * everyone for an admin). The guide panel therefore needs no query of its own,
+ * which is the point — a second path to this data is a second place for the
+ * read scoping to be forgotten.
+ */
+export interface ProjectionResponse {
+  rows: import('./salesGuidance').ProjectionRow[];
+  periodLabel: string;
+  generatedAt: string | null;
+  activityMeasurement: import('./salesGuidance').ActivityMeasurement;
+}
+
+export async function fetchProjection(period: string): Promise<ProjectionResponse> {
+  const res = await fetch(
+    `${API_BASE}/targets/projection?period=${encodeURIComponent(period)}`,
+    { headers: getAuthHeaders() },
+  );
+  const json = await unwrap(res);
+  const am = (json.activity_measurement ?? {}) as Record<string, unknown>;
+  return {
+    rows: (json.data ?? []) as import('./salesGuidance').ProjectionRow[],
+    periodLabel: (json.period as { label?: string } | undefined)?.label ?? period,
+    generatedAt: typeof json.generated_at === 'string' ? json.generated_at : null,
+    // Absent means NOT measurable. An older server that does not send the field
+    // must not be read as permission to compute an attainment it cannot back —
+    // the same "absent means none" rule as editable_user_ids.
+    activityMeasurement: {
+      measurable: am.measurable === true,
+      reason: typeof am.reason === 'string'
+        ? am.reason
+        : 'Activity attainment is not reported by this server.',
+      activities_recorded: typeof am.activities_recorded === 'number' ? am.activities_recorded : 0,
+    },
+  };
+}
+
 export interface QuotaWrite {
   user_id: number;
   period_label: string;

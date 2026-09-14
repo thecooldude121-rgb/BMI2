@@ -85,6 +85,48 @@ describe('Projection — real history through the real endpoints', () => {
     if (left.rows[0].n !== 0) throw new Error(`Cleanup failed: ${left.rows[0].n} deals remain`);
   });
 
+  it('serves activity targets and says attainment is NOT measurable, with the real count as evidence', async () => {
+    // The panel needs three separate facts and must not conflate them: what the
+    // target IS, that attainment cannot be computed, and WHY.
+    // A DEDICATED user, not the shared admin: `ws.userId` is asserted to have
+    // no quota by a later test in this file, and setting one here broke it.
+    const withTargets = await addUserWithRole(ws, 'sales');
+    await request(app).put('/api/v1/quotas').set(auth(ws)).send({
+      user_id: Number(withTargets.userId), period_label: PERIOD, quota_amount: 100000,
+      activity_targets: { calls_per_week: 40, meetings_per_week: 5 },
+    });
+
+    const res = await request(app).get(`/api/v1/targets/projection?period=${encodeURIComponent(PERIOD)}`).set(auth(ws));
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+
+    expect(res.body.activity_measurement.measurable).toBe(false);
+    expect(res.body.activity_measurement.reason).toMatch(/display name/);
+    // A real count, not a placeholder: this workspace has logged none.
+    expect(res.body.activity_measurement.activities_recorded).toBe(0);
+
+    const them = res.body.data.find(
+      (r: { user_id: number }) => r.user_id === Number(withTargets.userId));
+    expect(them.activity_targets).toEqual({ calls_per_week: 40, meetings_per_week: 5 });
+  });
+
+  it('reports NO activity targets as null, never as an object of zeros', async () => {
+    const fresh = await addUserWithRole(ws, 'sales');
+    const res = await request(app).get(`/api/v1/targets/projection?period=${encodeURIComponent(PERIOD)}`).set(auth(ws));
+    const row = res.body.data.find((r: { user_id: number }) => r.user_id === Number(fresh.userId));
+    expect(row.activity_targets).toBeNull();
+  });
+
+  it('serves the WORKSPACE win rate alongside the chosen one, so "conversion problem" has a basis', async () => {
+    const res = await request(app).get(`/api/v1/targets/projection?period=${encodeURIComponent(PERIOD)}`).set(auth(ws));
+    const row = res.body.data[0];
+    // Always present and always the workspace's, even when win_rate fell back
+    // to it — a client comparing the two must read `basis` to know that.
+    expect(row.win_rate_workspace).toBeDefined();
+    expect(row.win_rate_workspace.basis).toBe('workspace');
+    expect(row.win_rate_workspace).toHaveProperty('won');
+    expect(row.win_rate_workspace).toHaveProperty('sample_size');
+  });
+
   it('LIVE-LIKE: two dated closures and one undated -> "not enough historical data yet", nothing projected', async () => {
     await closeDeal(ws, rep.userId, 'won', 50000, 30);
     await closeDeal(ws, rep.userId, 'lost', 50000, 40);
