@@ -3,8 +3,8 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import {
-  authorizeTargetWrite, editableTargetUserIds, parsePeriodLabel, validateActivityTargets,
-  PERIOD_LABEL_MESSAGE, type ActivityTargets,
+  authorizeTargetWrite, editableTargetUserIds, parsePeriodLabel, readableTargetUserIds,
+  targetReadFilter, validateActivityTargets, PERIOD_LABEL_MESSAGE, type ActivityTargets,
 } from '../utils/targets';
 
 /**
@@ -24,6 +24,14 @@ import {
  *   - Each quota carries a `currency` and `activity_targets`. PUT /quotas stays
  *     the ONE write path for per-period targets; the Settings targets screen
  *     and ForecastPage's quota cell both write through it.
+ *   - GET /quotas IS NOW FILTERED. It used to return every quota in the
+ *     workspace to any authenticated caller, so a rep could read their
+ *     colleagues' and their manager's compensation targets. A caller now sees
+ *     their own row, the rows of everyone beneath them in the reporting line
+ *     (to any depth), and — for an admin — all of them. Rows are OMITTED rather
+ *     than redacted or refused: the rule lives in utils/targets.ts
+ *     (canReadTargetsOf), applied through targetReadFilter so GET /targets and
+ *     the projection cannot drift away from it.
  *   - PUT /quotas IS NOW AUTHORISED. It was open to every authenticated role,
  *     so a sales rep could set anybody's quota — including their manager's.
  *     The rule lives in utils/targets.ts (canSetTargetsFor) and is served back
@@ -44,7 +52,8 @@ export const getQuotas = async (req: AuthRequest, res: Response, next: NextFunct
       res.status(400).json({ success: false, message: 'period query param is required (e.g. "Q2 2026")' });
       return;
     }
-    const [result, editable] = await Promise.all([
+    const actor = { id: Number(req.user?.id), role: String(req.user?.role ?? '') };
+    const [result, editable, canRead, visible] = await Promise.all([
       pool.query(
         `SELECT q.id, q.user_id, q.period_label, q.quota_amount, q.currency, q.activity_targets,
                 -- The rep's NAME, projected from the joined user so the response
@@ -65,14 +74,21 @@ export const getQuotas = async (req: AuthRequest, res: Response, next: NextFunct
           ORDER BY u.first_name ASC, u.last_name ASC`,
         [period, tenantId],
       ),
-      editableTargetUserIds(tenantId, { id: Number(req.user?.id), role: String(req.user?.role ?? '') }),
+      editableTargetUserIds(tenantId, actor),
+      targetReadFilter(tenantId, actor),
+      readableTargetUserIds(tenantId, actor),
     ]);
     res.json({
       success: true,
-      data: result.rows,
+      data: result.rows.filter(r => canRead(Number(r.user_id))),
       // Whose quota THIS caller may set. Served, not re-derived client-side:
       // absent or empty means the client offers no edit control at all.
       editable_user_ids: editable,
+      // Whose quota this caller may SEE. Without it an absent row is ambiguous
+      // — "no quota set" and "not yours to see" are the same absence — and a
+      // client merging this against its own rep list would state the first
+      // while the second is true. See readableTargetUserIds.
+      visible_user_ids: visible,
     });
   } catch (error) { next(error); }
 };

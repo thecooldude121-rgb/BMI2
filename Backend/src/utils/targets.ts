@@ -1,5 +1,6 @@
 import { pool } from '../config/database';
 import { canActOn, rankOf } from './roles';
+import { chainAbove, loadManagerEdges, type ManagerEdge } from './reportingLine';
 
 /**
  * ONE PLACE THAT ANSWERS "who may set this person's targets", and the
@@ -103,28 +104,41 @@ export function validateActivityTargets(
   return { ok: true, value };
 }
 
-// ── Who may set whose targets ─────────────────────────────────────────────
+// ── Who may set, and who may see, whose targets ───────────────────────────
 
 export interface TargetActor { id: number; role: string }
-export interface TargetSubject { id: number; role: string; manager_id: number | null }
+
+export interface TargetSubject {
+  id: number;
+  role: string;
+  /**
+   * The ids ABOVE this person in the reporting line, nearest first — exactly
+   * `chainAbove(edges, subject.id)`. `managerChain[0]` is their `manager_id`;
+   * an empty array means they report to nobody in this workspace.
+   *
+   * The chain rather than the single column is what makes both rules below
+   * transitive, and it is the SAME array for both, so "may set" and "may see"
+   * can never come to disagree about who oversees whom.
+   */
+  managerChain: number[];
+}
 
 /**
- * The rule, as agreed for this feature:
+ * WHO MAY SET WHOSE TARGETS — confirmed policy, not a default:
  *
  *   admin    — anyone in the workspace, themselves included.
- *   manager  — their DIRECT reports (users.manager_id, migration 041).
+ *   manager  — anyone in their SUBTREE: the people who report to them directly
+ *              and, transitively, everyone below those people. A VP with three
+ *              layers beneath them sets targets for all three.
  *   anyone   — THEMSELVES, but only when the workspace has turned on
  *              `reps_set_own_targets`. Off by default. This applies to a
  *              manager's own targets too: "a user sets their own depending on
  *              permission" is about every user, not only sales.
  *
  * canActOn is applied on top, so a manager can never set targets for somebody
- * who outranks them even if a reporting line says that person reports to them
+ * who outranks them even if a reporting line says that person is beneath them
  * (users.role and users.manager_id are set independently, so that line can
  * exist).
- *
- * Direct reports only, NOT the whole subtree. That was an explicit choice over
- * the transitive option; if it changes, it changes here and nowhere else.
  *
  * An unrecognised role may set nothing — rankOf ranks it 0.
  */
@@ -140,11 +154,68 @@ export function canSetTargetsFor(
   if (role === 'admin') return canActOn(role, subject.role);
   if (isSelf) return repsSetOwnTargets;
   if (role === 'manager') {
-    return subject.manager_id !== null
-      && Number(subject.manager_id) === Number(actor.id)
-      && canActOn(role, subject.role);
+    return subject.managerChain.includes(Number(actor.id)) && canActOn(role, subject.role);
   }
   return false;
+}
+
+/**
+ * WHO MAY SEE WHOSE TARGETS — confirmed policy. Quota, activity targets and the
+ * projection are compensation-adjacent, so the three GETs are no longer open to
+ * every authenticated user in the workspace:
+ *
+ *   yourself — always. Reading your own target needs no toggle; the toggle
+ *              governs WRITING it, and a target you cannot see is one you
+ *              cannot work to.
+ *   above    — everyone in your management chain, to the top. The same relation
+ *              the write rule uses, read the other way.
+ *   admin    — everyone in the workspace.
+ *
+ * TWO DELIBERATE ASYMMETRIES WITH THE WRITE RULE, both load-bearing:
+ *
+ *  - No `canActOn` here. The rule as decided is chain membership, and a
+ *    lower-ranked person can only be above someone if an admin or manager put
+ *    them there — an administrative act, not an escalation a caller can perform.
+ *    Refusing the read would also hide a subordinate's quota from the person
+ *    who is accountable for it purely because of a role/reporting mismatch.
+ *  - The self case is not gated on `reps_set_own_targets`, per above.
+ *
+ * An unrecognised role sees NOTHING, its own row included — the same closed
+ * failure as canSetTargetsFor and as AuthContext's 'Unknown' mapping. It is
+ * unreachable through the API (requireRole and rankOf both refuse), but
+ * `users.role` has no CHECK constraint, so it is storable directly.
+ */
+export function canReadTargetsOf(actor: TargetActor, subject: Pick<TargetSubject, 'id' | 'managerChain'>): boolean {
+  const role = (actor.role ?? '').toLowerCase();
+  if (rankOf(role) === 0) return false;
+  if (Number(actor.id) === Number(subject.id)) return true;
+  if (role === 'admin') return true;
+  return subject.managerChain.includes(Number(actor.id));
+}
+
+/**
+ * A reusable "may this caller see this person's targets" predicate, built from
+ * ONE read of the workspace's reporting graph.
+ *
+ * Every list endpoint filters with this rather than asking per row, so the
+ * three GETs cannot drift apart, and a filtered list discloses nothing: a row
+ * you may not see is absent, never present-but-redacted and never a 403 that
+ * confirms the person exists.
+ */
+export async function targetReadFilter(
+  tenantId: string,
+  actor: TargetActor,
+): Promise<(subjectId: number) => boolean> {
+  const edges = await loadManagerEdges(tenantId);
+  const cache = new Map<number, boolean>();
+  return (subjectId: number): boolean => {
+    const id = Number(subjectId);
+    const hit = cache.get(id);
+    if (hit !== undefined) return hit;
+    const ok = canReadTargetsOf(actor, { id, managerChain: chainAbove(edges, id) });
+    cache.set(id, ok);
+    return ok;
+  };
 }
 
 /** The workspace toggle. Absent means OFF — the safe default, never assumed on. */
@@ -181,19 +252,19 @@ export async function authorizeTargetWrite(
     return { ok: false, status: 400, message: 'user_id must be a user id' };
   }
   const r = await pool.query(
-    'SELECT id, role, manager_id FROM users WHERE id = $1 AND tenant_id = $2',
+    'SELECT id, role FROM users WHERE id = $1 AND tenant_id = $2',
     [id, tenantId],
   );
   const row = r.rows[0];
   if (!row) {
     return { ok: false, status: 400, message: 'user_id does not name a user in this workspace' };
   }
+  const [edges, selfOn] = await Promise.all([loadManagerEdges(tenantId), repsSetOwnTargets(tenantId)]);
   const subject: TargetSubject = {
     id: Number(row.id),
     role: row.role,
-    manager_id: row.manager_id === null ? null : Number(row.manager_id),
+    managerChain: chainAbove(edges, Number(row.id)),
   };
-  const selfOn = await repsSetOwnTargets(tenantId);
   if (canSetTargetsFor(actor, subject, selfOn)) return { ok: true, subject };
 
   if (Number(actor.id) === subject.id) {
@@ -205,7 +276,7 @@ export async function authorizeTargetWrite(
   return {
     ok: false, status: 403,
     message: actor.role === 'manager'
-      ? 'You can set targets only for people who report directly to you.'
+      ? 'You can set targets only for people in your reporting line — someone who reports to you, directly or through another manager.'
       : 'Only a manager or admin can set targets for someone else.',
   };
 }
@@ -215,15 +286,46 @@ export async function authorizeTargetWrite(
  * alongside GET /quotas and GET /targets so no client re-derives the rule.
  */
 export async function editableTargetUserIds(tenantId: string, actor: TargetActor): Promise<number[]> {
-  const [users, selfOn] = await Promise.all([
+  const [users, edges, selfOn] = await Promise.all([
+    // The SUBJECTS are active users only — an offer to edit a deactivated
+    // account is an offer to do nothing. The EDGES are every user (see
+    // loadManagerEdges): a deactivated middle manager must not sever a subtree.
     pool.query(
-      'SELECT id, role, manager_id FROM users WHERE tenant_id = $1 AND is_active = true',
+      'SELECT id, role FROM users WHERE tenant_id = $1 AND is_active = true',
       [tenantId],
     ),
+    loadManagerEdges(tenantId),
     repsSetOwnTargets(tenantId),
   ]);
   return users.rows
-    .map(u => ({ id: Number(u.id), role: u.role, manager_id: u.manager_id === null ? null : Number(u.manager_id) }))
+    .map(u => ({ id: Number(u.id), role: u.role, managerChain: chainAbove(edges, Number(u.id)) }))
     .filter(s => canSetTargetsFor(actor, s, selfOn))
     .map(s => s.id);
 }
+
+/**
+ * The ids of everyone ACTIVE in the workspace whose targets `actor` may see.
+ *
+ * Served by GET /quotas, and the reason is specific rather than symmetric with
+ * `editable_user_ids`: that response is merged CLIENT-SIDE against a rep list
+ * built from deals, so an absent quota row is ambiguous — "none is set" and
+ * "you may not see it" look identical, and ForecastPage would print "Not set"
+ * over somebody's real quota. GET /targets needs no such field: its rows ARE
+ * the visible people, so nothing there is ambiguous.
+ *
+ * It discloses nothing new — GET /users already serves the roster and the
+ * reporting line to every authenticated caller. This says which of those people
+ * you may read a TARGET for, not that any target exists.
+ */
+export async function readableTargetUserIds(tenantId: string, actor: TargetActor): Promise<number[]> {
+  const [users, edges] = await Promise.all([
+    pool.query('SELECT id FROM users WHERE tenant_id = $1 AND is_active = true', [tenantId]),
+    loadManagerEdges(tenantId),
+  ]);
+  return users.rows
+    .map(u => Number(u.id))
+    .filter(id => canReadTargetsOf(actor, { id, managerChain: chainAbove(edges, id) }));
+}
+
+/** Re-exported so a caller needing both rules imports one module, not two. */
+export { chainAbove, loadManagerEdges, type ManagerEdge };

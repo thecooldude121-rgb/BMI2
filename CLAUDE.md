@@ -613,10 +613,54 @@ old constraint, which fails the shared-name test.
     tenant-consistent by a COMPOSITE FK to `users(id, tenant_id)`. There is no
     `user_targets` table. The reporting line is `users.manager_id` (041). `territories` and
     `products` were NOT used — neither has a `tenant_id`, the `employees` defect again.
-  - **Who sets whose targets** — admin: anyone; manager: DIRECT reports only, not the
-    subtree; anyone: themselves, only when `tenants.settings.reps_set_own_targets` is on
-    (off by default). One function, `utils/targets.canSetTargetsFor`, served as
+  - **Who sets whose targets — CONFIRMED POLICY, ratified 2026-09-14.** Admin: anyone.
+    Manager: anyone in their reporting SUBTREE, at any depth — not direct reports only.
+    Anyone: themselves, only when `tenants.settings.reps_set_own_targets` is on (off by
+    default). One function, `utils/targets.canSetTargetsFor`, served as
     `editable_user_ids` / `can_edit`. `PUT /quotas` was open to every role before 044.
+    `canActOn` still bounds it, so a manager cannot set an admin's targets even inside
+    their own subtree.
+
+    > The subtree rule REPLACED a direct-reports-only rule that shipped in 044. That
+    > earlier rule was a default chosen while building, not a decision anyone had made,
+    > and it was reported as though it had been — which is the mistake worth remembering
+    > here, not the rule. If a permission in this file has no ratification date on it,
+    > treat it as somebody's default and ask.
+
+  - **Who SEES whose targets — CONFIRMED POLICY, ratified 2026-09-14.** `GET /quotas`,
+    `GET /targets` and `GET /targets/projection` return a person's row to that person, to
+    everyone ABOVE them in the reporting chain (to the top, not one level), and to admins.
+    They were open to every authenticated caller in the workspace until then.
+    - **`canReadTargetsOf`, and it is NOT `canSetTargetsFor` with the arrow reversed.**
+      Two deliberate asymmetries: no `canActOn` on the read (chain membership is the rule
+      as decided, and someone is only above you because an admin put them there), and the
+      self case is not gated on `reps_set_own_targets` (that toggle governs writing your
+      own target, and a target you cannot see is one you cannot work to).
+    - **A row you may not see is ABSENT, never redacted and never a 403** — the same
+      reason the FK rejection names only the field. Everything editable is readable, and
+      a test asserts that containment rather than assuming it.
+    - **`GET /quotas` also serves `visible_user_ids`.** Its rows are merged CLIENT-SIDE
+      against a rep list built from deals, so an absent row is ambiguous — "no quota set"
+      and "not yours to see" are the same absence, and ForecastPage printed "Not set" over
+      both. `GET /targets` needs no such field: its rows ARE the visible people.
+    - **This is the ONE place in the CRM where row-level visibility is settled.** Deals,
+      contacts and `GET /users` are still workspace-wide; the general question
+      `middleware/auth.ts` records stays open. Targets are compensation, which is why they
+      went first and why they do not wait for it.
+  - **Both rules are one relation, `reportingLine.chainAbove`** — `A` may act on `B`
+    exactly when `chainAbove(edges, B)` contains `A`, and `B` is visible to `A` on the
+    same test. The walk is cycle-safe and depth-capped (nothing in Postgres stops
+    `A -> B -> A`; only `wouldCreateCycle` does, and only on the write path), and the
+    reporting graph is loaded WITHOUT an `is_active` filter on purpose: a deactivated
+    middle manager must not sever the subtree beneath them.
+  - **FALLOUT ON THE FORECAST PAGE, fixed with the rule.** `teamProjected` comes from
+    deals (unfiltered); `totalQuota` now comes from quotas (filtered). For anyone but an
+    admin those are different populations, so the gap banner and the footer attainment
+    were dividing one by the other and producing a percentage of nothing. Both are now
+    shown only when the populations agree, with a note naming how many quotas the viewer
+    cannot see in their place. A real per-scope forecast — comparing a subtree's pipeline
+    against a subtree's quota — is the follow-up, and is deliberately NOT guessed at
+    here.
   - **Projection bars** (`PROJECTION_RULES`): a win rate needs 10 closures with a RECORDED
     close time in the trailing 365 days, at least one of them won; cycle length and deal
     size need 5 won deals. The rep's own history first, else the workspace's (labelled),
@@ -635,8 +679,9 @@ old constraint, which fails the shared-name test.
     constrained; `CompanyForm` / `CompaniesPage` are unrouted dead code carrying a stale
     industry list; whether `createDeal` should write a history row when a deal is created
     straight into a closed stage (which would make those closures datable) is its own
-    decision; the projection endpoint's read visibility follows `GET /quotas` (open to
-    every role) — the same open row-level question `middleware/auth.ts` records.
+    decision. (The projection's read visibility is no longer deferred — it follows
+    `GET /quotas`, and `GET /quotas` is now scoped to the reporting chain: see the
+    confirmed read policy above.)
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
@@ -1012,9 +1057,40 @@ presumes the failure kills `afterAll`. A single test that times out still lets `
 run, so a timeout-shaped instance of this flake would never orphan a tenant — the signature
 as written may be excluding exactly these.
 
+**Observed 2026-09-14, and it CAPTURED THE 401 BODY FOR THE FIRST TIME — which points
+somewhere other than the pool.** During the targets-visibility work: five full runs, two of
+which failed with exactly one test each (`roundTrip.contacts` "edit: buying_role actually
+persists" on one of them; the other run's test name was not captured), three clean. The
+file passed 18/18 alone immediately afterwards, and **zero `rt-` tenants were orphaned**, so
+part 3 was not met — the same as the 2026-09-13 batch.
+
+The body was this, on a `PUT /api/v1/contacts/:id` that expected 200:
+
+```json
+{"type":"error","error":{"type":"authentication_error","message":"Invalid authentication"},"request_id":null}
+```
+
+**That is an Anthropic API error envelope. This codebase cannot produce it** — no controller,
+no middleware and no error handler emits `request_id`, and `protect`'s 401 is
+`{ success: false, message: ... }`. So the response did not come from the Express app under
+test, which reframes the working theory: not "the pool returned an error that surfaced as a
+401", but **the request left the app and was answered by something else**. supertest binds an
+ephemeral port on 127.0.0.1, so a request escaping to an outside endpoint means an
+interception layer — an HTTP proxy, a patched global `fetch`/agent, or an undici hook — is in
+play for at least some requests under load. `HTTP_PROXY`/`HTTPS_PROXY` were NOT set in the
+shell that ran it, so if this is a proxy it is being installed by something else in the
+process.
+
+Two consequences for the eventual debugging pass:
+- **Instrumenting the pg pool may be looking in the wrong place.** Do it, but capture the
+  RESPONSE BODY of every unexpected 401 first — it is cheap, and one body has already moved
+  the theory further than six data points of shape did.
+- The historical "401 whose body is `{}`" may be the same thing seen through a client that
+  dropped the body, rather than a distinct signature.
+
 **It still deserves a dedicated debugging pass**, and the first thing to instrument is pool
 acquisition (`pool.totalCount` / `idleCount` / `waitingCount`) during a full run, not any
-individual test.
+individual test — alongside the body capture above.
 
 ## CI
 
