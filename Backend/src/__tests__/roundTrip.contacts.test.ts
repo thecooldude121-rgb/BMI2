@@ -283,4 +283,242 @@ describe('Contacts — round trip', () => {
       await teardownWorkspace(wsB);
     }
   });
+
+  /**
+   * external_ref idempotency (migration 046).
+   *
+   * The failure this guards: Lead Gen POSTs a conversion, BMI2 creates the
+   * contact, the response is lost, Lead Gen retries. Before 046 the retry hit
+   * contacts_tenant_email_key and came back 409 with no contact id, so the
+   * conversion could never be marked done even though the contact existed.
+   *
+   * Asserted against Postgres directly, not the response body: the point is
+   * that ONE row exists, and the response-body id alone cannot show that.
+   */
+  it('external_ref: a retried create returns the SAME contact and Postgres holds exactly one row', async () => {
+    const ref = `prospect-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      first_name: 'Retry', last_name: 'Prospect',
+      email: `retry.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
+      source: 'lead-gen', external_ref: ref,
+    };
+
+    const first = await request(app).post('/api/v1/contacts').set(auth(ws)).send(payload);
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    const id = first.body.data.id;
+    createdIds.push(id);
+    expect(first.body.data.external_ref).toBe(ref);
+
+    // The retry: byte-identical request, as a real retry would be.
+    const retry = await request(app).post('/api/v1/contacts').set(auth(ws)).send(payload);
+    // 200, not 201 — nothing was created this time, and the caller can tell.
+    expect(retry.status, JSON.stringify(retry.body)).toBe(200);
+    expect(retry.body.success).toBe(true);
+    expect(retry.body.data.id, 'the retry must resolve to the first contact').toBe(id);
+
+    const rows = await pool.query(
+      'SELECT id FROM contacts WHERE tenant_id = $1 AND source = $2 AND external_ref = $3',
+      [ws.tenantId, 'lead-gen', ref],
+    );
+    expect(rows.rowCount, 'exactly one row, no duplicate').toBe(1);
+    expect(rows.rows[0].id).toBe(id);
+  });
+
+  /**
+   * The duplicate that WAS reachable before 046: the prospect's email is
+   * corrected between the first attempt and the retry, so the email constraint
+   * no longer matches and a second contact for one prospect is created.
+   * external_ref does not depend on any field a user can edit, so it still
+   * recognises the retry.
+   */
+  it('external_ref: a retry with a changed email is still the same contact, not a second one', async () => {
+    const ref = `prospect-moved-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const base = { first_name: 'Moved', last_name: 'Email', source: 'lead-gen', external_ref: ref };
+
+    const first = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ ...base, email: `before.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    const id = first.body.data.id;
+    createdIds.push(id);
+
+    const retry = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ ...base, email: `after.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com` });
+    expect(retry.status, JSON.stringify(retry.body)).toBe(200);
+    expect(retry.body.data.id).toBe(id);
+
+    const rows = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1 AND external_ref = $2',
+      [ws.tenantId, ref],
+    );
+    expect(rows.rows[0].n).toBe(1);
+
+    // DO NOTHING, not DO UPDATE: the stored contact is the first one, unchanged.
+    const stored = await pool.query('SELECT email FROM contacts WHERE id = $1', [id]);
+    expect(stored.rows[0].email).toMatch(/^before\./);
+  });
+
+  /**
+   * The reason source is in the unique key. Two modules that both number their
+   * records from 1 must not collide, or the second module's first conversion
+   * would be handed the first module's contact.
+   */
+  it('external_ref: the same ref from a different source is a different contact', async () => {
+    const ref = `shared-id-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const stamp = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+
+    const fromLeadGen = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'From', last_name: 'LeadGen', email: `lg.${stamp}@example.com`, source: 'lead-gen', external_ref: ref });
+    expect(fromLeadGen.status, JSON.stringify(fromLeadGen.body)).toBe(201);
+    createdIds.push(fromLeadGen.body.data.id);
+
+    const fromHrms = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'From', last_name: 'Hrms', email: `hr.${stamp}@example.com`, source: 'hrms', external_ref: ref });
+    expect(fromHrms.status, 'a different source reusing the id is a genuine new contact').toBe(201);
+    createdIds.push(fromHrms.body.data.id);
+
+    expect(fromHrms.body.data.id).not.toBe(fromLeadGen.body.data.id);
+    const rows = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1 AND external_ref = $2', [ws.tenantId, ref]);
+    expect(rows.rows[0].n).toBe(2);
+  });
+
+  it('external_ref: two workspaces may use the same ref without colliding', async () => {
+    const wsB = await setupWorkspace('contacts-extref-b');
+    try {
+      const ref = `cross-ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const stamp = `${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+      const body = (p: string) => ({
+        first_name: 'Cross', last_name: 'Workspace', email: `${p}.${stamp}@example.com`,
+        source: 'lead-gen', external_ref: ref,
+      });
+
+      const inA = await request(app).post('/api/v1/contacts').set(auth(ws)).send(body('a'));
+      expect(inA.status, JSON.stringify(inA.body)).toBe(201);
+      createdIds.push(inA.body.data.id);
+
+      const inB = await request(app).post('/api/v1/contacts').set(auth(wsB)).send(body('b'));
+      expect(inB.status, JSON.stringify(inB.body)).toBe(201);
+      expect(inB.body.data.id).not.toBe(inA.body.data.id);
+    } finally {
+      await teardownWorkspace(wsB);
+    }
+  });
+
+  it('external_ref: concurrent retries still produce exactly one contact', async () => {
+    const ref = `concurrent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = {
+      first_name: 'Concurrent', last_name: 'Retry',
+      email: `conc.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
+      source: 'lead-gen', external_ref: ref,
+    };
+
+    // Fired together, as a client retrying while the first attempt is still in
+    // flight would. A check-then-insert would let both pass the check.
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => request(app).post('/api/v1/contacts').set(auth(ws)).send(payload)),
+    );
+
+    const rows = await pool.query(
+      'SELECT id FROM contacts WHERE tenant_id = $1 AND source = $2 AND external_ref = $3',
+      [ws.tenantId, 'lead-gen', ref],
+    );
+    expect(rows.rowCount, 'exactly one contact from four concurrent attempts').toBe(1);
+    const id = rows.rows[0].id;
+    createdIds.push(id);
+
+    for (const r of results) {
+      expect([200, 201], `unexpected ${r.status}: ${JSON.stringify(r.body)}`).toContain(r.status);
+      expect(r.body.data.id, 'every concurrent caller learns the same contact id').toBe(id);
+    }
+    expect(results.filter(r => r.status === 201), 'exactly one caller created it').toHaveLength(1);
+  });
+
+  it('external_ref: rejected without a source, since a ref alone could never dedup', async () => {
+    const email = `noSource.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const res = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'No', last_name: 'Source', email, external_ref: 'ref-without-source' });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toMatch(/external_ref requires source/);
+    expect(res.body.message, 'the real reason, not a masked 500').not.toMatch(/Internal Server Error/);
+
+    const rows = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE email = $1', [email]);
+    expect(rows.rows[0].n, 'nothing created').toBe(0);
+  });
+
+  it('external_ref: a blank or over-long ref is a 400, not a stored value that can never match', async () => {
+    for (const bad of ['   ', 'x'.repeat(101)]) {
+      const email = `badref.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
+      const res = await request(app).post('/api/v1/contacts').set(auth(ws))
+        .send({ first_name: 'Bad', last_name: 'Ref', email, source: 'lead-gen', external_ref: bad });
+      expect(res.status, JSON.stringify(res.body)).toBe(400);
+      expect(res.body.message).toMatch(/external_ref must be/);
+
+      const rows = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE email = $1', [email]);
+      expect(rows.rows[0].n, 'nothing created').toBe(0);
+    }
+  });
+
+  /**
+   * The pre-046 behaviour must survive unchanged: the index is partial on
+   * external_ref IS NOT NULL, so for every caller that sends no ref the
+   * ON CONFLICT clause can never fire and a duplicate email is still a 409.
+   */
+  it('external_ref: contacts without one are unaffected — duplicate email is still a 409', async () => {
+    const email = `stillConflicts.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const first = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Plain', last_name: 'One', email });
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    createdIds.push(first.body.data.id);
+    expect(first.body.data.external_ref, 'no ref sent, none invented').toBeNull();
+
+    const second = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Plain', last_name: 'Two', email });
+    expect(second.status, JSON.stringify(second.body)).toBe(409);
+    expect(second.body.message).toMatch(/already exists in this workspace/);
+
+    const rows = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE email = $1', [email]);
+    expect(rows.rows[0].n).toBe(1);
+  });
+
+  /**
+   * A new external_ref whose email is already taken is a REAL conflict — a
+   * different prospect that happens to share an address with an existing
+   * contact — and must stay a 409. Returning the existing contact there would
+   * silently bind Lead Gen's new prospect to someone else's record.
+   */
+  it('external_ref: a new ref with an already-taken email is still a 409', async () => {
+    const email = `taken409.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const holder = await request(app).post('/api/v1/contacts').set(auth(ws))
+      .send({ first_name: 'Holder', last_name: 'Ofmail', email });
+    expect(holder.status, JSON.stringify(holder.body)).toBe(201);
+    createdIds.push(holder.body.data.id);
+
+    const res = await request(app).post('/api/v1/contacts').set(auth(ws)).send({
+      first_name: 'Different', last_name: 'Prospect', email,
+      source: 'lead-gen', external_ref: `fresh-${Date.now()}`,
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.message).toMatch(/already exists in this workspace/);
+    expect(res.body.message, 'the real reason, not a masked 500').not.toMatch(/Internal Server Error/);
+  });
+
+  it('external_ref: PUT cannot repoint it, so a later retry still finds its contact', async () => {
+    const ref = `immutable-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const create = await request(app).post('/api/v1/contacts').set(auth(ws)).send({
+      first_name: 'Immutable', last_name: 'Ref',
+      email: `imm.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
+      source: 'lead-gen', external_ref: ref,
+    });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    const id = create.body.data.id;
+    createdIds.push(id);
+
+    const edit = await request(app).put(`/api/v1/contacts/${id}`).set(auth(ws))
+      .send({ first_name: 'Edited', external_ref: 'hijacked' });
+    expect(edit.status, JSON.stringify(edit.body)).toBe(200);
+
+    const row = await pool.query('SELECT first_name, external_ref FROM contacts WHERE id = $1', [id]);
+    expect(row.rows[0].first_name, 'the writable field did change').toBe('Edited');
+    expect(row.rows[0].external_ref, 'the ref did not').toBe(ref);
+  });
 });
