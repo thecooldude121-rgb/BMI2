@@ -8,7 +8,9 @@ import {
   repsSetOwnTargets, targetReadFilter,
 } from '../utils/targets';
 import { PROJECTION_RULES, projectTarget } from '../services/targetProjection';
-import { loadProjectionDeals } from '../services/targetProjectionData';
+import {
+  loadProjectionDeals, countActivitiesInPeriod, ACTIVITY_MEASUREMENT_REASON,
+} from '../services/targetProjectionData';
 
 /**
  * Per-user sales targets — the Settings half. Migration 044.
@@ -149,9 +151,10 @@ export const getProjection = async (req: AuthRequest, res: Response, next: NextF
     if (!period) { res.status(400).json({ success: false, message: PERIOD_QUERY_MESSAGE }); return; }
 
     const actor = { id: Number(req.user?.id), role: String(req.user?.role ?? '') };
-    const [users, deals, canRead] = await Promise.all([
+    const [users, deals, canRead, activitiesRecorded] = await Promise.all([
       pool.query(
-        `SELECT u.id, u.first_name, u.last_name, u.email, q.quota_amount, q.currency
+        `SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.manager_id,
+                q.quota_amount, q.currency, q.activity_targets
            FROM users u
            LEFT JOIN quotas q
              ON q.user_id = u.id AND q.tenant_id = u.tenant_id AND q.period_label = $2
@@ -161,6 +164,7 @@ export const getProjection = async (req: AuthRequest, res: Response, next: NextF
       ),
       loadProjectionDeals(tenantId),
       targetReadFilter(tenantId, actor),
+      countActivitiesInPeriod(tenantId, period.start, period.end),
     ]);
 
     const now = new Date();
@@ -169,8 +173,32 @@ export const getProjection = async (req: AuthRequest, res: Response, next: NextF
       period: { label: period.label, start: period.start.toISOString(), end: period.end.toISOString() },
       generated_at: now.toISOString(),
       rules: PROJECTION_RULES,
+      /*
+       * ACTIVITY TARGETS ARE SERVED; ATTAINMENT IS NOT COMPUTED, and the
+       * payload says why rather than omitting the subject. See
+       * ACTIVITY_MEASUREMENT_REASON — `activities` records its actor as a
+       * free-text name, so attributing one to a rep would mean keying on a
+       * display name.
+       *
+       * `activities_recorded` is the real count for the period across the
+       * workspace, and it is the evidence that separates "nothing is logged
+       * here at all" from "this person did nothing" — a distinction a guidance
+       * panel must not get wrong in the accusatory direction.
+       */
+      activity_measurement: {
+        measurable: false,
+        reason: ACTIVITY_MEASUREMENT_REASON,
+        activities_recorded: activitiesRecorded,
+      },
       data: users.rows.filter(u => canRead(Number(u.id))).map(u => ({
         name: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email,
+        email: u.email,
+        role: u.role,
+        manager_id: u.manager_id === null ? null : Number(u.manager_id),
+        // The stored per-week targets (migration 044), or null when none are
+        // set. Never an object of zeros standing in for "not set".
+        activity_targets:
+          u.activity_targets && Object.keys(u.activity_targets).length > 0 ? u.activity_targets : null,
         ...projectTarget({
           userId: Number(u.id), now, period,
           quota: u.quota_amount === null ? null : { amount: Number(u.quota_amount), currency: u.currency },

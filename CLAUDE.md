@@ -604,7 +604,8 @@ old constraint, which fails the shared-name test.
 
 - **Agent Capability 2 foundation — user targets, one industry vocabulary, pipeline
   projection. BUILT (migrations 044, 045). The dashboard "Sales Intelligence Guide" panel
-  that consumes it is NOT built, and is the next piece of work.** The decisions below were
+  that consumes it is BUILT TOO (2026-09-14) — see "The Sales Intelligence Guide panel"
+  below.** The decisions below were
   agreed in the session that built it; they are recorded so they are neither re-litigated
   nor guessed at:
   - **Targets extend `quotas`, they do not duplicate it.** Per-period fields
@@ -682,6 +683,74 @@ old constraint, which fails the shared-name test.
     decision. (The projection's read visibility is no longer deferred — it follows
     `GET /quotas`, and `GET /quotas` is now scoped to the reporting chain: see the
     confirmed read policy above.)
+
+- **The Sales Intelligence Guide panel — BUILT 2026-09-14, and what it replaced.**
+  `components/Dashboard/SalesIntelligenceGuide.tsx`, rendered by `CRMDashboard` (the
+  `/crm/dashboard` the sidebar actually links to). Three role views off ONE request to
+  `GET /targets/projection`, whose response is already scoped by `canReadTargetsOf` — the
+  panel deliberately issues no roster query of its own, and a test asserts it makes exactly
+  one call, because a second path is a second place for the read scoping to be forgotten.
+  - **It replaced the "AI Insights" preview**: two fixed sentences ("3 deals need
+    attention", "close rate up 12% this month") behind a PREVIEW · SAMPLE CONTENT label.
+    The replacement is NOT named or presented as AI — it is arithmetic over the workspace's
+    own deals and quotas, and Phase-2 AI remains out of scope.
+  - **The rules live in `utils/salesGuidance.ts`, pure and separately tested**, because
+    every one of them is a claim about a person's performance. `Problem` has no shape
+    without its `evidence` string, so no code path can render a verdict without the numbers
+    that produced it.
+  - **A conversion verdict compares a rep against the workspace ONLY when
+    `win_rate.basis === 'rep'`.** When the projection fell back to the workspace figure the
+    two numbers are the same number. `win_rate_workspace` was added to the payload for this
+    — always the workspace's, even when `win_rate` already is — so the comparison has a
+    visible basis instead of being asserted.
+  - **`not_enough_data` and `no_quota` are grey, never amber or red, and produce no
+    problems at all.** "We cannot tell" is not "you are behind", and colouring an absence of
+    data as a warning is an accusation the data does not support. The roll-up also COUNTS
+    those people rather than filtering them out, so it cannot describe three people while
+    claiming to describe five.
+  - A failed load renders an error, never an empty roster — an empty roster reads as
+    "nobody is off pace", which is the worst possible failure mode for this panel.
+
+- **TRACKED GAP — activity targets CANNOT BE MEASURED, and the reason is structural.**
+  `quotas.activity_targets` stores real per-week calls/meetings/emails targets (044) and
+  Settings writes them. Nothing can measure attainment, because **the deployed `activities`
+  table has no user reference at all**: its actor columns are `created_by` and
+  `assigned_to`, both `character varying` holding free-text names. (The spec earlier in
+  this file shows `user_id UUID REFERENCES users(id)` and `occurred_at`; neither was
+  deployed — the same class of drift as `close_date` / `expected_close_date`.)
+  Attributing an activity to a rep would therefore mean matching on a DISPLAY NAME, which
+  is the defect migrations 039-043 exist to remove and which was rejected for
+  `deals.company_name` for the same reason. So the API reports
+  `activity_measurement: { measurable: false, reason, activities_recorded }` and the panel
+  shows the targets with "Attainment is not calculated" — never a shortfall, and never
+  silence, since silence over an unmeasured target reads as "you are meeting it".
+  `activities_recorded` is real and is what separates "nothing is logged in this workspace
+  at all" (it is 0 live) from "this person did nothing" — a distinction a guidance panel
+  must not get wrong in the accusatory direction.
+  **The fix is a migration giving `activities` an `assigned_to_user_id` FK the way 039 gave
+  one to `deals`, plus a writer on the create path.** Deliberately not done with the panel:
+  it is a schema decision, and with 0 rows recorded there would still be nothing to measure.
+
+- **ANSWERED — the buying-committee data structure EXISTS and is real. Do not rebuild it.**
+  `contacts.buying_role` is a `varchar` with a CHECK constraint (migration 026) over eight
+  values: `champion`, `decision-maker`, `economic-buyer`, `influencer`,
+  `technical-evaluator`, `user`, `legal-procurement`, `blocker-detractor`. It is validated
+  in `contactsController` (`BUYING_ROLES`), typed in `types/contact.ts`, labelled in
+  `config/contactRoles.ts`, and consumed by `components/Deal/BuyingCommitteeMap.tsx`
+  through the deal page's stakeholders — which correctly EXCLUDES a stakeholder with no
+  stored role rather than defaulting them onto a seat. All 20 live contacts have NULL.
+  - **One fabrication remains in that component and is NOT fixed here** (it was out of the
+    guide panel's scope): `BuyingCommitteeMap.tsx` renders a fixed line reading
+    *"AI Insight: Decision Maker and Economic Buyer not yet aligned — deals with both
+    engaged close 2.4× faster"*. The 2.4× is a literal; nothing computes it, and no endpoint
+    could. It is an evaluative statistic with no basis and should be deleted the way
+    `DocumentDetailPage`'s "12 views" was.
+
+- **There is no "AI Insights Panel" on the routed Reports page.** `pages/CRM/ReportsPage.tsx`
+  has never had one (`git log -S` finds nothing). The only Reports-shaped AI Insights tab is
+  in `pages/Settings/AnalyticsReporting.tsx`, which is inside the DEAD Supabase Settings
+  tree that `/settings` no longer reaches. Anything specified against "Reports' AI Insights
+  Panel" has no existing surface to fill.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

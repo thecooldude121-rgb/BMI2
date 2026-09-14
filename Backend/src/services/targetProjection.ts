@@ -97,6 +97,17 @@ export interface Projection {
   attained: number | null;
   remaining: number | null;
   win_rate: Metric & { won: number; lost: number };
+  /**
+   * THE WORKSPACE'S win rate over the same window, ALWAYS, even when
+   * `win_rate` already used this person's own.
+   *
+   * It exists so "this rep has a conversion problem" can be SHOWN rather than
+   * asserted. Without both figures that verdict is a bare label — and the
+   * project rule is that no evaluative output renders without an inspectable
+   * basis. A caller comparing the two must check `basis`: when `win_rate.basis`
+   * is 'workspace' the two are the same number and comparing them says nothing.
+   */
+  win_rate_workspace: Metric & { won: number; lost: number };
   sales_cycle_days: Metric;
   average_deal_size: Metric;
   /** Open deals expected to close in the period, in the quota's currency. */
@@ -266,6 +277,7 @@ export function projectTarget(input: ProjectionInput): Projection {
     quota,
     attained,
     win_rate: winRate,
+    win_rate_workspace: { ...wrWs, basis: 'workspace' as Basis },
     sales_cycle_days: cycle,
     average_deal_size: dealSize,
     pipeline,

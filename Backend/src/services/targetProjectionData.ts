@@ -77,3 +77,55 @@ export async function loadProjectionDeals(tenantId: string): Promise<{
   }
   return { closed, untimedClosed, open };
 }
+
+/**
+ * ACTIVITY TARGET MEASUREMENT — why it is not computed, and the evidence for
+ * saying so.
+ *
+ * `quotas.activity_targets` stores real per-week targets for calls, meetings
+ * and emails (migration 044), and the Settings screen writes them. NOTHING can
+ * currently measure them, and the reason is structural rather than a missing
+ * query:
+ *
+ *   THE DEPLOYED `activities` TABLE HAS NO USER REFERENCE. Its actor columns
+ *   are `created_by` and `assigned_to`, both `character varying` holding
+ *   free-text names, and there is no `user_id` or `assigned_to_user_id`. (The
+ *   spec in CLAUDE.md shows `user_id UUID REFERENCES users(id)` and an
+ *   `occurred_at`; neither was deployed — the same class of drift as
+ *   `close_date` / `expected_close_date`.)
+ *
+ * Attributing an activity to a rep would therefore mean matching on a DISPLAY
+ * NAME. That is precisely the defect migrations 039-043 exist to remove — two
+ * people sharing a name share the number, and a renamed person silently loses
+ * their history — and it was rejected for `deals.company_name` for the same
+ * reason. So attainment is reported as NOT MEASURABLE, with the targets still
+ * shown, rather than computed from a key that is not a key.
+ *
+ * The count IS real and is returned as evidence: on live data it is 0, which
+ * distinguishes "nobody logs activity here" from "this rep did nothing" — a
+ * distinction the panel would otherwise get wrong in the accusatory direction.
+ *
+ * THE FIX, when it is wanted, is a migration giving `activities` an
+ * `assigned_to_user_id` FK the way 039 gave one to `deals`, plus a writer on
+ * the create path. It is deliberately NOT done here: it is a schema decision,
+ * and with 0 rows recorded there would still be nothing to measure.
+ */
+export const ACTIVITY_MEASUREMENT_REASON =
+  'Activity targets cannot be measured yet: the activities table records who acted only as a free-text name '
+  + '(created_by / assigned_to) and has no user reference, so attainment cannot be attributed to a person '
+  + 'without matching on a display name. Targets are shown; attainment is not calculated.';
+
+/** How many activities the workspace recorded in a window. Real, and the evidence for the note above. */
+export async function countActivitiesInPeriod(
+  tenantId: string, start: Date, end: Date,
+): Promise<number> {
+  const r = await pool.query(
+    `SELECT COUNT(*)::int AS n
+       FROM activities
+      WHERE tenant_id = $1
+        AND COALESCE(completed_at, scheduled_at, created_at) >= $2
+        AND COALESCE(completed_at, scheduled_at, created_at) <  $3`,
+    [tenantId, start, end],
+  );
+  return Number(r.rows[0]?.n ?? 0);
+}
