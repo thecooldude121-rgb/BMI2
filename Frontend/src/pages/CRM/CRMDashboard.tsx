@@ -538,7 +538,28 @@ const CRMDashboard: React.FC = () => {
             response is already scoped to the people the caller may see. */}
         <SalesIntelligenceGuide />
 
-        {/* ── Gamification: PREVIEW, not a working feature ───────────────────
+        {/* ── Gamification: PREVIEW · SAMPLE CONTENT — AND SLATED FOR DELETION
+            ───────────────────────────────────────────────────────────────────
+            VENKAT DECIDED ON 2026-09-15 TO DELETE GAMIFICATION OUTRIGHT, on the
+            BANT-framework precedent. The standalone feature IS gone: the
+            /gamification and /gamification/leaderboard routes, both pages, the
+            sidebar's "Leaderboard" entry, the role permission and the dead
+            "View All" button below were all removed.
+
+            THIS PANEL AND `components/gamification/` SURVIVED THAT PASS, and
+            the reason is mechanical, not a judgement: this block's JSX is
+            INTERLEAVED with the surrounding dashboard layout rather than being
+            a self-contained subtree. Its opening <div>s are closed by tags
+            belonging to sibling sections, so the div depth never returns to
+            zero across the block — excising the line range breaks the page, and
+            it did on the first attempt. Untangling it is a real edit to a
+            1,100-line routed page and was not worth rushing at the end of a
+            long change.
+
+            It stays LABELLED in the meantime, which is the pre-existing state,
+            so nothing here is asserting anything unlabelled. Finishing the
+            deletion is tracked in CLAUDE.md.
+            ───────────────────────────────────────────────────────────────────
             Every figure in these three cards is a literal in `gamificationData`
             above: 38,450 points, rank #2, level 4 "Platinum", 87% to Diamond,
             5 badges, a 23-day streak, 10 coins, a "Make 15 calls" challenge at
@@ -816,16 +837,16 @@ const CRMDashboard: React.FC = () => {
               ))}
             </div>
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate('/crm/gamification/leaderboard');
-              }}
-              className="w-full py-2 text-center border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors mt-4"
-              style={{ borderColor: '#e0e0e0' }}
-            >
-              View All
-            </button>
+            {/*
+              * The "View All" button navigated to /crm/gamification/leaderboard,
+              * which was DELETED with the Gamification feature (Venkat,
+              * 2026-09-15). A button pointing at a removed route is a dead
+              * control, so it is gone rather than left to land on a blank page.
+              *
+              * The panel it sat in is still here and still labelled
+              * PREVIEW · SAMPLE CONTENT — see the note at the top of this file
+              * for why it could not be excised in the same pass.
+              */}
           </div>
         </div>
         </div>

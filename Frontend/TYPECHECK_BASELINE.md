@@ -17,7 +17,14 @@ cd Frontend && npm run typecheck        # tsc -p tsconfig.app.json --noEmit
 cd Frontend && npm run typecheck:count  # just the number
 ```
 
-## Baseline: 229 errors at HEAD (2026-09-10)
+## Baseline: 223 errors at HEAD (2026-09-15)
+
+Lowered from 229 by the facade-page cleanup (2026-09-15): six went with the deleted
+fabrication — three `TS6133`s in `AIResponseDetailView`'s removed strategy fixtures, the
+`Trophy` icon that only the deleted Gamification sidebar entry used, and two more in the
+Gamification pages themselves. None was fixed as such; they left with the code that carried
+them, which is the cheapest kind of reduction and the reason the count is a signal rather
+than a chore.
 
 Lowered from 281 (357be5a). The gate only fails on a RISE, so a stale-high baseline
 quietly stops protecting anything — CI emits a notice asking for the number to be lowered

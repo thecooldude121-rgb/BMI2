@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
+import PreviewBanner from '../../components/common/PreviewBanner';
 import { Cloud, Check, X, AlertCircle, RefreshCw, Settings, Plus, ArrowLeft, Link as LinkIcon, Clock, Activity, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { CRMIntegration, CRMProvider, IntegrationStatus } from '../../types/workflowAutomation';
@@ -68,6 +69,18 @@ const IntegrationsPage: React.FC = () => {
     alert(`OAuth flow for ${selectedProvider} would open here`);
   };
 
+  /*
+   * PREVIEW. This page is the most honest of the facade set — `integrations`
+   * starts as [] and nothing populates it, so the connected list renders
+   * genuinely empty and no figure is invented. What IS hardcoded is the
+   * provider catalogue below, which is a menu of what could be built, not a
+   * claim about your data.
+   *
+   * It is labelled anyway, because "Connect" does nothing: `handleConnect`
+   * opens a modal whose confirm is an alert(). A control that looks live and
+   * isn't is the dead-button problem this project treats as a bug, and a
+   * reader deserves to know before clicking.
+   */
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200 shadow-sm">
@@ -142,6 +155,16 @@ const IntegrationsPage: React.FC = () => {
             })}
           </div>
         </div>
+
+        <PreviewBanner
+          detail={<>
+            <strong>No integration is connected, and none can be yet.</strong> The
+            providers below are a catalogue of what this screen will support —
+            connecting one is not built, so the button opens a placeholder rather
+            than a real authorisation flow.
+          </>}
+          insteadTry="Nothing here reads or writes your CRM data, so no figure on this page is wrong — there simply aren't any."
+        />
 
         {integrations.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm">

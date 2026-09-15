@@ -12,6 +12,7 @@ import documentsRoutes from './documents';
 import usersRoutes from './users';
 import invitesRoutes from './invites';
 import quotasRoutes from './quotas';
+import meetingsRoutes from './meetings';
 import forecastRoutes from './forecast';
 import targetsRoutes from './targets';
 
@@ -30,6 +31,7 @@ router.use('/documents', documentsRoutes);
 router.use('/users', usersRoutes);
 router.use('/invites', invitesRoutes);
 router.use('/quotas', quotasRoutes);
+router.use('/meetings', meetingsRoutes);
 router.use('/forecast', forecastRoutes);
 router.use('/targets', targetsRoutes);
 

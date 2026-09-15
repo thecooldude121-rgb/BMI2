@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
+import PreviewBanner from '../../components/common/PreviewBanner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, Download, Share2, Star, Clock, Filter, RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Activity, Home, ChevronRight, ChevronDown, Mail, FileSpreadsheet, FileText, BarChart3, PieChart, LineChart, Table, Eye, Info, CheckCircle } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -49,18 +50,27 @@ const ReportDetailView: React.FC = () => {
   };
 
   const handleExportPDF = () => {
-    console.log('Exporting report as PDF');
+    // Was: console.log('Exporting report as PDF'). The menu item looked live
+    // and produced nothing — the dead-button problem. There is no report to
+    // export: every figure on this page is a literal (see getReportData).
     setShowExportMenu(false);
+    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
   };
 
   const handleExportCSV = () => {
-    console.log('Exporting report as CSV');
+    // Was: console.log('Exporting report as CSV'). The menu item looked live
+    // and produced nothing — the dead-button problem. There is no report to
+    // export: every figure on this page is a literal (see getReportData).
     setShowExportMenu(false);
+    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
   };
 
   const handleExportExcel = () => {
-    console.log('Exporting report as Excel');
+    // Was: console.log('Exporting report as Excel'). The menu item looked live
+    // and produced nothing — the dead-button problem. There is no report to
+    // export: every figure on this page is a literal (see getReportData).
     setShowExportMenu(false);
+    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
   };
 
   const handlePrint = () => {
@@ -160,6 +170,23 @@ const ReportDetailView: React.FC = () => {
       <CRMNavigation />
 
       <div className="p-8">
+        {/*
+          * PREVIEW. Every figure below comes from getReportData(), which
+          * branches on the URL SLUG and returns hardcoded chart series,
+          * pipeline splits and table rows. Nothing on this page is read from
+          * the workspace. The real build is P3 in the facade-page audit and
+          * depends on CustomReportBuilder gaining a backend first — there is
+          * no saved-report definition for this page to render.
+          */}
+        <PreviewBanner
+          detail={<>
+            <strong>Every number on this page is sample content.</strong> The charts,
+            the pipeline breakdown and the table rows are fixed examples chosen by
+            the report name in the URL — none of it is read from your workspace,
+            and export and scheduling are not built.
+          </>}
+          insteadTry="The Reports page states which of its cards compute from real data and which cannot yet, with the reason."
+        />
         {/* Breadcrumb */}
         <div className="mb-6 flex items-center text-sm text-gray-600">
           <Home className="w-4 h-4 mr-2" />
@@ -957,37 +984,21 @@ function getReportData(reportName: string) {
   // Generate different data based on report name
   const reportLower = reportName.toLowerCase();
 
-  // HRMS Reports (check first - most specific)
-  if (reportLower.includes('hrms') || reportLower.includes('recruitment')) {
-    return {
-      chartData: [
-        { label: 'Jan', value: 40, amount: 85 },
-        { label: 'Feb', value: 55, amount: 112 },
-        { label: 'Mar', value: 68, amount: 145 },
-        { label: 'Apr', value: 75, amount: 168 },
-        { label: 'May', value: 82, amount: 192 },
-        { label: 'Jun', value: 88, amount: 215 },
-        { label: 'Jul', value: 90, amount: 228 },
-        { label: 'Aug', value: 85, amount: 210 },
-        { label: 'Sep', value: 92, amount: 240 },
-        { label: 'Oct', value: 95, amount: 255 },
-        { label: 'Nov', value: 98, amount: 268 },
-        { label: 'Dec', value: 100, amount: 285 },
-      ],
-      pipelineData: [
-        { name: 'HRMS Generated Leads', value: 412, deals: 0, percentage: 49, color: 'bg-blue-500' },
-        { name: 'Traditional Sources', value: 435, deals: 0, percentage: 51, color: 'bg-gray-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'HRMS: Global Tech', type: 'lead', value: 125, stage: 'Converted', owner: 'Alex Rodriguez', status: 'Won' },
-        { id: '2', name: 'HRMS: FinanceFlow', type: 'lead', value: 98, stage: 'Qualified', owner: 'Sarah Chen', status: 'In Progress' },
-        { id: '3', name: 'HRMS: HealthPlus', type: 'lead', value: 87, stage: 'Proposal', owner: 'Mike Johnson', status: 'In Progress' },
-        { id: '4', name: 'HRMS: RetailMax', type: 'lead', value: 76, stage: 'Qualified', owner: 'Emily Davis', status: 'In Progress' },
-        { id: '5', name: 'HRMS: EduTech', type: 'lead', value: 65, stage: 'Converted', owner: 'Alex Rodriguez', status: 'Won' },
-      ],
-    };
-  }
-
+  /*
+   * A BRANCH FOR HRMS REPORTS WAS REMOVED HERE, and not only because it was
+   * fabricated like everything else in this function.
+   *
+   * It returned rows such as "HRMS: Global Tech" and a pipeline split of
+   * "HRMS Generated Leads: 412 / Traditional Sources: 435". HRMS is a SEPARATE
+   * PRODUCT reached over the SSO/API boundary (CLAUDE.md): this CRM has no
+   * access to its tables and must never join to them. So the sample data
+   * encoded a cross-module read that would be a design error if it were ever
+   * made real — and sample data is exactly how that gets made real, by someone
+   * wiring up what looks like an existing feature.
+   *
+   * A report slug mentioning HRMS now falls through to the generic branches
+   * below, which are sample content and labelled as such.
+   */
   // Account Reports
   if (reportLower.includes('account') || reportLower.includes('top accounts')) {
     return {

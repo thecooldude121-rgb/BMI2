@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
+import PreviewBanner from '../../components/common/PreviewBanner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, X, BarChart3, Table2, PieChart, LineChart, TrendingUp, Copy, GripVertical, Plus, Sparkles, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
@@ -938,8 +939,24 @@ export default function CustomReportBuilder() {
       setIsSaving(false);
       setIsRunning(false);
       setLoadingProgress(0);
-      showToast(isEditMode ? 'Report updated successfully' : 'Report created successfully', 'success');
-      navigate('/crm/reports');
+      /*
+       * THIS USED TO SAY "Report created successfully" AND NAVIGATE AWAY.
+       *
+       * Nothing was created. There is no `reports` table and no endpoint — the
+       * 2.5-second wait above is a setTimeout and the progress bar counts to
+       * 100 on a setInterval. A success toast over a database that did not
+       * change is this project's signature failure, and it was sitting in the
+       * one place a user would trust it most: immediately after clicking Save.
+       *
+       * The report config is NOT discarded silently either — the toast says it
+       * was not saved, so the user knows to copy anything they need before
+       * leaving. Navigation is removed for the same reason: being bounced to a
+       * list that does not contain your report reads as a save that worked.
+       */
+      showToast(
+        'Not saved — the report builder is a preview and has no backend yet. Your configuration is still on screen.',
+        'error',
+      );
     }, 300);
   };
 
@@ -950,14 +967,11 @@ export default function CustomReportBuilder() {
   const handleConfirmDelete = async () => {
     setShowDeleteModal(false);
 
-    // In a real app, you would delete from the database here
-    // await deleteReport(reportId);
-
-    // Simulate deletion
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    showToast('Report deleted', 'success');
-    navigate('/crm/reports');
+    // Nothing to delete: reports are not persisted anywhere (see
+    // handleSaveAndRun). The simulated 500ms wait and the 'Report deleted'
+    // success toast are gone — a toast for a deletion that did not happen is
+    // the same defect as the save toast above, pointed the other way.
+    showToast('Nothing to delete — reports are not saved yet.', 'error');
   };
 
   const handleLoadTemplate = (template: typeof ALL_TEMPLATES[0]) => {
@@ -1005,6 +1019,24 @@ export default function CustomReportBuilder() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
+      {/*
+        * PREVIEW, at the top of the page rather than buried by the preview
+        * pane: the whole builder is unbacked, not just the sample rows. There
+        * is no `reports` table, no endpoint, and "Run Report" queries nothing.
+        * The real build is P3 in the facade-page audit — and the hard part is
+        * not this UI, it is a query builder that translates a saved config into
+        * tenant-scoped SQL without ever dropping the workspace_id filter.
+        */}
+      <div className="px-4 md:px-6 pt-3">
+        <PreviewBanner
+          detail={<>
+            <strong>This report builder is not connected to anything.</strong> Reports
+            cannot be saved, and &ldquo;Run Report&rdquo; does not query your data —
+            the preview pane shows sample rows, not results.
+          </>}
+          insteadTry="Reports that DO compute from your data are on the Reports page; the cards there state which ones are unbacked and why."
+        />
+      </div>
       {/* Breadcrumbs */}
       <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3">
         <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600 mb-3">
@@ -1859,7 +1891,7 @@ export default function CustomReportBuilder() {
                 <div className="mt-4 bg-blue-50 rounded-lg p-4 flex items-start gap-3">
                   <span className="text-xl flex-shrink-0">💡</span>
                   <div className="text-sm text-blue-900">
-                    <strong>Preview Tip:</strong> The preview uses sample data. Click "Run Report" to see actual results.
+                    <strong>Preview:</strong> this builder is not connected to a backend. The preview below uses sample data, and &ldquo;Run Report&rdquo; does not query your data or save anything.
                   </div>
                 </div>
               </div>

@@ -213,7 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!user) return false;
     const rolePermissions: Record<User['role'], string[]> = {
       Admin: ['all'],
-      Manager: ['crm', 'analytics', 'integrations', 'calendar', 'settings', 'gamification', 'dashboard', 'team'],
+      Manager: ['crm', 'analytics', 'integrations', 'calendar', 'settings', 'dashboard', 'team'],
       Sales: ['crm', 'calendar', 'integrations', 'dashboard', 'team'],
       // Fails closed: an unrecognised role gets no module at all, rather than
       // inheriting Sales' list. See ROLE_MAP above.
