@@ -7,13 +7,7 @@ import SalesIntelligenceGuide from '../../components/Dashboard/SalesIntelligence
 import { isOpenWith } from '../../utils/pipelinesApi';
 import { sortActivitiesNewestFirst } from '../../utils/activitiesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
-import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
-import PointsBreakdownModal from '../../components/gamification/PointsBreakdownModal';
-import LevelInfoPopover from '../../components/gamification/LevelInfoPopover';
-import ProgressDetailPopover from '../../components/gamification/ProgressDetailPopover';
-import StreakPopover from '../../components/gamification/StreakPopover';
-import ChallengeDetailModal from '../../components/gamification/ChallengeDetailModal';
 import { fetchPipelines, type ApiPipeline } from '../../utils/pipelinesApi';
 
 /**
@@ -39,15 +33,11 @@ import { fetchPipelines, type ApiPipeline } from '../../utils/pipelinesApi';
  */
 const CRMDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { showToast } = useToast();
+  // useToast()'s only remaining callers were the gamification click handlers
+  // ("Loading challenges...", "Loading Sarah's profile..."), deleted with the panel.
   const { user } = useAuth();
   const { deals, contacts, accounts, activities, loading, error, truncated, reload } = useDashboardData();
 
-  const [showPointsBreakdown, setShowPointsBreakdown] = useState(false);
-  const [showLevelInfo, setShowLevelInfo] = useState(false);
-  const [showProgressDetail, setShowProgressDetail] = useState(false);
-  const [showStreakPopover, setShowStreakPopover] = useState(false);
-  const [showChallengeDetail, setShowChallengeDetail] = useState(false);
 
   // Get current date
   const today = new Date();
@@ -246,52 +236,7 @@ const CRMDashboard: React.FC = () => {
   // an unused fixture is the next session's "why is this here", and TS6133
   // would have reported it as noise.
 
-  // gamificationData: points, rank, level, streak, daily challenge and team
-  // celebrations, all invented. There is a gamification_points table and a
-  // gamification_achievements table, but nothing reads or writes them from
-  // here. Left as-is deliberately — it is outside this data-plumbing pass and
-  // wiring it is its own unit of work.
-  const gamificationData = {
-    userPerformance: {
-      points: 38450,
-      rank: 2,
-      rankChange: 'up',
-      level: 4,
-      levelName: 'Platinum',
-      levelProgress: 87,
-      badges: 5,
-      streak: 23,
-      coins: 10
-    },
-    dailyChallenge: {
-      title: 'Make 15 calls',
-      current: 8,
-      target: 15,
-      progress: 53,
-      reward: 200,
-      timeRemaining: '6h 32m'
-    },
-    teamCelebrations: [
-      {
-        name: 'Sarah',
-        achievement: 'closed $120K deal',
-        points: 1200,
-        time: '2h ago'
-      },
-      {
-        name: 'Mike',
-        achievement: 'earned Pipeline Master',
-        badge: true,
-        time: '5h ago'
-      },
-      {
-        name: 'Emily',
-        achievement: 'leveled up to Gold',
-        levelUp: true,
-        time: 'Yesterday'
-      }
-    ]
-  };
+  // `gamificationData` lived here. Deleted with the panel below.
 
   // Navigation handlers
   const handleMetricClick = (metric: string) => {
@@ -311,138 +256,8 @@ const CRMDashboard: React.FC = () => {
     }
   };
 
-  // Gamification data structures
-  const pointsBreakdownData = {
-    dealsClosedPoints: 25000,
-    activitiesPoints: 8450,
-    challengesPoints: 3000,
-    bonusPoints: 2000,
-    total: 38450
-  };
-
-  const levelInfoData = {
-    number: 4,
-    name: 'Platinum',
-    minPoints: 30000,
-    maxPoints: 49999,
-    perks: ['Early lead access', 'Flexible schedule', 'Priority support'],
-    nextLevel: {
-      name: 'Diamond',
-      points: 50000
-    }
-  };
-
-  const progressDetailData = {
-    currentPoints: 38450,
-    nextLevelPoints: 50000,
-    remainingPoints: 11550,
-    daysToNextLevel: 14
-  };
-
-  const streakData = {
-    current: 23,
-    longest: 45,
-    nextMilestone: {
-      days: 30,
-      points: 250,
-      daysRemaining: 7
-    }
-  };
-
-  const challengeDetailData = {
-    icon: '📞',
-    name: 'Daily Dialer',
-    description: 'Make 15 calls today',
-    current: 8,
-    target: 15,
-    progress: 53,
-    calls: [
-      { time: '10:30 AM', contact: 'John Smith' },
-      { time: '11:15 AM', contact: 'Sarah Johnson' },
-      { time: '11:45 AM', contact: 'Mike Chen' },
-      { time: '1:30 PM', contact: 'Emily Brown' },
-      { time: '2:00 PM', contact: 'Alex Davis' },
-      { time: '2:30 PM', contact: 'Lisa Wilson' },
-      { time: '3:00 PM', contact: 'Tom Anderson' },
-      { time: '3:30 PM', contact: 'Jane Miller' }
-    ],
-    reward: 200,
-    timeRemaining: '6h 32m'
-  };
-
-  // Gamification interaction handlers
-  const handlePerformanceWidgetClick = () => {
-    showToast('Loading leaderboard...', 'info');
-    setTimeout(() => navigate('/crm/gamification/leaderboard'), 300);
-  };
-
-  const handlePointsClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowPointsBreakdown(true);
-  };
-
-  const handleRankClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    showToast('Loading leaderboard...', 'info');
-    setTimeout(() => navigate('/crm/gamification/leaderboard'), 300);
-  };
-
-  const handleLevelBadgeClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowLevelInfo(true);
-  };
-
-  const handleProgressBarClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowProgressDetail(true);
-  };
-
-  const handleBadgesClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigate('/crm/gamification/achievements');
-  };
-
-  const handleStreakClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowStreakPopover(true);
-  };
-
-  const handleDealsIconClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigate('/crm/deals?filter=closed-this-quarter');
-  };
-
-  const handleChallengeWidgetClick = () => {
-    showToast('Loading challenges...', 'info');
-    setTimeout(() => navigate('/crm/gamification/challenges'), 300);
-  };
-
-  const handleChallengeNameClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowChallengeDetail(true);
-  };
-
-  const handleCelebrationClick = (celebration: any) => {
-    if (celebration.points) {
-      navigate(`/crm/deals/deal_sarah_120k`);
-      showToast('Loading deal...', 'info');
-    } else if (celebration.badge) {
-      navigate('/crm/gamification/achievements');
-    } else if (celebration.levelUp) {
-      navigate('/crm/gamification/profile/user_4');
-    }
-  };
-
-  const handleCelebrationUserClick = (e: React.MouseEvent, userName: string) => {
-    e.stopPropagation();
-    const userIdMap: { [key: string]: string } = {
-      'Sarah': 'user_1',
-      'Mike': 'user_2',
-      'Emily': 'user_4'
-    };
-    showToast(`Loading ${userName}'s profile...`, 'info');
-    setTimeout(() => navigate(`/crm/gamification/profile/${userIdMap[userName]}`), 300);
-  };
+  // The gamification modal fixtures and click handlers lived here.
+  // Deleted with the panel below.
 
   const getColorClasses = (color: string) => {
     const colors: Record<string, { bg: string; text: string; border: string }> = {
@@ -538,318 +353,30 @@ const CRMDashboard: React.FC = () => {
             response is already scoped to the people the caller may see. */}
         <SalesIntelligenceGuide />
 
-        {/* ── Gamification: PREVIEW · SAMPLE CONTENT — AND SLATED FOR DELETION
-            ───────────────────────────────────────────────────────────────────
-            VENKAT DECIDED ON 2026-09-15 TO DELETE GAMIFICATION OUTRIGHT, on the
-            BANT-framework precedent. The standalone feature IS gone: the
-            /gamification and /gamification/leaderboard routes, both pages, the
-            sidebar's "Leaderboard" entry, the role permission and the dead
-            "View All" button below were all removed.
-
-            THIS PANEL AND `components/gamification/` SURVIVED THAT PASS, and
-            the reason is mechanical, not a judgement: this block's JSX is
-            INTERLEAVED with the surrounding dashboard layout rather than being
-            a self-contained subtree. Its opening <div>s are closed by tags
-            belonging to sibling sections, so the div depth never returns to
-            zero across the block — excising the line range breaks the page, and
-            it did on the first attempt. Untangling it is a real edit to a
-            1,100-line routed page and was not worth rushing at the end of a
-            long change.
-
-            It stays LABELLED in the meantime, which is the pre-existing state,
-            so nothing here is asserting anything unlabelled. Finishing the
-            deletion is tracked in CLAUDE.md.
-            ───────────────────────────────────────────────────────────────────
-            Every figure in these three cards is a literal in `gamificationData`
-            above: 38,450 points, rank #2, level 4 "Platinum", 87% to Diamond,
-            5 badges, a 23-day streak, 10 coins, a "Make 15 calls" challenge at
-            8/15 with "6h 32m remaining", and team celebrations for Sarah, Mike
-            and Emily.
-
-            `gamification_points` and `gamification_achievements` exist as tables.
-            NOTHING reads or writes either one — no controller, no API client, no
-            query. So there is no scoring, no ranking, no streak tracking and no
-            leaderboard behind any of it.
-
-            Kept visible because the shape of the feature is a real product
-            decision worth showing, and marked so it cannot be read as a record of
-            anyone's actual performance. Same treatment as the AI Insights panel. */}
-        <div
-          className="mb-8 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/60 p-5"
-          data-preview="Gamification"
-          aria-describedby="gamification-preview-note"
-        >
-          <div className="flex flex-wrap items-center gap-3 mb-2">
-            <h2 className="font-bold text-gray-900 flex items-center" style={{ fontSize: '18px' }}>
-              <span className="mr-2" aria-hidden="true">🎮</span> Performance &amp; Rewards
-            </h2>
-            <span className="rounded-full bg-gray-700 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-              Preview · sample content
-            </span>
-          </div>
-          <p id="gamification-preview-note" className="text-sm text-gray-700 mb-4">
-            Illustrative only. <strong>Points, rank, level, streak and team activity below are not
-            your data</strong> — nothing tracks or awards them yet, so the numbers are fixed
-            examples.
-          </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Your Performance Card */}
-          <div
-            className="relative bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg cursor-pointer transition-all duration-300"
-            style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', transform: 'translateY(0)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-            onClick={handlePerformanceWidgetClick}
-          >
-            <div className="flex items-center mb-4" onClick={handlePerformanceWidgetClick}>
-              <span className="text-2xl mr-2">🏆</span>
-              <h3 className="font-bold text-gray-900" style={{ fontSize: '16px' }}>YOUR PERFORMANCE</h3>
-            </div>
-
-            <div className="mb-4">
-              <div
-                className="text-3xl font-bold mb-1 cursor-pointer hover:opacity-80 transition-opacity"
-                style={{ color: '#667eea', fontSize: '28px' }}
-                onClick={handlePointsClick}
-              >
-                {gamificationData.userPerformance.points.toLocaleString()} pts
-              </div>
-              <div
-                className="flex items-center text-sm font-medium cursor-pointer hover:opacity-80 transition-opacity"
-                style={{ color: '#28a745' }}
-                onClick={handleRankClick}
-              >
-                <span className="font-bold" style={{ color: '#333333' }}>Rank #{gamificationData.userPerformance.rank}</span>
-                <span className="ml-1">↑</span>
-              </div>
-            </div>
-
-            <div
-              className="mb-4 p-3 rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-              style={{ backgroundColor: '#667eea' }}
-              onClick={handleLevelBadgeClick}
-            >
-              <div className="flex items-center justify-center">
-                <span className="text-white font-bold" style={{ fontSize: '14px' }}>
-                  💎 L{gamificationData.userPerformance.level} {gamificationData.userPerformance.levelName}
-                </span>
-              </div>
-            </div>
-
-            <div
-              className="mb-4 cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={handleProgressBarClick}
-            >
-              <div className="flex items-center justify-between text-xs text-gray-600 mb-1" style={{ fontSize: '12px' }}>
-                <span>{gamificationData.userPerformance.levelProgress}% to Diamond</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full" style={{ height: '8px' }}>
-                <div
-                  className="rounded-full"
-                  style={{
-                    height: '8px',
-                    width: `${gamificationData.userPerformance.levelProgress}%`,
-                    background: '#667eea'
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mb-4" style={{ fontSize: '14px' }}>
-              <span
-                className="font-medium cursor-pointer hover:scale-105 transition-transform"
-                onClick={handleBadgesClick}
-              >
-                {gamificationData.userPerformance.badges} 🏅
-              </span>
-              <span
-                className="font-medium cursor-pointer hover:scale-105 transition-transform"
-                onClick={handleStreakClick}
-              >
-                {gamificationData.userPerformance.streak}🔥
-              </span>
-              <span
-                className="font-medium cursor-pointer hover:scale-105 transition-transform"
-                onClick={handleDealsIconClick}
-              >
-                {gamificationData.userPerformance.coins}💰
-              </span>
-            </div>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate('/crm/gamification/leaderboard');
-              }}
-              className="w-full py-2 text-center border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              style={{ borderColor: '#e0e0e0' }}
-            >
-              Leaderboard
-            </button>
-          </div>
-
-          {/* Daily Challenge Card */}
-          <div
-            className="rounded-xl p-6 hover:shadow-lg cursor-pointer transition-all duration-300 text-white"
-            style={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              transform: 'translateY(0)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-            onClick={handleChallengeWidgetClick}
-          >
-            <div className="flex items-center mb-4" onClick={handleChallengeWidgetClick}>
-              <span className="text-2xl mr-2">🎯</span>
-              <h3 className="font-bold text-white" style={{ fontSize: '16px' }}>DAILY CHALLENGE</h3>
-            </div>
-
-            <div className="mb-4">
-              <div
-                className="flex items-center mb-3 cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={handleChallengeNameClick}
-              >
-                <span className="text-lg mr-2">📞</span>
-                <p className="text-lg font-semibold text-white">
-                  {gamificationData.dailyChallenge.title}
-                </p>
-              </div>
-
-              <div className="mb-2 cursor-pointer hover:opacity-90 transition-opacity">
-                <div className="flex items-center justify-between text-sm text-white mb-1">
-                  <span>{gamificationData.dailyChallenge.current} / {gamificationData.dailyChallenge.target} calls</span>
-                  <span className="font-medium">{gamificationData.dailyChallenge.progress}%</span>
-                </div>
-                <div className="w-full bg-white/30 rounded-full h-3">
-                  <div
-                    className="h-3 rounded-full bg-white transition-all duration-500"
-                    style={{ width: `${gamificationData.dailyChallenge.progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-4 p-3 bg-white/20 backdrop-blur-sm rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <span className="text-lg mr-2">🎁</span>
-                  <span className="text-sm font-medium text-white">Reward:</span>
-                </div>
-                <span className="text-lg font-bold text-white">
-                  +{gamificationData.dailyChallenge.reward} points
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-center p-3 bg-white/10 rounded-lg mb-4">
-              <span className="text-sm font-medium text-white/90">
-                ⏱️ {gamificationData.dailyChallenge.timeRemaining} remaining
-              </span>
-            </div>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate('/crm/gamification/challenges');
-              }}
-              className="w-full py-2 text-center bg-white rounded-lg text-sm font-medium hover:shadow-md transition-all duration-200"
-              style={{ color: '#667eea' }}
-            >
-              View All
-            </button>
-          </div>
-
-          {/* Team Celebrations Card */}
-          <div
-            className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg cursor-pointer transition-all duration-300"
-            style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', transform: 'translateY(0)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-            onClick={() => {
-              showToast('Loading leaderboard...', 'info');
-              setTimeout(() => navigate('/crm/gamification/leaderboard'), 300);
-            }}
-          >
-            <div className="flex items-center mb-4">
-              <span className="text-2xl mr-2">🎉</span>
-              <h3 className="font-bold text-gray-900" style={{ fontSize: '16px' }}>TEAM CELEBRATIONS</h3>
-            </div>
-
-            <div className="space-y-3">
-              {gamificationData.teamCelebrations.map((celebration, index) => (
-                <div
-                  key={index}
-                  className="border-b border-gray-200 pb-3 last:border-b-0 cursor-pointer hover:bg-gray-50 transition-all duration-200 -mx-2 px-2 py-2 rounded"
-                  style={{ borderLeft: '3px solid transparent' }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderLeftColor = '#667eea';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderLeftColor = 'transparent';
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCelebrationClick(celebration);
-                  }}
-                >
-                  <div className="flex items-start">
-                    <span className="text-lg mr-2">
-                      {celebration.points ? '💰' : celebration.badge ? '🏅' : '⬆️'}
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900 mb-1" style={{ fontSize: '14px' }}>
-                        <span
-                          className="font-semibold hover:underline cursor-pointer"
-                          onClick={(e) => handleCelebrationUserClick(e, celebration.name)}
-                        >
-                          {celebration.name}
-                        </span>{' '}
-                        {celebration.achievement}
-                      </p>
-                      {celebration.points && (
-                        <div className="text-xs font-bold mb-1" style={{ color: '#667eea', fontSize: '12px' }}>
-                          +{celebration.points.toLocaleString()} pts
-                        </div>
-                      )}
-                      <p className="text-xs text-gray-500" style={{ fontSize: '11px' }}>{celebration.time}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/*
-              * The "View All" button navigated to /crm/gamification/leaderboard,
-              * which was DELETED with the Gamification feature (Venkat,
-              * 2026-09-15). A button pointing at a removed route is a dead
-              * control, so it is gone rather than left to land on a blank page.
-              *
-              * The panel it sat in is still here and still labelled
-              * PREVIEW · SAMPLE CONTENT — see the note at the top of this file
-              * for why it could not be excised in the same pass.
-              */}
-          </div>
-        </div>
-        </div>
+        {/*
+          * THE GAMIFICATION PANEL WAS HERE, AND IS DELETED (Venkat, 2026-09-15,
+          * on the BANT-framework precedent).
+          *
+          * It rendered three cards of fabricated performance data — 38,450
+          * points, rank #2, level 4 "Platinum", a 23-day streak, a daily
+          * challenge at 8/15 with "6h 32m remaining", and team celebrations
+          * naming invented colleagues. `gamification_points`,
+          * `gamification_achievements` and `gamification_badges` exist as
+          * tables, hold 0 rows, and nothing read or wrote any of them.
+          *
+          * A PREVIEW badge was not enough: a leaderboard naming people puts
+          * invented colleagues on a screen beside real ones, which is a
+          * different kind of claim from an invented number.
+          *
+          * CORRECTION TO THE NOTE THAT SAT HERE: it said this block's JSX was
+          * "interleaved with the surrounding layout" and could not be excised.
+          * That was WRONG. The cause was a bug in the throwaway script used to
+          * check it — JSX comments were blanked with a regex that collapsed
+          * their newlines, shifting every line number after the first
+          * multi-line comment. The element was always a self-contained subtree
+          * (lines 577-852). Located with the TypeScript compiler the second
+          * time, rather than counted with a regex.
+          */}
 
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -1114,41 +641,6 @@ const CRMDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Gamification Modals and Popovers */}
-      <PointsBreakdownModal
-        isOpen={showPointsBreakdown}
-        onClose={() => setShowPointsBreakdown(false)}
-        breakdown={pointsBreakdownData}
-      />
-
-      <LevelInfoPopover
-        isOpen={showLevelInfo}
-        onClose={() => setShowLevelInfo(false)}
-        level={levelInfoData}
-      />
-
-      <ProgressDetailPopover
-        isOpen={showProgressDetail}
-        onClose={() => setShowProgressDetail(false)}
-        progress={progressDetailData}
-      />
-
-      <StreakPopover
-        isOpen={showStreakPopover}
-        onClose={() => setShowStreakPopover(false)}
-        streak={streakData}
-      />
-
-      <ChallengeDetailModal
-        isOpen={showChallengeDetail}
-        onClose={() => setShowChallengeDetail(false)}
-        challenge={challengeDetailData}
-      />
-
-      {/* PointsDetailTooltip removed: its only trigger was the "+N points earned"
-          badge on each fabricated activity row, so with the real activity feed it
-          became unreachable UI. The rest of the gamification panels are
-          untouched — see the note on gamificationData. */}
     </div>
   );
 };

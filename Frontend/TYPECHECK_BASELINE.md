@@ -17,7 +17,11 @@ cd Frontend && npm run typecheck        # tsc -p tsconfig.app.json --noEmit
 cd Frontend && npm run typecheck:count  # just the number
 ```
 
-## Baseline: 223 errors at HEAD (2026-09-15)
+## Baseline: 216 errors at HEAD (2026-09-16)
+
+Lowered from 223 by the Meeting Agent rewire and the Gamification panel removal
+(2026-09-16): seven more left with the deleted fixtures and modals. None was fixed as
+such.
 
 Lowered from 229 by the facade-page cleanup (2026-09-15): six went with the deleted
 fabrication — three `TS6133`s in `AIResponseDetailView`'s removed strategy fixtures, the
