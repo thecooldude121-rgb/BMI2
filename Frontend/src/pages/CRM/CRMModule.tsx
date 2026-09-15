@@ -13,8 +13,6 @@ import ActivitiesPage from './ActivitiesPage';
 import TasksPage from './TasksPage';
 import AddLeadPage from './AddLeadPage';
 import LeadDetailPage from './LeadDetailPage';
-import GamificationPage from './GamificationPage';
-import GamificationLeaderboard from './GamificationLeaderboard';
 
 import ComprehensiveDealDetailPage from '../Deal/ComprehensiveDealDetailPage';
 import ComprehensiveDealFormPage from '../Deal/ComprehensiveDealFormPage';
@@ -47,11 +45,15 @@ const CRMModule = () => {
   return (
     <AccountsProvider>
       <div className="min-h-full bg-gray-50">
+        {/*
+          * The /gamification and /gamification/leaderboard routes were removed
+          * with the feature (Venkat, 2026-09-15). No redirect is left behind:
+          * the pages are gone, not moved, and a redirect to nowhere reads as a
+          * broken link rather than a deleted feature.
+          */}
         <Routes>
           <Route path="/" element={<CRMDashboard />} />
           <Route path="/dashboard" element={<CRMDashboard />} />
-          <Route path="/gamification" element={<GamificationPage />} />
-          <Route path="/gamification/leaderboard" element={<GamificationLeaderboard />} />
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/new" element={<AddLeadPage />} />
           <Route path="/leads/import" element={<ImportLeadsPage />} />

@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, UserPlus, Users, Building, DollarSign,
   Activity, FileText, BarChart3, Calendar,
-  Plug, Settings, Trophy, ChevronDown, ChevronRight,
+  Plug, Settings, ChevronDown, ChevronRight,
   Building2, Phone, Video, CheckSquare, PanelLeftClose,
   PanelLeftOpen, Bookmark, Clock, PauseCircle
 } from 'lucide-react';
@@ -75,7 +75,6 @@ export const navGroups: { label?: string; items: NavItem[] }[] = [
       { name: 'Calendar',        href: '/calendar',                     icon: Calendar },
       { name: 'Team',            href: '/team',                         icon: Users },
       { name: 'Integrations',    href: '/integrations',                 icon: Plug },
-      { name: 'Leaderboard',     href: '/crm/gamification/leaderboard', icon: Trophy },
     ],
   },
 ];

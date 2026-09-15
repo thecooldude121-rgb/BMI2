@@ -4,9 +4,21 @@
 A multi-tenant B2B SaaS CRM. **This repo is the CRM platform.** It is not "module 1 of 4" —
 that framing is retired. **Lead Generation and HRMS are separate products, with their own
 repos and their own deployments**, connected to this one over SSO. They are not future
-phases of this codebase, and no amount of "later" makes them belong here. **Meeting Agent's
-status is undecided — mark it TBD; it is not in scope either way.** Do not build any of the
-three.
+phases of this codebase, and no amount of "later" makes them belong here. Do not build
+Lead Generation or HRMS here.
+
+**MEETING AGENT IS IN SCOPE — a NEW decision from Venkat on 2026-09-15, not a
+clarification of an existing one.** This file said, until that date, that its status was
+"undecided — mark it TBD; it is not in scope either way", and there was no documented
+exception permitting it tighter CRM integration. There is now. Recorded with its date
+because it was put to this session as something already settled, and it was not — the same
+care the "confirmed against the running Lead Gen service" correction needed.
+
+Venkat's words: *"a separate module which will have the tasks shown, meeting notes and
+activities based on the note with a button to push to the deals or accounts."* So it is a
+separate MODULE that integrates with CRM records, not a standalone sellable product like
+Lead Gen and HRMS, and not a fourth thing forbidden here. Scope is deliberately narrow —
+see "Meeting Agent" below. **No recording, no transcription, no AI summarisation.**
 
 Do not build AI features (email drafts, deal health scoring, next-best-action) yet either —
 those are Phase 2. This phase is CRM core data + pipeline only.
@@ -491,9 +503,10 @@ hold a date outside 2000-2100.
    the above have real data to summarize)
 
 Explicitly **not** in this phase: Gmail/Outlook email sync, AI email drafts, deal health
-scoring, next-best-action. Omit these rather than half-building them. Meeting Agent is TBD
-and out of scope; Lead Generation and HRMS are not "not in this phase" at all — they are
-other products, and nothing about them is ever built here.
+scoring, next-best-action. Omit these rather than half-building them. Meeting Agent IS in
+scope as of 2026-09-15 (notes/tasks/activities only — see above); Lead Generation and HRMS
+are not "not in this phase" at all — they are other products, and nothing about them is
+ever built here.
 
 ## Design system (apply consistently — do not invent new patterns)
 **Colors:**
@@ -751,6 +764,84 @@ old constraint, which fails the shared-name test.
   in `pages/Settings/AnalyticsReporting.tsx`, which is inside the DEAD Supabase Settings
   tree that `/settings` no longer reaches. Anything specified against "Reports' AI Insights
   Panel" has no existing surface to fill.
+
+- **Meeting Agent — BUILT (backend) 2026-09-15. Migration 049.** `meetingsController` +
+  `routes/meetings.ts`: list, detail, create, patch, `PUT /:id/relation` (the push-to-deal
+  action) and `POST /:id/activities`. `utils/meetingsApi.ts` is the client.
+  `roundTrip.meetings.test.ts` pins it (21 tests).
+  - **THE POLYMORPHIC REFERENCE IS FIXED HERE, THIRD TIME LUCKY.** 049 adds a CHECK
+    restricting `meetings.related_to_type` to deal/company/contact/lead, plus a pair CHECK
+    (both columns or neither), and the controller proves the id belongs to the caller's
+    workspace with `foreignIdsInTenant` — the same arrangement `tasksController` uses. Both
+    halves are needed and both are tested: a CHECK cannot scope a polymorphic id, and a
+    controller can be bypassed. **`documents.module` / `record_id` is still unfixed and is
+    now the only remaining instance.**
+  - **'employee' is deliberately absent from the type list, unlike `tasks`.** `employees`
+    has no `tenant_id` and belongs to HRMS; a new module must not inherit that hole.
+  - **`meetings.id` had NO DEFAULT** — varchar(10) NOT NULL with nothing generating it, so
+    a meeting could never be created at all. Nothing had ever exercised it because the only
+    reader was a fabricated fixture. 049 gives it a sequence, the way 031 did for the other
+    four tables.
+  - **`meetings_type_check` already existed with its own vocabulary** —
+    `sales-call | internal | client-meeting`. The controller's first draft invented
+    `call/video/in-person/internal/other` and every create returned a masked 500. Read the
+    constraint; do not reason about what it should be. An omitted type stays NULL rather
+    than being defaulted, because picking one classifies the meeting on the caller's behalf.
+  - **ACTIVITIES, NOT `action_items` — the call and the reason.** "Activities based on the
+    note" creates rows in `activities`, because that is the table the deal and account feeds
+    read; `action_items` is a column nothing else queries, so it would produce a list
+    visible only on the page that wrote it. `action_items` is left in place as the note's own
+    checklist. **Nothing is inferred from note text** — no parser, no keywords, no model. A
+    test feeds a note full of "ACTION:" and "TODO:" and asserts ZERO activities are created.
+  - Still open: `activities` has no `meeting_id`, so provenance is carried in the activity's
+    description text (`From meeting MTG001: …`). Deliberate — the reference is one-way and
+    for reading, not a key anything joins on.
+
+- **Gamification — DELETED 2026-09-15 (Venkat's call, BANT-framework precedent). ONE PIECE
+  REMAINS.** Gone: `GamificationPage`, `GamificationLeaderboard`, both routes, the sidebar's
+  "Leaderboard" entry, the `gamification` role permission, and the dashboard's dead
+  "View All" button. It was ~2,400 lines of fabricated points, levels and streaks plus a
+  leaderboard of invented colleagues ("John Smith", "Sarah Johnson", "Mike Chen"), blocked
+  on a scoring model that does not exist and an event source never built; the three
+  `gamification_*` tables hold 0 rows and nothing reads them.
+  - **NOT YET REMOVED: the dashboard's "Performance & Rewards" panel and
+    `components/gamification/` (6 files), which that panel still mounts.** The reason is
+    mechanical: the panel's JSX is INTERLEAVED with the surrounding dashboard layout — its
+    opening `<div>`s are closed by tags belonging to sibling sections, so the div depth never
+    returns to zero across the block and excising the line range breaks the page (it did, on
+    the first attempt). It stays labelled `PREVIEW · SAMPLE CONTENT`, which is its
+    pre-existing state, so nothing is unlabelled in the meantime. Finishing it is a real
+    edit to a 1,100-line routed page, not a line-range delete.
+
+- **Facade pages — fabrication removed or labelled, 2026-09-15.** From the six-page audit:
+  - **AI Copilot: the canned transcripts are DELETED, not labelled** (~855 lines). They did
+    not merely invent numbers, they asserted specific CRM facts about named people
+    ("Last contact: 5 days ago", "Email open rate: Opened 2x but no response") in the voice
+    of an assistant reading the database, then recommended actions from them. A badge is not
+    enough for that class: the label does not travel with the sentence once somebody pastes
+    it into a deal note. The page now answers every question the same way — that it is not
+    built. Same treatment for **`AIResponseDetailView`** (~1,100 lines: "87% probability of
+    closing", "Competitor activity detected (LinkedIn mentions of Salesforce eval)").
+  - **`CustomReportBuilder`: the false success toast is gone.** "Report created
+    successfully" fired after a `setTimeout` and a fake progress bar, with no `reports`
+    table and no endpoint behind it — a success toast over a database that did not change,
+    in the place a user trusts it most. It now says the report was not saved, and does not
+    navigate away (being bounced to a list that does not contain your report reads as a save
+    that worked). The delete handler's "Report deleted" is gone for the same reason.
+  - **`ReportDetailView`: labelled, exports made honest** (they were `console.log`), and
+    **the HRMS branch of its fake data removed** — it returned "HRMS Generated Leads: 412"
+    and rows like "HRMS: Global Tech", encoding a cross-module read that would be a design
+    error if it were ever made real, and sample data is exactly how that gets made real.
+  - **`IntegrationsPage`: labelled.** It was already honest about having no data
+    (`integrations` starts `[]` and nothing populates it) and renders NO fabricated
+    credentials — but "Connect" opens a placeholder, so the label says so.
+  - `components/common/PreviewBanner.tsx` is the convention in one place now, with a
+    REQUIRED `detail` prop: a bare badge tells a reader something is wrong without saying
+    what.
+  - **Still facades, deliberately: CustomReportBuilder and ReportDetailView's real builds
+    (P3) and AI Copilot's (P4).** The report pair needs a `saved_reports` table and a query
+    builder that renders tenant-scoped SQL — the security-sensitive part, and partly blocked
+    on the `deals.company_id` backfill. AI Copilot needs Phase 2 to open.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
