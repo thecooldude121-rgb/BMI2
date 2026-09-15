@@ -15,6 +15,7 @@ import quotasRoutes from './quotas';
 import meetingsRoutes from './meetings';
 import forecastRoutes from './forecast';
 import targetsRoutes from './targets';
+import moduleLinksRoutes from './moduleLinks';
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use('/quotas', quotasRoutes);
 router.use('/meetings', meetingsRoutes);
 router.use('/forecast', forecastRoutes);
 router.use('/targets', targetsRoutes);
+router.use('/module-links', moduleLinksRoutes);
 
 export default router;

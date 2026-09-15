@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
+import { fetchAccountIntelligence } from '../services/leadGen/accountIntelligence';
 import {
   MAX_IMPORT_ROWS, runImport, created, skipped, failed, tooLong, firstProblem,
 } from '../utils/csvImport';
@@ -349,4 +350,58 @@ export const importCompanies = async (req: AuthRequest, res: Response, next: Nex
   } finally {
     client.release();
   }
+};
+
+/**
+ * GET /companies/:id/account-intelligence
+ *
+ * Account-level signals Lead Gen has recorded for this company — Capability 5
+ * of the AI Agent Intelligence Layer. Lead Gen has exposed this for months and
+ * nothing here had ever called it.
+ *
+ * WHY THE DOMAIN IS RESOLVED HERE AND NOT ACCEPTED FROM THE CLIENT.
+ * The credential belongs to the workspace, not to the person holding the
+ * browser. If this took `?company_domain=`, any authenticated user could spend
+ * the workspace's Lead Gen connection querying arbitrary domains — turning a
+ * CRM page into a lookup service for someone else's data. Taking a company id
+ * and reading the domain off the tenant-scoped row means the only domains
+ * reachable are ones this workspace already has an account for.
+ *
+ * Failure is REPORTED, not thrown. This is a panel on a page: a Lead Gen that
+ * is down must cost the panel, not the account page, which is the same rule the
+ * page's other four requests already follow with Promise.allSettled.
+ */
+export const getCompanyAccountIntelligence = async (
+  req: AuthRequest, res: Response, next: NextFunction,
+): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const company = await pool.query(
+      'SELECT domain FROM companies WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, tenantId],
+    );
+    if (!company.rows[0]) {
+      res.status(404).json({ success: false, message: 'Company not found' });
+      return;
+    }
+
+    const domain = (company.rows[0].domain ?? '').trim();
+    if (!domain) {
+      // A distinct state, not an empty list. "No signals" and "we cannot ask,
+      // because this account has no domain recorded" are different facts and
+      // the panel says which one it is.
+      res.json({ success: true, data: { status: 'no_domain', signals: [] } });
+      return;
+    }
+
+    const result = await fetchAccountIntelligence(tenantId, domain);
+    res.json({
+      success: true,
+      data: result.status === 'ok'
+        ? { status: 'ok', signals: result.signals, company_domain: domain }
+        : result.status === 'not_linked'
+          ? { status: 'not_linked', signals: [] }
+          : { status: 'error', signals: [], message: result.message },
+    });
+  } catch (error) { next(error); }
 };

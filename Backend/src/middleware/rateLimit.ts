@@ -128,6 +128,29 @@ export const inviteLimiter = rateLimit({
     String(req.user?.id ?? 'anonymous'),
 });
 
+/**
+ * Redeeming a module setup code is UNAUTHENTICATED — the code is the only
+ * credential — which makes it the one endpoint here that can be attacked by
+ * guessing. 32 random bytes are not guessable at any rate, but the limit costs
+ * nothing and bounds a flood against the one write that takes no session.
+ *
+ * Per IP, because a caller presenting no valid code has no other identity to
+ * key on, and the code itself must never become a rate-limit bucket key: that
+ * would put a secret in the limiter's memory keyed by its own value.
+ *
+ * `skipSuccessfulRequests`, for the same reason loginIpLimiter has it: only
+ * FAILED attempts are evidence of guessing. A successful redemption consumes
+ * its single-use code and cannot be repeated, so charging it to the budget
+ * would only throttle legitimate setup — several workspaces behind one office
+ * NAT address connecting on the same afternoon share this bucket.
+ */
+export const moduleLinkRedeemLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  skipSuccessfulRequests: true,
+});
+
 /** Exported for tests and for a future Redis swap to assert against. */
 export const LIMITS = {
   loginPerIp: 30,
@@ -135,6 +158,7 @@ export const LIMITS = {
   changePasswordPerAccount: 5,
   registerPerIp: 10,
   invitesPerUser: 30,
+  moduleLinkRedeemPerIp: 20,
   windowMinutes: 15,
 } as const;
 

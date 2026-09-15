@@ -19,6 +19,8 @@ import ActiveDealsSection, { type Deal as SectionDeal } from '../../components/A
 import AccountContactsSection from '../../components/Accounts/AccountContactsSection';
 import RecentActivitiesTimeline, { type ActivityItem } from '../../components/Accounts/RecentActivitiesTimeline';
 import EnhancedMetricsBar from '../../components/Accounts/EnhancedMetricsBar';
+import AccountIntelligencePanel from '../../components/Accounts/AccountIntelligencePanel';
+import { fetchAccountIntelligence, type AccountIntelligence } from '../../utils/accountIntelligenceApi';
 
 /**
  * Account detail — Phase-1 item 3: "account detail, related deals, account
@@ -124,6 +126,13 @@ const AccountDetail: React.FC = () => {
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [documentsLoading, setDocumentsLoading] = useState(true);
 
+  // Account intelligence comes from Lead Gen over HTTP, not from our database.
+  // It joins the same allSettled group as the other related records so a Lead
+  // Gen outage costs this panel and nothing else on the page.
+  const [intelligence, setIntelligence] = useState<AccountIntelligence | null>(null);
+  const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
+  const [intelligenceLoading, setIntelligenceLoading] = useState(true);
+
   const loadContacts = useCallback(async () => {
     if (!accountId) return;
     setContactsLoading(true);
@@ -148,11 +157,13 @@ const AccountDetail: React.FC = () => {
     // the whole page. Each failure is SURFACED — returning [] on error is what
     // makes a broken request indistinguishable from an account with no history.
     setActivitiesLoading(true); setDealsLoading(true); setDocumentsLoading(true);
+    setIntelligenceLoading(true);
     Promise.allSettled([
       fetchActivities({ company_id: accountId, limit: 200 }),
       fetchDealsForAccount(accountId),
       documentsService.loadDocuments({ entity_type: 'companies', entity_id: accountId, limit: 100 }),
-    ]).then(([actRes, dealRes, docRes]) => {
+      fetchAccountIntelligence(accountId),
+    ]).then(([actRes, dealRes, docRes, intelRes]) => {
       if (cancelled) return;
       if (actRes.status === 'fulfilled') { setActivities(actRes.value); setActivitiesError(null); }
       else setActivitiesError(actRes.reason?.message ?? 'Could not load activity');
@@ -165,6 +176,10 @@ const AccountDetail: React.FC = () => {
       if (docRes.status === 'fulfilled') { setDocuments(docRes.value.data); setDocumentsError(null); }
       else setDocumentsError(docRes.reason?.message ?? 'Could not load documents');
       setDocumentsLoading(false);
+
+      if (intelRes.status === 'fulfilled') { setIntelligence(intelRes.value); setIntelligenceError(null); }
+      else setIntelligenceError(intelRes.reason?.message ?? 'Could not load account intelligence');
+      setIntelligenceLoading(false);
     });
 
     return () => { cancelled = true; };
@@ -511,6 +526,13 @@ const AccountDetail: React.FC = () => {
                 accountName={account.name}
                 onDealClick={(id) => navigate(`/crm/deals/${id}`)}
                 onAddDeal={() => navigate(`/crm/deals/create?accountId=${accountId}`)}
+              />
+              {/* External signals, from Lead Gen. Last on the overview because
+                  it is context for the account rather than a record of it. */}
+              <AccountIntelligencePanel
+                data={intelligence}
+                loading={intelligenceLoading}
+                error={intelligenceError}
               />
             </>
           )}
