@@ -602,9 +602,46 @@ very case it breaks, not by review. It is keyed by position now. `roundTrip.fore
 (12 tests) pins all of the above; the re-keyed index was mutation-tested by restoring the
 old constraint, which fails the shared-name test.
 
-- **`deals.company_id` needs a backfill, and two reports are waiting on it.**
-  Only **3 of 24** deals carry a `company_id`; 9 have a free-text `company_name`, and
-  matching on that name resolves exactly **1** more. So "Revenue by Industry" and the
+- **`deals.company_id` backfill — INVESTIGATED 2026-09-16, and the earlier estimate in
+  this file was WRONG in a useful direction.** It said "9 have a free-text `company_name`,
+  and matching on that name resolves exactly 1 more". Measured directly: there are **25**
+  deals (not 24), **10** carry a `company_name`, and exact name matching against
+  `companies` resolves **0** of the unlinked ones — the live names are variants
+  ("TechCorp" vs the company row "TechCorp Inc"), which is the display-name fragility this
+  project keeps running into.
+  **The name was the wrong key to measure. `deals.lead_id` is the right one: 15 of 25
+  deals carry one, every one resolves, and every one of those leads has both a company
+  name AND an email.** The email's DOMAIN matched against `companies.domain` is a real key.
+  Of the 22 unlinked deals:
+  - **13 are confidently inferable** — the lead's email domain AND the lead's company name
+    independently resolve to the SAME company, with **0 ambiguous matches** (no domain or
+    name matches more than one company) and **0 disagreements**. INR 963,000 of value.
+  - **2 need a human** (D006 ManufactPro, D010 AutomEdge): the name matches a company but
+    the lead's domain does not — `manufact.com` vs the company's `manufactpro.com`, and
+    `automatedge.com` vs `automedge.com`. Near-misses that are either a second legitimate
+    domain or a typo, and guessing either way is a fabrication.
+  - **7 CANNOT be inferred by any method, because the account does not exist.** D017
+    TechStart, dlj22yl Zenith Corp, D026/D030 Acme Corp, D042/D043 Moving Walls, D053 Demo
+    Company — none has a row in `companies` at all, under any name. INR 847,000. These need
+    accounts CREATED (a data-entry decision, not a query), or the deals accepted as
+    accountless.
+  **THE CAVEAT THAT DECIDES HOW TO RUN IT: the method cannot be validated against known-good
+  data.** The 3 deals that already carry a `company_id` have NO `lead_id`, so the inferable
+  set and the ground-truth set are disjoint — there is no row where the inference can be
+  checked against a human-confirmed answer. Two independent keys agreeing on all 13 with
+  zero ambiguity is strong, but it is corroboration, not validation. A backfill should
+  therefore be reviewed before it is committed (13 rows is a readable list), not run blind.
+  **What this buys P3:** coverage goes from 3/25 (12%) to 16/25 (64%), or 18/25 (72%) if
+  the two near-misses are confirmed. All 15 companies have an `industry`, so "Revenue by
+  Industry" becomes computable — but at 64% it still needs the coverage stated on the card
+  rather than presented as complete.
+  Two smaller things found on the way: **`dlj22yl` is a deal id that does not match the
+  `D###` format** every other deal uses (Zenith Corp — Enterprise Suite, INR 72,000,
+  created 2026-05-25), and **"Demo Company" (D053)** looks like test data left in live.
+  Both worth a decision before a cleanup pass.
+
+- **Superseded note on the old estimate:**
+  Only **3 of 25** deals carry a `company_id`; 10 have a free-text `company_name`. So "Revenue by Industry" and the
   "SaaS Pipeline Report" cannot be built: `industry` lives on `companies` (all 15 have
   one), and the join key to reach it is missing on 87% of deals. A breakdown built anyway
   would describe three deals and omit twenty-one **while looking complete** — worse than a
@@ -897,8 +934,29 @@ old constraint, which fails the shared-name test.
   (document id, user id, action, timestamp, workspace) plus a write on the content
   endpoint — deliberately out of scope for what was meant to stay a small wiring fix,
   the same call made for the BANT framework and the `ROLE_MAP` fallback.
-- **`documents.module` / `record_id` have no foreign key, so related-entity panels
-  stay empty.** The detail page's related deal, account and contacts came from a
+- **CLOSED (migration 050) — `documents.module` / `record_id` is constrained, and that was
+  the LAST unconstrained polymorphic reference in the schema.** All three are now handled:
+  `tasks` (controller-only, deliberately — see its `RELATED_TABLE` note on `employee`),
+  `meetings` (049, both layers), `documents` (050, both layers).
+  - **Half of it was already done and the backlog note was stale — checked before writing
+    anything.** `documentsController` already had `VALID_MODULES`, a COMPLETE `MODULE_TABLE`
+    (`account` -> companies, `activity` -> activities), a `foreignIdsInTenant` check on
+    create/update/upload, and both-or-neither validation, all covered by
+    `roundTrip.documents.test.ts`.
+  - **What 050 adds is the DATABASE half**, which did not exist: a CHECK on `module` and a
+    pair CHECK forbidding a half-set reference. A controller guard binds ONE writer; the CSV
+    importer, a future endpoint, a backfill or a hand-typed UPDATE all bypass it.
+  - The record_id's WORKSPACE still cannot be enforced in Postgres and is not: the target
+    table varies per row, and every FK here references a global primary key anyway. That
+    half stays in the controller. Both halves, neither substituting for the other.
+  - Safe on live data, verified rather than assumed: 3 documents, modules `contact` and
+    `deal`, no half-set pairs, all three record_ids resolving inside their own tenant. The
+    migration was also dry-run against `bmi_crm` inside a rolled-back transaction.
+  - A test walks the controller's `VALID_MODULES` and asserts Postgres accepts each one, so
+    the two lists drifting apart fails a test rather than a user's upload — the `hr` lesson.
+
+- **The related-entity panels on `DocumentDetailPage` are still empty, and that is
+  separate.** The detail page's related deal, account and contacts came from a
   fixture keyed off three hardcoded document ids. The real columns are a free-text
   module name and a free-text id with nothing constraining either, so resolving them
   needs the same decision `deals.pipeline_id` needs: become a real FK, or stay a
