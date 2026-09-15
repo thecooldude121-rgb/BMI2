@@ -185,6 +185,79 @@ describe('Documents — round trip', () => {
     }
   });
 
+  /*
+   * ─── THE DATABASE LAYER (migration 050) ─────────────────────────────────
+   *
+   * The three tests above prove the CONTROLLER refuses a bad module, a
+   * half-set pair and a cross-workspace parent. These prove POSTGRES refuses
+   * the first two as well.
+   *
+   * That distinction is the whole point of 050 and is worth stating: a
+   * controller guard binds one writer. The CSV importer, a future endpoint, a
+   * backfill or a hand-typed UPDATE all bypass it — and this exact pair has
+   * already produced a live defect, where DocumentDetailPage resolved related
+   * records from a fixture keyed off three hardcoded ids because the columns
+   * guaranteed nothing.
+   *
+   * The record_id's WORKSPACE cannot be checked here and is not: the target
+   * table varies per row, so no foreign key is expressible, and every FK in
+   * this schema references a global primary key anyway. That half stays in the
+   * controller, where the test above covers it. Both halves, neither
+   * substituting for the other.
+   */
+  it('THE DATABASE refuses an unknown module, not only the API', async () => {
+    await expect(pool.query(
+      `INSERT INTO documents (name, module, record_id, tenant_id)
+       VALUES ('db-check.pdf', 'telepathy', $1, $2)`,
+      [dealId, ws.tenantId],
+    )).rejects.toThrow(/documents_module_check/);
+  });
+
+  it('THE DATABASE refuses a half-set pair, in both directions', async () => {
+    await expect(pool.query(
+      `INSERT INTO documents (name, module, record_id, tenant_id)
+       VALUES ('db-half-1.pdf', 'deal', NULL, $1)`,
+      [ws.tenantId],
+    )).rejects.toThrow(/documents_module_record_pair_check/);
+
+    await expect(pool.query(
+      `INSERT INTO documents (name, module, record_id, tenant_id)
+       VALUES ('db-half-2.pdf', NULL, $1, $2)`,
+      [dealId, ws.tenantId],
+    )).rejects.toThrow(/documents_module_record_pair_check/);
+  });
+
+  it('THE DATABASE still allows a document with NO parent at all', async () => {
+    // The common case: a file uploaded to the library, attached to nothing.
+    // A pair CHECK written as "both NOT NULL" rather than "both or neither"
+    // would have made this unstorable.
+    const r = await pool.query(
+      `INSERT INTO documents (name, tenant_id) VALUES ('db-unattached.pdf', $1) RETURNING id`,
+      [ws.tenantId],
+    );
+    expect(r.rows[0].id).toBeTruthy();
+    await pool.query('DELETE FROM documents WHERE id = $1', [r.rows[0].id]);
+  });
+
+  it('every module the CONTROLLER accepts is one the DATABASE accepts', async () => {
+    /*
+     * The two lists are written in two places — VALID_MODULES in the
+     * controller and the CHECK in 050 — which is exactly the arrangement that
+     * drifted for `hr` in the role vocabulary. This walks the controller's
+     * list and proves Postgres takes each one, so the drift fails a test
+     * instead of failing a user's upload.
+     */
+    for (const mod of ['lead', 'deal', 'contact', 'account', 'activity']) {
+      const r = await pool.query(
+        `INSERT INTO documents (name, module, record_id, tenant_id)
+         VALUES ($1, $2, 'placeholder-id', $3) RETURNING id`,
+        [`db-vocab-${mod}.pdf`, mod, ws.tenantId],
+      );
+      expect(r.rows[0].id, `module '${mod}' was rejected by the database`).toBeTruthy();
+      await pool.query('DELETE FROM documents WHERE id = $1', [r.rows[0].id]);
+    }
+  });
+
   it('negative: a parent record from another workspace is refused, naming the field only', async () => {
     const wsB = await setupWorkspace('docs-foreign');
     try {
