@@ -189,7 +189,23 @@ const CRMSettings: React.FC = () => {
       id: 'connected-modules',
       label: 'CONNECTED MODULES',
       icon: <Link2 className="h-4 w-4" />,
-      subsections: [],
+      /*
+       * A SECTION WITH NO SUBSECTIONS RENDERS ITS HEADER AND NOTHING ELSE.
+       *
+       * This was `subsections: []`, so the screen was unreachable from the nav
+       * for everyone — the header appeared with no clickable item under it.
+       * `renderContent` has had `case 'connected-modules'` all along; nothing
+       * ever called `setActiveSection('connected-modules')`.
+       *
+       * TEAM MANAGEMENT gets away with an empty array only because the nav
+       * renderer carries a hardcoded `section.id === 'team'` fallback that
+       * synthesises a "Team Overview" button. That special case is why the two
+       * sections looked identical in the data but behaved differently on
+       * screen. See the note beside it in the renderer.
+       */
+      subsections: [
+        { id: 'connected-modules', label: 'Manage Connections' }
+      ],
       administrativeOnly: true
     }
   ];
@@ -325,6 +341,20 @@ const CRMSettings: React.FC = () => {
                           {subsection.label}
                         </button>
                       ))}
+                      {/*
+                        * A HARDCODED FALLBACK FOR ONE SECTION. Every other
+                        * section is reachable because it LISTS its entries in
+                        * `subsections`; `team` alone relies on this branch.
+                        *
+                        * That asymmetry cost a working screen: Connected
+                        * Modules shipped with `subsections: []`, matched no
+                        * branch, and rendered a header with nothing under it.
+                        * The general property — every section offers at least
+                        * one clickable item — is now pinned by
+                        * CRMSettings.navigation.test.tsx, so the next section
+                        * added with an empty array fails a test instead of
+                        * silently disappearing.
+                        */}
                       {section.id === 'team' && section.subsections?.length === 0 && (
                         <button
                           onClick={() => setActiveSection('team')}
