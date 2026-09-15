@@ -765,7 +765,32 @@ old constraint, which fails the shared-name test.
   tree that `/settings` no longer reaches. Anything specified against "Reports' AI Insights
   Panel" has no existing surface to fill.
 
-- **Meeting Agent — BUILT (backend) 2026-09-15. Migration 049.** `meetingsController` +
+- **Meeting Agent — BUILT, FRONT TO BACK, 2026-09-15/16. Migration 049.**
+  The UI is `MeetingsPage` (list + create), `MeetingDetailPage` (note, push, tasks,
+  activities) and three modals: `NewMeetingModal`, `PushToRecordModal`,
+  `LogActivityModal`. `MeetingsUI.test.tsx` pins it (12 tests).
+  - **THE ANTI-INFERENCE RULE IS KEPT ON THE CLIENT TOO, and that is where the temptation
+    actually lives.** The "log an activity" subject field starts EMPTY even when the note is
+    full of `ACTION:` / `TODO:` / `Next steps:` phrasing, and no suggestion list, highlight
+    or "items detected" affordance is rendered anywhere. A pre-filled field is accepted far
+    more often than it is read, so pre-filling from the note IS the Phase-2 extraction
+    feature, arriving through the side door. Mutation-tested: pre-filling the subject by
+    splitting the note on `ACTION:` fails two tests.
+  - **~4,800 lines of fabrication deleted with it.** `sampleMeetingsData` (47 meetings, 35
+    "recorded", 42 "AI processed", an AI-insights strip naming Acme/TechStart/BigCo),
+    `meetingTranscriptMockData`, and five modals that could not be rewired because their
+    contents were fiction — `ScheduleMeetingModal` offered a hardcoded contact and deal
+    list and collected `recordMeeting` / `enableAI` settings for capabilities this module
+    does not have.
+  - **No "recorded", "live now" or "AI processed" tiles replaced them.** A tile that always
+    reads 0 still implies the thing is being measured. The two counts shown — total, and
+    how many are not yet linked — are derived from the rows actually fetched.
+  - **`MeetingTranscriptViewer` is an honest stub, not a deletion.** Transcription is out
+    of scope; the route is kept so a bookmark lands on that explanation rather than on a
+    convincing transcript of a conversation nobody had.
+  - Original backend notes follow.
+
+- **Meeting Agent backend — 2026-09-15. Migration 049.** `meetingsController` +
   `routes/meetings.ts`: list, detail, create, patch, `PUT /:id/relation` (the push-to-deal
   action) and `POST /:id/activities`. `utils/meetingsApi.ts` is the client.
   `roundTrip.meetings.test.ts` pins it (21 tests).
@@ -804,14 +829,18 @@ old constraint, which fails the shared-name test.
   leaderboard of invented colleagues ("John Smith", "Sarah Johnson", "Mike Chen"), blocked
   on a scoring model that does not exist and an event source never built; the three
   `gamification_*` tables hold 0 rows and nothing reads them.
-  - **NOT YET REMOVED: the dashboard's "Performance & Rewards" panel and
-    `components/gamification/` (6 files), which that panel still mounts.** The reason is
-    mechanical: the panel's JSX is INTERLEAVED with the surrounding dashboard layout — its
-    opening `<div>`s are closed by tags belonging to sibling sections, so the div depth never
-    returns to zero across the block and excising the line range breaks the page (it did, on
-    the first attempt). It stays labelled `PREVIEW · SAMPLE CONTENT`, which is its
-    pre-existing state, so nothing is unlabelled in the meantime. Finishing it is a real
-    edit to a 1,100-line routed page, not a line-range delete.
+  - **NOW COMPLETE (2026-09-16).** The dashboard's "Performance & Rewards" panel and
+    `components/gamification/` (6 files) are gone too; `CRMDashboard` went 1,157 -> 625
+    lines. Nothing but explanatory comments mentions gamification anywhere.
+  - **AND A CORRECTION WORTH KEEPING.** The previous note here said that panel's JSX was
+    "interleaved with the surrounding layout" and could not be excised. **That was wrong.**
+    The element was always a self-contained subtree (lines 577-852). The false conclusion
+    came from a bug in the throwaway script used to check it: JSX comments were blanked with
+    a regex that collapsed their newlines, which shifted every line number after the first
+    multi-line comment and made the depth count nonsense. Located with the TypeScript
+    compiler the second time instead of a regex. **The lesson is not about JSX — it is that
+    a conclusion from a one-off script deserves the same scepticism as a conclusion from a
+    test, and "I could not do it" is a claim that needs checking like any other.**
 
 - **Facade pages — fabrication removed or labelled, 2026-09-15.** From the six-page audit:
   - **AI Copilot: the canned transcripts are DELETED, not labelled** (~855 lines). They did
