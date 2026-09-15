@@ -909,6 +909,58 @@ old constraint, which fails the shared-name test.
     builder that renders tenant-scoped SQL — the security-sensitive part, and partly blocked
     on the `deals.company_id` backfill. AI Copilot needs Phase 2 to open.
 
+- **DONE (migration 051) — `deals.company_id` backfilled for 13 deals, and what the
+  investigation found underneath it.**
+  Coverage 3/25 -> **16/25 (64%)**. The 13 mappings are LITERAL pairs in the migration, not
+  a join, so the decision is auditable; dry-run against `bmi_crm` in a rolled-back
+  transaction, then applied through the runner and **verified by re-querying the rows**.
+  D006/D010 (domain near-misses) and the 7 accountless deals were left untouched.
+  - **The inference key was `deals.lead_id`, not `company_name`.** Exact name matching
+    resolves 0 — live names are variants ("TechCorp" vs the row "TechCorp Inc"). Through the
+    lead, the email DOMAIN and the company NAME resolve to the same company for 13 deals,
+    with zero ambiguity and zero disagreements.
+  - **The method could not be validated against known-good data** — the 3 deals that
+    already had a `company_id` have no `lead_id`, so ground truth and inferable set are
+    disjoint. Corroboration, not validation. Applied on explicit approval.
+
+- **THE LIVE WORKSPACE'S CORE DATA IS A SYNTHETIC SEED LOAD. Established 2026-09-16, and it
+  changes how every figure in this CRM should be read.**
+  - **Two populations, separated by timestamp and unmistakable.** 15 companies created at
+    **exactly 00:00:00.000** on a 14-day cadence (2025-06-01 -> 2026-01-01); 15 leads and 15
+    deals (D001-D015) likewise at exact midnight on a 5-day cadence (2026-01-10 ->
+    2026-04-05); 20 contacts across 20 distinct days. Nobody creates 15 deals at midnight on
+    a tidy cadence. **The 13 deals just backfilled are all from this seeded set** — so
+    "Revenue by Industry" will mostly describe invented accounts, and should say so.
+  - **The second population is hand-created: 10 deals and 23 leads, 2026-05-25 to
+    2026-06-03, with realistic sub-second timestamps.** These are the ones that could NOT be
+    linked to an account — because **no company or contact was created in that window at
+    all** (0 companies, 0 contacts). Somebody typed deals with free-text company names and
+    never created the accounts. That is the whole explanation for the 7 "unresolvable"
+    deals; it is not a second seed load.
+  - **NO SEEDER EXISTS IN THIS REPO.** No migration inserts demo rows, `seedUsers.ts` only
+    rotates passwords, and git history contains no deleted seeder. Whatever wrote the
+    synthetic core came from outside this repository — so this is NOT the migration
+    auto-apply hazard repeating, and there is no script here to remove. It also means the
+    load cannot be re-run or reversed from anything in the tree.
+  - **THE FIXTURE NAMES ARE NOT A COINCIDENCE.** The 23 leads of 2026-05-25 include
+    `john.smith2@acmecorp.com` (Acme Corporation), `sarah.lee2@techstart.com` (TechStart
+    Inc), `mike.chen@bigco.com` (BigCo Enterprise) and `rachel.green@startco.com` (StartCo
+    Solutions) — four of the five hardcoded contacts from the deleted
+    `ScheduleMeetingModal` fixture (John Smith/Acme Corp, Sarah Lee/TechStart, Mike
+    Chen/BigCo, Emma Wilson/DataFlow, Lisa Wong/StartCo), with `2` suffixes on the emails to
+    dodge the `UNIQUE(tenant_id, email)` constraint against the first load. The facade
+    fixtures and the live rows share a source.
+  - **`D053` "Demo Company" (USD 300,000) is already flagged `is_test = true`** and
+    `getDeals` excludes test rows unless `include_test=true`, as does the projection loader.
+    So it is contained: it corrupts no figure today. It is clutter, not a live defect.
+  - **`dlj22yl` predates the id sequences.** Migration 031 wired `deals.id` to a sequence on
+    2026-09-03; that deal was created 2026-05-25, when ids still came from app code or the
+    client. Its base36-looking id is a client-minted one from before the backend owned
+    generation — a historical artefact, not an active bug. The sequence is at 54 and the
+    highest `D###` is 53, so it is consistent.
+  - **Nothing depends on these rows**: of the 7, only D043 has a single related document;
+    no activities, tasks, stage history or quotes on any of them.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
@@ -1327,6 +1379,14 @@ interception layer — an HTTP proxy, a patched global `fetch`/agent, or an undi
 play for at least some requests under load. `HTTP_PROXY`/`HTTPS_PROXY` were NOT set in the
 shell that ran it, so if this is a proxy it is being installed by something else in the
 process.
+
+**THIRD CAPTURE, 2026-09-16.** Identical body again, character for character, this time
+failing `roundTrip.projection` ("test-flagged deals never count toward the history") on a
+`POST /deals/:id/stage-transition` expecting 200. The file then passed 8/8 alone, the next
+full run passed 589/589, and zero `rt-` tenants were orphaned. Three captures now, three
+unrelated test files (`roundTrip.contacts`, `roundTrip.leads`, `roundTrip.projection`), one
+byte-identical body — and two of the three were in a DIFFERENT WORKTREE with its own
+`node_modules`. The affected test is arbitrary; the response is not.
 
 Two consequences for the eventual debugging pass:
 - **Instrumenting the pg pool may be looking in the wrong place.** Do it, but capture the
