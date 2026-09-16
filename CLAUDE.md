@@ -961,6 +961,43 @@ old constraint, which fails the shared-name test.
   - **Nothing depends on these rows**: of the 7, only D043 has a single related document;
     no activities, tasks, stage history or quotes on any of them.
 
+- **DONE (migrations 052, 053) — the live workspace's data is now labelled by provenance.**
+  - **`is_seed` is a NEW column, deliberately NOT `is_test`, and the distinction matters.**
+    `is_test` already means "hide this row" and is enforced as such (`getDeals` appends
+    `AND d.is_test = false` unless `include_test=true`; `loadProjectionDeals` excludes it
+    unconditionally). The synthetic rows are 15 of 25 deals, ALL 15 companies, all 38 leads
+    and 20 of 21 contacts — most of what the app has to show. Flagging them `is_test` would
+    empty the deals list, the dashboard and the pipeline board. So:
+      `is_test` = "this row is debris; do not show it"
+      `is_seed` = "this row is demo data; SHOW it, but say so when you summarise it"
+    **052 changes no query and excludes nothing.** The column exists so a report can
+    DISCLOSE its input.
+  - **FOR P3's "Revenue by Industry" CARD, THIS IS THE REQUIREMENT:** the card must state how
+    much of its input is seeded, not merely its coverage. Of the 16 deals now carrying a
+    `company_id`, **13 are seeded** — so a coverage figure alone ("64% of deals linked")
+    would be true and still misleading. Blanket-excluding the seeded rows is NOT the answer
+    either: that leaves the card describing three deals, which is the exact failure
+    `UNBACKED_REPORTS` already documents.
+  - **053 labelled D017, D026 and D030 `is_test`** (TechStart Inc AED 50,000; Acme Corp USD
+    75,000; Acme Corp USD 60,000). Fixture names — "Acme" appears in 44 source files,
+    "TechStart" in 16, both from the deleted ScheduleMeetingModal lists. Labelled rather than
+    deleted: one boolean, reversible, and it gets them out of every production view via the
+    exclusion that already exists.
+  - **053 DELETED D053 "Demo Company" (USD 300,000)**, which was already `is_test = true` and
+    therefore already invisible everywhere. Backed up first as a restorable INSERT at
+    `Backend/migrations/_backups/D053_demo_company_row.sql` — a deletion with a backup beside
+    it is recoverable. The migration re-checks dependents at apply time and RAISEs rather
+    than deleting if any exist, so applying it elsewhere later cannot silently orphan
+    something.
+  - Live now: 24 deals, **21 visible**, 15 seeded.
+
+- **STILL PENDING A DECISION — D042, D043 and dlj22yl are NOT deleted.** The dependency check
+  is done and is in the report; the one dependent is a document on D043 named
+  **`test-upload-deal`** (1,381 bytes, application/pdf, uploaded by David Kumar 2026-09-11)
+  — a test upload, not a business document. **Delete it through the documents API, not SQL:**
+  `deleteDocuments` also removes the stored blob via `deleteFile(storage_key)`, so a raw SQL
+  delete would orphan the file in the store.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
@@ -1387,6 +1424,40 @@ full run passed 589/589, and zero `rt-` tenants were orphaned. Three captures no
 unrelated test files (`roundTrip.contacts`, `roundTrip.leads`, `roundTrip.projection`), one
 byte-identical body — and two of the three were in a DIFFERENT WORKTREE with its own
 `node_modules`. The affected test is arbitrary; the response is not.
+
+**BOUNDED INVESTIGATION, 2026-09-16 — CONCLUSION: THIS IS NOT A CODEBASE BUG.** Time-boxed
+on instruction, and it resolved further than expected. Three facts, each checked directly:
+
+1. **Every 401 this codebase can emit has the shape `{ success: false, message }`.** All
+   eight sites (`middleware/auth.ts` x6, `authController.ts` x2) were enumerated. None emits
+   `type`, `error` or `request_id`.
+2. **No backend dependency contains the string `authentication_error`** — grepped across the
+   whole of `Backend/node_modules`. There is no `@anthropic-ai` package in the backend at
+   all.
+3. **Nothing patches HTTP in the test path.** No `globalThis.fetch` assignment, no
+   `setGlobalDispatcher`, no `ProxyAgent`, no interceptor in `setup.ts`, `vitest.config.ts`
+   or `app.ts`; and `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NODE_OPTIONS` and
+   `NODE_EXTRA_CA_CERTS` are all unset in the test process.
+
+So the response is **not producible by the process under test or by anything it loads**. It
+arrives from outside Node, between supertest's loopback request and the app — i.e. the
+ENVIRONMENT the suite runs in, not this repository. That also explains every part of the
+signature that made it look mysterious: why the affected test is arbitrary, why it is
+byte-identical each time, why it self-resolves on retry, and why it followed the suite into
+a different worktree with a fresh `node_modules`.
+
+**A FOURTH HIT THE SAME DAY CONFIRMED THE `{}` VARIANT IS THE SAME THING.**
+`roundTrip.userRoles` failed with `real login failed — {}` — the bodyless 401 of the
+ORIGINAL signature, not the Anthropic-shaped one. Passed 17/17 alone, 593/593 on the next
+full run, nothing orphaned. So the two shapes this file has tracked separately are one
+phenomenon seen through two clients: supertest's `login.status !== 200` path stringifies an
+empty body, while an assertion that dumps `res.body` shows the envelope. That resolves the
+"part 2 could not be confirmed" caveat recorded on 2026-09-06.
+
+**Practical guidance: retry, do not debug.** A single unexplained 401 in a full run whose
+file then passes alone is this, and re-running is the correct response. Do not add retries
+or timeouts to the suite to paper over it — that would mask a real auth regression later.
+Stop here unless it starts failing on re-run too, which would be a different bug.
 
 Two consequences for the eventual debugging pass:
 - **Instrumenting the pg pool may be looking in the wrong place.** Do it, but capture the
