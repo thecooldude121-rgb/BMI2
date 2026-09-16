@@ -18,6 +18,15 @@ export interface AuthRequest extends Request {
      */
     first_name?: string; last_name?: string;
   };
+  /**
+   * Set ONLY by serviceKeyOrProtect (middleware/serviceAuth.ts) when the caller
+   * authenticated with a machine credential rather than a session. Its presence
+   * is how a controller can tell a module from a person.
+   *
+   * Typed inline rather than imported from serviceAuth to keep that module's
+   * dependency on this one one-directional.
+   */
+  service?: { id: string; name: string; scopes: string[] };
 }
 
 /**
