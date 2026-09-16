@@ -16,6 +16,7 @@ import meetingsRoutes from './meetings';
 import forecastRoutes from './forecast';
 import targetsRoutes from './targets';
 import moduleLinksRoutes from './moduleLinks';
+import serviceCredentialsRoutes from './serviceCredentials';
 
 const router = Router();
 
@@ -36,5 +37,6 @@ router.use('/meetings', meetingsRoutes);
 router.use('/forecast', forecastRoutes);
 router.use('/targets', targetsRoutes);
 router.use('/module-links', moduleLinksRoutes);
+router.use('/service-credentials', serviceCredentialsRoutes);
 
 export default router;

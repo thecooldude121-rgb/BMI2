@@ -10,11 +10,18 @@ import {
   getDealStageHistory,
 } from '../controllers/dealsController';
 import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
+import { serviceKeyOrProtect } from '../middleware/serviceAuth';
 
 const router = Router();
 
+/**
+ * Above `router.use(protect)` for the same reason as the contacts POST: Express
+ * order. Lead Gen reads closed-won deals here for ICP suggestion, and its
+ * link-verification probe hits this same endpoint.
+ */
+router.get('/', serviceKeyOrProtect('deals:read'), getDeals);
+
 router.use(protect);
-router.get('/', getDeals);
 router.get('/:id', getDealById);
 router.post('/', createDeal);
 router.put('/:id', updateDeal);

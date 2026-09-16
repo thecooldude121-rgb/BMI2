@@ -138,6 +138,23 @@ The names differ by one word. The concepts do not overlap.
   because silently discarded invites and password resets are invisible until a customer
   reports never receiving one. Report `email_sent` from `ok && transport.delivers`, never
   from `ok` alone.
+- **`MODULE_LINK_ENCRYPTION_KEY` must never be rotated once a module link exists.**
+  It encrypts `module_links.api_key_encrypted` — the credential this CRM uses to call Lead
+  Gen. Rotating it does not error: the link row still says connected, `secretBox` fails to
+  decrypt, and every account-intelligence panel quietly reports "not linked" instead. There
+  is no re-encrypt path, because the plaintext is not stored anywhere to re-encrypt from.
+  Recovery is generating a fresh setup code in Settings > Connected Modules and re-running
+  the handshake from Lead Gen. Treat it like a database password. It is also lazily read, so
+  a deployment with no module link boots fine without it — and the first symptom of a
+  MISSING key is a 500 on redeem saying so, which is how it was found.
+- **Machine callers use a service credential, never a person's login.** `POST /contacts`
+  and `GET /deals` accept `bmk_…` keys (migration 054, `middleware/serviceAuth.ts`) because
+  Lead Gen calls both and has no session. The keys are scoped (`contacts:write`,
+  `deals:read`), hashed at rest, and opt-in PER ROUTE — a route that does not name
+  `serviceKeyOrProtect` cannot be reached with one, which is what keeps a leaked key small.
+  Do not "simplify" this by teaching `protect` about keys: that would open ~60 routes at
+  once. The predecessor was an admin's JWT minted for the integration, which expired in 7
+  days and carried full admin rights; do not go back to that.
 - **Registration is INVITE-ONLY, and this is a security boundary, not a workflow
   preference.** Open self-registration was a live exposure: `POST /auth/register` was
   unauthenticated, accepted any email domain, and resolved "one workspace exists -> join
