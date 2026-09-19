@@ -1,8 +1,37 @@
 # P3 design — saved reports and the tenant-scoped query builder
 
-**Status: FOR REVIEW. No implementation written.** Same pattern as the facade-page
-audit preceding the build waves, and as `PIPELINE_STAGES_DESIGN.md` preceded
-migration 037.
+**Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
+see §6, which now records the ANSWERS, not the questions. Phase 0 is BUILT.**
+
+### Confirmed build order
+
+| Phase | What | State |
+|---|---|---|
+| **0** | Registry + generator, pure, no execution | **built** |
+| **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | next |
+| **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | |
+| **3** | Run endpoints + provenance | |
+| **4** | `CustomReportBuilder` wired | |
+| **5** | `ReportDetailView` | |
+| **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | |
+| **7** | Exports (CSV, then PDF/Excel) | |
+| **8** | Scheduling | |
+| **9** | Caching with result age (small, droppable) | |
+
+**RLS moved from last to Phase 1 on Venkat's decision**, and it is better there
+than originally argued for a reason underweighted at design time: adjacency lets
+the two layers be mutation-tested AGAINST EACH OTHER — sabotage the generator's
+tenant predicate and assert RLS still blocks the read, which demonstrates
+independence rather than asserting it.
+
+**Permissions folded into Phase 2** rather than staying a late phase: "owner may
+grant edit rights to specific people" is not an enum, so `saved_report_grants`
+must exist when `saved_reports` is created, or it becomes a second migration plus
+a backfill.
+
+**v1 grew.** Scheduling needs a job runner, which does not exist in this codebase
+— no cron, no queue, no worker. That is larger new infrastructure than the RLS
+work, and it is now in scope.
 
 Every number below was measured against live `bmi_crm` on 2026-09-16, after the
 test-data cleanup — not carried over from an earlier round.
@@ -327,29 +356,33 @@ scheduler, and both are out of P3 unless you want them in.
 
 ---
 
-## 6. Product decisions — for Venkat, not for me
+## 6. Product decisions — ANSWERED 2026-09-19
 
-1. **Default visibility for a saved report: `private` or `workspace`?** The
-   schema above defaults to `private`. The existing builder UI already collects
-   `shareWithTeam` and `allowEdit`, which implies sharing was intended — but there
-   is no permission model behind either flag today.
-2. **Who may create, edit and delete a saved report?** Any authenticated user, or
-   `DESTRUCTIVE_ACTION_ROLES` for delete? Note `GET /users` is deliberately
-   ungated while role changes are not, so "read broadly, write narrowly" is the
-   house pattern.
-3. **Should seeded rows be user-excludable** (a toggle on the report), or always
-   included-with-disclosure? I recommend the latter — a toggle invites someone to
-   hide the disclosure and then screenshot the chart.
-4. **The "mostly seeded" threshold** at which disclosure moves above the chart.
-   I suggest 50%.
-5. **Row cap and query timeout.** I suggest 5,000 rows and 10s, with the cap
-   disclosed when it truncates (never a silent `LIMIT`).
-6. **Caching.** Recomputing on every view is simplest and always honest. If
-   results are cached, the age must be shown.
-7. **The RLS + read-only-role hardening in §2.4** — worth the infrastructure or
-   not.
-8. **Is the `deals.assigned_to_user_id` backfill (5% filled) a P3 prerequisite?**
-   Without it there is no trustworthy "by owner" report. It is a separate data
-   task, the same shape as the `company_id` backfill just completed.
-9. **Scheduled email delivery and exports** — in or out of P3? Both are collected
-   by the existing UI and neither has a backend.
+Recorded as answers so a later reader does not mistake this for an open list.
+
+1. **Sharing: private by default; the owner may grant EDIT rights to specific
+   people.** This SUPERSEDES the `visibility` enum sketched in §1 — per-person
+   grants need a `saved_report_grants` table (report, user, can_edit) with the
+   composite tenant FK, created alongside `saved_reports` in Phase 2.
+2. **Create/edit/delete** follows from (1): the owner, plus anyone holding an
+   explicit edit grant.
+3. **Seeded rows are NEVER user-excludable.** Included and disclosed, always. The
+   builder has no code path that can filter `is_seed`, and a test asserts the
+   emitted SQL never mentions it — the capability does not exist rather than
+   being defaulted off.
+4. **Threshold: 50%**, `MOSTLY_SEEDED_THRESHOLD` in `types.ts`.
+5. **5,000 rows, 10s timeout, truncation always disclosed.** The builder asks for
+   `MAX_ROWS + 1`, so truncation is DETECTED rather than assumed: a plain
+   `LIMIT 5000` returning exactly 5,000 rows is indistinguishable from a report
+   that genuinely has 5,000.
+6. **Caching allowed; result age must always be shown when served from cache.**
+   Phase 9, deliberately last — premature caching hides freshness bugs.
+7. **RLS + read-only role: YES, build it now** — resequenced to Phase 1.
+8. **No `assigned_to_user_id` backfill** — it would need the fuzzy name-matching
+   this project refused elsewhere (039-043). "By owner" ships in Phase 6 with the
+   same honest-disclosure treatment as the other weak joins. The registry
+   therefore exposes BOTH `deals.assigned_to` ("Owner (name as entered)") and
+   `deals.owner_name` ("Owner (linked user)"), labelled so a reader knows which
+   one they are grouping on.
+9. **Exports and scheduling are IN for v1** (Phases 7 and 8). The job runner does
+   not exist yet.
