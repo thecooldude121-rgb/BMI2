@@ -11,7 +11,8 @@
     "db:seed:users": "ts-node src/scripts/seedUsers.ts",
     "test": "vitest run",
     "test:isolation": "DB_NAME=bmi_crm_iso_test NODE_ENV=test vitest run",
-    "test:isolation:setup": "dropdb --if-exists bmi_crm_iso_test && createdb bmi_crm_iso_test && DB_NAME=bmi_crm_iso_test npm run db:migrate"
+    "test:isolation:setup": "dropdb --if-exists bmi_crm_iso_test && createdb bmi_crm_iso_test && DB_NAME=bmi_crm_iso_test npm run db:migrate",
+    "db:reports-role": "ts-node src/scripts/setupReportsRole.ts"
   },
   "dependencies": {
     "@types/multer": "^2.2.0",

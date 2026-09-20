@@ -228,9 +228,10 @@ describe('PROPERTY: every module and every legal join is scoped, including ones 
         T,
       );
       const src = SUPPORT_SOURCES[f.requiresSource];
+      const projection = src.columns?.length ? src.columns.join(', ') : '*';
       expect(tenantPredicates(sql), `field "${key}"`).toBe(sourceCount);
       expect(sql, `field "${key}"`).toContain(
-        `LEFT JOIN (SELECT * FROM ${src.table} WHERE tenant_id = $2) ${src.alias}`);
+        `LEFT JOIN (SELECT ${projection} FROM ${src.table} WHERE tenant_id = $2) ${src.alias}`);
     }
   });
 
@@ -246,6 +247,36 @@ describe('PROPERTY: every module and every legal join is scoped, including ones 
     for (const src of Object.values(SUPPORT_SOURCES)) {
       expect(aliases.has(src.alias), `duplicate alias ${src.alias}`).toBe(false);
       aliases.add(src.alias);
+    }
+  });
+});
+
+describe('a source holding secrets is never read with SELECT *', () => {
+  /*
+   * `users` carries `password_hash` and `token_version`. The read-only
+   * reporting role is granted SELECT on four columns only (migration 055), so
+   * a `SELECT *` would be REFUSED by Postgres — the right failure, but one
+   * that should never arise. This asserts the projection is explicit.
+   */
+  it('projects only the four safe columns of users, never *', () => {
+    const { sql } = buildReportQuery(
+      def({ dimensions: [{ field: 'deals.owner_name' }] }), T);
+    expect(sql).toContain('(SELECT id, first_name, last_name, tenant_id FROM users WHERE tenant_id = $2) u');
+    expect(sql).not.toContain('SELECT * FROM users');
+    expect(sql).not.toContain('password_hash');
+  });
+
+  it('every registry source that declares columns emits exactly those', () => {
+    // Walks the registry, so a source added later with a projection is covered.
+    for (const [key, src] of Object.entries(SUPPORT_SOURCES)) {
+      if (!src.columns?.length) continue;
+      const field = Object.entries(REPORT_FIELDS).find(([, f]) => f.requiresSource === key);
+      if (!field) continue;
+      const { sql } = buildReportQuery(
+        { v: DEFINITION_VERSION, base: REPORT_FIELDS[field[0]].module,
+          dimensions: [{ field: field[0] }], metrics: [{ agg: 'count' }] }, T);
+      expect(sql, key).toContain(`SELECT ${src.columns.join(', ')} FROM ${src.table}`);
+      expect(sql, key).not.toContain(`SELECT * FROM ${src.table}`);
     }
   });
 });

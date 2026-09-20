@@ -1,15 +1,32 @@
 # P3 design — saved reports and the tenant-scoped query builder
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
-see §6, which now records the ANSWERS, not the questions. Phase 0 is BUILT.**
+see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
+BUILT.**
+
+### Two things Phase 1 discovered that changed the design
+
+1. **The application connects as a SUPERUSER that owns every table.** So RLS is
+   unconditionally inert for it — which is exactly why the app is unaffected, and
+   exactly why a reports pool misconfigured to use those credentials would have
+   RLS silently inert while looking protected. An inert security layer is worse
+   than an absent one. The pool therefore proves RLS is live BEHAVIOURALLY before
+   serving anything (a query with no tenant set must return zero rows) and
+   refuses outright if `REPORTS_DB_USER` equals `DB_USER` or is missing. There is
+   no fallback to the app pool, deliberately.
+2. **`users` carries `password_hash` and `token_version`**, so the reporting role
+   gets COLUMN-level SELECT on four columns — which made `SELECT *` in the
+   builder's scoped source wrong. `scopedSource()` now takes an optional
+   projection from the registry. The security boundary is unchanged: the column
+   names come from the registry, never a request.
 
 ### Confirmed build order
 
 | Phase | What | State |
 |---|---|---|
 | **0** | Registry + generator, pure, no execution | **built** |
-| **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | next |
-| **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | |
+| **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | **built** (migration 055) |
+| **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | next |
 | **3** | Run endpoints + provenance | |
 | **4** | `CustomReportBuilder` wired | |
 | **5** | `ReportDetailView` | |

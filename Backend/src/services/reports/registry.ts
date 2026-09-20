@@ -51,6 +51,18 @@ export interface FieldSpec {
 export interface ModuleSpec {
   /** The real table. It MUST have a tenant_id column — see the note above. */
   table: string;
+  /**
+   * Explicit projection for the scoped inline view, when `SELECT *` is wrong.
+   *
+   * It is wrong whenever the reports role holds only COLUMN-level SELECT: a
+   * `SELECT *` demands every column and is refused. `users` is the live case —
+   * it carries `password_hash` and `token_version`, which the read-only
+   * reporting role must never be able to read, so it is granted four columns
+   * and the source must ask for exactly those.
+   *
+   * Defaults to `*` where the whole table is safe to read.
+   */
+  columns?: string[];
   /** Stable SQL alias. Distinct across all modules so joins never collide. */
   alias: string;
   label: string;
@@ -75,7 +87,9 @@ export interface ModuleSpec {
  * Sources that are never named by a definition but may be pulled in to resolve a
  * field (a deal's stage). They are scoped exactly like any other source.
  */
-export const SUPPORT_SOURCES: Record<string, { table: string; alias: string; joinFrom: string; on: string }> = {
+export const SUPPORT_SOURCES: Record<string, {
+  table: string; alias: string; joinFrom: string; on: string; columns?: string[];
+}> = {
   pipeline_stages: {
     table: 'pipeline_stages',
     alias: 'ps',
@@ -91,6 +105,14 @@ export const SUPPORT_SOURCES: Record<string, { table: string; alias: string; joi
     alias: 'u',
     joinFrom: 'deals',
     on: 'u.id = d.assigned_to_user_id',
+    /*
+     * FOUR COLUMNS, NOT `*`, AND THIS IS A SECURITY BOUNDARY NOT A TIDINESS
+     * PREFERENCE. `users` carries `password_hash` and `token_version`. The
+     * read-only reporting role is granted SELECT on exactly these four columns
+     * (migration 055), so a `SELECT *` here would be refused by Postgres —
+     * which is the correct failure, but the projection makes it never arise.
+     */
+    columns: ['id', 'first_name', 'last_name', 'tenant_id'],
   },
 };
 

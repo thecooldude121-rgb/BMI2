@@ -74,9 +74,18 @@ export interface BuiltQuery {
  * tenant parameter. There is no variant of this that omits the predicate, and
  * nothing else in this file concatenates a table name.
  */
-function scopedSource(table: string, alias: string, tenantId: string, params: unknown[]): string {
+function scopedSource(
+  table: string, alias: string, tenantId: string, params: unknown[], columns?: string[],
+): string {
   params.push(tenantId);
-  return `(SELECT * FROM ${table} WHERE tenant_id = $${params.length}) ${alias}`;
+  /*
+   * The projection defaults to `*`, and is explicit only where the reports role
+   * holds column-level SELECT rather than table-level — `users`, which carries
+   * `password_hash`. The column names come from the REGISTRY, never from a
+   * request, so this is not an interpolation point.
+   */
+  const projection = columns?.length ? columns.join(', ') : '*';
+  return `(SELECT ${projection} FROM ${table} WHERE tenant_id = $${params.length}) ${alias}`;
 }
 
 /**
@@ -174,7 +183,7 @@ export function buildReportQuery(definition: ReportDefinition, tenantId: string)
 
   // ── Sources ─────────────────────────────────────────────────────────────
   const active = new Set<string>([base]);
-  let from = `FROM ${scopedSource(baseSpec.table, baseSpec.alias, tenantId, params)}`;
+  let from = `FROM ${scopedSource(baseSpec.table, baseSpec.alias, tenantId, params, baseSpec.columns)}`;
   let sourceCount = 1;
 
   const joinKeys = Array.isArray(definition.joins) ? definition.joins : [];
@@ -187,7 +196,7 @@ export function buildReportQuery(definition: ReportDefinition, tenantId: string)
       fail(`"${base}" cannot be joined to "${mod}". Allowed: ${Object.keys(baseSpec.joins).join(', ') || 'none'}.`);
     }
     const spec = REPORT_MODULES[mod];
-    from += `\n  LEFT JOIN ${scopedSource(spec.table, spec.alias, tenantId, params)}`
+    from += `\n  LEFT JOIN ${scopedSource(spec.table, spec.alias, tenantId, params, spec.columns)}`
           + `\n    ON ${joinOn(businessKey, baseSpec.alias, spec.alias)}`;
     sourceCount += 1;
     active.add(mod);
@@ -228,7 +237,7 @@ export function buildReportQuery(definition: ReportDefinition, tenantId: string)
       fail(`A chosen field needs "${key}", which attaches to "${src.joinFrom}".`);
     }
     const parent = REPORT_MODULES[src.joinFrom];
-    from += `\n  LEFT JOIN ${scopedSource(src.table, src.alias, tenantId, params)}`
+    from += `\n  LEFT JOIN ${scopedSource(src.table, src.alias, tenantId, params, src.columns)}`
           + `\n    ON ${joinOn(src.on, parent.alias, src.alias)}`;
     sourceCount += 1;
   }
