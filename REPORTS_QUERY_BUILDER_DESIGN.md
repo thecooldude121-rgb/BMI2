@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT.**
+BUILT, and so is Phase 2.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -26,8 +26,8 @@ BUILT.**
 |---|---|---|
 | **0** | Registry + generator, pure, no execution | **built** |
 | **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | **built** (migration 055) |
-| **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | next |
-| **3** | Run endpoints + provenance | |
+| **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | **built** (migration 056) |
+| **3** | Run endpoints + provenance | next |
 | **4** | `CustomReportBuilder` wired | |
 | **5** | `ReportDetailView` | |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | |
@@ -377,10 +377,15 @@ scheduler, and both are out of P3 unless you want them in.
 
 Recorded as answers so a later reader does not mistake this for an open list.
 
-1. **Sharing: private by default; the owner may grant EDIT rights to specific
-   people.** This SUPERSEDES the `visibility` enum sketched in §1 — per-person
-   grants need a `saved_report_grants` table (report, user, can_edit) with the
-   composite tenant FK, created alongside `saved_reports` in Phase 2.
+1. **Sharing: private by default; the owner may grant rights to specific people,
+   at TWO LEVELS — `view` and `edit`** (refined 2026-09-21). `view` is the floor
+   any share confers; `edit` sits on top and implies it. There is deliberately no
+   edit-without-view, and it is not merely discouraged: one grant row per
+   (report, user) holding one level makes that state UNREPRESENTABLE.
+   This SUPERSEDES the `visibility` enum sketched in §1 — and there is no
+   `visibility` column at all, because "private" is simply the absence of grants.
+   A column beside the grants table would be two sources of truth for one
+   question.
 2. **Create/edit/delete** follows from (1): the owner, plus anyone holding an
    explicit edit grant.
 3. **Seeded rows are NEVER user-excludable.** Included and disclosed, always. The
