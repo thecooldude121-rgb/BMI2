@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT, and so is Phase 2.**
+BUILT, and so are Phases 2 and 3.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -27,8 +27,8 @@ BUILT, and so is Phase 2.**
 | **0** | Registry + generator, pure, no execution | **built** |
 | **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | **built** (migration 055) |
 | **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | **built** (migration 056) |
-| **3** | Run endpoints + provenance | next |
-| **4** | `CustomReportBuilder` wired | |
+| **3** | Run endpoints + provenance | **built** |
+| **4** | `CustomReportBuilder` wired | next |
 | **5** | `ReportDetailView` | |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | |
 | **7** | Exports (CSV, then PDF/Excel) | |

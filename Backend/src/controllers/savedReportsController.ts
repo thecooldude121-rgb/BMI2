@@ -9,6 +9,7 @@ import {
   canViewPredicate, canEditPredicate, isOwnerPredicate,
   abilitiesFor, GRANT_LEVELS, type GrantLevel,
 } from '../services/reports/access';
+import { runReport, ReportTimeout } from '../services/reports/runner';
 
 /**
  * SAVED REPORTS — definitions, and who may see them. P3 Phase 2.
@@ -328,4 +329,85 @@ export const revokeGrant = async (req: AuthRequest, res: Response, next: NextFun
     if (!removed.rows[0]) { res.status(404).json({ success: false, message: 'That person has no grant on this report' }); return; }
     res.json({ success: true, data: { user_id: Number(removed.rows[0].user_id) } });
   } catch (error) { next(error); }
+};
+
+/**
+ * POST /api/v1/reports/run — run a definition WITHOUT saving it.
+ *
+ * This is what the builder's preview pane calls. It needs no saved row and
+ * therefore no grant check: you are running a definition you just supplied,
+ * against your own workspace, on a connection that cannot see anyone else's
+ * data. The tenant comes from the token, as everywhere.
+ */
+export const runAdHoc = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const { definition } = req.body ?? {};
+    if (!definition) {
+      res.status(400).json({ success: false, message: 'definition is required' });
+      return;
+    }
+    const run = await runReport(definition, tenantId);
+    res.json({ success: true, ...run });
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(400).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      // 504: the request was well-formed and the server gave up, which is a
+      // different thing from the caller having asked for something invalid.
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+/**
+ * GET /api/v1/reports/:id/run — run a SAVED report.
+ *
+ * Requires view. The permission predicate is in the SELECT that fetches the
+ * definition, so a caller without access never obtains a definition to run —
+ * the check is not "may you run this" asked after loading it.
+ */
+export const runSaved = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const userId = Number(req.user?.id);
+
+    const found = await pool.query(
+      `SELECT r.id, r.name, r.definition
+         FROM saved_reports r
+        WHERE r.tenant_id = $1 AND r.id = $3 AND ${canViewPredicate('r', 2)}`,
+      [tenantId, userId, req.params.id],
+    );
+    if (!found.rows[0]) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+
+    const run = await runReport(found.rows[0].definition, tenantId);
+    res.json({
+      success: true,
+      report: { id: found.rows[0].id, name: found.rows[0].name },
+      ...run,
+    });
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      /*
+       * A SAVED definition that no longer compiles is a 409, not a 400: the
+       * caller did nothing wrong, and the stored report has outlived a registry
+       * change. Saying so beats a 400 that implies bad input, and beats a
+       * best-effort run that would report a wrong number.
+       */
+      res.status(409).json({
+        success: false,
+        message: `This saved report can no longer run: ${error.message}`,
+      });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
 };

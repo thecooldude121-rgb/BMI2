@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   listReports, getReport, createReport, updateReport, deleteReport,
-  listGrants, setGrant, revokeGrant,
+  listGrants, setGrant, revokeGrant, runAdHoc, runSaved,
 } from '../controllers/savedReportsController';
 import { protect } from '../middleware/auth';
 
@@ -18,9 +18,15 @@ router.use(protect);
  */
 router.get('/', listReports);
 router.post('/', createReport);
+
+// Declared BEFORE /:id so "run" is never read as a report id. Express matches
+// in order, and a literal segment must win over a parameter.
+router.post('/run', runAdHoc);
 router.get('/:id', getReport);
 router.patch('/:id', updateReport);
 router.delete('/:id', deleteReport);
+
+router.get('/:id/run', runSaved);
 
 router.get('/:id/grants', listGrants);
 router.put('/:id/grants', setGrant);
