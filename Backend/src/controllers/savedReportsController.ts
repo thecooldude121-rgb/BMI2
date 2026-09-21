@@ -6,6 +6,10 @@ import { foreignIdsInTenant } from '../utils/tenantScope';
 import { buildReportQuery, ReportDefinitionError } from '../services/reports/queryBuilder';
 import { REPORT_MODULES, REPORT_FIELDS } from '../services/reports/registry';
 import {
+  AGGREGATIONS, OPERATORS, AGGREGATION_NEEDS_FIELD, OPERATOR_ARITY,
+  OPERATOR_FIELD_TYPES,
+} from '../services/reports/types';
+import {
   canViewPredicate, canEditPredicate, isOwnerPredicate,
   abilitiesFor, GRANT_LEVELS, type GrantLevel,
 } from '../services/reports/access';
@@ -103,6 +107,14 @@ export const listReports = async (req: AuthRequest, res: Response, next: NextFun
         key, label: f.label, type: f.type, module: f.module, aggregatable: !!f.aggregatable,
       })),
       grant_levels: GRANT_LEVELS,
+      // Served for the same reason modules and fields are: the builder must not
+      // keep its own copy of a vocabulary this server enforces. `arity` and
+      // `needs_field` travel with them so the form knows how many value inputs
+      // to show without re-deriving the rule.
+      aggregations: AGGREGATIONS.map(id => ({ id, needs_field: AGGREGATION_NEEDS_FIELD[id] })),
+      operators: OPERATORS.map(id => ({
+        id, arity: OPERATOR_ARITY[id], applies_to: OPERATOR_FIELD_TYPES[id],
+      })),
     });
   } catch (error) { next(error); }
 };

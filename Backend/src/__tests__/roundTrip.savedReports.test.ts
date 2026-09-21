@@ -280,6 +280,35 @@ describe('Saved reports — persistence and sharing', () => {
     expect(res.body.grant_levels).toEqual(['view', 'edit']);
   });
 
+  it('serves the aggregation and operator vocabularies, with the rules the form needs', async () => {
+    /*
+     * The builder used to carry its own picker lists, and a third of what they
+     * offered did not exist — "Revenue", "Deal Health", and an "HRMS Connection"
+     * grouping, which is a product-boundary violation shipped as a dropdown.
+     * These assertions exist so the vocabularies stay served: a client-side copy
+     * is the `invitableRolesFor` defect, which in this repo silently cost a
+     * feature before anyone noticed.
+     */
+    const res = await request(app).get('/api/v1/reports').set(auth(ws));
+
+    const count = res.body.aggregations.find((a: { id: string }) => a.id === 'count');
+    const sum = res.body.aggregations.find((a: { id: string }) => a.id === 'sum');
+    expect(count.needs_field).toBe(false);
+    expect(sum.needs_field).toBe(true);
+
+    const between = res.body.operators.find((o: { id: string }) => o.id === 'between');
+    const contains = res.body.operators.find((o: { id: string }) => o.id === 'contains');
+    const eq = res.body.operators.find((o: { id: string }) => o.id === 'eq');
+    expect(between.arity).toBe(2);
+    expect(eq.arity).toBe(1);
+    expect(res.body.operators.find((o: { id: string }) => o.id === 'is_null').arity).toBe(0);
+
+    // The type restriction the form filters on. `null` means any type; only
+    // `contains` is restricted, and the server refuses it elsewhere.
+    expect(contains.applies_to).toEqual(['string']);
+    expect(eq.applies_to).toBeNull();
+  });
+
   it('requires authentication', async () => {
     expect((await request(app).get('/api/v1/reports')).status).toBe(401);
     expect((await request(app).post('/api/v1/reports').send({ name: 'x' })).status).toBe(401);

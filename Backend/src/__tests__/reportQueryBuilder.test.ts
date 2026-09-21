@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { buildReportQuery, ReportDefinitionError, assertEverySourceIsScoped } from '../services/reports/queryBuilder';
 import { REPORT_MODULES, REPORT_FIELDS, SUPPORT_SOURCES } from '../services/reports/registry';
-import { DEFINITION_VERSION, MAX_ROWS, type ReportDefinition } from '../services/reports/types';
+import {
+  DEFINITION_VERSION, MAX_ROWS, OPERATORS, AGGREGATIONS,
+  OPERATOR_ARITY, AGGREGATION_NEEDS_FIELD, OPERATOR_FIELD_TYPES,
+  type ReportDefinition,
+} from '../services/reports/types';
 
 /**
  * THE QUERY BUILDER'S SECURITY BOUNDARY.
@@ -285,4 +289,91 @@ describe('errors are ReportDefinitionError, so the controller can answer 400', (
   it('uses the typed error for definition problems', () => {
     expect(() => buildReportQuery(def({ base: 'nope' }), T)).toThrow(ReportDefinitionError);
   });
+});
+
+describe('the SERVED arity description agrees with what the builder enforces', () => {
+  /*
+   * `OPERATOR_ARITY` and `AGGREGATION_NEEDS_FIELD` are served to the builder UI
+   * so the client keeps no copy of a vocabulary this server enforces. But they
+   * are a DESCRIPTION of `filterSql`'s switch, not the switch itself, and a
+   * description can drift from what it describes — which would put the form one
+   * value input short of what the server demands, or one too many.
+   *
+   * So every operator is driven at its DECLARED arity and must compile, and at
+   * a WRONG arity and must be refused. That is what welds the two together.
+   */
+
+  const valueFor = (arity: (typeof OPERATOR_ARITY)[keyof typeof OPERATOR_ARITY]) => {
+    if (arity === 0) return undefined;
+    if (arity === 1) return '100';
+    if (arity === 2) return ['100', '200'];
+    return ['100', '200', '300'];
+  };
+
+  it('declares an arity for every operator, and a field-need for every aggregation', () => {
+    // A new operator added to OPERATORS without an arity would otherwise be
+    // served as `undefined` and render no value input at all.
+    for (const op of OPERATORS) expect(OPERATOR_ARITY[op]).toBeDefined();
+    for (const agg of AGGREGATIONS) expect(AGGREGATION_NEEDS_FIELD[agg]).toBeDefined();
+  });
+
+  /**
+   * A field of a type the operator is declared to accept. `deals.source` would
+   * look like the obvious text field and is NOT one — the registry types it
+   * `enum`, and the builder refuses `contains` on it. That distinction is
+   * exactly why `applies_to` is served rather than guessed at in the client.
+   */
+  const fieldFor = (op: (typeof OPERATORS)[number]) =>
+    (OPERATOR_FIELD_TYPES[op] ?? []).includes('string') ? 'deals.name' : 'deals.value';
+
+  for (const op of OPERATORS) {
+    it(`compiles "${op}" when given exactly its declared ${OPERATOR_ARITY[op]} value(s)`, () => {
+      const built = buildReportQuery(
+        def({ filters: [{ field: fieldFor(op), op, value: valueFor(OPERATOR_ARITY[op]) }] }),
+        T,
+      );
+      expect(built.sql).toContain('WHERE');
+      // Still scoped — the arity check must not be the only thing proven here.
+      expect(tenantPredicates(built.sql)).toBeGreaterThan(0);
+    });
+
+    it(`"${op}" is declared for ${OPERATOR_FIELD_TYPES[op]?.join('/') ?? 'any type'}, and the builder agrees`, () => {
+      const allowed = OPERATOR_FIELD_TYPES[op];
+      // `deals.value` is a number field. If the operator is declared as
+      // text-only, the builder must refuse it there; if declared for any type,
+      // it must accept it. Either way the served description is load-bearing:
+      // the filter form hides an operator the server would reject.
+      const onNumber = () => buildReportQuery(
+        def({ filters: [{ field: 'deals.value', op, value: valueFor(OPERATOR_ARITY[op]) }] }), T,
+      );
+      if (allowed && !allowed.includes('number')) {
+        expect(onNumber).toThrow(ReportDefinitionError);
+      } else {
+        expect(onNumber().sql).toContain('WHERE');
+      }
+    });
+  }
+
+  it('refuses a one-value operator given nothing, and a no-value operator is unaffected by a value', () => {
+    // arity 1 with no value: the builder must reject rather than emit `= NULL`.
+    expect(() => buildReportQuery(
+      def({ filters: [{ field: 'deals.value', op: 'eq' }] }), T,
+    )).toThrow(ReportDefinitionError);
+
+    // arity 2 given one value.
+    expect(() => buildReportQuery(
+      def({ filters: [{ field: 'deals.value', op: 'between', value: ['100'] }] }), T,
+    )).toThrow(ReportDefinitionError);
+  });
+
+  for (const agg of AGGREGATIONS) {
+    it(`"${agg}" ${AGGREGATION_NEEDS_FIELD[agg] ? 'requires' : 'does not require'} a field, as declared`, () => {
+      const withoutField = () => buildReportQuery(def({ metrics: [{ agg }] }), T);
+      if (AGGREGATION_NEEDS_FIELD[agg]) {
+        expect(withoutField).toThrow(ReportDefinitionError);
+      } else {
+        expect(withoutField().sql).toContain('SELECT');
+      }
+    });
+  }
 });

@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT, and so are Phases 2 and 3.**
+BUILT, and so are Phases 2, 3 and 4.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -28,12 +28,43 @@ BUILT, and so are Phases 2 and 3.**
 | **1** | Hardened execution: read-only role, RLS, restricted pool, `statement_timeout`, row cap | **built** (migration 055) |
 | **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | **built** (migration 056) |
 | **3** | Run endpoints + provenance | **built** |
-| **4** | `CustomReportBuilder` wired | next |
-| **5** | `ReportDetailView` | |
+| **4** | `CustomReportBuilder` wired | **built** (a rewrite — see below) |
+| **5** | `ReportDetailView` | next |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | |
 | **7** | Exports (CSV, then PDF/Excel) | |
 | **8** | Scheduling | |
 | **9** | Caching with result age (small, droppable) | |
+
+### What Phase 4 discovered — the vocabulary was only half served
+
+The design said the client would render the served registry rather than keep its
+own copy, and Phase 2 served `modules`, `fields` and `grant_levels` accordingly.
+**It did not serve the aggregation and operator vocabularies**, so the builder
+still held those two lists locally — the exact `invitableRolesFor` shape this
+repo has a documented bug for.
+
+Worse, two rules the server enforces were nowhere in the payload at all:
+
+- **arity** — how many values an operator takes (`between` needs two, `is_null`
+  none). A form that guesses this renders the wrong number of value inputs.
+- **field-type applicability** — `contains` compiles to ILIKE and the builder
+  refuses it on anything but a `string` field. Without this served, the picker
+  offers "contains" on a currency column and the server answers 400 for a choice
+  the UI presented as valid.
+
+`OPERATOR_ARITY`, `AGGREGATION_NEEDS_FIELD` and `OPERATOR_FIELD_TYPES` in
+`types.ts` now declare all three, `GET /reports` serves them, and the builder
+filters its operator picker by the selected field's type. **They are a
+DESCRIPTION of `filterSql`'s switch, not a second implementation of it** — so
+`reportQueryBuilder.test.ts` drives every operator at its declared arity and on a
+field of a type it is and is not declared for, asserting the builder agrees. That
+is what stops the description drifting from the thing it describes.
+
+One registry fact worth recording because it is genuinely counter-intuitive:
+**`deals.source` is typed `enum`, not `string`**, so `contains` does not apply to
+it. It reads like a free-text field and is not. A client guessing which fields
+are "text" would have got that wrong, which is the concrete argument for serving
+the rule rather than inferring it.
 
 **RLS moved from last to Phase 1 on Venkat's decision**, and it is better there
 than originally argued for a reason underweighted at design time: adjacency lets
