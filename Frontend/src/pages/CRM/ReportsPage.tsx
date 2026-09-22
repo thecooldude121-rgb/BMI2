@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
+import { fetchReports, type SavedReport } from '../../utils/reportsApi';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { isWonWith, isLostWith, isOpenWith, outcomeOf } from '../../utils/pipelinesApi';
 import {
@@ -360,11 +361,23 @@ const ReportsPage: React.FC = () => {
     navigate('/crm/custom-report-builder');
   };
 
-  const handleViewReport = (reportName: string) => {
-    // Navigate to report detail view
-    const reportSlug = reportName.toLowerCase().replace(/\s+/g, '-');
-    navigate(`/crm/reports/${reportSlug}`);
-  };
+  /*
+   * `handleViewReport` IS GONE, and this comment is where it was.
+   *
+   * It did `navigate('/crm/reports/' + title.toLowerCase().replace(/\s+/g, '-'))`
+   * — a DISPLAY NAME used as a primary key, which is the defect migrations
+   * 039-043 exist to remove. ReportDetailView then title-cased the slug back
+   * into a heading and rendered ~600 lines of fabricated rows for it.
+   *
+   * Nothing on THIS page has a report id to navigate with: all 21 cards below
+   * come from UNBACKED_REPORTS, a catalogue of reports that are not built, each
+   * stating why. There is no saved_reports row behind any of them, so a "View"
+   * on them could only ever have led somewhere invented — which is exactly what
+   * it did.
+   *
+   * The workspace's REAL saved reports are listed separately by
+   * `SavedReportsSection`, and those navigate by id.
+   */
 
 
 
@@ -576,7 +589,6 @@ const ReportsPage: React.FC = () => {
             def.usesDateRange && dateBounds ? 'expected close date' : null,
             def.usesOwner && ownerKey !== 'all' ? 'owner' : null,
           ].filter(Boolean) as string[]}
-          onView={handleViewReport}
         />
       );
     });
@@ -958,9 +970,7 @@ const ReportsPage: React.FC = () => {
             change={`From ${stats.dealsWon} closed-won ${stats.dealsWon === 1 ? 'deal' : 'deals'}`}
             changeColor="text-gray-600"
             bgColor="bg-green-50"
-            reportName="Sales Overview"
-            onView={handleViewReport}
-          />
+            />
           {/* Was "89% of quota ✅ On track". The quotas table has ZERO rows and
               this page queries it nowhere, so attainment cannot be computed. */}
           <QuickStatCard
@@ -970,9 +980,7 @@ const ReportsPage: React.FC = () => {
             change={stats.decided > 0 ? `${stats.dealsLost} lost · quota not tracked` : 'No deals closed yet'}
             changeColor="text-gray-600"
             bgColor="bg-blue-50"
-            reportName="Quota Attainment"
-            onView={handleViewReport}
-          />
+            />
           <QuickStatCard
             icon={<TrendingUp className="w-6 h-6 text-purple-600" />}
             label="OPEN PIPELINE"
@@ -980,9 +988,7 @@ const ReportsPage: React.FC = () => {
             change={`${stats.openCount} open ${stats.openCount === 1 ? 'deal' : 'deals'}, excludes closed`}
             changeColor="text-gray-600"
             bgColor="bg-purple-50"
-            reportName="Pipeline Health"
-            onView={handleViewReport}
-          />
+            />
           {/* Won / decided, not won / all deals — see the note on `stats`. */}
           <QuickStatCard
             icon={<Award className="w-6 h-6 text-orange-600" />}
@@ -993,9 +999,7 @@ const ReportsPage: React.FC = () => {
               : 'No decided deals yet'}
             changeColor="text-gray-600"
             bgColor="bg-orange-50"
-            reportName="Win/Loss Analysis"
-            onView={handleViewReport}
-          />
+            />
           </div>
         )}
 
@@ -1008,6 +1012,13 @@ const ReportsPage: React.FC = () => {
           card, available or not, so "this category has no reports" cannot
           happen either.
         */}
+
+        {/*
+          * The workspace's real saved reports, ABOVE the catalogue of unbuilt
+          * ones. Ordered that way deliberately: what a user actually has should
+          * not sit below twenty-one cards explaining what they cannot have.
+          */}
+        <SavedReportsSection />
 
         {/* Sales Performance Section */}
         {true && (
@@ -1279,8 +1290,14 @@ interface QuickStatCardProps {
   change: string;
   changeColor: string;
   bgColor: string;
-  reportName: string;
-  onView: (reportName: string) => void;
+  /*
+   * `reportName` and `onView` are GONE. These four figures are REAL (derived
+   * from live deals via useDashboardData), but they were clickable and led to
+   * the slug detail page, which showed fabricated rows for whatever the title
+   * slugified to. A real number linking to an invented breakdown is the
+   * hybrid-page failure lesson 15 describes: the correct figure vouches for the
+   * fiction behind it.
+   */
   /**
    * OPTIONAL and no longer passed by the four headline cards. They used fixed
    * Unicode strings like "━━━▁▃▄▃▅▆▇▄▆▅" that drew a rising trend whatever the
@@ -1297,14 +1314,9 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
   sparkline,
   changeColor,
   bgColor,
-  reportName,
-  onView,
 }) => {
   return (
-    <div
-      onClick={() => onView(reportName)}
-      className="bg-white rounded-lg border border-gray-200 p-5 h-[140px] shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
-    >
+    <div className="bg-white rounded-lg border border-gray-200 p-5 h-[140px] shadow-sm">
       <div className="flex items-center gap-3 mb-3">
         <div className={`p-2 ${bgColor} rounded-lg`}>
           {icon}
@@ -1314,16 +1326,6 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
       <div className="text-[28px] font-bold text-gray-900 leading-none mb-2">{value}</div>
       <div className={`text-sm font-medium mb-2 ${changeColor}`}>{change}</div>
       <div className="text-xs text-gray-400 mb-2 font-mono tracking-wider">{sparkline}</div>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onView(reportName);
-        }}
-        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-      >
-        View Report
-        <ChevronRight className="w-4 h-4" />
-      </button>
     </div>
   );
 };
@@ -1365,7 +1367,12 @@ interface ReportCardProps {
   progress?: string;
   highlight?: boolean;
   editable?: boolean;
-  onView: (title: string) => void;
+  /*
+   * `onView` is GONE. Every card rendered by this component is an UNBACKED
+   * report, so there was no report to view — the button navigated to a slug URL
+   * and the page invented content to fill it. `onEdit` stays: it opens the
+   * custom report builder, which is real.
+   */
   onEdit?: (title: string) => void;
 }
 
@@ -1381,13 +1388,11 @@ const ReportCard: React.FC<ReportCardProps> = ({
   progress,
   highlight,
   editable,
-  onView,
   onEdit,
 }) => {
   return (
     <div
-      onClick={() => onView(title)}
-      className={`border rounded-lg p-4 min-h-[240px] flex flex-col hover:shadow-lg hover:-translate-y-0.5 hover:border-blue-500 transition-all duration-200 cursor-pointer relative ${
+      className={`border rounded-lg p-4 min-h-[240px] flex flex-col relative ${
         highlight ? 'border-[#ff9800] bg-[#fff3cd]' : 'border-gray-200 bg-white'
       }`}
     >
@@ -1464,20 +1469,16 @@ const ReportCard: React.FC<ReportCardProps> = ({
         someone's evidence. Export comes back when the numbers behind it are
         real.
 
-        `View` stays because /crm/reports/:slug is a real route, and `Edit`
-        because it navigates to the custom-report builder.
+        `View` IS ALSO GONE NOW, and this paragraph used to say it stayed
+        "because /crm/reports/:slug is a real route". The route was real and led
+        to a real page; what the page SHOWED for these titles was invented. P3
+        Phase 5 replaced that page with one routed by report id, and no card
+        here has an id — so the button had nowhere honest to go.
+
+        `Edit` stays, because it navigates to the custom-report builder, which
+        is now genuinely wired.
       */}
       <div className="flex items-center gap-2 mt-2 flex-shrink-0">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onView(title);
-          }}
-          className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium hover:bg-blue-50 rounded transition-colors"
-        >
-          <Eye className="w-4 h-4 inline mr-1" />
-          View
-        </button>
         {editable && onEdit && (
           <button
             onClick={(e) => {
@@ -1491,6 +1492,106 @@ const ReportCard: React.FC<ReportCardProps> = ({
           </button>
         )}
       </div>
+    </div>
+  );
+};
+
+
+/**
+ * THE WORKSPACE'S OWN SAVED REPORTS — the real ones, and the only thing on this
+ * page that navigates to a report.
+ *
+ * Added in P3 Phase 5 because removing the slug route otherwise orphaned both
+ * ends: 21 catalogue cards with a "View" leading nowhere honest, and a new
+ * `/crm/reports/:reportId` route with no path to it but a typed URL. A route
+ * with no navigation is the documented dashboard bug — a fix that was correct
+ * and invisible for three commits because the sidebar pointed elsewhere
+ * (lesson 5).
+ *
+ * These rows come from GET /reports, which already returns only what the caller
+ * owns or has been granted — the visibility predicate is welded into the query
+ * (services/reports/access.ts), so an absent report is absent, never redacted.
+ * This component applies no filtering of its own; there is nothing here to
+ * forget.
+ */
+const SavedReportsSection: React.FC = () => {
+  const navigate = useNavigate();
+  const [reports, setReports] = useState<SavedReport[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchReports()
+      .then(list => { if (!cancelled) setReports(list.reports); })
+      .catch((e: Error) => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-gray-900">Your saved reports</h2>
+        <button
+          onClick={() => navigate('/crm/custom-report-builder')}
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+        >
+          New report
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Couldn&rsquo;t load your saved reports.
+          <span className="block text-red-600 mt-0.5 text-xs">{error}</span>
+          {/* Not an empty list: "you have none" and "we could not ask" are
+              different facts, and showing the first for the second is a false
+              statement about the user's own data. */}
+        </div>
+      )}
+
+      {!error && reports === null && (
+        <p className="text-sm text-gray-400">Loading…</p>
+      )}
+
+      {!error && reports?.length === 0 && (
+        <div className="rounded-lg border border-gray-200 bg-white px-5 py-8 text-center">
+          <p className="text-sm text-gray-700">You haven&rsquo;t saved any reports yet.</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Build one and it appears here. Saved reports are private until you share them.
+          </p>
+          <button
+            onClick={() => navigate('/crm/custom-report-builder')}
+            className="mt-3 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            Build a report
+          </button>
+        </div>
+      )}
+
+      {!error && reports && reports.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {reports.map(r => (
+            <button
+              key={r.id}
+              /* BY ID. This is the whole point of the phase. */
+              onClick={() => navigate(`/crm/reports/${encodeURIComponent(r.id)}`)}
+              className="text-left border border-gray-200 bg-white rounded-lg p-4 hover:shadow-md hover:border-blue-500 transition-all"
+            >
+              <h3 className="text-base font-semibold text-gray-900">{r.name}</h3>
+              {r.description && (
+                <p className="text-xs text-gray-600 mt-1 line-clamp-2">{r.description}</p>
+              )}
+              <p className="text-xs text-gray-400 mt-2">
+                {r.category ?? 'Uncategorised'}
+                {' · '}
+                {/* Shared-with-me is worth distinguishing from mine: it changes
+                    which controls the detail page will offer. */}
+                {r.abilities.can_delete ? 'Yours' : 'Shared with you'}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

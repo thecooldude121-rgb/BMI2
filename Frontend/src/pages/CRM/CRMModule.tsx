@@ -89,7 +89,13 @@ const CRMModule = () => {
           <Route path="/activities/:id" element={<ActivityDetailPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/custom-report-builder" element={<CustomReportBuilder />} />
-          <Route path="/reports/:reportSlug" element={<ReportDetailView />} />
+          {/*
+            * `:reportId`, NOT `:reportSlug`. The slug was a display name run
+            * through toLowerCase().replace(/\s+/g, '-'), which does not
+            * round-trip ("Revenue by Industry" came back "Revenue By Industry")
+            * and collides for two reports sharing a name. P3 Phase 5.
+            */}
+          <Route path="/reports/:reportId" element={<ReportDetailView />} />
           <Route path="/documents-demo" element={<DocumentsContextDemo />} />
           <Route path="/documents" element={<DocumentsLibrary />} />
           <Route path="/documents/:documentId" element={<DocumentDetailPage />} />

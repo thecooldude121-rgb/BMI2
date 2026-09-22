@@ -247,3 +247,50 @@ export interface OperatorSpec {
 /** An operator with no declared restriction applies to every field type. */
 export const operatorAppliesTo = (op: OperatorSpec, fieldType: string): boolean =>
   op.applies_to === null || op.applies_to.includes(fieldType);
+
+// ── Sharing ───────────────────────────────────────────────────────────────
+//
+// Private is the ABSENCE of grants, not a `visibility` column — there is no
+// such column, deliberately, so "private" cannot disagree with who actually
+// has access. One row per (report, user) holding one level, which is what makes
+// edit-without-view unrepresentable rather than merely discouraged.
+
+export interface ReportGrant {
+  user_id: number;
+  level: GrantLevel;
+  name: string | null;
+  email: string;
+  created_at: string;
+}
+
+export type GrantLevel = 'view' | 'edit';
+
+export async function fetchGrants(
+  reportId: string,
+): Promise<{ grants: ReportGrant[]; grantLevels: GrantLevel[] }> {
+  const json = await unwrap(await fetch(
+    `${API_BASE}/reports/${encodeURIComponent(reportId)}/grants`,
+    { headers: getAuthHeaders() },
+  ));
+  return {
+    grants: (json.data ?? []) as ReportGrant[],
+    grantLevels: (json.grant_levels ?? []) as GrantLevel[],
+  };
+}
+
+export async function setGrant(
+  reportId: string, userId: number, level: GrantLevel,
+): Promise<void> {
+  await unwrap(await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/grants`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ user_id: userId, level }),
+  }));
+}
+
+export async function revokeGrant(reportId: string, userId: number): Promise<void> {
+  await unwrap(await fetch(
+    `${API_BASE}/reports/${encodeURIComponent(reportId)}/grants/${userId}`,
+    { method: 'DELETE', headers: getAuthHeaders() },
+  ));
+}

@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT, and so are Phases 2, 3 and 4.**
+BUILT, and so are Phases 2, 3, 4 and 5.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -29,11 +29,54 @@ BUILT, and so are Phases 2, 3 and 4.**
 | **2** | `saved_reports` + `saved_report_grants` + persistence + permissions | **built** (migration 056) |
 | **3** | Run endpoints + provenance | **built** |
 | **4** | `CustomReportBuilder` wired | **built** (a rewrite — see below) |
-| **5** | `ReportDetailView` | next |
-| **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | |
+| **5** | `ReportDetailView` | **built** (routed by id; + the saved-reports list) |
+| **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | next |
 | **7** | Exports (CSV, then PDF/Excel) | |
 | **8** | Scheduling | |
 | **9** | Caching with result age (small, droppable) | |
+
+### What Phase 5 had to include, and why it is not scope creep
+
+The phase was "route ReportDetailView by id, not slug". Doing only that would
+have left the work incoherent, because **all 21 cards on ReportsPage are
+`UNBACKED_REPORTS`** — a catalogue of reports that are not built, each carrying
+its reason. Not one is a `saved_reports` row.
+
+So the old `View` button had no id to be converted to an id-based link: it could
+only ever lead somewhere invented, which is exactly what it did. Removing the
+slug route therefore orphaned both ends at once — 21 buttons pointing nowhere
+honest, and a new `/crm/reports/:reportId` reachable only by typing a URL.
+
+A route with no navigation path is this project's documented dashboard bug: a
+fix that was correct and invisible for three commits because the sidebar pointed
+at `/dashboard` while the page lived at `/crm/dashboard` (lesson 5). So Phase 5
+also added **`SavedReportsSection`** — the workspace's real saved reports, from
+the `GET /reports` that Phase 2 already served, each linking by id. No new
+endpoint, no new query.
+
+What did NOT come along: the canned reports themselves (Revenue by Industry and
+the rest) stay Phase 6. This is the list and the detail page, not the content.
+
+**Sharing landed here too**, because Phase 2 built the grants schema and all
+three endpoints and no phase owned the UI. The facade had a share modal
+collecting three hardcoded colleagues, an "allow edit" switch and a "notify by
+email" switch, persisting none of it — two of those three now exist for real.
+The email notification does not, and is not offered: `services/email` has two
+consumers and this is not one, so the dialog says plainly that nobody is
+emailed.
+
+### The slug was a display name used as a primary key
+
+Worth recording next to the `forecast_snapshots.rep_name` and
+`deals.company_name` decisions, because it is the same defect in a third place:
+
+`/crm/reports/:reportSlug` was fed `title.toLowerCase().replace(/\s+/g, '-')`
+by the caller, and the page title-cased it back to produce its heading. It did
+not round-trip — "Revenue by Industry" returned as "Revenue By Industry" — and
+two reports sharing a name would have shared a URL. `saved_reports` has
+`UNIQUE (tenant_id, name)`, so names are unique per workspace *today*, which is
+precisely the kind of incidental fact that makes a name-as-key look safe until
+someone relaxes the constraint.
 
 ### What Phase 4 discovered — the vocabulary was only half served
 

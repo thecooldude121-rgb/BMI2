@@ -1,1212 +1,542 @@
-import React, { useState } from 'react';
-import { Button } from '../../components/ui/Button';
-import PreviewBanner from '../../components/common/PreviewBanner';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Download, Share2, Star, Clock, Filter, RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Activity, Home, ChevronRight, ChevronDown, Mail, FileSpreadsheet, FileText, BarChart3, PieChart, LineChart, Table, Eye, Info, CheckCircle } from 'lucide-react';
+import {
+  ArrowLeft, Download, Share2, Pencil, Trash2, RefreshCw, AlertCircle, Clock, X,
+} from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
+import ProvenanceNote from '../../components/Reports/ProvenanceNote';
+import {
+  fetchReport, runSavedReport, deleteReport,
+  fetchGrants, setGrant, revokeGrant, ReportsApiError,
+  type SavedReport, type ReportRun, type ReportGrant, type GrantLevel,
+} from '../../utils/reportsApi';
+import { fetchRoster, type WorkspaceMember } from '../../utils/usersApi';
+
+/**
+ * SAVED REPORT DETAIL — P3 Phase 5. The last of the report facades.
+ *
+ * ─── ROUTED BY ID, AND THE OLD ROUTE WAS THE BUG ──────────────────────────
+ *
+ * This page used to live at `/crm/reports/:reportSlug`, where the slug was a
+ * DISPLAY NAME run through `toLowerCase().replace(/\s+/g, '-')` by the caller,
+ * and the page then title-cased it back to produce a heading. That is a display
+ * name used as a primary key — the defect migrations 039-043 exist to remove,
+ * and the one this project has rejected for `forecast_snapshots.rep_name`, for
+ * `deals.company_name`, and for the meeting/document polymorphic references.
+ *
+ * It did not even round-trip: "Revenue by Industry" came back as "Revenue By
+ * Industry". And two reports sharing a name would have shared a URL.
+ *
+ * It is now `/crm/reports/:reportId`, resolving a real `saved_reports.id`. A
+ * report that does not exist is a 404 saying so, not a page that renders
+ * whatever its URL happened to spell.
+ *
+ * ─── EVERY FIGURE COMES FROM GET /reports/:id/run ──────────────────────────
+ *
+ * The old page's `getReportData(slug)` returned ~600 lines of fabricated rows —
+ * "GlobalCorp Industries", "TechVision Solutions", owners "Alex Rodriguez" and
+ * "Sarah Chen" — the same fixture-name family as the deleted meeting and
+ * gamification fixtures. It carried a PREVIEW banner, which is why it survived;
+ * a banner is not enough for rows that name people and quote their numbers.
+ *
+ * There is no fallback path here. If the run fails, the failure is what renders.
+ */
+
+const fmt = (v: unknown): React.ReactNode =>
+  v === null || v === undefined
+    ? <span className="text-gray-300">—</span>
+    : String(v);
+
+/**
+ * The runner aliases its SELECT list `dim_0..n` then `metric_0..n`, indexed
+ * within each list, while `columns` runs dimensions-then-metrics. Position is
+ * therefore not alias index once there are two dimensions. Same helper as the
+ * builder, same reason: the failure mode is a correct number under the wrong
+ * heading.
+ */
+const rowKeysFor = (columns: ReportRun['columns']): string[] => {
+  let dims = 0, metrics = 0;
+  return columns.map(c => (c.kind === 'dimension' ? `dim_${dims++}` : `metric_${metrics++}`));
+};
+
+type LoadError = { message: string; kind: 'missing' | 'stale' | 'timeout' | 'other' };
 
 const ReportDetailView: React.FC = () => {
   const navigate = useNavigate();
-  const { reportSlug } = useParams<{ reportSlug: string }>();
-  const [selectedDateRange, setSelectedDateRange] = useState('month');
-  const [selectedOwner, setSelectedOwner] = useState('all');
-  const [selectedMetric, setSelectedMetric] = useState('all');
-  const [isFavorited, setIsFavorited] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [successToastMessage, setSuccessToastMessage] = useState('');
-  const [showShareModal, setShowShareModal] = useState(false);
+  // `reportId`, not `reportSlug`. The route parameter is the id.
+  const { reportId } = useParams<{ reportId: string }>();
 
-  // Schedule modal state
-  const [scheduleFrequency, setScheduleFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const [scheduleTime, setScheduleTime] = useState('09:00');
-  const [scheduleRecipients, setScheduleRecipients] = useState({
-    alex: true,
-    sarah: true,
-    mike: false,
-  });
-  const [scheduleFormat, setScheduleFormat] = useState<'pdf' | 'excel' | 'csv'>('pdf');
+  const [report, setReport] = useState<SavedReport | null>(null);
+  const [run, setRun] = useState<ReportRun | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [rerunning, setRerunning] = useState(false);
+  const [ranAt, setRanAt] = useState<Date | null>(null);
 
-  // Share modal state
-  const [shareSearch, setShareSearch] = useState('');
-  const [shareRecipients, setShareRecipients] = useState({
-    sarah: true,
-    mike: true,
-    emily: false,
-  });
-  const [shareMessage, setShareMessage] = useState('');
-  const [allowEdit, setAllowEdit] = useState(true);
-  const [notifyEmail, setNotifyEmail] = useState(true);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Convert slug to report name
-  const reportName = reportSlug?.split('-').map(word =>
-    word.charAt(0).toUpperCase() + word.slice(1)
-  ).join(' ') || 'Report';
-
-  const handleBack = () => {
-    navigate('/crm/reports');
+  const classify = (e: unknown): LoadError => {
+    const err = e as ReportsApiError;
+    const status = err?.status;
+    return {
+      message: err?.message ?? 'Something went wrong.',
+      kind: status === 404 ? 'missing'
+        : status === 409 ? 'stale'
+        : status === 504 ? 'timeout'
+        : 'other',
+    };
   };
 
-  const handleExportPDF = () => {
-    // Was: console.log('Exporting report as PDF'). The menu item looked live
-    // and produced nothing — the dead-button problem. There is no report to
-    // export: every figure on this page is a literal (see getReportData).
-    setShowExportMenu(false);
-    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
-  };
+  const load = useCallback(async (mode: 'initial' | 'rerun') => {
+    if (!reportId) return;
+    if (mode === 'initial') setLoading(true); else setRerunning(true);
+    setError(null);
+    try {
+      // Metadata first: a 404 here means the report is gone or not shared with
+      // this caller, and running it would answer the same 404 less clearly.
+      const meta = mode === 'initial' ? await fetchReport(reportId) : report;
+      if (mode === 'initial') setReport(meta);
 
-  const handleExportCSV = () => {
-    // Was: console.log('Exporting report as CSV'). The menu item looked live
-    // and produced nothing — the dead-button problem. There is no report to
-    // export: every figure on this page is a literal (see getReportData).
-    setShowExportMenu(false);
-    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
-  };
+      const result = await runSavedReport(reportId);
+      setRun(result);
+      // The age of the figures, recorded when they arrived. Phase 9 may serve
+      // results from a cache, and a cached result must show its age — so the
+      // page states when it ran from the start rather than gaining it later.
+      setRanAt(new Date());
+    } catch (e) {
+      setRun(null);
+      setError(classify(e));
+    } finally {
+      setLoading(false);
+      setRerunning(false);
+    }
+  }, [reportId, report]);
 
-  const handleExportExcel = () => {
-    // Was: console.log('Exporting report as Excel'). The menu item looked live
-    // and produced nothing — the dead-button problem. There is no report to
-    // export: every figure on this page is a literal (see getReportData).
-    setShowExportMenu(false);
-    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
-  };
+  useEffect(() => { void load('initial'); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [reportId]);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const rowKeys = useMemo(() => (run ? rowKeysFor(run.columns) : []), [run]);
+  const dimCount = useMemo(
+    () => (run ? run.columns.filter(c => c.kind === 'dimension').length : 0),
+    [run],
+  );
 
-  const handleSchedule = () => {
-    setShowScheduleModal(true);
-  };
-
-  const handleScheduleConfirm = () => {
-    console.log('Scheduling report:', {
-      frequency: scheduleFrequency,
-      time: scheduleTime,
-      recipients: scheduleRecipients,
-      format: scheduleFormat,
-    });
-    setShowScheduleModal(false);
-    setSuccessToastMessage('Scheduling reports is not available yet — nothing was scheduled.');
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
-
-  const toggleRecipient = (recipient: 'alex' | 'sarah' | 'mike') => {
-    setScheduleRecipients(prev => ({
-      ...prev,
-      [recipient]: !prev[recipient],
-    }));
-  };
-
-  const toggleShareRecipient = (recipient: 'sarah' | 'mike' | 'emily') => {
-    setShareRecipients(prev => ({
-      ...prev,
-      [recipient]: !prev[recipient],
-    }));
-  };
-
-  const handleShareConfirm = () => {
-    const sharedCount = Object.values(shareRecipients).filter(Boolean).length;
-    console.log('Sharing report:', {
-      recipients: shareRecipients,
-      message: shareMessage,
-      allowEdit,
-      notifyEmail,
-    });
-    setShowShareModal(false);
-    setSuccessToastMessage(`Report shared with ${sharedCount} ${sharedCount === 1 ? 'person' : 'people'}`);
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
-
-  const handleEmailReport = () => {
-    console.log('Opening email modal');
-    setShowExportMenu(false);
-    // TODO: Implement email modal
-  };
-
-  const handleToggleFavorite = () => {
-    setIsFavorited(!isFavorited);
-  };
-
-  const handleRefresh = () => {
-    console.log('Refreshing report data');
-  };
-
-  const handleDrillDown = (dataPoint: string) => {
-    console.log('Drilling down into:', dataPoint);
-  };
-
-  const handleRowClick = (type: string, id: string, name: string) => {
-    console.log(`Navigating to ${type} detail:`, id);
-
-    // Navigate to appropriate detail page based on type
-    switch (type) {
-      case 'deal':
-        navigate(`/crm/deals/${id}`);
-        break;
-      case 'contact':
-        navigate(`/crm/contacts/${id}`);
-        break;
-      case 'account':
-        navigate(`/accounts/${id}`);
-        break;
-      case 'lead':
-        navigate(`/crm/leads/${id}`);
-        break;
-      default:
-        console.log('Unknown type:', type);
+  const onDelete = async () => {
+    if (!reportId) return;
+    try {
+      await deleteReport(reportId);
+      navigate('/crm/reports', { replace: true });
+    } catch (e) {
+      setConfirmDelete(false);
+      setError(classify(e));
     }
   };
 
-  // Mock data for the report
-  const reportData = getReportData(reportName);
+  if (!reportId) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <CRMNavigation />
+        <div className="p-8"><p className="text-[13px] text-gray-600">No report specified.</p></div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <CRMNavigation />
+        <div className="p-8"><p className="text-[12px] text-gray-400">Loading report…</p></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <CRMNavigation />
 
-      <div className="p-8">
-        {/*
-          * PREVIEW. Every figure below comes from getReportData(), which
-          * branches on the URL SLUG and returns hardcoded chart series,
-          * pipeline splits and table rows. Nothing on this page is read from
-          * the workspace. The real build is P3 in the facade-page audit and
-          * depends on CustomReportBuilder gaining a backend first — there is
-          * no saved-report definition for this page to render.
-          */}
-        <PreviewBanner
-          detail={<>
-            <strong>Every number on this page is sample content.</strong> The charts,
-            the pipeline breakdown and the table rows are fixed examples chosen by
-            the report name in the URL — none of it is read from your workspace,
-            and export and scheduling are not built.
-          </>}
-          insteadTry="The Reports page states which of its cards compute from real data and which cannot yet, with the reason."
-        />
-        {/* Breadcrumb */}
-        <div className="mb-6 flex items-center text-sm text-gray-600">
-          <Home className="w-4 h-4 mr-2" />
-          <button onClick={() => navigate('/')} className="hover:text-blue-600">
-            Dashboard
-          </button>
-          <ChevronRight className="w-4 h-4 mx-2" />
-          <button onClick={handleBack} className="hover:text-blue-600">
-            Reports
-          </button>
-          <ChevronRight className="w-4 h-4 mx-2" />
-          <span className="text-gray-900 font-medium">{reportName}</span>
-        </div>
+      <div className="p-8 max-w-6xl">
+        <button
+          onClick={() => navigate('/crm/reports')}
+          className="flex items-center gap-2 text-[13px] text-gray-600 hover:text-gray-900 mb-4"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Reports
+        </button>
 
-        {/* Header */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleBack}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">{reportName}</h1>
-                <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
-                  <Clock className="w-4 h-4" />
-                  <span>Last updated: 5 minutes ago</span>
-                </div>
-              </div>
-            </div>
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-[22px] font-semibold text-gray-900">
+              {/* The STORED name. Not reconstructed from the URL. */}
+              {report?.name ?? 'Report'}
+            </h1>
+            {report?.description && (
+              <p className="text-[13px] text-gray-600 mt-1">{report.description}</p>
+            )}
+            <p className="text-[12px] text-gray-400 mt-1.5">
+              {report?.category && <span>{report.category} · </span>}
+              {/* Ownerless is a real state — the owner FK is ON DELETE SET NULL,
+                  so a report outlives the person who made it. Say so plainly
+                  rather than printing a blank. */}
+              {report?.owner_name
+                ? <span>Created by {report.owner_name}</span>
+                : <span>No owner (the person who created this no longer has an account)</span>}
+              {ranAt && (
+                <span className="ml-1">
+                  {' · '}Ran at {ranAt.toLocaleTimeString()}
+                  {run && <> in {run.ms} ms</>}
+                </span>
+              )}
+            </p>
+          </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleToggleFavorite}
-                className={`px-4 py-2 border rounded-lg flex items-center gap-2 transition-all ${
-                  isFavorited
-                    ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Star className={`w-4 h-4 ${isFavorited ? 'fill-yellow-400' : ''}`} />
-                {isFavorited ? 'Favorited' : 'Favorite'}
-              </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" onClick={() => void load('rerun')} disabled={rerunning}>
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${rerunning ? 'animate-spin' : ''}`} aria-hidden="true" />
+              {rerunning ? 'Running…' : 'Re-run'}
+            </Button>
 
-              <div className="relative">
-                <button
-                  onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                {showExportMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
-                    <button
-                      onClick={handleExportPDF}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Export as PDF
-                    </button>
-                    <button
-                      onClick={handleExportCSV}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      Export as CSV
-                    </button>
-                    <button
-                      onClick={handleExportExcel}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      Export as Excel
-                    </button>
-                    <div className="border-t border-gray-200 my-2"></div>
-                    <button
-                      onClick={handleEmailReport}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Mail className="w-4 h-4" />
-                      Email Report
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowExportMenu(false);
-                        setShowScheduleModal(true);
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Clock className="w-4 h-4" />
-                      Schedule Delivery
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Share2 className="w-4 h-4" />
-                Share
-              </button>
-
-              <Button
-                onClick={handleSchedule}
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule
+            {/*
+              * Controls are rendered from the SERVER'S `abilities`, and an
+              * ability the caller lacks gets NO control rather than a disabled
+              * one — the same call TeamManagement's role picker makes: a
+              * disabled control advertises an action that does not exist for
+              * you. Delete and re-share are owner-only, narrower than `edit`.
+              */}
+            {report?.abilities.can_edit && (
+              <Button variant="secondary"
+                onClick={() => navigate(`/crm/custom-report-builder?id=${encodeURIComponent(reportId)}`)}>
+                <Pencil className="h-4 w-4 mr-1.5" aria-hidden="true" /> Edit
               </Button>
-            </div>
-          </div>
-
-          {/* Filters Bar */}
-          <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Date Range:</label>
-              <select aria-label="Date Range:"
-                value={selectedDateRange}
-                onChange={(e) => setSelectedDateRange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-                <option value="quarter">This Quarter</option>
-                <option value="year">This Year</option>
-                <option value="last30">Last 30 Days</option>
-                <option value="last90">Last 90 Days</option>
-                <option value="custom">Custom Range...</option>
-              </select>
-            </div>
-
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Owner:</label>
-              <select aria-label="Owner:"
-                value={selectedOwner}
-                onChange={(e) => setSelectedOwner(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Team</option>
-                <option value="me">Me Only</option>
-                <option value="alex">Alex Rodriguez</option>
-                <option value="sarah">Sarah Chen</option>
-                <option value="mike">Mike Johnson</option>
-              </select>
-            </div>
-
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Metric:</label>
-              <select aria-label="Metric:"
-                value={selectedMetric}
-                onChange={(e) => setSelectedMetric(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Metrics</option>
-                <option value="revenue">Revenue</option>
-                <option value="deals">Deals</option>
-                <option value="pipeline">Pipeline</option>
-              </select>
-            </div>
-
-            <div className="flex items-end gap-2">
-              <button
-                onClick={() => setShowFilterPanel(!showFilterPanel)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Filter className="w-4 h-4" />
-                More Filters
-              </button>
-              <button
-                onClick={handleRefresh}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </div>
+            )}
+            {report?.abilities.can_share && (
+              <Button variant="secondary" onClick={() => setShareOpen(true)}>
+                <Share2 className="h-4 w-4 mr-1.5" aria-hidden="true" /> Share
+              </Button>
+            )}
+            {report?.abilities.can_delete && (
+              <Button variant="secondary" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="h-4 w-4 mr-1.5" aria-hidden="true" /> Delete
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Additional Filters Panel */}
-        {showFilterPanel && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Filters</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Stage:</label>
-                <select aria-label="Stage:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option>All Stages</option>
-                  <option>Qualification</option>
-                  <option>Proposal</option>
-                  <option>Negotiation</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Industry:</label>
-                <select aria-label="Industry:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option>All Industries</option>
-                  <option>SaaS</option>
-                  <option>Enterprise</option>
-                  <option>Healthcare</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Deal Size:</label>
-                <select aria-label="Deal Size:" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  <option>All Sizes</option>
-                  <option>Small ($0-25K)</option>
-                  <option>Medium ($25K-100K)</option>
-                  <option>Large ($100K+)</option>
-                </select>
+        {/* ── Failure states, each saying which one it is ─────────────────── */}
+        {error && (
+          <div
+            data-testid={`report-error-${error.kind}`}
+            className={`rounded-lg border px-4 py-3 mb-5 flex items-start gap-2 ${
+              error.kind === 'stale' ? 'border-amber-300 bg-amber-50' : 'border-red-200 bg-red-50'
+            }`}
+          >
+            <AlertCircle
+              className={`h-4 w-4 flex-shrink-0 mt-0.5 ${error.kind === 'stale' ? 'text-amber-600' : 'text-red-600'}`}
+              aria-hidden="true"
+            />
+            <div className={`text-[12px] ${error.kind === 'stale' ? 'text-amber-900' : 'text-red-800'}`}>
+              {error.kind === 'missing' && (
+                <>
+                  <strong>This report doesn&rsquo;t exist, or isn&rsquo;t shared with you.</strong>
+                  {/* Deliberately ONE message for both, the same reason a failed
+                      login does not say which half was wrong: distinguishing
+                      them tells a prober which report ids exist. */}
+                  <span className="block mt-1">
+                    Reports are private unless their owner shares them.
+                  </span>
+                </>
+              )}
+              {error.kind === 'stale' && (
+                <>
+                  <strong>This report can no longer run.</strong> A field or module it refers
+                  to is no longer available, so nothing is shown rather than a partial
+                  result.
+                  <span className="block mt-1">{error.message}</span>
+                  {report?.abilities.can_edit
+                    ? <span className="block mt-1">Open it in the builder to fix the definition.</span>
+                    : <span className="block mt-1">Ask its owner to update the definition.</span>}
+                </>
+              )}
+              {error.kind === 'timeout' && (
+                <>
+                  <strong>This report took too long and was stopped.</strong>
+                  <span className="block mt-1">
+                    Nothing is shown, because a partial answer to a query that was cut off
+                    is not a smaller version of the right answer. Narrowing the filters
+                    usually fixes it.
+                  </span>
+                </>
+              )}
+              {error.kind === 'other' && (
+                <>
+                  <strong>Couldn&rsquo;t run this report.</strong>
+                  <span className="block mt-1">{error.message}</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── The result ─────────────────────────────────────────────────── */}
+        {run && (
+          <>
+            {/* Disclosure first. The seeded-vs-real split is not a footnote:
+                most of this workspace's core data is a synthetic seed load, so
+                a figure read without it is a figure read wrong. */}
+            <div className="mb-4">
+              <ProvenanceNote provenance={run.provenance} />
+            </div>
+
+            <section className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+              {run.rows.length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <p className="text-[13px] text-gray-700">No rows matched this report.</p>
+                  <p className="text-[12px] text-gray-500 mt-1">
+                    That is a result, not a failure — nothing in this workspace fits the
+                    report&rsquo;s filters.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {run.columns.map((c, i) => (
+                          <th
+                            key={c.key}
+                            className={`px-4 py-2.5 font-semibold text-gray-600 border-b border-gray-200 ${
+                              i >= dimCount ? 'text-right' : 'text-left'
+                            }`}
+                          >
+                            {c.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {run.rows.map((r, i) => (
+                        <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                          {run.columns.map((c, n) => (
+                            <td
+                              key={c.key}
+                              className={`px-4 py-2.5 text-gray-800 ${
+                                n >= dimCount ? 'text-right tabular-nums' : ''
+                              }`}
+                            >
+                              {fmt(r[rowKeys[n]])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/*
+              * Export and scheduling are NOT rendered as controls.
+              *
+              * The old page had a download menu whose items were `console.log`
+              * calls behind a "Report exported successfully" toast with a "View
+              * File" button — a user would go looking on disk for a file that
+              * was never written. And a schedule modal collecting a frequency,
+              * a time, a format and three hardcoded recipients ("alex",
+              * "sarah", "mike") that went nowhere.
+              *
+              * Both are real, funded phases (7 and 8). Until then this states
+              * where they are rather than offering a button that lies, because
+              * a dead control is worse than an absent one: a user plans around
+              * it.
+              */}
+            <p className="text-[12px] text-gray-400 mt-3 flex items-center gap-1.5">
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              Export and scheduled delivery aren&rsquo;t built yet. The figures above are
+              live, so there is nothing stopping them — they are just not done.
+            </p>
+          </>
+        )}
+
+        {/* ── Delete confirmation ────────────────────────────────────────── */}
+        {confirmDelete && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full p-5" role="dialog" aria-label="Confirm delete">
+              <h2 className="text-[15px] font-semibold text-gray-900">
+                Delete &ldquo;{report?.name}&rdquo;?
+              </h2>
+              <p className="text-[12px] text-gray-600 mt-2">
+                This removes the saved report and everyone&rsquo;s access to it. The deals,
+                companies and contacts it reports on are not touched.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+                <Button onClick={() => void onDelete()}>Delete report</Button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Key Metrics Cards */}
-        <div className="grid grid-cols-4 gap-6 mb-6">
-          <MetricCard
-            icon={<DollarSign className="w-6 h-6 text-green-600" />}
-            label="Total Revenue"
-            value="$847,000"
-            change="+12.5%"
-            trend="up"
-            bgColor="bg-green-50"
+        {shareOpen && report && (
+          <ShareDialog
+            reportId={reportId}
+            reportName={report.name}
+            onClose={() => setShareOpen(false)}
           />
-          <MetricCard
-            icon={<Target className="w-6 h-6 text-blue-600" />}
-            label="Deals Won"
-            value="23"
-            change="+8 deals"
-            trend="up"
-            bgColor="bg-blue-50"
-          />
-          <MetricCard
-            icon={<TrendingUp className="w-6 h-6 text-purple-600" />}
-            label="Pipeline Value"
-            value="$2.4M"
-            change="+8.2%"
-            trend="up"
-            bgColor="bg-purple-50"
-          />
-          <MetricCard
-            icon={<Users className="w-6 h-6 text-orange-600" />}
-            label="Win Rate"
-            value="68%"
-            change="+5 points"
-            trend="up"
-            bgColor="bg-orange-50"
-          />
-        </div>
-
-        {/* Main Charts Section */}
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          {/* Revenue Trend Chart */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Revenue Trend</h3>
-              <div className="flex items-center gap-2">
-                <button className="p-2 hover:bg-gray-100 rounded">
-                  <BarChart3 className="w-4 h-4 text-gray-600" />
-                </button>
-                <button className="p-2 hover:bg-gray-100 rounded">
-                  <LineChart className="w-4 h-4 text-gray-600" />
-                </button>
-              </div>
-            </div>
-            <div className="h-64 flex items-end justify-between gap-2">
-              {reportData.chartData.map((item, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleDrillDown(item.label)}
-                  className="flex-1 flex flex-col items-center gap-2 hover:opacity-80 transition-opacity group"
-                >
-                  <div className="relative w-full bg-blue-100 rounded-t hover:bg-blue-200 transition-colors cursor-pointer" style={{ height: `${item.value}%` }}>
-                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                      ${item.amount}K
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-600">{item.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
-              <Info className="w-4 h-4" />
-              <span>Click any bar to drill down into specific records</span>
-            </div>
-          </div>
-
-          {/* Pipeline Distribution Chart */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Pipeline by Stage</h3>
-              <button className="p-2 hover:bg-gray-100 rounded">
-                <PieChart className="w-4 h-4 text-gray-600" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              {reportData.pipelineData.map((stage, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleDrillDown(stage.name)}
-                  className="w-full text-left hover:bg-gray-50 p-3 rounded-lg transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-900">{stage.name}</span>
-                    <span className="text-sm text-gray-600">${stage.value}K ({stage.deals} deals)</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${stage.color}`}
-                      style={{ width: `${stage.percentage}%` }}
-                    ></div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
-              <Info className="w-4 h-4" />
-              <span>Click any stage to view deals in that stage</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Data Table */}
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Detailed Records</h3>
-                <p className="text-sm text-gray-600 mt-1">Click any row to view full details</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                  <Table className="w-4 h-4" />
-                  View All
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Value
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Stage
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Owner
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {reportData.tableData.map((row, index) => (
-                  <tr
-                    key={index}
-                    onClick={() => handleRowClick(row.type, row.id, row.name)}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="text-sm font-medium text-gray-900">{row.name}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {row.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${row.value}K
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {row.stage}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {row.owner}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        row.status === 'Won' ? 'bg-green-100 text-green-800' :
-                        row.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {row.status === 'Won' && <CheckCircle className="w-3 h-3" />}
-                        {row.status === 'In Progress' && <Activity className="w-3 h-3" />}
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRowClick(row.type, row.id, row.name);
-                        }}
-                        className="text-blue-600 hover:text-blue-900 flex items-center gap-1 ml-auto"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between text-sm text-gray-600">
-              <span>Showing 1-10 of 156 records</span>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-white">
-                  Previous
-                </button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-white">
-                  Next
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Schedule Modal */}
-        {showScheduleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Schedule Report Delivery</h3>
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <span className="text-2xl">&times;</span>
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-6 space-y-6">
-                <div className="text-sm text-gray-600">
-                  Report: <span className="font-medium text-gray-900">{reportName}</span>
-                </div>
-
-                {/* Frequency */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Frequency: <span className="text-red-500">*</span>
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={scheduleFrequency === 'daily'}
-                        onChange={() => setScheduleFrequency('daily')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Daily</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={scheduleFrequency === 'weekly'}
-                        onChange={() => setScheduleFrequency('weekly')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Weekly (Every Monday)</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={scheduleFrequency === 'monthly'}
-                        onChange={() => setScheduleFrequency('monthly')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Monthly (1st of month)</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Time */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time:</label>
-                  <select aria-label="Time:"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="00:00">12:00 AM</option>
-                    <option value="01:00">1:00 AM</option>
-                    <option value="02:00">2:00 AM</option>
-                    <option value="03:00">3:00 AM</option>
-                    <option value="04:00">4:00 AM</option>
-                    <option value="05:00">5:00 AM</option>
-                    <option value="06:00">6:00 AM</option>
-                    <option value="07:00">7:00 AM</option>
-                    <option value="08:00">8:00 AM</option>
-                    <option value="09:00">9:00 AM</option>
-                    <option value="10:00">10:00 AM</option>
-                    <option value="11:00">11:00 AM</option>
-                    <option value="12:00">12:00 PM</option>
-                    <option value="13:00">1:00 PM</option>
-                    <option value="14:00">2:00 PM</option>
-                    <option value="15:00">3:00 PM</option>
-                    <option value="16:00">4:00 PM</option>
-                    <option value="17:00">5:00 PM</option>
-                    <option value="18:00">6:00 PM</option>
-                    <option value="19:00">7:00 PM</option>
-                    <option value="20:00">8:00 PM</option>
-                    <option value="21:00">9:00 PM</option>
-                    <option value="22:00">10:00 PM</option>
-                    <option value="23:00">11:00 PM</option>
-                  </select>
-                </div>
-
-                {/* Recipients */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Recipients: <span className="text-red-500">*</span>
-                  </label>
-                  <div className="border border-gray-300 rounded-lg p-3 space-y-2">
-                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={scheduleRecipients.alex}
-                        onChange={() => toggleRecipient('alex')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Alex Rodriguez (me)</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={scheduleRecipients.sarah}
-                        onChange={() => toggleRecipient('sarah')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Sarah Chen</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={scheduleRecipients.mike}
-                        onChange={() => toggleRecipient('mike')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Mike Johnson</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Format */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Format:</label>
-                  <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="format"
-                        checked={scheduleFormat === 'pdf'}
-                        onChange={() => setScheduleFormat('pdf')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">PDF</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="format"
-                        checked={scheduleFormat === 'excel'}
-                        onChange={() => setScheduleFormat('excel')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Excel</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="format"
-                        checked={scheduleFormat === 'csv'}
-                        onChange={() => setScheduleFormat('csv')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">CSV</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={handleScheduleConfirm}
-                  size="lg"
-                >
-                  Schedule
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Share Modal */}
-        {showShareModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Share Report</h3>
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <span className="text-2xl">&times;</span>
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-6 space-y-6">
-                <div className="text-sm text-gray-600">
-                  Report: <span className="font-medium text-gray-900">{reportName}</span>
-                </div>
-
-                {/* Search and Recipients */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Share with:
-                  </label>
-                  <input aria-label="Share with:"
-                    type="text"
-                    placeholder="Search team members..."
-                    value={shareSearch}
-                    onChange={(e) => setShareSearch(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"
-                  />
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shareRecipients.sarah}
-                        onChange={() => toggleShareRecipient('sarah')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Sarah Chen</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shareRecipients.mike}
-                        onChange={() => toggleShareRecipient('mike')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Mike Johnson</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shareRecipients.emily}
-                        onChange={() => toggleShareRecipient('emily')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Emily Davis</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Message */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Message (optional):
-                  </label>
-                  <textarea aria-label="Message (optional):"
-                    value={shareMessage}
-                    onChange={(e) => setShareMessage(e.target.value)}
-                    placeholder="Add a message..."
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  />
-                </div>
-
-                {/* Options */}
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allowEdit}
-                      onChange={(e) => setAllowEdit(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-900">Allow them to edit this report</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notifyEmail}
-                      onChange={(e) => setNotifyEmail(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-900">Notify via email</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={handleShareConfirm}
-                  size="lg"
-                >
-                  Share
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Toast */}
-        {showSuccessToast && (
-          <div className="fixed bottom-8 right-8 z-50 animate-fade-in">
-            <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3">
-              <CheckCircle className="w-5 h-5" />
-              <span className="font-medium">{successToastMessage}</span>
-            </div>
-          </div>
         )}
       </div>
     </div>
   );
 };
 
-// Helper Components
-interface MetricCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  change: string;
-  trend: 'up' | 'down';
-  bgColor: string;
-}
+/**
+ * SHARING, against the real `saved_report_grants` table.
+ *
+ * The facade's version collected three hardcoded colleagues, an "allow edit"
+ * switch and a "notify by email" switch, and persisted none of it. Two of those
+ * three things now exist for real (the roster, and the edit level); the email
+ * notification does not, so it is not offered — `services/email` has two
+ * consumers and this is not one of them.
+ *
+ * `view` is the floor a share grants and `edit` is what the owner adds on top,
+ * so there is no edit-only option to pick: one row per person holding one
+ * level, which is what makes edit-without-view unrepresentable.
+ */
+const ShareDialog: React.FC<{
+  reportId: string;
+  reportName: string;
+  onClose: () => void;
+}> = ({ reportId, reportName, onClose }) => {
+  const [grants, setGrants] = useState<ReportGrant[]>([]);
+  const [levels, setLevels] = useState<GrantLevel[]>([]);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
-const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, change, trend, bgColor }) => {
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`p-2 ${bgColor} rounded-lg`}>
-          {icon}
-        </div>
-        <span className="text-sm font-medium text-gray-600">{label}</span>
-      </div>
-      <div className="text-2xl font-bold text-gray-900 mb-2">{value}</div>
-      <div className={`flex items-center gap-1 text-sm font-medium ${
-        trend === 'up' ? 'text-green-600' : 'text-red-600'
-      }`}>
-        {trend === 'up' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-        {change}
-      </div>
-    </div>
+  const reload = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const [g, roster] = await Promise.all([
+        fetchGrants(reportId),
+        // Only active members: sharing with a deactivated account grants access
+        // nobody can use and reads as a share that worked.
+        fetchRoster(false),
+      ]);
+      setGrants(g.grants);
+      setLevels(g.grantLevels);
+      setMembers(roster.members.filter(m => m.isActive));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [reportId]);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  const granted = useMemo(() => new Set(grants.map(g => g.user_id)), [grants]);
+  const ungranted = useMemo(
+    () => members.filter(m => !granted.has(Number(m.id))),
+    [members, granted],
   );
-};
 
-// Mock data generator
-function getReportData(reportName: string) {
-  // Generate different data based on report name
-  const reportLower = reportName.toLowerCase();
-
-  /*
-   * A BRANCH FOR HRMS REPORTS WAS REMOVED HERE, and not only because it was
-   * fabricated like everything else in this function.
-   *
-   * It returned rows such as "HRMS: Global Tech" and a pipeline split of
-   * "HRMS Generated Leads: 412 / Traditional Sources: 435". HRMS is a SEPARATE
-   * PRODUCT reached over the SSO/API boundary (CLAUDE.md): this CRM has no
-   * access to its tables and must never join to them. So the sample data
-   * encoded a cross-module read that would be a design error if it were ever
-   * made real — and sample data is exactly how that gets made real, by someone
-   * wiring up what looks like an existing feature.
-   *
-   * A report slug mentioning HRMS now falls through to the generic branches
-   * below, which are sample content and labelled as such.
-   */
-  // Account Reports
-  if (reportLower.includes('account') || reportLower.includes('top accounts')) {
-    return {
-      chartData: [
-        { label: 'Enterprise', value: 85, amount: 45 },
-        { label: 'Mid-Market', value: 70, amount: 78 },
-        { label: 'SMB', value: 55, amount: 156 },
-        { label: 'Startup', value: 40, amount: 89 },
-      ],
-      pipelineData: [
-        { name: 'High Value (>$100K)', value: 15, deals: 0, percentage: 35, color: 'bg-green-500' },
-        { name: 'Medium ($25K-100K)', value: 48, deals: 0, percentage: 40, color: 'bg-blue-500' },
-        { name: 'Small (<$25K)', value: 92, deals: 0, percentage: 25, color: 'bg-gray-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'GlobalCorp Industries', type: 'account', value: 450, stage: 'Active', owner: 'Alex Rodriguez', status: 'Active' },
-        { id: '2', name: 'TechVision Solutions', type: 'account', value: 325, stage: 'Active', owner: 'Sarah Chen', status: 'Active' },
-        { id: '3', name: 'InnovateNow Inc', type: 'account', value: 285, stage: 'Active', owner: 'Mike Johnson', status: 'Active' },
-        { id: '4', name: 'DataStream Corp', type: 'account', value: 210, stage: 'Active', owner: 'Emily Davis', status: 'Active' },
-        { id: '5', name: 'CloudFirst Ltd', type: 'account', value: 195, stage: 'Active', owner: 'Alex Rodriguez', status: 'Active' },
-      ],
-    };
-  }
-
-  // Revenue Reports
-  if (reportLower.includes('revenue') || reportLower.includes('forecast')) {
-    return {
-      chartData: [
-        { label: 'Q1', value: 65, amount: 425 },
-        { label: 'Q2', value: 75, amount: 520 },
-        { label: 'Q3', value: 85, amount: 620 },
-        { label: 'Q4', value: 95, amount: 735 },
-      ],
-      pipelineData: [
-        { name: 'Product Sales', value: 1200, deals: 0, percentage: 52, color: 'bg-blue-500' },
-        { name: 'Services', value: 650, deals: 0, percentage: 28, color: 'bg-green-500' },
-        { name: 'Subscriptions', value: 380, deals: 0, percentage: 16, color: 'bg-purple-500' },
-        { name: 'Other', value: 70, deals: 0, percentage: 4, color: 'bg-gray-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'Q4 Enterprise Deals', type: 'deal', value: 285, stage: 'Closed Won', owner: 'Alex Rodriguez', status: 'Won' },
-        { id: '2', name: 'Annual Subscriptions', type: 'deal', value: 195, stage: 'Closed Won', owner: 'Sarah Chen', status: 'Won' },
-        { id: '3', name: 'Professional Services', type: 'deal', value: 145, stage: 'Closed Won', owner: 'Mike Johnson', status: 'Won' },
-        { id: '4', name: 'Product Licenses', type: 'deal', value: 110, stage: 'Closed Won', owner: 'Emily Davis', status: 'Won' },
-        { id: '5', name: 'Support Contracts', type: 'deal', value: 82, stage: 'Closed Won', owner: 'Alex Rodriguez', status: 'Won' },
-      ],
-    };
-  }
-
-  // Lead Reports
-  if (reportLower.includes('lead') || reportLower.includes('conversion') || reportLower.includes('contact') || reportLower.includes('response time')) {
-    return {
-      chartData: [
-        { label: 'Jan', value: 50, amount: 42 },
-        { label: 'Feb', value: 60, amount: 51 },
-        { label: 'Mar', value: 70, amount: 58 },
-        { label: 'Apr', value: 65, amount: 55 },
-        { label: 'May', value: 75, amount: 63 },
-        { label: 'Jun', value: 80, amount: 68 },
-        { label: 'Jul', value: 85, amount: 72 },
-        { label: 'Aug', value: 78, amount: 66 },
-        { label: 'Sep', value: 88, amount: 75 },
-        { label: 'Oct', value: 92, amount: 78 },
-        { label: 'Nov', value: 95, amount: 81 },
-        { label: 'Dec', value: 100, amount: 85 },
-      ],
-      pipelineData: [
-        { name: 'New Leads', value: 156, deals: 0, percentage: 40, color: 'bg-blue-500' },
-        { name: 'Contacted', value: 98, deals: 0, percentage: 25, color: 'bg-indigo-500' },
-        { name: 'Qualified', value: 67, deals: 0, percentage: 17, color: 'bg-purple-500' },
-        { name: 'Converted', value: 45, deals: 0, percentage: 11, color: 'bg-green-500' },
-        { name: 'Lost', value: 28, deals: 0, percentage: 7, color: 'bg-red-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'Sarah Williams', type: 'lead', value: 0, stage: 'Qualified', owner: 'Alex Rodriguez', status: 'In Progress' },
-        { id: '2', name: 'Michael Brown', type: 'lead', value: 0, stage: 'Contacted', owner: 'Sarah Chen', status: 'In Progress' },
-        { id: '3', name: 'Jennifer Davis', type: 'lead', value: 0, stage: 'Converted', owner: 'Mike Johnson', status: 'Won' },
-        { id: '4', name: 'Robert Wilson', type: 'lead', value: 0, stage: 'New', owner: 'Emily Davis', status: 'In Progress' },
-        { id: '5', name: 'Lisa Anderson', type: 'lead', value: 0, stage: 'Qualified', owner: 'Alex Rodriguez', status: 'In Progress' },
-      ],
-    };
-  }
-
-  // Activity Reports
-  if (reportLower.includes('activity') || reportLower.includes('meeting') || reportLower.includes('response')) {
-    return {
-      chartData: [
-        { label: 'Mon', value: 75, amount: 42 },
-        { label: 'Tue', value: 85, amount: 48 },
-        { label: 'Wed', value: 90, amount: 52 },
-        { label: 'Thu', value: 95, amount: 55 },
-        { label: 'Fri', value: 88, amount: 50 },
-        { label: 'Sat', value: 30, amount: 15 },
-        { label: 'Sun', value: 20, amount: 10 },
-      ],
-      pipelineData: [
-        { name: 'Calls', value: 78, deals: 0, percentage: 32, color: 'bg-blue-500' },
-        { name: 'Emails', value: 89, deals: 0, percentage: 36, color: 'bg-green-500' },
-        { name: 'Meetings', value: 45, deals: 0, percentage: 18, color: 'bg-purple-500' },
-        { name: 'Tasks', value: 35, deals: 0, percentage: 14, color: 'bg-orange-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'Call with TechStart', type: 'activity', value: 0, stage: 'Completed', owner: 'Alex Rodriguez', status: 'Completed' },
-        { id: '2', name: 'Meeting - Q4 Planning', type: 'activity', value: 0, stage: 'Scheduled', owner: 'Sarah Chen', status: 'In Progress' },
-        { id: '3', name: 'Email - Proposal Sent', type: 'activity', value: 0, stage: 'Completed', owner: 'Mike Johnson', status: 'Completed' },
-        { id: '4', name: 'Task - Follow up', type: 'activity', value: 0, stage: 'Pending', owner: 'Emily Davis', status: 'In Progress' },
-        { id: '5', name: 'Call - Discovery', type: 'activity', value: 0, stage: 'Completed', owner: 'Alex Rodriguez', status: 'Completed' },
-      ],
-    };
-  }
-
-  // Pipeline Reports
-  if (reportLower.includes('pipeline') || reportLower.includes('aging') || reportLower.includes('trend')) {
-    return {
-      chartData: [
-        { label: 'Jan', value: 60, amount: 200 },
-        { label: 'Feb', value: 65, amount: 215 },
-        { label: 'Mar', value: 70, amount: 240 },
-        { label: 'Apr', value: 75, amount: 260 },
-        { label: 'May', value: 72, amount: 255 },
-        { label: 'Jun', value: 78, amount: 270 },
-        { label: 'Jul', value: 82, amount: 290 },
-        { label: 'Aug', value: 88, amount: 310 },
-        { label: 'Sep', value: 85, amount: 305 },
-        { label: 'Oct', value: 90, amount: 325 },
-        { label: 'Nov', value: 92, amount: 335 },
-        { label: 'Dec', value: 95, amount: 350 },
-      ],
-      pipelineData: [
-        { name: 'Prospecting', value: 450, deals: 18, percentage: 20, color: 'bg-blue-500' },
-        { name: 'Qualification', value: 720, deals: 16, percentage: 32, color: 'bg-indigo-500' },
-        { name: 'Proposal', value: 650, deals: 11, percentage: 29, color: 'bg-purple-500' },
-        { name: 'Negotiation', value: 380, deals: 7, percentage: 17, color: 'bg-orange-500' },
-        { name: 'Closed Won', value: 50, deals: 2, percentage: 2, color: 'bg-green-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'CloudFlow Enterprise', type: 'deal', value: 120, stage: 'Qualification', owner: 'Sarah Chen', status: 'In Progress' },
-        { id: '2', name: 'TechCorp Platform', type: 'deal', value: 95, stage: 'Proposal', owner: 'Alex Rodriguez', status: 'In Progress' },
-        { id: '3', name: 'DataSync Solution', type: 'deal', value: 88, stage: 'Negotiation', owner: 'Mike Johnson', status: 'In Progress' },
-        { id: '4', name: 'SecureNet Deal', type: 'deal', value: 76, stage: 'Qualification', owner: 'Emily Davis', status: 'In Progress' },
-        { id: '5', name: 'AutoScale Package', type: 'deal', value: 65, stage: 'Proposal', owner: 'Sarah Chen', status: 'In Progress' },
-      ],
-    };
-  }
-
-  // Sales Reports (checked last as it's most general)
-  if (reportLower.includes('sales') || reportLower.includes('win') || reportLower.includes('quota')) {
-    return {
-      chartData: [
-        { label: 'Jan', value: 45, amount: 120 },
-        { label: 'Feb', value: 55, amount: 145 },
-        { label: 'Mar', value: 65, amount: 175 },
-        { label: 'Apr', value: 70, amount: 190 },
-        { label: 'May', value: 60, amount: 165 },
-        { label: 'Jun', value: 75, amount: 205 },
-        { label: 'Jul', value: 85, amount: 235 },
-        { label: 'Aug', value: 80, amount: 220 },
-        { label: 'Sep', value: 90, amount: 250 },
-        { label: 'Oct', value: 95, amount: 265 },
-        { label: 'Nov', value: 88, amount: 245 },
-        { label: 'Dec', value: 100, amount: 280 },
-      ],
-      pipelineData: [
-        { name: 'Qualification', value: 620, deals: 15, percentage: 25, color: 'bg-blue-500' },
-        { name: 'Proposal', value: 890, deals: 12, percentage: 37, color: 'bg-purple-500' },
-        { name: 'Negotiation', value: 690, deals: 8, percentage: 29, color: 'bg-orange-500' },
-        { name: 'Closed Won', value: 200, deals: 5, percentage: 9, color: 'bg-green-500' },
-      ],
-      tableData: [
-        { id: '1', name: 'Enterprise Solution Deal', type: 'deal', value: 95, stage: 'Negotiation', owner: 'Alex Rodriguez', status: 'In Progress' },
-        { id: '2', name: 'DataFlow Inc Expansion', type: 'deal', value: 75, stage: 'Proposal', owner: 'Sarah Chen', status: 'In Progress' },
-        { id: '3', name: 'HealthPlus Integration', type: 'deal', value: 62, stage: 'Qualification', owner: 'Mike Johnson', status: 'In Progress' },
-        { id: '4', name: 'TechStart Platform', type: 'deal', value: 50, stage: 'Closed Won', owner: 'Alex Rodriguez', status: 'Won' },
-        { id: '5', name: 'Acme Corp Upgrade', type: 'deal', value: 45, stage: 'Negotiation', owner: 'Emily Davis', status: 'In Progress' },
-      ],
-    };
-  }
-
-  // Default data for any other report
-  return {
-    chartData: [
-      { label: 'Jan', value: 45, amount: 120 },
-      { label: 'Feb', value: 55, amount: 145 },
-      { label: 'Mar', value: 65, amount: 175 },
-      { label: 'Apr', value: 70, amount: 190 },
-      { label: 'May', value: 60, amount: 165 },
-      { label: 'Jun', value: 75, amount: 205 },
-      { label: 'Jul', value: 85, amount: 235 },
-      { label: 'Aug', value: 80, amount: 220 },
-      { label: 'Sep', value: 90, amount: 250 },
-      { label: 'Oct', value: 95, amount: 265 },
-      { label: 'Nov', value: 88, amount: 245 },
-      { label: 'Dec', value: 100, amount: 280 },
-    ],
-    pipelineData: [
-      { name: 'Category A', value: 620, deals: 15, percentage: 25, color: 'bg-blue-500' },
-      { name: 'Category B', value: 890, deals: 12, percentage: 37, color: 'bg-purple-500' },
-      { name: 'Category C', value: 690, deals: 8, percentage: 29, color: 'bg-orange-500' },
-      { name: 'Category D', value: 200, deals: 5, percentage: 9, color: 'bg-green-500' },
-    ],
-    tableData: [
-      { id: '1', name: 'Sample Record 1', type: 'deal', value: 95, stage: 'Active', owner: 'Alex Rodriguez', status: 'In Progress' },
-      { id: '2', name: 'Sample Record 2', type: 'deal', value: 75, stage: 'Active', owner: 'Sarah Chen', status: 'In Progress' },
-      { id: '3', name: 'Sample Record 3', type: 'deal', value: 62, stage: 'Active', owner: 'Mike Johnson', status: 'In Progress' },
-      { id: '4', name: 'Sample Record 4', type: 'deal', value: 50, stage: 'Completed', owner: 'Alex Rodriguez', status: 'Won' },
-      { id: '5', name: 'Sample Record 5', type: 'deal', value: 45, stage: 'Active', owner: 'Emily Davis', status: 'In Progress' },
-    ],
+  const act = async (fn: () => Promise<void>) => {
+    setErr(null);
+    try { await fn(); await reload(); } catch (e) { setErr((e as Error).message); }
   };
-}
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto"
+        role="dialog" aria-label="Share report">
+        <div className="flex items-start justify-between p-5 border-b border-gray-200">
+          <div>
+            <h2 className="text-[15px] font-semibold text-gray-900">Share this report</h2>
+            <p className="text-[12px] text-gray-500 mt-0.5">{reportName}</p>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {err && (
+            <p className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">{err}</p>
+          )}
+
+          <div>
+            <h3 className="text-[12px] font-semibold text-gray-700 mb-2">Who has access</h3>
+            {busy && <p className="text-[12px] text-gray-400">Loading…</p>}
+            {!busy && grants.length === 0 && (
+              <p className="text-[12px] text-gray-500">
+                Only you. A report is private until it is shared — there is no
+                &ldquo;private&rdquo; setting to check, because private is simply the absence
+                of anyone else having access.
+              </p>
+            )}
+            <ul className="space-y-1.5">
+              {grants.map(g => (
+                <li key={g.user_id} className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] text-gray-800 min-w-0 truncate">
+                    {g.name ?? g.email}
+                    <span className="text-gray-400"> · {g.email}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 flex-shrink-0">
+                    <select
+                      aria-label={`Access for ${g.name ?? g.email}`}
+                      value={g.level}
+                      onChange={e => void act(() => setGrant(reportId, g.user_id, e.target.value as GrantLevel))}
+                      className="text-[12px] rounded border border-gray-300 px-2 py-1"
+                    >
+                      {levels.map(l => (
+                        <option key={l} value={l}>{l === 'edit' ? 'Can edit' : 'Can view'}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => void act(() => revokeGrant(reportId, g.user_id))}
+                      className="text-[12px] text-red-600 hover:text-red-800 px-1"
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-[12px] font-semibold text-gray-700 mb-2">Add someone</h3>
+            {!busy && ungranted.length === 0 && (
+              <p className="text-[12px] text-gray-500">
+                Everyone active in this workspace already has access.
+              </p>
+            )}
+            <ul className="space-y-1.5">
+              {ungranted.map(m => (
+                <li key={m.id} className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] text-gray-800 min-w-0 truncate">
+                    {m.name || m.email}<span className="text-gray-400"> · {m.email}</span>
+                  </span>
+                  <button
+                    onClick={() => void act(() => setGrant(reportId, Number(m.id), 'view'))}
+                    className="text-[12px] text-indigo-600 hover:text-indigo-800 flex-shrink-0"
+                  >
+                    Give view access
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-gray-400 mt-2 flex items-start gap-1">
+              <Clock className="h-3 w-3 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              Sharing takes effect immediately. Nobody is emailed — this CRM sends
+              transactional mail only for invites, and report sharing is not wired to it.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default ReportDetailView;
