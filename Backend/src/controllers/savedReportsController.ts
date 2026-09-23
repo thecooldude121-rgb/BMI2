@@ -18,6 +18,7 @@ import {
 } from '../services/reports/access';
 import { runReport, ReportTimeout } from '../services/reports/runner';
 import { toCsv, csvFilename } from '../services/reports/csv';
+import { toXlsx, xlsxFilename, XLSX_CONTENT_TYPE } from '../services/reports/xlsx';
 import { streamHeaders } from '../config/fileStorage';
 
 /**
@@ -662,6 +663,67 @@ export const exportAdHoc = async (req: AuthRequest, res: Response, next: NextFun
 
     res.set(streamHeaders(csvFilename(reportName, generatedAt), 'text/csv'));
     res.send('\uFEFF' + toCsv(run, { reportName, generatedAt }));
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(400).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+
+/** GET /api/v1/reports/:id/export.xlsx */
+export const exportSavedXlsx = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const userId = Number(req.user?.id);
+
+    // The SAME resolver the CSV route uses, so the two formats cannot drift
+    // apart on who is allowed to export what.
+    const target = await resolveForExport(req, tenantId, userId);
+    if (!target) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+
+    const run = await runReport(target.definition as never, tenantId);
+    const generatedAt = new Date().toISOString();
+    const book = toXlsx(run, { reportName: target.name, generatedAt, caveat: target.caveat });
+
+    res.set(streamHeaders(xlsxFilename(target.name, generatedAt), XLSX_CONTENT_TYPE));
+    // No BOM: that is a TEXT-encoding fix. An xlsx is a binary container whose
+    // XML parts already declare UTF-8, and a BOM here would corrupt the ZIP.
+    res.send(book);
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(409).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+/** POST /api/v1/reports/export.xlsx — an unsaved definition, from the builder. */
+export const exportAdHocXlsx = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const { definition, name } = req.body ?? {};
+    if (!definition) {
+      res.status(400).json({ success: false, message: 'definition is required' });
+      return;
+    }
+    const run = await runReport(definition, tenantId);
+    const generatedAt = new Date().toISOString();
+    const reportName = typeof name === 'string' && name.trim() ? name.trim() : 'Untitled report';
+
+    res.set(streamHeaders(xlsxFilename(reportName, generatedAt), XLSX_CONTENT_TYPE));
+    res.send(toXlsx(run, { reportName, generatedAt }));
   } catch (error) {
     if (error instanceof ReportDefinitionError) {
       res.status(400).json({ success: false, message: error.message });

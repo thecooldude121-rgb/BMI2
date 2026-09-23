@@ -180,6 +180,56 @@ describe('Report CSV export', () => {
     expect(res.status).toBe(409);
   });
 
+  // ── Excel ────────────────────────────────────────────────────────────────
+
+  it('exports xlsx with the workbook content type and an attachment disposition', async () => {
+    const res = await request(app).get(`/api/v1/reports/${reportId}/export.xlsx`)
+      .set(auth(ws)).buffer().parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('spreadsheetml.sheet');
+    expect(res.headers['content-disposition']).toContain('deals-by-name-');
+    expect(res.headers['content-disposition']).toContain('.xlsx');
+    // A ZIP local file header: "PK\x03\x04". NOT a BOM — that is a text fix
+    // and would corrupt the container.
+    expect((res.body as Buffer).subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4B, 0x03, 0x04]));
+  });
+
+  it('xlsx enforces the same visibility as csv, through the same resolver', async () => {
+    // Two formats, one access rule. A second resolver would be a second place
+    // to forget the predicate.
+    const res = await request(app).get(`/api/v1/reports/${reportId}/export.xlsx`).set(auth(outsider));
+    expect(res.status).toBe(404);
+  });
+
+  it('xlsx requires authentication too', async () => {
+    expect((await request(app).get(`/api/v1/reports/${reportId}/export.xlsx`)).status).toBe(401);
+    expect((await request(app).post('/api/v1/reports/export.xlsx').send({})).status).toBe(401);
+  });
+
+  it('exports an unsaved definition as xlsx', async () => {
+    const res = await request(app).post('/api/v1/reports/export.xlsx').set(auth(ws)).send({
+      name: 'Scratch',
+      definition: { v: 1, base: 'deals', dimensions: [{ field: 'deals.source' }], metrics: [{ agg: 'count' }] },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toContain('scratch-');
+  });
+
+  it('a stale saved report is 409 in xlsx as well, matching csv and the run', async () => {
+    const broken = await pool.query(
+      `INSERT INTO saved_reports (tenant_id, name, definition, owner_id)
+       VALUES ($1, 'Broken xlsx', $2::jsonb, $3) RETURNING id`,
+      [ws.tenantId, JSON.stringify({ v: 1, base: 'deals', dimensions: [{ field: 'deals.nope' }] }), ws.userId],
+    );
+    const res = await request(app)
+      .get(`/api/v1/reports/${broken.rows[0].id}/export.xlsx`).set(auth(ws));
+    expect(res.status).toBe(409);
+  });
+
   it('the ad-hoc name is display text, and cannot break the filename header', async () => {
     const res = await request(app).post('/api/v1/reports/export.csv').set(auth(ws)).send({
       name: '../../etc/passwd',

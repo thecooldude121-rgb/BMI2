@@ -7,7 +7,7 @@ import ProvenanceNote from '../../components/Reports/ProvenanceNote';
 import {
   fetchReports, fetchReport, createReport, updateReport, runDefinition,
   aggregationLabel, operatorLabel, operatorAppliesTo, DEFINITION_VERSION, ReportsApiError,
-  UNATTRIBUTED, exportDefinitionCsv,
+  UNATTRIBUTED, exportDefinition, type ExportFormat,
   type ReportDefinition, type RegistryField, type RegistryModule,
   type ReportRun, type Aggregation, type Operator,
   type AggregationSpec, type OperatorSpec,
@@ -104,7 +104,7 @@ const CustomReportBuilder: React.FC = () => {
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ text: string; ok: boolean } | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
 
   const rowKeys = useMemo(() => (run ? rowKeysFor(run.columns) : []), [run]);
 
@@ -545,25 +545,26 @@ const CustomReportBuilder: React.FC = () => {
                     * would mean the file is the first place the numbers appear,
                     * with nobody having seen the disclosure on screen first.
                     */}
-                  {run && (
+                  {run && (['csv', 'xlsx'] as ExportFormat[]).map(fmt => (
                     <button
+                      key={fmt}
                       onClick={async () => {
-                        setExporting(true);
+                        setExporting(fmt);
                         setRunError(null);
                         try {
-                          await exportDefinitionCsv(definition, name.trim() || 'Untitled report');
+                          await exportDefinition(definition, name.trim() || 'Untitled report', fmt);
                         } catch (e) {
                           setRunError({ message: (e as Error).message, stale: false });
                         } finally {
-                          setExporting(false);
+                          setExporting(null);
                         }
                       }}
-                      disabled={exporting}
+                      disabled={exporting !== null}
                       className="text-[12px] text-indigo-600 hover:text-indigo-800 disabled:text-gray-400"
                     >
-                      {exporting ? 'Preparing…' : 'Export CSV'}
+                      {exporting === fmt ? 'Preparing…' : `Export ${fmt === 'csv' ? 'CSV' : 'Excel'}`}
                     </button>
-                  )}
+                  ))}
                 </span>
               </div>
 

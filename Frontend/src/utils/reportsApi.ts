@@ -387,23 +387,34 @@ async function downloadCsv(res: Response, fallbackName: string): Promise<void> {
   );
 }
 
-export async function exportReportCsv(reportId: string): Promise<void> {
+/**
+ * The formats a report can be downloaded as.
+ *
+ * PDF is deliberately absent rather than disabled: it needs a rendering
+ * dependency this project has not agreed to add, and an option that cannot
+ * work is worse than one that is not offered.
+ */
+export type ExportFormat = 'csv' | 'xlsx';
+
+export async function exportReport(reportId: string, format: ExportFormat): Promise<void> {
   await downloadCsv(
-    await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/export.csv`,
-      { headers: getAuthHeaders() }),
-    'report.csv',
+    await fetch(
+      `${API_BASE}/reports/${encodeURIComponent(reportId)}/export.${format}`,
+      { headers: getAuthHeaders() },
+    ),
+    `report.${format}`,
   );
 }
 
-export async function exportDefinitionCsv(
-  definition: ReportDefinition, name: string,
+export async function exportDefinition(
+  definition: ReportDefinition, name: string, format: ExportFormat,
 ): Promise<void> {
   await downloadCsv(
-    await fetch(`${API_BASE}/reports/export.csv`, {
+    await fetch(`${API_BASE}/reports/export.${format}`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ definition, name }),
     }),
-    'report.csv',
+    `report.${format}`,
   );
 }

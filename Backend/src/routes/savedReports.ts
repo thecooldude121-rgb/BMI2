@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   listReports, getReport, createReport, updateReport, deleteReport,
   listGrants, setGrant, revokeGrant, runAdHoc, runSaved,
-  exportSaved, exportAdHoc,
+  exportSaved, exportAdHoc, exportSavedXlsx, exportAdHocXlsx,
 } from '../controllers/savedReportsController';
 import { protect } from '../middleware/auth';
 
@@ -30,12 +30,14 @@ router.post('/run', runAdHoc);
  * ordering hazard the `/run` route above has.
  */
 router.post('/export.csv', exportAdHoc);
+router.post('/export.xlsx', exportAdHocXlsx);
 router.get('/:id', getReport);
 router.patch('/:id', updateReport);
 router.delete('/:id', deleteReport);
 
 router.get('/:id/run', runSaved);
 router.get('/:id/export.csv', exportSaved);
+router.get('/:id/export.xlsx', exportSavedXlsx);
 
 router.get('/:id/grants', listGrants);
 router.put('/:id/grants', setGrant);

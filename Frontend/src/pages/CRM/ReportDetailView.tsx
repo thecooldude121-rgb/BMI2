@@ -8,7 +8,7 @@ import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ProvenanceNote from '../../components/Reports/ProvenanceNote';
 import {
   fetchReport, runSavedReport, deleteReport,
-  fetchGrants, setGrant, revokeGrant, ReportsApiError, UNATTRIBUTED, exportReportCsv,
+  fetchGrants, setGrant, revokeGrant, ReportsApiError, UNATTRIBUTED, exportReport, type ExportFormat,
   type SavedReport, type ReportRun, type ReportGrant, type GrantLevel,
 } from '../../utils/reportsApi';
 import { fetchRoster, type WorkspaceMember } from '../../utils/usersApi';
@@ -91,7 +91,7 @@ const ReportDetailView: React.FC = () => {
   const [ranAt, setRanAt] = useState<Date | null>(null);
 
   const [shareOpen, setShareOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -398,26 +398,32 @@ const ReportDetailView: React.FC = () => {
               * spreadsheet they become someone's evidence."
               */}
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button
-                variant="secondary"
-                onClick={async () => {
-                  setExporting(true);
-                  setExportError(null);
-                  try {
-                    await exportReportCsv(reportId);
-                  } catch (e) {
-                    setExportError((e as Error).message);
-                  } finally {
-                    setExporting(false);
-                  }
-                }}
-                disabled={exporting}
-              >
-                <Download className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                {exporting ? 'Preparing…' : 'Export CSV'}
-              </Button>
+              {(['csv', 'xlsx'] as ExportFormat[]).map(fmt => (
+                <Button
+                  key={fmt}
+                  variant="secondary"
+                  onClick={async () => {
+                    setExporting(fmt);
+                    setExportError(null);
+                    try {
+                      await exportReport(reportId, fmt);
+                    } catch (e) {
+                      setExportError((e as Error).message);
+                    } finally {
+                      setExporting(null);
+                    }
+                  }}
+                  disabled={exporting !== null}
+                >
+                  <Download className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                  {exporting === fmt ? 'Preparing…' : `Export ${fmt === 'csv' ? 'CSV' : 'Excel'}`}
+                </Button>
+              ))}
               <span className="text-[12px] text-gray-400">
-                The file includes the data note above. Scheduled delivery isn&rsquo;t built yet.
+                {/* PDF is not offered at all rather than shown disabled: a
+                    control for something that does not exist invites a support
+                    question and tells the user nothing. */}
+                Both include the data note above. Scheduled delivery isn&rsquo;t built yet.
               </span>
             </div>
             {exportError && (

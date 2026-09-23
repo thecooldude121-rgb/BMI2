@@ -31,9 +31,66 @@ BUILT, and so are Phases 2 through 7.**
 | **4** | `CustomReportBuilder` wired | **built** (a rewrite — see below) |
 | **5** | `ReportDetailView` | **built** (routed by id; + the saved-reports list) |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | **built** |
-| **7** | Exports (CSV, then PDF/Excel) | **CSV built**; PDF/Excel still open |
+| **7** | Exports (CSV, then PDF/Excel) | **CSV + Excel built**; PDF needs a dependency decision |
 | **8** | Scheduling | next — needs a job runner that does not exist |
 | **9** | Caching with result age (small, droppable) | |
+
+### Phase 7b — Excel, where the FORMAT solves the injection problem
+
+**XLSX has types, and that inverts the usual trade: the more complex format is
+the safer one.** CSV has no types — a spreadsheet decides what a cell IS by
+reading its text — so the CSV writer must neutralise a leading `=` with an
+apostrophe. In xlsx a cell is a formula only when it carries an `<f>` element,
+and this writer emits none: every text value goes out as `t="inlineStr"`. So
+`=HYPERLINK("http://attacker/",A1)` in a deal name is stored and displayed as
+that literal text, with nothing escaped and no prefix added. **Verified with a
+real reader** (openpyxl): `data_type='s'`, not `'f'`.
+
+The same typing removes the CSV's negative-number exemption entirely — `-500` is
+a numeric cell, so it is a real number the recipient can sum, with no special
+case to get wrong.
+
+**THE DISCLOSURE GOES IN TWO PLACES, and that differs from the CSV on purpose.**
+A CSV has one sheet and nowhere else to put the note. A workbook has sheets,
+which creates a risk a CSV does not have: **a sheet is a thing you can fail to
+visit**, so a reader who opens "Data" and never clicks "About this report" has
+seen the figures and not the note. So the note is its own FIRST sheet (the
+workbook opens on it) AND repeated above the data. The duplication is the point
+— neither copy can be the one they missed.
+
+**No new dependency.** An .xlsx is a ZIP of small XML files, and every entry
+here is one we generate: five files, ASCII names, none large. `services/reports/
+zip.ts` writes exactly that and nothing more — STORE only, no ZIP64, no unicode
+name flag, and it throws rather than writing an archive it cannot represent
+correctly. The archive is verified in tests with the SYSTEM `unzip`, not by
+re-reading our own offsets, because a test that parses its own output agrees
+with whatever it produced.
+
+### PDF IS NOT BUILT, AND THIS IS THE REASON
+
+PDF is the one piece of Phase 7 that cannot be done without adding a runtime
+dependency, and CLAUDE.md's "Tech stack (fixed — do not substitute without
+asking)" makes that a decision rather than a judgement call. Nothing in the
+backend can render one today: no `pdfkit`, no `puppeteer`, and no zip/deflate
+library either.
+
+Hand-rolling was considered and rejected, unlike the ZIP writer, and the
+difference is worth recording. The ZIP container is a fixed, tiny, fully
+specified problem with five known inputs. A PDF renderer is open-ended —
+pagination, font metrics for column widths, text escaping, and the standard-14
+width tables — and getting it subtly wrong produces a file a reader refuses to
+open, reported as "corrupt" with no indication of which part is at fault.
+
+Recommendation when it is picked up: **`pdfkit`** — pure JS, no native build
+step, no headless browser. `puppeteer` should be refused outright: it downloads
+a Chromium build, and rendering a report would mean running a browser on the
+server to lay out a table.
+
+The disclosure placement is already decided for when it is: **a PDF is a
+document, not data**, so the note belongs in a block under the title on page 1,
+and repeated in the page footer — because a PDF is the format most likely to be
+printed, forwarded, or screenshotted one page at a time, and page 4 on its own
+must still say what it is made of.
 
 ### Phase 7 — CSV export, and the two things it had to get right
 

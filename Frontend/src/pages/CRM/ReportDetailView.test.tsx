@@ -680,3 +680,56 @@ describe('CSV export', () => {
     expect(screen.getByText(/Scheduled delivery isn.t built yet/i)).toBeInTheDocument();
   });
 });
+
+describe('Excel export', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  const stub = () => {
+    const saved: { name: string | null } = { name: null };
+    vi.spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) { saved.name = this.download; });
+    vi.stubGlobal('URL', Object.assign(Object.create(URL), {
+      createObjectURL: () => 'blob:x', revokeObjectURL: vi.fn(),
+    }));
+    return saved;
+  };
+
+  it('hits the .xlsx endpoint, not the .csv one', async () => {
+    const saved = stub();
+    mockServer();
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/export.xlsx')) {
+        return {
+          ok: true, status: 200,
+          headers: { get: () => 'attachment; filename="deals-2026-09-23.xlsx"' },
+          blob: async () => new Blob(['PK']),
+        } as unknown as Response;
+      }
+      if (/\/run$/.test(u)) return { ok: true, status: 200, json: async () => RUN } as Response;
+      return { ok: true, status: 200, json: async () => ({ success: true, data: REPORT }) } as Response;
+    });
+
+    const user = userEvent.setup();
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: /Export Excel/i }));
+
+    await waitFor(() => expect(saved.name).toBe('deals-2026-09-23.xlsx'));
+    expect(urlsFetched().some(u => u.endsWith('/reports/R7/export.xlsx'))).toBe(true);
+    expect(urlsFetched().some(u => u.endsWith('/export.csv'))).toBe(false);
+  });
+
+  it('does NOT offer PDF, because it is not built', async () => {
+    /*
+     * Offered as absent rather than disabled. A disabled control advertises
+     * something that does not exist — the same call TeamManagement's role
+     * picker makes, and the reason the old export menu was deleted rather than
+     * greyed out.
+     */
+    mockServer();
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: /pdf/i })).not.toBeInTheDocument();
+  });
+});
