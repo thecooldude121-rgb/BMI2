@@ -142,12 +142,33 @@ describe('Report run + provenance', () => {
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     const p = res.body.provenance;
 
-    // Coverage: 2 of 4 visible deals carry a company_id.
-    expect(p.coverage).toHaveLength(1);
-    expect(p.coverage[0]).toMatchObject({ join: 'companies', matched: 2, of: 4 });
-    // Provenance: 3 of 4 are seeded. TWO DIFFERENT NUMBERS, both present.
+    /*
+     * UPDATED IN PHASE 6, and this test had been PINNING A BUG.
+     *
+     * It asserted the disclosure contained "2 of 4 have no accounts linked and
+     * are not counted". That sentence was false: every join here is a LEFT
+     * JOIN, so those two deals were never dropped — they were grouped into a
+     * NULL bucket sitting in the very result the sentence described. Running
+     * the canned reports against live data is what surfaced it.
+     *
+     * There are now TWO coverage entries rather than one, and that is also
+     * correct: `RunRep Co` was created with no industry, so of the 4 deals, 2
+     * reach an account (the join) and 0 have an industry (the dimension).
+     * Different counts mean different problems — "linked to no account" and
+     * "linked to an account with no industry recorded" have different fixes —
+     * so both are reported. They collapse to one entry only when the counts
+     * are equal.
+     */
+    expect(p.coverage).toHaveLength(2);
+    expect(p.coverage.find((c: { kind: string }) => c.kind === 'join'))
+      .toMatchObject({ key: 'companies', matched: 2, of: 4 });
+    expect(p.coverage.find((c: { kind: string }) => c.kind === 'dimension'))
+      .toMatchObject({ key: 'companies.industry', matched: 0, of: 4 });
+
+    // Provenance: 3 of 4 are seeded. STILL TWO DIFFERENT NUMBERS, both present.
     expect(p.rows_seeded).toBe(3);
-    expect(p.disclosure).toContain('2 of 4 have no accounts linked and are not counted');
+    expect(p.disclosure).toContain('2 of 4 have no accounts linked, and are grouped under "Not recorded" rather than dropped');
+    expect(p.disclosure).not.toMatch(/not counted/i);
     expect(p.disclosure).toContain('seeded demo data');
   });
 

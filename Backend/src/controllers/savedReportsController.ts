@@ -6,6 +6,9 @@ import { foreignIdsInTenant } from '../utils/tenantScope';
 import { buildReportQuery, ReportDefinitionError } from '../services/reports/queryBuilder';
 import { REPORT_MODULES, REPORT_FIELDS } from '../services/reports/registry';
 import {
+  CANNED_REPORTS, isCannedId, findCanned, type CannedReport,
+} from '../services/reports/canned';
+import {
   AGGREGATIONS, OPERATORS, AGGREGATION_NEEDS_FIELD, OPERATOR_ARITY,
   OPERATOR_FIELD_TYPES,
 } from '../services/reports/types';
@@ -71,6 +74,35 @@ const shape = (row: Record<string, unknown>, userId: number) => ({
   ),
 });
 
+/**
+ * A canned report in the same envelope as a saved one, so the client renders
+ * one kind of thing.
+ *
+ * The abilities are FIXED rather than computed: a canned report has no owner
+ * and no grants, so there is nobody for `abilitiesFor` to compare against. It
+ * is viewable by anyone in the workspace and editable by no one — which the UI
+ * renders as "no control", not "a disabled control".
+ *
+ * `owner_name` is null and the detail page already words that case as "no
+ * owner". That reads oddly for a report the product ships, so `is_canned`
+ * travels with it and the UI says "Built in" instead. Sending a fake owner name
+ * would have been the shorter fix and the wrong one.
+ */
+const shapeCanned = (r: CannedReport) => ({
+  id: r.id,
+  name: r.name,
+  description: r.description,
+  category: r.category,
+  definition: r.definition,
+  owner_id: null,
+  owner_name: null,
+  created_at: null,
+  updated_at: null,
+  is_canned: true as const,
+  caveat: r.caveat ?? null,
+  abilities: { can_view: true, can_edit: false, can_delete: false, can_share: false },
+});
+
 /** Compile the definition to validate it. Returns a message, or null. */
 function definitionError(definition: unknown, tenantId: string): string | null {
   try {
@@ -115,6 +147,10 @@ export const listReports = async (req: AuthRequest, res: Response, next: NextFun
       operators: OPERATORS.map(id => ({
         id, arity: OPERATOR_ARITY[id], applies_to: OPERATOR_FIELD_TYPES[id],
       })),
+      // The reports the product ships. Same shape as a saved report so the UI
+      // renders one list, with abilities that say what they are: runnable by
+      // anyone, editable by nobody.
+      canned: CANNED_REPORTS.map(shapeCanned),
     });
   } catch (error) { next(error); }
 };
@@ -124,6 +160,21 @@ export const getReport = async (req: AuthRequest, res: Response, next: NextFunct
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+
+    /*
+     * Canned reports are resolved BEFORE the query, and that ordering is not
+     * incidental: `saved_reports.id` is a UUID column, so passing
+     * `canned:revenue-by-industry` to Postgres raises 22P02 and `errorHandler`
+     * masks it as a bare 500. Intercepting here is what keeps one route serving
+     * both.
+     */
+    if (isCannedId(req.params.id)) {
+      const canned = findCanned(req.params.id);
+      if (!canned) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+      res.json({ success: true, data: shapeCanned(canned) });
+      return;
+    }
+
     const result = await pool.query(
       `SELECT ${SELECT_COLUMNS} ${FROM_JOINS}
         WHERE r.tenant_id = $1 AND r.id = $3 AND ${canViewPredicate('r', 2)}`,
@@ -177,6 +228,23 @@ export const updateReport = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+    /*
+     * A canned report is not a row, so every write path must refuse it BEFORE
+     * the query. Two reasons, and the second is the one that bites: `id` is a
+     * UUID column, so `canned:revenue-by-industry` reaches Postgres as 22P02
+     * and `errorHandler` masks it as a bare 500 — an "invalid input syntax"
+     * where the honest answer is "that is not an editable report".
+     *
+     * 404, matching what a viewer already gets from `updateReport`: its WHERE
+     * carries canEditPredicate, so a report you may see but not edit is
+     * reported as absent rather than forbidden. One shape of answer for "not
+     * yours to write", whatever the reason.
+     */
+    if (isCannedId(req.params.id)) {
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
+
     const body = req.body ?? {};
 
     const fields = EDITABLE.filter(f => body[f] !== undefined);
@@ -227,6 +295,23 @@ export const deleteReport = async (req: AuthRequest, res: Response, next: NextFu
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+    /*
+     * A canned report is not a row, so every write path must refuse it BEFORE
+     * the query. Two reasons, and the second is the one that bites: `id` is a
+     * UUID column, so `canned:revenue-by-industry` reaches Postgres as 22P02
+     * and `errorHandler` masks it as a bare 500 — an "invalid input syntax"
+     * where the honest answer is "that is not an editable report".
+     *
+     * 404, matching what a viewer already gets from `updateReport`: its WHERE
+     * carries canEditPredicate, so a report you may see but not edit is
+     * reported as absent rather than forbidden. One shape of answer for "not
+     * yours to write", whatever the reason.
+     */
+    if (isCannedId(req.params.id)) {
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
+
     // Grants cascade with the report (composite FK, ON DELETE CASCADE).
     const deleted = await pool.query(
       `DELETE FROM saved_reports r
@@ -244,6 +329,23 @@ export const listGrants = async (req: AuthRequest, res: Response, next: NextFunc
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+    /*
+     * A canned report is not a row, so every write path must refuse it BEFORE
+     * the query. Two reasons, and the second is the one that bites: `id` is a
+     * UUID column, so `canned:revenue-by-industry` reaches Postgres as 22P02
+     * and `errorHandler` masks it as a bare 500 — an "invalid input syntax"
+     * where the honest answer is "that is not an editable report".
+     *
+     * 404, matching what a viewer already gets from `updateReport`: its WHERE
+     * carries canEditPredicate, so a report you may see but not edit is
+     * reported as absent rather than forbidden. One shape of answer for "not
+     * yours to write", whatever the reason.
+     */
+    if (isCannedId(req.params.id)) {
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
+
     const visible = await pool.query(
       `SELECT r.id FROM saved_reports r
         WHERE r.tenant_id = $1 AND r.id = $3 AND ${canViewPredicate('r', 2)}`,
@@ -279,6 +381,23 @@ export const setGrant = async (req: AuthRequest, res: Response, next: NextFuncti
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+    /*
+     * A canned report is not a row, so every write path must refuse it BEFORE
+     * the query. Two reasons, and the second is the one that bites: `id` is a
+     * UUID column, so `canned:revenue-by-industry` reaches Postgres as 22P02
+     * and `errorHandler` masks it as a bare 500 — an "invalid input syntax"
+     * where the honest answer is "that is not an editable report".
+     *
+     * 404, matching what a viewer already gets from `updateReport`: its WHERE
+     * carries canEditPredicate, so a report you may see but not edit is
+     * reported as absent rather than forbidden. One shape of answer for "not
+     * yours to write", whatever the reason.
+     */
+    if (isCannedId(req.params.id)) {
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
+
     const { user_id, level } = req.body ?? {};
 
     if (!(GRANT_LEVELS as readonly string[]).includes(String(level))) {
@@ -325,6 +444,23 @@ export const revokeGrant = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+    /*
+     * A canned report is not a row, so every write path must refuse it BEFORE
+     * the query. Two reasons, and the second is the one that bites: `id` is a
+     * UUID column, so `canned:revenue-by-industry` reaches Postgres as 22P02
+     * and `errorHandler` masks it as a bare 500 — an "invalid input syntax"
+     * where the honest answer is "that is not an editable report".
+     *
+     * 404, matching what a viewer already gets from `updateReport`: its WHERE
+     * carries canEditPredicate, so a report you may see but not edit is
+     * reported as absent rather than forbidden. One shape of answer for "not
+     * yours to write", whatever the reason.
+     */
+    if (isCannedId(req.params.id)) {
+      res.status(404).json({ success: false, message: 'Report not found' });
+      return;
+    }
+
     const owns = await pool.query(
       `SELECT r.id FROM saved_reports r
         WHERE r.tenant_id = $1 AND r.id = $3 AND ${isOwnerPredicate('r', 2)}`,
@@ -387,6 +523,20 @@ export const runSaved = async (req: AuthRequest, res: Response, next: NextFuncti
   try {
     const tenantId = requireTenantId(req);
     const userId = Number(req.user?.id);
+
+    if (isCannedId(req.params.id)) {
+      const canned = findCanned(req.params.id);
+      if (!canned) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+      // Same tenant scoping as any other run — the definition is ours, the
+      // data is theirs, and runReport is the only thing that touches data.
+      const cannedRun = await runReport(canned.definition, tenantId);
+      res.json({
+        success: true,
+        report: { id: canned.id, name: canned.name },
+        ...cannedRun,
+      });
+      return;
+    }
 
     const found = await pool.query(
       `SELECT r.id, r.name, r.definition

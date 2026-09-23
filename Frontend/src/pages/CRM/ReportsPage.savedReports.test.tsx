@@ -60,7 +60,18 @@ const SAVED = [
   },
 ];
 
-function mockServer(over: Partial<{ reports: unknown[]; status: number }> = {}) {
+const CANNED = [
+  {
+    id: 'canned:revenue-by-industry', name: 'Revenue by Industry',
+    description: 'Closed-won value by account industry.', category: 'Revenue Reports',
+    definition: { v: 1, base: 'deals' },
+    owner_id: null, owner_name: null, created_at: null, updated_at: null,
+    is_canned: true, caveat: 'Industry lives on the account.',
+    abilities: { can_view: true, can_edit: false, can_delete: false, can_share: false },
+  },
+];
+
+function mockServer(over: Partial<{ reports: unknown[]; canned: unknown[]; status: number }> = {}) {
   const fetchMock = vi.fn(async (url: string) => {
     const u = String(url);
     if (u.endsWith('/reports')) {
@@ -71,6 +82,7 @@ function mockServer(over: Partial<{ reports: unknown[]; status: number }> = {}) 
               success: true, data: over.reports ?? SAVED,
               modules: [], fields: [], grant_levels: ['view', 'edit'],
               aggregations: [], operators: [],
+              canned: over.canned ?? CANNED,
             }
           : { success: false, message: 'Registry unavailable' }
       ) } as Response;
@@ -152,11 +164,52 @@ describe('the unbuilt catalogue no longer pretends to be viewable', () => {
       .map(c => String(c[0]))
       .filter(u => u.startsWith('/crm/reports/'));
 
+    const servedIds = [...SAVED, ...CANNED].map(r => r.id);
     for (const u of reportNavs) {
-      const id = u.slice('/crm/reports/'.length);
-      // Every report navigation targets a served id, never a slugified title.
-      expect(SAVED.map(r => r.id)).toContain(decodeURIComponent(id));
-      expect(id).not.toMatch(/-/);
+      const id = decodeURIComponent(u.slice('/crm/reports/'.length));
+      // Every navigation targets an id the SERVER supplied. A canned id
+      // contains hyphens by design (`canned:revenue-by-industry`), so the test
+      // cannot just forbid hyphens — it checks the id was served, which is the
+      // property that actually matters.
+      expect(servedIds).toContain(id);
     }
+  });
+});
+
+describe('built-in reports', () => {
+  it('are listed, and open by their canned id', async () => {
+    mockServer();
+    const user = userEvent.setup();
+    render(<ReportsPage />);
+
+    const card = await screen.findByRole('button', { name: /Revenue by Industry/ });
+    await user.click(card);
+    expect(navigate).toHaveBeenCalledWith('/crm/reports/canned%3Arevenue-by-industry');
+  });
+
+  it('are labelled "Built in", not as someone\'s report', async () => {
+    mockServer();
+    render(<ReportsPage />);
+    await screen.findByRole('button', { name: /Revenue by Industry/ });
+    expect(screen.getByText(/Built in/)).toBeInTheDocument();
+  });
+
+  it('no longer appear in the unbuilt catalogue, since they are built', async () => {
+    /*
+     * "Revenue by Industry" sat in UNBACKED_REPORTS with the reason "only 3 of
+     * 24 deals are linked to an account" — which was true when written and
+     * became wrong when migration 051 backfilled 13 more. A hardcoded coverage
+     * figure in a static string is a fabricated number with a shelf life; the
+     * report now states its own coverage per run instead.
+     */
+    mockServer();
+    render(<ReportsPage />);
+    await screen.findByRole('button', { name: /Revenue by Industry/ });
+
+    expect(screen.queryByText(/only 3 of 24 deals are linked/)).not.toBeInTheDocument();
+    // Exactly one CARD is called this now — the built-in one. Matched on the
+    // heading rather than on any text, since the card's own description
+    // legitimately mentions the same words.
+    expect(screen.getAllByRole('heading', { name: 'Revenue by Industry' })).toHaveLength(1);
   });
 });

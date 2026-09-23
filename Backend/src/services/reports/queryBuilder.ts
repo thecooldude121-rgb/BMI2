@@ -89,7 +89,9 @@ export interface BuiltProvenanceQuery {
    */
   seedMeasurable: boolean;
   /** One entry per join, so coverage can be reported per relationship. */
-  coverageJoins: { module: string; label: string; alias: string }[];
+  coverage: { kind: 'join' | 'dimension'; key: string; label: string }[];
+  /** True when a sum/avg is over a money field, so currency spread was measured. */
+  measuresMoney?: boolean;
 }
 
 /**
@@ -138,6 +140,16 @@ function moduleOf(key: unknown): string {
   }
   return key as string;
 }
+
+/** Display text for a column header. The SQL mapping is AGG_SQL below. */
+const AGG_LABEL: Record<string, string> = {
+  count: 'Count',
+  count_distinct: 'Distinct count',
+  sum: 'Sum',
+  avg: 'Average',
+  min: 'Minimum',
+  max: 'Maximum',
+};
 
 const AGG_SQL: Record<string, (sql: string) => string> = {
   count:          ()    => 'COUNT(*)',
@@ -303,7 +315,9 @@ function assemble(
     selects.push(`${AGG_SQL[m.agg](spec ? spec.sql : '*')} AS metric_${i}`);
     columns.push({
       key: `metric:${i}`,
-      label: m.label || (spec ? `${m.agg} of ${spec.label}` : 'Count'),
+      // Capitalised, and the underscore removed: the raw key reads "count_distinct
+      // of Value" in a column header otherwise. Display text, never SQL.
+      label: m.label || (spec ? `${AGG_LABEL[m.agg]} of ${spec.label}` : 'Count'),
       kind: 'metric',
     });
   });
@@ -353,17 +367,83 @@ function assemble(
 
     // Coverage per join: how many surviving base rows actually matched.
     const coverageJoins = joinKeys.map(k => ({
-      module: k, label: REPORT_MODULES[k].label, alias: REPORT_MODULES[k].alias,
+      kind: 'join' as const,
+      key: k, label: REPORT_MODULES[k].label, alias: REPORT_MODULES[k].alias,
     }));
     coverageJoins.forEach((j, i) => {
-      counts.push(`COUNT(*) FILTER (WHERE ${notTest} AND ${j.alias}.id IS NOT NULL) AS join_${i}_matched`);
+      counts.push(`COUNT(*) FILTER (WHERE ${notTest} AND ${j.alias}.id IS NOT NULL) AS cov_${i}_matched`);
     });
+
+    /*
+     * COVERAGE PER DIMENSION — added in Phase 6, and it closes the larger hole.
+     *
+     * A join gap is only measurable for modules named in `definition.joins`. A
+     * dimension reached through a SUPPORT SOURCE is not a join, so it produced
+     * no coverage entry at all: grouping live deals by "Owner (linked user)"
+     * (which resolves through the `users` support source) put 17 of 18 rows in
+     * a single NULL bucket worth 1,207,000 while `coverage` came back `[]` and
+     * the disclosure mentioned only the seeded share.
+     *
+     * Measuring the DIMENSION rather than the source covers both cases with one
+     * count, and it is the number a reader actually needs: not "did the join
+     * resolve" but "how many rows could be placed in a bucket at all".
+     *
+     * `d.sql` here is registry-supplied SQL for an allowlisted field — the same
+     * expression the SELECT list uses. No user input reaches it.
+     */
+    const coverageDimensions = dimensions.map((d, i) => {
+      counts.push(
+        `COUNT(*) FILTER (WHERE ${notTest} AND (${d.sql}) IS NOT NULL) `
+        + `AS cov_${coverageJoins.length + i}_matched`,
+      );
+      return { kind: 'dimension' as const, key: d.key, label: d.label };
+    });
+
+    /*
+     * CURRENCY SPREAD, for any metric that SUMS or AVERAGES money.
+     *
+     * `SUM(value)` over 17 USD rows and 1 AED row is not a total in any
+     * currency — it is a number with no unit, presented as confidently as a
+     * correct one. There are no exchange rates here, so the only honest move is
+     * to measure the spread and say so.
+     *
+     * Only sum/avg: a MIN or MAX picks an existing row's value, and a COUNT
+     * does not touch the amount at all, so neither can mix units.
+     */
+    const moneySpec = metrics
+      .map((m, i) => ({ m, spec: metricSpecs[i] }))
+      .find(x => x.spec?.currencySql && (x.m.agg === 'sum' || x.m.agg === 'avg'));
+
+    /*
+     * GROUPING BY CURRENCY IS THE FIX, so a report that already does it must
+     * not be warned about mixing them — every total in it is a real total in
+     * one currency. Warning anyway would train readers to ignore the warning,
+     * which costs more than never having had it.
+     *
+     * Compared on the SQL expression rather than the field key, so any field
+     * resolving to the same column counts.
+     */
+    const partitionedByCurrency = moneySpec?.spec?.currencySql
+      ? dimensions.some(d => d.sql === moneySpec.spec!.currencySql)
+      : false;
+    const currencySql = partitionedByCurrency ? undefined : moneySpec?.spec?.currencySql;
+    if (currencySql) {
+      counts.push(`COUNT(DISTINCT ${currencySql}) FILTER (WHERE ${notTest}) AS currency_count`);
+      counts.push(
+        `ARRAY_AGG(DISTINCT ${currencySql}) FILTER (WHERE ${notTest} AND ${currencySql} IS NOT NULL) `
+        + `AS currencies`,
+      );
+    }
 
     const provSql = `SELECT ${counts.join(',\n       ')}\n${from}`
       + (where.length ? `\nWHERE ${where.join('\n  AND ')}` : '');
 
     assertEverySourceIsScoped(provSql, sourceCount);
-    return { sql: provSql, params, sourceCount, seedMeasurable, coverageJoins };
+    return {
+      sql: provSql, params, sourceCount, seedMeasurable,
+      coverage: [...coverageJoins, ...coverageDimensions],
+      measuresMoney: !!currencySql,
+    };
   }
 
   // ── GROUP BY / ORDER BY / LIMIT ─────────────────────────────────────────

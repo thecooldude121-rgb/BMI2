@@ -25,6 +25,7 @@ const p = (over: Partial<Provenance> = {}): Provenance => ({
   mostly_seeded: false,
   excluded_test: 0,
   coverage: [],
+  currencies: null,
   truncated: false,
   row_limit: 5000,
   disclosure: '2 of 10 rows (20%) are seeded demo data.',
@@ -70,7 +71,7 @@ describe('unmeasurable is not zero', () => {
 describe('coverage and the seeded share are separate facts', () => {
   it('renders a coverage entry alongside the seeded share, not merged into it', () => {
     render(<ProvenanceNote provenance={p({
-      coverage: [{ join: 'companies', label: 'Account', matched: 3, of: 24 }],
+      coverage: [{ kind: 'join' as const, key: 'companies', label: 'Account', matched: 3, of: 24 }],
     })} />);
 
     // Both numbers are present and distinguishable.
@@ -101,5 +102,38 @@ describe('a mostly-seeded or truncated result is escalated, not just annotated',
   it('does not escalate an ordinary result', () => {
     render(<ProvenanceNote provenance={p()} />);
     expect(screen.getByTestId('provenance-note')).toHaveAttribute('data-mostly-seeded', 'false');
+  });
+});
+
+describe('a join gap and a dimension gap are not the same gap', () => {
+  it('words them differently, because they have different fixes', () => {
+    /*
+     * "no account linked" and "no industry recorded" are different problems:
+     * the first is fixed by linking the deal to an account, the second by
+     * filling in the account's industry. Rendering both as "linked" would tell
+     * a reader to do the wrong thing.
+     */
+    render(<ProvenanceNote provenance={p({
+      coverage: [
+        { kind: 'join', key: 'companies', label: 'Accounts', matched: 3, of: 5 },
+        { kind: 'dimension', key: 'companies.industry', label: 'Industry', matched: 2, of: 5 },
+      ],
+    })} />);
+
+    const note = screen.getByTestId('provenance-note');
+    expect(note).toHaveTextContent(/Accounts linked:\s*3 of 5/);
+    expect(note).toHaveTextContent(/Industry recorded:\s*2 of 5/);
+  });
+});
+
+describe('mixed currencies', () => {
+  it('carries the warning the server composed, rather than a total', () => {
+    // There are no exchange rates in this system, so a sum across currencies
+    // is a number in no unit. The server states that; this renders it.
+    const disclosure = 'Based on 18 rows — 15 of them seeded demo data, 3 real. '
+      + 'These amounts span 2 currencies (AED, USD) and are added together WITHOUT '
+      + 'conversion, so the totals are not meaningful as money.';
+    render(<ProvenanceNote provenance={p({ currencies: ['AED', 'USD'], disclosure })} />);
+    expect(screen.getByText(disclosure)).toBeInTheDocument();
   });
 });

@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT, and so are Phases 2, 3, 4 and 5.**
+BUILT, and so are Phases 2 through 6.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -30,10 +30,69 @@ BUILT, and so are Phases 2, 3, 4 and 5.**
 | **3** | Run endpoints + provenance | **built** |
 | **4** | `CustomReportBuilder` wired | **built** (a rewrite — see below) |
 | **5** | `ReportDetailView` | **built** (routed by id; + the saved-reports list) |
-| **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | next |
-| **7** | Exports (CSV, then PDF/Excel) | |
+| **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | **built** |
+| **7** | Exports (CSV, then PDF/Excel) | next |
 | **8** | Scheduling | |
 | **9** | Caching with result age (small, droppable) | |
+
+### What Phase 6 found by running the disclosure at volume
+
+The reports were the small part. Running them against the live workspace found
+**four defects in the provenance block Phase 3 built**, none of which any test
+had caught, because every test to that point used data the test itself created.
+
+1. **THE DISCLOSURE CONTAINED A FALSE STATEMENT.** It said unlinked rows "have
+   no accounts linked and are not counted". Every join is a LEFT JOIN, so those
+   rows are NOT dropped — they are kept with a NULL dimension and land in a
+   bucket of their own. Grouping live deals by industry produced
+   `{industry: null, value: 140000, count: 2}` sitting in the result while the
+   sentence beneath it said those two rows were not counted. A disclosure that
+   misdescribes the data is worse than none, because it is read as the
+   authoritative account of what is on screen. **A Phase 3 test was pinning the
+   bug** — it asserted the sentence verbatim.
+
+2. **COVERAGE COULD NOT SEE THE BIGGER GAP.** It was built from
+   `definition.joins` only, so a dimension reached through a SUPPORT SOURCE
+   produced no entry at all. Grouping live deals by "Owner (linked user)" — which
+   resolves through `users` — put **17 of 18 rows into one unlabelled bucket
+   worth 1,207,000** and reported `coverage: []`. Coverage is now measured per
+   DIMENSION as well, which is also the number a reader actually wants: not "did
+   the join resolve" but "how many rows could be placed at all".
+
+3. **SUMS ADDED UNLIKE CURRENCIES.** `deals` live holds 17 USD rows and one AED
+   row, so `SUM(value)` returned 1,237,000 of nothing with the same confidence
+   as a correct figure. This is the trap `PROJECTION_RULES` already refuses
+   ("reported by currency, never converted") reached from another direction.
+   There are no exchange rates here and inventing one would be a fabricated
+   number with a decimal point, so: the registry marks `deals.value` as money
+   via `currencySql`, the builder measures the spread, the disclosure states it
+   — and **both shipped reports group BY currency**, which makes every total a
+   real total rather than merely a warned-about one. The warning is suppressed
+   when a report already groups by currency, so it cannot become noise.
+
+4. **"Based on 1 rows."** The other two branches pluralised correctly, which is
+   how it survived — the bug was in the branch nobody read aloud.
+
+### Two decisions inside the canned reports
+
+**They are NOT rows in `saved_reports`.** A migration inserting one row per
+workspace was rejected: a workspace created later would not have them, they
+would be editable and deletable so "the Revenue by Industry report" would mean
+something different per tenant, and improving one would become a data migration.
+They live in `services/reports/canned.ts`, and their ids are prefixed `canned:`
+— not a valid UUID, so they can never collide with a saved report's id nor be
+stored as one. That is what lets ONE route serve both. Every write path refuses
+a canned id before the query, because `id` is a UUID column and an unguarded
+`canned:...` reaches Postgres as 22P02 and is masked as a bare 500.
+
+**Pipeline by Owner groups on the LINKED USER, and it costs the report most of
+its rows.** `deals` carries both `assigned_to` (free text, 16 of 18 populated)
+and `assigned_to_user_id` (a real reference, 1 of 18). Grouping on the typed
+name would look far better and would be the same defect removed three times
+already — two people sharing a name merge, one person typed two ways splits.
+So it groups on the reference and says plainly that 15 of 16 are unattributed.
+**The fix is the `assigned_to_user_id` backfill**, already recorded as not a P3
+prerequisite. Until then this report is mostly one honest row.
 
 ### What Phase 5 had to include, and why it is not scope creep
 

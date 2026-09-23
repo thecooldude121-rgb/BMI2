@@ -8,7 +8,7 @@ import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ProvenanceNote from '../../components/Reports/ProvenanceNote';
 import {
   fetchReport, runSavedReport, deleteReport,
-  fetchGrants, setGrant, revokeGrant, ReportsApiError,
+  fetchGrants, setGrant, revokeGrant, ReportsApiError, UNATTRIBUTED,
   type SavedReport, type ReportRun, type ReportGrant, type GrantLevel,
 } from '../../utils/reportsApi';
 import { fetchRoster, type WorkspaceMember } from '../../utils/usersApi';
@@ -43,10 +43,26 @@ import { fetchRoster, type WorkspaceMember } from '../../utils/usersApi';
  * There is no fallback path here. If the run fails, the failure is what renders.
  */
 
-const fmt = (v: unknown): React.ReactNode =>
-  v === null || v === undefined
-    ? <span className="text-gray-300">—</span>
-    : String(v);
+/**
+ * A NULL in a DIMENSION is a bucket, not a missing cell, and it must be named.
+ *
+ * It renders as "Not recorded" — the same words the server puts inside the
+ * disclosure sentence ("...are grouped under \"Not recorded\" rather than
+ * dropped"), so the reader can match the sentence to the row by eye. A bare
+ * em-dash left the largest row on a live by-owner report unexplained: 17 of 18
+ * deals, worth 1,207,000, under a character that reads as "no data here"
+ * rather than "these are the ones nobody is assigned to".
+ *
+ * A NULL in a METRIC is different and keeps the dash: an aggregate over no rows
+ * genuinely has no value, and calling that "Not recorded" would claim something
+ * about data collection that is not true.
+ */
+const fmt = (v: unknown, kind: 'dimension' | 'metric'): React.ReactNode => {
+  if (v !== null && v !== undefined) return String(v);
+  return kind === 'dimension'
+    ? <span className="text-gray-500 italic">{UNATTRIBUTED}</span>
+    : <span className="text-gray-300">—</span>;
+};
 
 /**
  * The runner aliases its SELECT list `dim_0..n` then `metric_0..n`, indexed
@@ -179,9 +195,11 @@ const ReportDetailView: React.FC = () => {
               {/* Ownerless is a real state — the owner FK is ON DELETE SET NULL,
                   so a report outlives the person who made it. Say so plainly
                   rather than printing a blank. */}
-              {report?.owner_name
-                ? <span>Created by {report.owner_name}</span>
-                : <span>No owner (the person who created this no longer has an account)</span>}
+              {report?.is_canned
+                ? <span>Built in</span>
+                : report?.owner_name
+                  ? <span>Created by {report.owner_name}</span>
+                  : <span>No owner (the person who created this no longer has an account)</span>}
               {ranAt && (
                 <span className="ml-1">
                   {' · '}Ran at {ranAt.toLocaleTimeString()}
@@ -278,6 +296,23 @@ const ReportDetailView: React.FC = () => {
           </div>
         )}
 
+        {/*
+          * THE STRUCTURAL CAVEAT, above the per-run note and shown even when
+          * the run fails.
+          *
+          * These answer different questions and both are needed. The caveat
+          * says something about the DATA MODEL that will be true of every run
+          * ("industry lives on the account, so unlinked deals cannot be
+          * placed"); the provenance note says what THIS run measured ("2 of 18
+          * have no industry recorded"). Collapsing them would lose either the
+          * reason or the number.
+          */}
+        {report?.caveat && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 mb-4">
+            <p className="text-[12px] text-blue-900">{report.caveat}</p>
+          </div>
+        )}
+
         {/* ── The result ─────────────────────────────────────────────────── */}
         {run && (
           <>
@@ -324,7 +359,7 @@ const ReportDetailView: React.FC = () => {
                                 n >= dimCount ? 'text-right tabular-nums' : ''
                               }`}
                             >
-                              {fmt(r[rowKeys[n]])}
+                              {fmt(r[rowKeys[n]], c.kind)}
                             </td>
                           ))}
                         </tr>

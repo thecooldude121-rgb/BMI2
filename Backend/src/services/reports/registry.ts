@@ -46,6 +46,22 @@ export interface FieldSpec {
    * the source without the definition having to know about it.
    */
   requiresSource?: string;
+  /**
+   * SQL for the column holding this field's CURRENCY, when the field is an
+   * amount of money.
+   *
+   * Summing money across currencies produces a number in no unit at all. Live,
+   * `deals` holds 17 USD rows and 1 AED row, so `SUM(value)` returned 1,237,000
+   * of nothing — and reported it with the same confidence as any other figure.
+   * This is the same trap `PROJECTION_RULES` already refuses ("only deals in
+   * the quota's currency count; the rest are reported by currency, never
+   * converted"), reached from a different direction.
+   *
+   * There are no exchange rates in this system and inventing one would be a
+   * fabricated number with a decimal point. So the builder MEASURES the spread
+   * and the disclosure states it.
+   */
+  currencySql?: string;
 }
 
 export interface ModuleSpec {
@@ -156,7 +172,8 @@ export const REPORT_FIELDS: Record<string, FieldSpec> = {
   // ── Deals ───────────────────────────────────────────────────────────────
   'deals.id':                  { module: 'deals', sql: 'd.id',                  type: 'string',   label: 'Deal ID' },
   'deals.name':                { module: 'deals', sql: 'd.name',                type: 'string',   label: 'Deal name' },
-  'deals.value':               { module: 'deals', sql: 'd.value',               type: 'number',   label: 'Value', aggregatable: true },
+  'deals.value':               { module: 'deals', sql: 'd.value',               type: 'number',   label: 'Value', aggregatable: true,
+                                 currencySql: 'd.currency' },
   'deals.currency':            { module: 'deals', sql: 'd.currency',            type: 'enum',     label: 'Currency' },
   'deals.expected_close_date': { module: 'deals', sql: 'd.expected_close_date', type: 'date',     label: 'Expected close date' },
   'deals.created_at':          { module: 'deals', sql: 'd.created_at',          type: 'datetime', label: 'Created' },

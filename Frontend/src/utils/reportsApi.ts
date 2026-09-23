@@ -78,6 +78,13 @@ export interface ReportAbilities {
 
 export interface SavedReport {
   id: string;
+  /** True for a report the product ships. Absent on a user's own. */
+  is_canned?: boolean;
+  /**
+   * A structural limitation of the workspace's data that every run will share
+   * — distinct from `provenance.disclosure`, which describes one run.
+   */
+  caveat?: string | null;
   name: string;
   description: string | null;
   category: string | null;
@@ -96,6 +103,8 @@ export interface ReportsList {
   grantLevels: string[];
   aggregations: AggregationSpec[];
   operators: OperatorSpec[];
+  /** Reports the product ships. Runnable by anyone, editable by nobody. */
+  canned: SavedReport[];
 }
 
 export async function fetchReports(): Promise<ReportsList> {
@@ -110,6 +119,7 @@ export async function fetchReports(): Promise<ReportsList> {
     grantLevels: (json.grant_levels ?? []) as string[],
     aggregations: (json.aggregations ?? []) as AggregationSpec[],
     operators: (json.operators ?? []) as OperatorSpec[],
+    canned: (json.canned ?? []) as SavedReport[],
   };
 }
 
@@ -148,7 +158,29 @@ export async function deleteReport(id: string): Promise<void> {
 
 // ── Running, and what a run discloses ─────────────────────────────────────
 
-export interface CoverageEntry { join: string; label: string; matched: number; of: number }
+export interface CoverageEntry {
+  /**
+   * `join` — base rows that reached a joined module at all.
+   * `dimension` — base rows that actually have a value for a grouped field.
+   * The second was added in Phase 6; without it a dimension resolved through a
+   * support source (`users`) reported no gap while putting 17 of 18 live deals
+   * into one unlabelled bucket.
+   */
+  kind: 'join' | 'dimension';
+  key: string;
+  label: string;
+  matched: number;
+  of: number;
+}
+
+/**
+ * THE NAME OF THE NULL BUCKET. Mirrors `UNATTRIBUTED` in the runner, and it is
+ * mirrored ON PURPOSE rather than served: the server already puts this exact
+ * string inside the disclosure sentence, so if the two ever disagree the
+ * sentence will name a bucket the table does not show — which a test asserts
+ * against, rather than leaving it to be noticed.
+ */
+export const UNATTRIBUTED = 'Not recorded';
 
 export interface Provenance {
   rows_returned: number;
@@ -160,6 +192,15 @@ export interface Provenance {
   mostly_seeded: boolean;
   excluded_test: number;
   coverage: CoverageEntry[];
+  /**
+   * Currencies the aggregated amounts were drawn from, when a sum or average
+   * was taken over money. More than one means the figure adds unlike units and
+   * is not a total — this CRM stores no exchange rates, so the server reports
+   * the spread rather than resolving it.
+   *
+   * Null when no money was aggregated, which is NOT the same as one currency.
+   */
+  currencies: string[] | null;
   truncated: boolean;
   row_limit: number;
   /** Composed server-side. Rendered verbatim — see ProvenanceNote. */

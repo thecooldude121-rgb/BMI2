@@ -98,8 +98,18 @@ export const ProvenanceNote: React.FC<{
                 * trust, while 81% seeded is the fact that changes the reading.
                 */}
               {p.coverage.map(c => (
-                <div key={c.join}>
-                  <dt className="inline">{c.label} linked: </dt>
+                <div key={`${c.kind}:${c.key}`}>
+                  {/*
+                    * "linked" for a join, "recorded" for a dimension. They are
+                    * different gaps and the wording is the only thing telling
+                    * them apart: a deal with no account CANNOT reach the
+                    * account's industry, whereas a deal linked to an account
+                    * that simply has no industry recorded is a different
+                    * problem with a different fix.
+                    */}
+                  <dt className="inline">
+                    {c.label} {c.kind === 'join' ? 'linked' : 'recorded'}:{' '}
+                  </dt>
                   <dd className="inline font-medium text-gray-700 tabular-nums">
                     {c.matched.toLocaleString()} of {c.of.toLocaleString()}
                   </dd>

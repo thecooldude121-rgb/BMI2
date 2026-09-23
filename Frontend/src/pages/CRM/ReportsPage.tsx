@@ -189,15 +189,12 @@ const UNBACKED_REPORTS: ReadonlyArray<{
    * tracked in CLAUDE.md.
    */
   {
-    section: 'revenue', title: 'Revenue by Industry', icon: '🏭',
-    reason: 'Revenue cannot be grouped by industry yet. Accounts all record an '
-      + 'industry, but only 3 of 24 deals are linked to an account, so a '
-      + 'breakdown would describe those three and omit the rest.',
-  },
-  {
     section: 'custom', title: 'SaaS Pipeline Report', icon: '📊',
-    reason: 'Filtering pipeline by industry needs deals linked to accounts, and '
-      + 'only 3 of 24 currently are. The industry is on the account, not the deal.',
+    reason: 'Filtering pipeline by industry needs deals linked to accounts. '
+      + 'Migration 051 backfilled 13, so 16 of 25 now are — enough for the '
+      + '"Revenue by Industry" report above, which states its own coverage per '
+      + 'run, but this one also needs a definition of which accounts count as '
+      + 'SaaS, and nothing records that.',
   },
 
   // ── Custom ───────────────────────────────────────────────────────────────
@@ -1517,18 +1514,62 @@ const ReportCard: React.FC<ReportCardProps> = ({
 const SavedReportsSection: React.FC = () => {
   const navigate = useNavigate();
   const [reports, setReports] = useState<SavedReport[] | null>(null);
+  const [canned, setCanned] = useState<SavedReport[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetchReports()
-      .then(list => { if (!cancelled) setReports(list.reports); })
+      .then(list => {
+        if (cancelled) return;
+        setReports(list.reports);
+        setCanned(list.canned);
+      })
       .catch((e: Error) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, []);
 
+  const card = (r: SavedReport) => (
+    <button
+      key={r.id}
+      /* BY ID — canned ids are `canned:<key>`, which is not a valid UUID and
+         so can never collide with a saved report's. One route serves both. */
+      onClick={() => navigate(`/crm/reports/${encodeURIComponent(r.id)}`)}
+      className="text-left border border-gray-200 bg-white rounded-lg p-4 hover:shadow-md hover:border-blue-500 transition-all"
+    >
+      <h3 className="text-base font-semibold text-gray-900">{r.name}</h3>
+      {r.description && (
+        <p className="text-xs text-gray-600 mt-1 line-clamp-2">{r.description}</p>
+      )}
+      <p className="text-xs text-gray-400 mt-2">
+        {r.category ?? 'Uncategorised'}
+        {' · '}
+        {r.is_canned
+          ? 'Built in'
+          : r.abilities.can_delete ? 'Yours' : 'Shared with you'}
+      </p>
+    </button>
+  );
+
   return (
     <div className="mb-8">
+      {/*
+        * BUILT-IN REPORTS FIRST. They are the ones that work on a workspace
+        * that has never built anything, and each states its own coverage when
+        * opened rather than advertising a figure here that would be stale the
+        * moment the data changed — which is exactly what the card this
+        * replaced did ("only 3 of 24 deals are linked", true when written,
+        * wrong after migration 051 backfilled 13 more).
+        */}
+      {canned.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Built-in reports</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {canned.map(card)}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold text-gray-900">Your saved reports</h2>
         <button
@@ -1570,26 +1611,7 @@ const SavedReportsSection: React.FC = () => {
 
       {!error && reports && reports.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {reports.map(r => (
-            <button
-              key={r.id}
-              /* BY ID. This is the whole point of the phase. */
-              onClick={() => navigate(`/crm/reports/${encodeURIComponent(r.id)}`)}
-              className="text-left border border-gray-200 bg-white rounded-lg p-4 hover:shadow-md hover:border-blue-500 transition-all"
-            >
-              <h3 className="text-base font-semibold text-gray-900">{r.name}</h3>
-              {r.description && (
-                <p className="text-xs text-gray-600 mt-1 line-clamp-2">{r.description}</p>
-              )}
-              <p className="text-xs text-gray-400 mt-2">
-                {r.category ?? 'Uncategorised'}
-                {' · '}
-                {/* Shared-with-me is worth distinguishing from mine: it changes
-                    which controls the detail page will offer. */}
-                {r.abilities.can_delete ? 'Yours' : 'Shared with you'}
-              </p>
-            </button>
-          ))}
+          {reports.map(card)}
         </div>
       )}
     </div>

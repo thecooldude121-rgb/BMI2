@@ -7,6 +7,7 @@ import ProvenanceNote from '../../components/Reports/ProvenanceNote';
 import {
   fetchReports, fetchReport, createReport, updateReport, runDefinition,
   aggregationLabel, operatorLabel, operatorAppliesTo, DEFINITION_VERSION, ReportsApiError,
+  UNATTRIBUTED,
   type ReportDefinition, type RegistryField, type RegistryModule,
   type ReportRun, type Aggregation, type Operator,
   type AggregationSpec, type OperatorSpec,
@@ -604,7 +605,18 @@ const CustomReportBuilder: React.FC = () => {
                                 const v = r[rowKeys[n]];
                                 return (
                                   <td key={c.key} className="px-3 py-2 text-gray-800 tabular-nums">
-                                    {v === null || v === undefined ? <span className="text-gray-300">—</span> : String(v)}
+                                    {/*
+                                      * A null DIMENSION is a bucket and gets
+                                      * the name the server uses inside the
+                                      * disclosure sentence; a null METRIC is a
+                                      * genuine absence and keeps the dash. Same
+                                      * rule as ReportDetailView.
+                                      */}
+                                    {v !== null && v !== undefined
+                                      ? String(v)
+                                      : c.kind === 'dimension'
+                                        ? <span className="text-gray-500 italic">{UNATTRIBUTED}</span>
+                                        : <span className="text-gray-300">—</span>}
                                   </td>
                                 );
                               })}

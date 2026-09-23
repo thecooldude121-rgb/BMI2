@@ -42,7 +42,8 @@ const REPORT = {
 const PROVENANCE = {
   rows_returned: 2, rows_matched: 2, rows_seeded: 2, rows_real: 0,
   seeded_share: 1, mostly_seeded: true, excluded_test: 1,
-  coverage: [{ join: 'companies', label: 'Account', matched: 16, of: 24 }],
+  coverage: [{ kind: 'join', key: 'companies', label: 'Account', matched: 16, of: 24 }],
+  currencies: null,
   truncated: false, row_limit: 5000,
   disclosure: 'All 2 rows are seeded demo data. 8 of 24 have no account linked and are not counted.',
 };
@@ -492,5 +493,95 @@ describe('delete', () => {
     await user.click(screen.getByRole('button', { name: /Cancel/i }));
     expect(deleted).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('a canned report is presented as what it is', () => {
+  const CANNED = {
+    ...REPORT,
+    id: 'canned:revenue-by-industry',
+    name: 'Revenue by Industry',
+    owner_id: null,
+    owner_name: null,
+    is_canned: true,
+    caveat: 'Industry lives on the account, so only linked deals can be placed in a band.',
+    abilities: { can_view: true, can_edit: false, can_delete: false, can_share: false },
+  };
+
+  beforeEach(() => { params = { reportId: 'canned:revenue-by-industry' }; });
+
+  it('says "Built in" rather than "No owner"', async () => {
+    /*
+     * A canned report genuinely has no owner row, and the ownerless wording
+     * ("the person who created this no longer has an account") would be a
+     * false statement about a report the product ships. Sending a fake owner
+     * name would have been the shorter fix and the wrong one.
+     */
+    mockServer({ report: CANNED });
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+
+    expect(screen.getByText('Built in')).toBeInTheDocument();
+    expect(screen.queryByText(/No owner/i)).not.toBeInTheDocument();
+  });
+
+  it('offers no edit, share or delete, because nobody owns it', async () => {
+    mockServer({ report: CANNED });
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+
+    for (const name of [/Edit/i, /Share/i, /Delete/i]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: /Re-run/i })).toBeInTheDocument();
+  });
+
+  it('shows the structural caveat ABOVE the per-run note, since they answer different questions', async () => {
+    // The caveat describes the DATA MODEL and is true of every run; the note
+    // describes what THIS run measured. Collapsing them loses the reason or
+    // the number.
+    mockServer({ report: CANNED });
+    render(<ReportDetailView />);
+    const note = await screen.findByTestId('provenance-note');
+    const caveat = screen.getByText(/Industry lives on the account/);
+
+    expect(caveat).toBeInTheDocument();
+    expect(caveat.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('still shows the caveat when the run FAILS', async () => {
+    // The reason the report is limited does not stop being true because the
+    // query timed out.
+    mockServer({ report: CANNED, runStatus: 504, runMessage: 'timeout' });
+    render(<ReportDetailView />);
+    await screen.findByTestId('report-error-timeout');
+    expect(screen.getByText(/Industry lives on the account/)).toBeInTheDocument();
+  });
+});
+
+describe('the NULL bucket is named, not left as a dash', () => {
+  it('renders "Not recorded" for a null DIMENSION and a dash for a null METRIC', async () => {
+    /*
+     * On live data the largest row of the by-owner report is the null one — 15
+     * of 16 deals — and an em-dash there reads as "no data in this cell"
+     * rather than "these are the deals nobody is linked to". The words match
+     * the server's disclosure sentence exactly so the two can be matched by eye.
+     */
+    mockServer();
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (/\/run$/.test(u)) {
+        return { ok: true, status: 200, json: async () => ({
+          ...RUN,
+          rows: [{ dim_0: null, metric_0: null }],
+        }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ success: true, data: REPORT }) } as Response;
+    });
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+
+    expect(screen.getByText('Not recorded')).toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
   });
 });
