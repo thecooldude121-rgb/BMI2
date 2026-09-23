@@ -335,3 +335,75 @@ export async function revokeGrant(reportId: string, userId: number): Promise<voi
     { method: 'DELETE', headers: getAuthHeaders() },
   ));
 }
+
+// ── CSV export ────────────────────────────────────────────────────────────
+//
+// A plain <a href> cannot be used: these endpoints require the Authorization
+// header, and a link sends none. So the file is fetched, turned into a blob,
+// and handed to a synthetic anchor — which also lets a failure surface as an
+// error the page can render instead of a browser tab showing raw JSON.
+
+/**
+ * The server names the file (`Content-Disposition`), and this reads that name
+ * rather than inventing one, so the CSV a user saves is called what the server
+ * says it is. RFC 6266 sends both a plain `filename` and a percent-encoded
+ * `filename*`; the starred form wins when present because it survives non-ASCII.
+ */
+function filenameFrom(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const starred = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (starred) {
+    try { return decodeURIComponent(starred[1]); } catch { /* fall through */ }
+  }
+  const plain = /filename="([^"]+)"/i.exec(header);
+  return plain ? plain[1] : fallback;
+}
+
+/** Hands a fetched blob to the browser as a download. */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking immediately can cancel the download in some browsers; a tick is
+  // enough and the object is released either way.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function downloadCsv(res: Response, fallbackName: string): Promise<void> {
+  if (!res.ok) {
+    // The error body is JSON even though the success body is a file, so a
+    // failed export reports WHY (409 stale, 504 timed out) rather than saving
+    // a file containing an error message.
+    const json = await res.json().catch(() => ({} as { message?: string }));
+    throw new ReportsApiError(json?.message || `Export failed (${res.status})`, res.status);
+  }
+  saveBlob(
+    await res.blob(),
+    filenameFrom(res.headers.get('Content-Disposition'), fallbackName),
+  );
+}
+
+export async function exportReportCsv(reportId: string): Promise<void> {
+  await downloadCsv(
+    await fetch(`${API_BASE}/reports/${encodeURIComponent(reportId)}/export.csv`,
+      { headers: getAuthHeaders() }),
+    'report.csv',
+  );
+}
+
+export async function exportDefinitionCsv(
+  definition: ReportDefinition, name: string,
+): Promise<void> {
+  await downloadCsv(
+    await fetch(`${API_BASE}/reports/export.csv`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ definition, name }),
+    }),
+    'report.csv',
+  );
+}

@@ -7,7 +7,7 @@ import ProvenanceNote from '../../components/Reports/ProvenanceNote';
 import {
   fetchReports, fetchReport, createReport, updateReport, runDefinition,
   aggregationLabel, operatorLabel, operatorAppliesTo, DEFINITION_VERSION, ReportsApiError,
-  UNATTRIBUTED,
+  UNATTRIBUTED, exportDefinitionCsv,
   type ReportDefinition, type RegistryField, type RegistryModule,
   type ReportRun, type Aggregation, type Operator,
   type AggregationSpec, type OperatorSpec,
@@ -104,6 +104,7 @@ const CustomReportBuilder: React.FC = () => {
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const rowKeys = useMemo(() => (run ? rowKeysFor(run.columns) : []), [run]);
 
@@ -537,7 +538,33 @@ const CustomReportBuilder: React.FC = () => {
                   <Table2 className="h-4 w-4 text-gray-400" aria-hidden="true" />
                   Result
                 </h2>
-                {run && <span className="text-[11px] text-gray-400">{run.ms} ms</span>}
+                <span className="flex items-center gap-3">
+                  {run && <span className="text-[11px] text-gray-400">{run.ms} ms</span>}
+                  {/*
+                    * Only once a result EXISTS. Exporting an unrun definition
+                    * would mean the file is the first place the numbers appear,
+                    * with nobody having seen the disclosure on screen first.
+                    */}
+                  {run && (
+                    <button
+                      onClick={async () => {
+                        setExporting(true);
+                        setRunError(null);
+                        try {
+                          await exportDefinitionCsv(definition, name.trim() || 'Untitled report');
+                        } catch (e) {
+                          setRunError({ message: (e as Error).message, stale: false });
+                        } finally {
+                          setExporting(false);
+                        }
+                      }}
+                      disabled={exporting}
+                      className="text-[12px] text-indigo-600 hover:text-indigo-800 disabled:text-gray-400"
+                    >
+                      {exporting ? 'Preparing…' : 'Export CSV'}
+                    </button>
+                  )}
+                </span>
               </div>
 
               {runError && (

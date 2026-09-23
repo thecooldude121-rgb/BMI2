@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ReportDetailView from './ReportDetailView';
@@ -190,16 +190,24 @@ describe('every figure comes from the run, and none from a fixture', () => {
     }
   });
 
-  it('offers no export or schedule CONTROL, and says where they are', async () => {
-    // The old menu's items were console.log behind a "Report exported
-    // successfully" toast and a "View File" button, for a file never written.
+  it('offers no SCHEDULE control, because scheduling still is not built', async () => {
+    /*
+     * UPDATED IN PHASE 7. This asserted that EXPORT had no control either,
+     * which was correct while export was fake — the old menu was `console.log`
+     * behind a "Report exported successfully" toast and a "View File" button
+     * pointing at a file never written.
+     *
+     * Export is real now, so that half of the assertion is gone and the export
+     * tests below replace it. Scheduling is still not built, and its absence
+     * still needs pinning: a dead control is worse than none, because a user
+     * plans around it.
+     */
     mockServer();
     render(<ReportDetailView />);
     await screen.findByRole('table');
 
-    expect(screen.queryByRole('button', { name: /export/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /schedule/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/aren.t built yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Scheduled delivery isn.t built yet/i)).toBeInTheDocument();
   });
 
   it('an empty result is stated as a result, not as a failure', async () => {
@@ -583,5 +591,92 @@ describe('the NULL bucket is named, not left as a dash', () => {
 
     expect(screen.getByText('Not recorded')).toBeInTheDocument();
     expect(screen.getByText('—')).toBeInTheDocument();
+  });
+});
+
+describe('CSV export', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  /*
+   * The old page's export menu was `console.log` behind a "Report exported
+   * successfully" toast and a "View File" button, so a user went looking on
+   * disk for a file that was never written. What is pinned here is that a
+   * request is actually MADE, and that a failure is reported rather than
+   * swallowed.
+   */
+  /**
+   * Minimal: spy on the ANCHOR'S click and stub the object-URL pair, nothing
+   * else.
+   *
+   * The first version of this mocked `document.createElement` wholesale, which
+   * broke React's own rendering — the next test found an empty <body> and
+   * failed for a reason unrelated to what it was testing. A test double that
+   * replaces a DOM primitive takes the framework with it.
+   */
+  const stubDownload = () => {
+    const saved: { name: string | null } = { name: null };
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) { saved.name = this.download; });
+    const createObjectURL = vi.fn(() => 'blob:x');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', Object.assign(Object.create(URL), { createObjectURL, revokeObjectURL }));
+    return { click, saved };
+  };
+
+  it('requests the export endpoint for THIS report and saves what the server named', async () => {
+    const { click, saved } = stubDownload();
+    mockServer();
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/export.csv')) {
+        return {
+          ok: true, status: 200,
+          headers: { get: () => 'attachment; filename="deals-by-name-2026-09-23.csv"' },
+          blob: async () => new Blob(['x']),
+        } as unknown as Response;
+      }
+      if (/\/run$/.test(u)) return { ok: true, status: 200, json: async () => RUN } as Response;
+      return { ok: true, status: 200, json: async () => ({ success: true, data: REPORT }) } as Response;
+    });
+
+    const user = userEvent.setup();
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: /Export CSV/i }));
+
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(urlsFetched().some(u => u.endsWith('/reports/R7/export.csv'))).toBe(true);
+    // The server names the file; the client does not invent one.
+    expect(saved.name).toBe('deals-by-name-2026-09-23.csv');
+  });
+
+  it('reports a failed export instead of silently saving nothing', async () => {
+    stubDownload();
+    mockServer();
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/export.csv')) {
+        return { ok: false, status: 409, json: async () => ({
+          success: false, message: 'Unknown field "deals.gone"',
+        }) } as Response;
+      }
+      if (/\/run$/.test(u)) return { ok: true, status: 200, json: async () => RUN } as Response;
+      return { ok: true, status: 200, json: async () => ({ success: true, data: REPORT }) } as Response;
+    });
+
+    const user = userEvent.setup();
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: /Export CSV/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Couldn.t export this report/);
+    expect(screen.getByRole('alert')).toHaveTextContent('deals.gone');
+  });
+
+  it('still says scheduling is not built, so nobody plans around it', async () => {
+    mockServer();
+    render(<ReportDetailView />);
+    await screen.findByRole('table');
+    expect(screen.getByText(/Scheduled delivery isn.t built yet/i)).toBeInTheDocument();
   });
 });

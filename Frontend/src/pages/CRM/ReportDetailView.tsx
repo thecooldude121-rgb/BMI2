@@ -8,7 +8,7 @@ import CRMNavigation from '../../components/CRM/CRMNavigation';
 import ProvenanceNote from '../../components/Reports/ProvenanceNote';
 import {
   fetchReport, runSavedReport, deleteReport,
-  fetchGrants, setGrant, revokeGrant, ReportsApiError, UNATTRIBUTED,
+  fetchGrants, setGrant, revokeGrant, ReportsApiError, UNATTRIBUTED, exportReportCsv,
   type SavedReport, type ReportRun, type ReportGrant, type GrantLevel,
 } from '../../utils/reportsApi';
 import { fetchRoster, type WorkspaceMember } from '../../utils/usersApi';
@@ -91,6 +91,8 @@ const ReportDetailView: React.FC = () => {
   const [ranAt, setRanAt] = useState<Date | null>(null);
 
   const [shareOpen, setShareOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const classify = (e: unknown): LoadError => {
@@ -385,11 +387,47 @@ const ReportDetailView: React.FC = () => {
               * a dead control is worse than an absent one: a user plans around
               * it.
               */}
-            <p className="text-[12px] text-gray-400 mt-3 flex items-center gap-1.5">
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              Export and scheduled delivery aren&rsquo;t built yet. The figures above are
-              live, so there is nothing stopping them — they are just not done.
-            </p>
+            {/*
+              * EXPORT IS REAL NOW — Phase 7. Scheduling is not, and saying so
+              * is cheaper than letting someone plan around a button that does
+              * not exist.
+              *
+              * The downloaded file carries the disclosure above its data. That
+              * is the whole reason export was withheld until the figures were
+              * real: "on screen they are surrounded by context, in a
+              * spreadsheet they become someone's evidence."
+              */}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  setExporting(true);
+                  setExportError(null);
+                  try {
+                    await exportReportCsv(reportId);
+                  } catch (e) {
+                    setExportError((e as Error).message);
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+                disabled={exporting}
+              >
+                <Download className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                {exporting ? 'Preparing…' : 'Export CSV'}
+              </Button>
+              <span className="text-[12px] text-gray-400">
+                The file includes the data note above. Scheduled delivery isn&rsquo;t built yet.
+              </span>
+            </div>
+            {exportError && (
+              <p className="text-[12px] text-red-700 mt-2" role="alert">
+                {/* Never a silent no-op: an export that fails must say so, or a
+                    user goes looking on disk for a file that was never written
+                    — which is exactly what the old fake export did. */}
+                Couldn&rsquo;t export this report. {exportError}
+              </p>
+            )}
           </>
         )}
 

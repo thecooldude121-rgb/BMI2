@@ -17,6 +17,8 @@ import {
   abilitiesFor, GRANT_LEVELS, type GrantLevel,
 } from '../services/reports/access';
 import { runReport, ReportTimeout } from '../services/reports/runner';
+import { toCsv, csvFilename } from '../services/reports/csv';
+import { streamHeaders } from '../config/fileStorage';
 
 /**
  * SAVED REPORTS — definitions, and who may see them. P3 Phase 2.
@@ -564,6 +566,105 @@ export const runSaved = async (req: AuthRequest, res: Response, next: NextFuncti
         success: false,
         message: `This saved report can no longer run: ${error.message}`,
       });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+
+/**
+ * RESOLVE A REPORT FOR EXPORT — canned or saved, with the caller's visibility
+ * enforced exactly as it is for a run.
+ *
+ * Shared by both export routes so there is ONE place the access check lives.
+ * An export that applied a weaker check than the run would be a way to read a
+ * report you cannot open, which is the same class of mistake as a second data
+ * path around tenant scoping.
+ */
+async function resolveForExport(
+  req: AuthRequest, tenantId: string, userId: number,
+): Promise<{ name: string; definition: unknown; caveat: string | null } | null> {
+  if (isCannedId(req.params.id)) {
+    const c = findCanned(req.params.id);
+    return c ? { name: c.name, definition: c.definition, caveat: c.caveat ?? null } : null;
+  }
+  const found = await pool.query(
+    `SELECT r.name, r.definition
+       FROM saved_reports r
+      WHERE r.tenant_id = $1 AND r.id = $3 AND ${canViewPredicate('r', 2)}`,
+    [tenantId, userId, req.params.id],
+  );
+  return found.rows[0]
+    ? { name: found.rows[0].name, definition: found.rows[0].definition, caveat: null }
+    : null;
+}
+
+/** GET /api/v1/reports/:id/export.csv */
+export const exportSaved = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const userId = Number(req.user?.id);
+
+    const target = await resolveForExport(req, tenantId, userId);
+    if (!target) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+
+    const run = await runReport(target.definition as never, tenantId);
+    const generatedAt = new Date().toISOString();
+    const csv = toCsv(run, {
+      reportName: target.name, generatedAt, caveat: target.caveat,
+    });
+
+    /*
+     * The SAME download headers every other file in this app uses
+     * (`config/fileStorage.streamHeaders`) rather than a hand-rolled pair here:
+     * they carry `X-Content-Type-Options: nosniff`, a `default-src 'none';
+     * sandbox` CSP and RFC 6266 filename encoding. A second set of download
+     * headers is a second place to forget one of those.
+     */
+    res.set(streamHeaders(csvFilename(target.name, generatedAt), 'text/csv'));
+    // A BOM, so Excel opens UTF-8 correctly instead of mangling non-ASCII
+    // account names — this product targets India, the Middle East and Africa.
+    res.send('\uFEFF' + csv);
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(409).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+/** POST /api/v1/reports/export.csv — an unsaved definition, from the builder. */
+export const exportAdHoc = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const { definition, name } = req.body ?? {};
+    if (!definition) {
+      res.status(400).json({ success: false, message: 'definition is required' });
+      return;
+    }
+
+    const run = await runReport(definition, tenantId);
+    const generatedAt = new Date().toISOString();
+    // A name the caller supplies is DISPLAY TEXT inside the file and part of
+    // the filename, so it is escaped by `toCsv`/`csvFilename` like any other
+    // untrusted string rather than trusted for being "ours".
+    const reportName = typeof name === 'string' && name.trim() ? name.trim() : 'Untitled report';
+
+    res.set(streamHeaders(csvFilename(reportName, generatedAt), 'text/csv'));
+    res.send('\uFEFF' + toCsv(run, { reportName, generatedAt }));
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(400).json({ success: false, message: error.message });
       return;
     }
     if (error instanceof ReportTimeout) {
