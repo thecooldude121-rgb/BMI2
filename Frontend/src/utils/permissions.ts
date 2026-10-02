@@ -27,9 +27,19 @@ export type Permission =
 
 // ── Role → Permission mapping ──────────────────────────────────────────────────
 
+/**
+ * `leads.convert` and `leads.manage_views` are EVERY role's — RATIFIED
+ * 2026-10-03 (Venkat). Both used to be manager+ in this file only; the API never
+ * restricted either (conversion is an ordinary PUT /leads/:id, saved views are
+ * open CRUD), so the UI was hiding work the server allowed. The decision was to
+ * open the UI, not to close the server: converting a lead is everyday sales
+ * work, and a saved view is a convenience, not a record.
+ */
 const SDR: Permission[] = [
   'leads.view_own',
   'leads.edit_fields',
+  'leads.convert',
+  'leads.manage_views',
 ];
 
 const SENIOR_SDR: Permission[] = [
@@ -37,6 +47,7 @@ const SENIOR_SDR: Permission[] = [
   'leads.edit_fields',
   'leads.bulk_actions',
   'leads.convert',
+  'leads.manage_views',
 ];
 
 const MANAGER: Permission[] = [
@@ -71,8 +82,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
    *
    * The backend issues three roles (admin, manager, sales) and this model has
    * four tiers, so one tier has to absorb another. `sales` maps to the LOWEST
-   * non-privileged tier deliberately: view_own and edit_fields, without
-   * bulk_actions, convert or delete. Two reasons.
+   * non-privileged tier deliberately: view_own, edit_fields, convert and
+   * manage_views (the last two ratified for everyone, 2026-10-03 — see SDR),
+   * without bulk_actions or delete. Two reasons.
    *
    * First, it matches what the API now enforces. Destructive actions —
    * deletes and bulk updates — require admin or manager server-side

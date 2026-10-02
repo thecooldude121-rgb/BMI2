@@ -25,7 +25,7 @@ import { generateDealName } from '../../utils/dealNameGenerator';
 import { usePipelines, useStageLookup } from '../../hooks/useStageLookup';
 import { findPipeline, defaultPipeline } from '../../utils/pipelinesApi';
 import { DEFAULT_DEAL_TYPE } from '../../config/dealTypes';
-import { DEFAULT_CONTACT_ROLE, getContactRole, StakeholderContact } from '../../config/contactRoles';
+import { DEFAULT_CONTACT_ROLE, StakeholderContact } from '../../config/contactRoles';
 import { Competitor } from '../../config/competitors';
 import { getSuggestedForecastCategory } from '../../config/forecastCategories';
 import { getSuggestedDealValue, PriceResult } from '../../utils/productPricingEngine';
@@ -381,13 +381,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       }
     }));
 
-    // Generate AI suggestions based on account
+    // Only what the selected account actually carries. A suggested value
+    // (from a hardcoded 50,000 "avg deal size"), a fixed 45-day close date and
+    // a 65-68% "similar deals" win probability used to be offered here — and
+    // "Apply All Suggestions" wrote them INTO the deal being saved. None was
+    // derived from anything; removed 2026-10-03.
     const suggestions = {
-      dealValue: account.avgDealSize || '50000',
-      valueRange: `$${(account.avgDealSize * 0.9 / 1000).toFixed(0)}K - $${(account.avgDealSize * 1.1 / 1000).toFixed(0)}K`,
-      closeDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      closeDays: 45,
-      probability: Math.min(account.winRate || 68, 100),
       contact: account.primaryContact,
     };
     setAiSuggestions(suggestions);
@@ -411,18 +410,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         id: contact.id
       }
     }));
-  };
-
-  const handleApplyAISuggestions = () => {
-    if (aiSuggestions) {
-      // Route through handleFieldChange so dealValueUserEdited is set to true,
-      // preventing the catalog auto-apply effect from overwriting the value.
-      handleFieldChange('dealValue', String(aiSuggestions.dealValue));
-      handleFieldChange('closeDate', aiSuggestions.closeDate);
-      // Probability is derived, update directly without triggering field-level side effects
-      setFormData(prev => ({ ...prev, probability: aiSuggestions.probability }));
-      showToast('success', 'Form auto-populated from AI suggestions');
-    }
   };
 
   const handleChangeSelection = () => {
@@ -555,30 +542,15 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     return null;
   };
 
-  // Calculate win probability based on multiple factors
-  const calculateWinProbability = (data: any): number => {
-    // Base probability comes from the workspace's stage, not a hardcoded
-    // catalogue. A stage with none set contributes no baseline rather than the
-    // old `?? 20` — a number nobody chose, presented as the deal's.
-    let probability = stageLookup(data.stage, data.pipelineId ?? null)?.probability ?? 0;
-
-    // Contact level boost — check primary and all additional stakeholders
-    const allRoles: string[] = [
-      data.contactRole,
-      ...((data.additionalContacts ?? []) as StakeholderContact[]).map(c => c.role),
-    ];
-    if (allRoles.some(r => getContactRole(r).id === 'decision-maker')) probability += 10;
-    if (allRoles.some(r => getContactRole(r).id === 'champion'))       probability += 15;
-    if (allRoles.some(r => getContactRole(r).id === 'economic-buyer')) probability += 10;
-
-    // Sweet-spot check always in USD so it works across all currencies
-    const dealValue = parseAmountInput(data.dealValue?.toString() || '0');
-    const dealValueUSD = convertToBaseCurrency(isNaN(dealValue) ? 0 : dealValue, data.currency || BASE_CURRENCY_CODE);
-    if (dealValueUSD >= 40000 && dealValueUSD <= 60000) probability += 5;
-
-    // Cap at 100%
-    return Math.min(probability, 100);
-  };
+  // Win probability = the stage probability the workspace configured. That is
+  // its reason, and the only one this form can state. It used to add FIXED
+  // boosts (+10 decision-maker, +15 champion, +10 economic buyer, +5 for a
+  // hardcoded 40K-60K USD "sweet spot") and save the result as `probability`
+  // and `win_prob_ai` — a score whose reasons were never computed from
+  // anything. Removed 2026-10-03 under CLAUDE.md's Evidence-Based AI standard.
+  // A rep can still override it, with a reason.
+  const calculateWinProbability = (data: any): number =>
+    stageLookup(data.stage, data.pipelineId ?? null)?.probability ?? 0;
 
   // Forces a fresh auto-generated name regardless of whether the user had edited it.
   // Called by the "Regenerate" button in DealFormBasicInfo.
@@ -1056,7 +1028,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
                 <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm font-semibold text-purple-900">🤖 AI Auto-populated:</div>
+                    <div className="text-sm font-semibold text-purple-900">Linked from your selection:</div>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
@@ -1067,25 +1039,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
                       <span className="text-purple-800">• Contact:</span>
                       <span className="font-medium text-purple-900">{selectedContact?.name || aiSuggestions.contact}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-800">• Suggested Value:</span>
-                      <span className="font-medium text-purple-900">{aiSuggestions.valueRange} (Based on company size & industry)</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-800">• Suggested Close Date:</span>
-                      <span className="font-medium text-purple-900">{aiSuggestions.closeDays} days ({new Date(aiSuggestions.closeDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-800">• Win Probability:</span>
-                      <span className="font-medium text-purple-900">{aiSuggestions.probability}% (Similar deals)</span>
-                    </div>
                   </div>
-                  <button
-                    onClick={handleApplyAISuggestions}
-                    className="mt-4 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
-                  >
-                    Apply All Suggestions
-                  </button>
                 </div>
               </div>
             )}
@@ -1094,7 +1048,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
             <DealFormBasicInfo
               formData={formData}
               onChange={handleFieldChange}
-              aiSuggestions={aiSuggestions}
               validationErrors={validationErrors}
               fieldWarnings={fieldWarnings}
               isNameAutoGenerated={!dealNameUserEdited && !!formData.dealName}

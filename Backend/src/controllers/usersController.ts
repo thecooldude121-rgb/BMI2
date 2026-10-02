@@ -133,7 +133,7 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
 function memberPermissions(callerRole: string, targetRole: string) {
   const mayManage = (DESTRUCTIVE_ACTION_ROLES as readonly string[]).includes(callerRole);
   const actOn = mayManage && canActOn(callerRole, targetRole);
-  return { can_change_role: actOn, can_change_manager: actOn };
+  return { can_change_role: actOn, can_change_manager: actOn, can_deactivate: actOn };
 }
 
 async function findMember(tenantId: string, id: string, db: Queryable = pool) {
@@ -223,6 +223,22 @@ export const deactivateUser = async (req: AuthRequest, res: Response, next: Next
       return;
     }
 
+    // Guard 1b — never above your own (canActOn), the same rule role and
+    // manager changes enforce. Missing until 2026-10-03: a manager could
+    // deactivate an admin whenever another privileged member remained, which
+    // removes the person above you just as surely as demoting them does. It
+    // went unnoticed only because the Team page was admin-only in the UI — a
+    // hidden control, not a server check.
+    const callerRole = String(req.user?.role ?? '');
+    if (!canActOn(callerRole, target.role)) {
+      await client.query('COMMIT');
+      res.status(403).json({
+        success: false,
+        message: `A ${callerRole || 'user'} cannot deactivate a ${target.role}.`,
+      });
+      return;
+    }
+
     // Guard 2 — the last one standing. Read INSIDE the lock, so a concurrent
     // deactivation in this workspace has either already committed (and is
     // counted) or is waiting behind us (and will re-read after we commit).
@@ -258,7 +274,7 @@ export const deactivateUser = async (req: AuthRequest, res: Response, next: Next
       [target.id, tenantId],
     );
     await client.query('COMMIT');
-    res.json({ success: true, data: updated.rows[0] });
+    res.json({ success: true, data: { ...updated.rows[0], ...memberPermissions(callerRole, target.role) } });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     next(error);
@@ -274,6 +290,17 @@ export const reactivateUser = async (req: AuthRequest, res: Response, next: Next
     const target = await findMember(tenantId, req.params.id);
     if (!target) { res.status(404).json({ success: false, message: 'User not found' }); return; }
 
+    // Same canActOn bound as deactivation: restoring an admin's access is not
+    // a manager's call to make any more than removing it is.
+    const callerRole = String(req.user?.role ?? '');
+    if (!canActOn(callerRole, target.role)) {
+      res.status(403).json({
+        success: false,
+        message: `A ${callerRole || 'user'} cannot reactivate a ${target.role}.`,
+      });
+      return;
+    }
+
     // NO LOCK HERE, deliberately: reactivation only ADDS an active privileged
     // member, so it cannot break the "at least one" invariant no matter how it
     // interleaves with a concurrent deactivation.
@@ -288,7 +315,7 @@ export const reactivateUser = async (req: AuthRequest, res: Response, next: Next
         RETURNING id, first_name, last_name, email, role, is_active`,
       [target.id, tenantId],
     );
-    res.json({ success: true, data: updated.rows[0] });
+    res.json({ success: true, data: { ...updated.rows[0], ...memberPermissions(callerRole, target.role) } });
   } catch (error) { next(error); }
 };
 

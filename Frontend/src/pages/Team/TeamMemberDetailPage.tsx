@@ -3,6 +3,8 @@ import { Button } from '../../components/ui/Button';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChevronRight, Mail, Calendar, Video, Briefcase, Target, Trophy, TrendingUp, Clock, BarChart3, Users, Phone, MessageSquare, CheckCircle, Plus, CreditCard as Edit2, Trash2, AlertCircle, X, FileText, MoreVertical, StickyNote, Share2, RefreshCw, Download, Link2, Copy, Settings, Shield, Activity } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { PreviewBanner } from '../../components/common/PreviewBanner';
 import { NotAvailable } from '../../components/common/NotAvailable';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
 import { useTeamPerformance } from '../../hooks/useTeamPerformance';
@@ -93,7 +95,14 @@ export default function TeamMemberDetailPage() {
   const { showToast } = useToast();
   const location = useLocation();
   const navigationState = location.state as { from?: string } | null;
-  const [currentRole, setCurrentRole] = useState<Role>('Manager');
+  // The page's view role now comes from the SESSION. It used to be a local
+  // useState('Manager') driven by an on-page "Role-Based View Testing"
+  // dropdown (CEO / VP / Analyst / Support…) shown to every user — a dev
+  // widget, and a role nobody was signed in as. Removed 2026-10-03.
+  // Display-only: nothing on this page writes to the API.
+  const { user } = useAuth();
+  const currentRole: Role =
+    user?.role === 'Admin' ? 'CEO' : user?.role === 'Manager' ? 'Manager' : user?.role === 'Sales' ? 'Rep' : 'Support';
   const [addNoteOpen, setAddNoteOpen] = useState(false);
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
@@ -354,75 +363,14 @@ export default function TeamMemberDetailPage() {
     setCallModalOpen(true);
   };
 
-  const handleCallSchedule = async (callData: {
-    date: string;
-    time: string;
-    duration: number;
-    callType: 'phone' | 'video' | 'inperson';
-    phoneNumber?: string;
-    videoLink?: string;
-    subject: string;
-    notes: string;
-    sendInvite: boolean;
-    addToCalendar: boolean;
-  }) => {
-    // Format date and time for display
-    const callDate = new Date(callData.date + 'T' + callData.time);
-    const formattedDate = callDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    const formattedTime = callDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-
-    // Create activity log
-    const activity = {
-      id: `call-${Date.now()}`,
-      type: 'Call Scheduled' as const,
-      with: member.name,
-      withEmail: member.email,
-      date: callData.date,
-      time: callData.time,
-      formattedDateTime: `${formattedDate} at ${formattedTime} ${member.timezone || 'PST'}`,
-      duration: `${callData.duration} minutes`,
-      callType: callData.callType,
-      phoneNumber: callData.phoneNumber,
-      videoLink: callData.videoLink,
-      subject: callData.subject,
-      notes: callData.notes,
-      status: 'Scheduled' as const,
-      timestamp: new Date().toISOString(),
-      sendInvite: callData.sendInvite,
-      addToCalendar: callData.addToCalendar,
-      relatedTo: `${member.name} (Team Member)`
-    };
-
-    // In a real app, this would:
-    // 1. Create calendar event via Google Calendar/Outlook API
-    // 2. Send calendar invite to member's email
-    // 3. Generate Zoom link if video call
-    // 4. Set reminder 15 minutes before
-    // 5. Save to database
-    // 6. Add to Activities (Screen 6.1)
-
-    console.log('Call Activity Logged:', activity);
-
-    // Show success toast with formatted details
-    const callTypeDisplay = {
-      phone: 'Phone Call',
-      video: 'Video Call',
-      inperson: 'In-Person Meeting'
-    }[callData.callType];
-
-    showToast(
-      `${callTypeDisplay} scheduled with ${member.name} for ${formattedDate} at ${formattedTime}`,
-      'success'
-    );
-
+  /*
+   * The seven handlers below used to assemble an "activity" object, console.log
+   * it, and toast success ("Email sent", "Meeting scheduled", "Task created"…)
+   * — none reached the API. Rewritten 2026-10-03 to say what actually happened.
+   * The modals still collect input; wiring any of them = replacing its handler.
+   */
+  const handleCallSchedule = async () => {
+    showToast('Scheduling is not available yet — no call was created.', 'warning');
     setCallModalOpen(false);
   };
 
@@ -454,289 +402,43 @@ export default function TeamMemberDetailPage() {
 
   const confirmDeleteNote = () => {
     if (selectedNote) {
-      showToast('Coaching note deleted successfully', 'success');
+      showToast('Coaching notes are not stored yet — nothing was deleted.', 'warning');
       setDeleteNoteModalOpen(false);
       setSelectedNote(null);
     }
   };
 
   const saveSchedule = () => {
-    showToast(`1-on-1 scheduled with ${member.name}`, 'success');
+    showToast('Scheduling is not available yet — no 1-on-1 was created.', 'warning');
     setScheduleModalOpen(false);
   };
 
-  const handleEmailSend = async (emailData: {
-    subject: string;
-    body: string;
-    template: string;
-    attachments?: File[];
-  }) => {
-    // Log activity to activity timeline
-    const activity = {
-      id: `email-${Date.now()}`,
-      type: 'Email' as const,
-      to: member.name,
-      toEmail: member.email,
-      subject: emailData.subject,
-      body: emailData.body,
-      template: emailData.template,
-      date: new Date().toISOString(),
-      timestamp: new Date().toLocaleString(),
-      status: 'Sent' as const,
-      relatedTo: `${member.name} (Team Member)`,
-      attachmentCount: emailData.attachments?.length || 0
-    };
-
-    // In a real app, this would:
-    // 1. Send email via Gmail/Outlook integration
-    // 2. Save to database
-    // 3. Add to Sarah Chen's activity timeline
-
-    console.log('Email Activity Logged:', activity);
-
-    showToast(`Email sent to ${member.name}`, 'success');
+  const handleEmailSend = async () => {
+    showToast('Email sending is not available yet — nothing was sent.', 'warning');
     setEmailModalOpen(false);
   };
 
-  const handleEmailSaveDraft = async (emailData: {
-    subject: string;
-    body: string;
-    template: string;
-  }) => {
-    // Save draft to database
-    const draft = {
-      id: `draft-${Date.now()}`,
-      to: member.email,
-      toName: member.name,
-      subject: emailData.subject,
-      body: emailData.body,
-      template: emailData.template,
-      savedAt: new Date().toISOString(),
-      status: 'Draft' as const
-    };
-
-    // In a real app, save to database
-    console.log('Email Draft Saved:', draft);
-
-    showToast('Email saved as draft', 'success');
-    // Keep modal open so user can continue editing
+  const handleEmailSaveDraft = async () => {
+    showToast('Drafts are not stored yet — this draft was not saved.', 'warning');
   };
 
-  const handleMeetingSchedule = async (meetingData: {
-    meetingType: '1-on-1' | 'team' | 'client';
-    date: string;
-    time: string;
-    duration: number;
-    locationType: 'office' | 'video' | 'external';
-    locationDetails: string;
-    subject: string;
-    agenda: string;
-    agendaTemplate?: string;
-    additionalAttendees: string[];
-    recurring: 'one-time' | 'weekly' | 'biweekly' | 'monthly';
-    reminders: { fifteenMin: boolean; oneDay: boolean };
-  }) => {
-    // Format date and time
-    const meetingDateTime = new Date(meetingData.date + 'T' + meetingData.time);
-    const formattedDate = meetingDateTime.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-    const formattedTime = meetingDateTime.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-
-    // Create activity log
-    const activity = {
-      id: `meeting-${Date.now()}`,
-      type: 'Meeting Scheduled' as const,
-      meetingType: meetingData.meetingType,
-      with: member.name,
-      withEmail: member.email,
-      date: meetingData.date,
-      time: meetingData.time,
-      formattedDateTime: `${formattedDate} at ${formattedTime} ${member.timezone || 'PST'}`,
-      duration: `${meetingData.duration} minutes`,
-      locationType: meetingData.locationType,
-      locationDetails: meetingData.locationDetails,
-      subject: meetingData.subject,
-      agenda: meetingData.agenda,
-      agendaTemplate: meetingData.agendaTemplate,
-      additionalAttendees: meetingData.additionalAttendees,
-      recurring: meetingData.recurring,
-      reminders: meetingData.reminders,
-      status: 'Scheduled' as const,
-      timestamp: new Date().toISOString(),
-      relatedTo: `${member.name} (Team Member)`,
-      isOneOnOne: meetingData.meetingType === '1-on-1'
-    };
-
-    // In a real app, this would:
-    // 1. Create calendar event
-    // 2. Send invites to all attendees
-    // 3. Generate video link if needed
-    // 4. Set reminders
-    // 5. Add to Activities
-    // 6. If 1-on-1: Add to Coaching Notes timeline
-
-    console.log('Meeting Activity Logged:', activity);
-
-    const meetingTypeDisplay = meetingData.meetingType === '1-on-1' ? '1-on-1' :
-                                meetingData.meetingType === 'team' ? 'Team Meeting' : 'Client Meeting';
-
-    showToast(
-      `${meetingTypeDisplay} scheduled with ${member.name} for ${formattedDate} at ${formattedTime}`,
-      'success'
-    );
-
+  const handleMeetingSchedule = async () => {
+    showToast('Scheduling is not available yet — no meeting was created.', 'warning');
     setMeetingModalOpen(false);
   };
 
-  const handleTaskCreate = async (taskData: {
-    assignedTo: string;
-    title: string;
-    description: string;
-    dueDate: string;
-    priority: 'low' | 'medium' | 'high' | 'urgent';
-    relatedTo: 'deal' | 'contact' | 'team' | 'other';
-    relatedEntity: string;
-    sendReminder: boolean;
-  }) => {
-    // Format due date
-    const dueDate = new Date(taskData.dueDate);
-    const formattedDueDate = dueDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-
-    // Create activity log
-    const activity = {
-      id: `task-${Date.now()}`,
-      type: 'Task Assigned' as const,
-      taskTitle: taskData.title,
-      assignedTo: taskData.assignedTo,
-      assignedBy: currentRole,
-      dueDate: taskData.dueDate,
-      formattedDueDate,
-      priority: taskData.priority,
-      description: taskData.description,
-      relatedTo: taskData.relatedTo,
-      relatedEntity: taskData.relatedEntity || member.name,
-      sendReminder: taskData.sendReminder,
-      status: 'Pending' as const,
-      timestamp: new Date().toISOString()
-    };
-
-    // In a real app, this would:
-    // 1. Create task in system
-    // 2. Send notification to assignee
-    // 3. Add to assignee's task list
-    // 4. Add to Activities timeline
-    // 5. Set reminder if enabled
-
-    console.log('Task Activity Logged:', activity);
-
-    showToast(`Task created for ${taskData.assignedTo}`, 'success');
-
+  const handleTaskCreate = async () => {
+    showToast('Tasks from this page are not saved yet — no task was created. Use Tasks to create one.', 'warning');
     setTaskModalOpen(false);
   };
 
-  const handleNoteSave = async (noteData: {
-    noteType: 'coaching' | 'general' | 'meeting';
-    date: string;
-    subject: string;
-    content: string;
-    focusAreas: string[];
-    developmentGoals: string;
-    visibility: 'private' | 'shared';
-  }) => {
-    // Format date
-    const noteDate = new Date(noteData.date);
-    const formattedDate = noteDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-
-    // Create coaching note
-    const note = {
-      id: `note-${Date.now()}`,
-      type: noteData.noteType,
-      about: member.name,
-      aboutEmail: member.email,
-      date: noteData.date,
-      formattedDate,
-      subject: noteData.subject,
-      content: noteData.content,
-      focusAreas: noteData.focusAreas,
-      developmentGoals: noteData.developmentGoals,
-      visibility: noteData.visibility,
-      author: currentRole,
-      authorName: 'Current User',
-      timestamp: new Date().toISOString(),
-      status: 'Active' as const
-    };
-
-    // In a real app, this would:
-    // 1. Add to Coaching Notes section
-    // 2. Add to member's coaching timeline
-    // 3. Save to database
-    // 4. Optional: Notify member if shared
-    // 5. Link to performance reviews
-
-    console.log('Coaching Note Saved:', note);
-
-    const noteTypeDisplay = noteData.noteType === 'coaching' ? 'Coaching note' :
-                             noteData.noteType === 'general' ? 'General note' : 'Meeting note';
-
-    showToast(`${noteTypeDisplay} added for ${member.name}`, 'success');
-
+  const handleNoteSave = async () => {
+    showToast('Notes on team members are not stored yet — this note was not saved.', 'warning');
     setNoteModalOpen(false);
   };
 
-  const handleDocumentShare = async (documentData: {
-    documentSource: 'library' | 'upload';
-    documentName: string;
-    documentType?: string;
-    file?: File;
-    message: string;
-    permission: 'view' | 'edit' | 'download';
-    expires: 'never' | '7days' | '30days' | '90days';
-  }) => {
-    // Create activity log
-    const activity = {
-      id: `document-${Date.now()}`,
-      type: 'Document Shared' as const,
-      documentName: documentData.documentName,
-      documentType: documentData.documentType,
-      sharedWith: member.name,
-      sharedWithEmail: member.email,
-      sharedBy: currentRole,
-      documentSource: documentData.documentSource,
-      fileSize: documentData.file ? `${(documentData.file.size / 1024).toFixed(0)} KB` : 'N/A',
-      message: documentData.message,
-      permission: documentData.permission,
-      expires: documentData.expires,
-      timestamp: new Date().toISOString(),
-      status: 'Shared' as const
-    };
-
-    // In a real app, this would:
-    // 1. Upload document (if new)
-    // 2. Grant permissions to Sarah Chen
-    // 3. Send email notification with link
-    // 4. Add to Shared Documents section
-    // 5. Sync with Google Drive/Dropbox if connected
-    // 6. Track document views and downloads
-
-    console.log('Document Shared Activity:', activity);
-
-    showToast(`Document shared with ${member.name}`, 'success');
-
+  const handleDocumentShare = async () => {
+    showToast('Document sharing is not available yet — nothing was shared.', 'warning');
     setDocumentModalOpen(false);
   };
 
@@ -748,17 +450,17 @@ export default function TeamMemberDetailPage() {
 
   const handleRefreshData = () => {
     setMoreActionsOpen(false);
-    showToast('Refreshing profile data...', 'info');
+    // Was a setTimeout followed by "Profile data refreshed" — nothing refetched.
     setTimeout(() => {
-      showToast('Profile data refreshed', 'success');
+      showToast('Reload the page to refresh this profile.', 'info');
     }, 1000);
   };
 
   const handleExportProfile = () => {
     setMoreActionsOpen(false);
-    showToast('Generating profile export...', 'info');
+    // Was a setTimeout followed by "Profile exported successfully" — no file was produced.
     setTimeout(() => {
-      showToast('Profile exported successfully', 'success');
+      showToast('Profile export is not available yet — no file was produced.', 'warning');
     }, 1500);
   };
 
@@ -777,9 +479,9 @@ export default function TeamMemberDetailPage() {
 
   const handleUserSettings = () => {
     setMoreActionsOpen(false);
-    if (currentRole === 'Admin' || currentRole === 'CEO') {
-      navigate('/settings/team');
-      showToast('Opening user settings...', 'info');
+    if (currentRole === 'CEO') {
+      // Was navigate('/settings/team') — a route that does not exist.
+      navigate('/crm/settings');
     } else {
       showToast('Admin access required', 'error');
     }
@@ -787,20 +489,20 @@ export default function TeamMemberDetailPage() {
 
   const handleViewAuditLog = () => {
     setMoreActionsOpen(false);
-    if (currentRole === 'Admin' || currentRole === 'CEO') {
-      showToast('Opening audit log...', 'info');
+    if (currentRole === 'CEO') {
+      showToast('There is no audit log yet.', 'warning');
     } else {
       showToast('Admin access required', 'error');
     }
   };
 
   const saveNote = () => {
-    showToast('Coaching note added successfully', 'success');
+    showToast('Coaching notes are not stored yet — this note was not saved.', 'warning');
     setAddNoteOpen(false);
   };
 
   const updateNote = () => {
-    showToast('Coaching note updated successfully', 'success');
+    showToast('Coaching notes are not stored yet — this change was not saved.', 'warning');
     setEditNoteModalOpen(false);
     setSelectedNote(null);
   };
@@ -831,34 +533,7 @@ export default function TeamMemberDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       <div className="max-w-7xl mx-auto p-8">
-        {/* Role Switcher */}
-        <div className="bg-gradient-to-r from-blue-50 to-slate-50 rounded-xl shadow-sm p-4 mb-6 border border-blue-200">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-slate-700">Role-Based View Testing:</h3>
-            <select
-              value={currentRole}
-              onChange={(e) => setCurrentRole(e.target.value as Role)}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="CEO">CEO (Full Access)</option>
-              <option value="VP">VP (Full Access)</option>
-              <option value="Manager">Manager (Own Team)</option>
-              <option value="Rep">Rep (No Direct Reports)</option>
-              <option value="Admin">Admin (Read-Only)</option>
-              <option value="Analyst">Analyst (Read-Only)</option>
-              <option value="Support">Support (No Access)</option>
-            </select>
-          </div>
-          <div className="text-xs text-slate-600">
-            {currentRole === 'CEO' && '✅ Can view all direct reports, schedule meetings, full access to all data'}
-            {currentRole === 'VP' && '✅ Can view direct reports, schedule meetings, view performance data'}
-            {currentRole === 'Manager' && '✅ Viewing own team - Full access to direct reports and all actions'}
-            {currentRole === 'Rep' && '❌ Direct Reports section hidden - Reps don\'t see team structure'}
-            {currentRole === 'Admin' && '⚠️ Read-only access - Can view but not schedule 1-on-1s'}
-            {currentRole === 'Analyst' && '⚠️ Read-only access - Data visibility for analysis only'}
-            {currentRole === 'Support' && '❌ No access to team performance data'}
-          </div>
-        </div>
+        <PreviewBanner detail="Actions on this page — email, scheduling, tasks, notes, document sharing and export — are not saved or sent. Each one says so when you use it." />
 
         {/* Breadcrumb Navigation */}
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
@@ -1148,7 +823,7 @@ export default function TeamMemberDetailPage() {
                         Copy Email Address
                       </button>
 
-                      {(currentRole === 'Admin' || currentRole === 'CEO') && (
+                      {(currentRole === 'CEO') && (
                         <>
                           <div className="border-t border-slate-200 my-1"></div>
                           <button
@@ -1807,7 +1482,7 @@ export default function TeamMemberDetailPage() {
                 <Calendar className="w-5 h-5" />
                 Schedule Call
               </button>
-              <button onClick={() => { setContactModalOpen(false); showToast('Activity logged successfully', 'success'); }} className="w-full px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium flex items-center gap-3">
+              <button onClick={() => { setContactModalOpen(false); showToast('Activity logging from this page is not available yet — nothing was logged.', 'warning'); }} className="w-full px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium flex items-center gap-3">
                 <FileText className="w-5 h-5" />
                 Log Activity
               </button>
@@ -2010,7 +1685,7 @@ export default function TeamMemberDetailPage() {
             <div className="flex gap-3 p-6 border-t border-slate-200">
               <Button
                 onClick={() => {
-                  showToast('Document shared successfully', 'success');
+                  showToast('Document sharing is not available yet — nothing was shared.', 'warning');
                   setShareDocModalOpen(false);
                 }}
                 fullWidth
@@ -2097,7 +1772,7 @@ export default function TeamMemberDetailPage() {
             <div className="flex gap-3 p-6 border-t border-slate-200">
               <Button
                 onClick={() => {
-                  showToast('Task created successfully', 'success');
+                  showToast('Tasks from this page are not saved yet — no task was created.', 'warning');
                   setAddTaskModalOpen(false);
                 }}
                 fullWidth

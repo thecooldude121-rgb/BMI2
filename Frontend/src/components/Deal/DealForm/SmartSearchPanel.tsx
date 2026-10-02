@@ -49,8 +49,6 @@ export const SmartSearchPanel: React.FC<SmartSearchPanelProps> = ({
         industry: item.industry,
         employees: item.size,
         revenue: item.revenue ? `$${(item.revenue / 1_000_000).toFixed(1)}M revenue` : null,
-        avgDealSize: 50000,
-        winRate: 65,
       });
     } else {
       onContactSelect({

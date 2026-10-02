@@ -52,6 +52,7 @@ const member = (
    * `toMember` produces for a row whose server omitted the flags.
    */
   canChangeManager: false,
+  canDeactivate: false,
   managerId: null,
   managerName: null,
 });

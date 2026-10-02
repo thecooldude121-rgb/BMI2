@@ -59,18 +59,18 @@ const ImportLeadsPage: React.FC = () => {
 
   const integrations: Integration[] = [
     {
+      // Was status 'connected' with "2 hours ago", "1,234 leads" imported and
+      // auto-sync "Enabled" — directly under copy saying no integration is
+      // wired. Nothing is connected; corrected 2026-10-03.
       id: 'apollo',
       name: 'Apollo.io',
-      status: 'connected',
+      status: 'not-connected',
       logo: '🚀',
-      lastSync: '2 hours ago',
-      totalImported: 1234,
-      autoSync: true,
-      frequency: 'Every 6 hours',
-      assignedTo: 'Alex Rodriguez (You)',
-      leadStatus: 'New',
-      tags: ['Lead Gen', 'Apollo'],
-      aiScoring: true
+      benefits: [
+        'B2B contact database',
+        'Email sequences',
+        'Contact enrichment'
+      ]
     },
     {
       id: 'zoominfo',
@@ -107,53 +107,10 @@ const ImportLeadsPage: React.FC = () => {
     }
   ];
 
-  const importHistory: ImportHistory[] = [
-    {
-      id: '1',
-      date: 'Nov 15, 2025',
-      time: '10:00 AM',
-      source: 'Apollo.io',
-      totalLeads: 25,
-      highValue: 8,
-      mediumValue: 12,
-      lowValue: 5,
-      failed: 0
-    },
-    {
-      id: '2',
-      date: 'Nov 13, 2025',
-      time: '4:00 PM',
-      source: 'Apollo.io',
-      totalLeads: 18,
-      highValue: 5,
-      mediumValue: 9,
-      lowValue: 4,
-      failed: 0
-    },
-    {
-      id: '3',
-      date: 'Nov 10, 2025',
-      time: '9:00 AM',
-      source: 'Apollo.io',
-      totalLeads: 32,
-      highValue: 12,
-      mediumValue: 15,
-      lowValue: 5,
-      failed: 0
-    },
-    {
-      id: '4',
-      date: 'Nov 8, 2025',
-      time: '2:00 PM',
-      source: 'Apollo.io',
-      totalLeads: 5,
-      highValue: 2,
-      mediumValue: 2,
-      lowValue: 1,
-      failed: 0,
-      duplicates: 2
-    }
-  ];
+  // Was six invented Apollo.io imports (Nov 2025, with lead counts and
+  // value splits). No import from an external provider has ever run; CSV
+  // imports are not recorded as history either. Emptied 2026-10-03.
+  const importHistory: ImportHistory[] = [];
 
   const handleImportNow = (integration: Integration) => {
     setSelectedIntegration(integration);
@@ -306,7 +263,7 @@ const ImportLeadsPage: React.FC = () => {
 
         {/* Connected Integrations */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Connected Integrations</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Lead Sources</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {integrations.map((integration) => (
               <div
@@ -419,7 +376,7 @@ const ImportLeadsPage: React.FC = () => {
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Recent Imports</h2>
-            {!showFullHistory && (
+            {!showFullHistory && importHistory.length > 0 && (
               <button
                 onClick={() => setShowFullHistory(true)}
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -430,6 +387,12 @@ const ImportLeadsPage: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 divide-y divide-gray-200">
+            {importHistory.length === 0 && (
+              <div className="p-8 text-center">
+                <p className="font-medium text-gray-900">No imports yet</p>
+                <p className="text-sm text-gray-600 mt-1">No lead source is connected, so nothing has been imported from one.</p>
+              </div>
+            )}
             {(showFullHistory ? importHistory : importHistory.slice(0, 4)).map((item) => (
               <div key={item.id} className="p-6">
                 <div className="flex items-start justify-between">

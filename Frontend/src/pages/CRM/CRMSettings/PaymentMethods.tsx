@@ -1,37 +1,27 @@
 import React from 'react';
-import { Button } from '../../../components/ui/Button';
-import { CreditCard, Plus } from 'lucide-react';
+import { NotAvailable } from '../../../components/common/NotAvailable';
 
-const PaymentMethods: React.FC = () => {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Payment Methods</h2>
-          <p className="text-sm text-gray-600 mt-1">Manage your payment methods</p>
-        </div>
-        <Button >
-          <Plus className="h-4 w-4" />
-          Add Payment Method
-        </Button>
-      </div>
-
-      <div className="space-y-3">
-        <div className="p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CreditCard className="h-6 w-6 text-blue-600" />
-              <div>
-                <div className="font-medium text-gray-900">•••• •••• •••• 4242</div>
-                <div className="text-sm text-gray-600">Expires 12/25</div>
-              </div>
-            </div>
-            <span className="px-2 py-1 bg-brand-600 text-white text-xs rounded">Default</span>
-          </div>
-        </div>
-      </div>
+/**
+ * Payment Methods — NOT BUILT.
+ *
+ * Rewritten 2026-10-03 (step 4, sample-data sweep). This page used to render
+ * an invented card number fragment and expiry marked "Default". None of it was backed by a table or an endpoint, and nothing
+ * resembling real security, billing or configuration state may render
+ * unlabelled. Restore the real screen only alongside the API that backs it.
+ */
+const PaymentMethods: React.FC = () => (
+  <div>
+    <div className="mb-6">
+      <h2 className="text-2xl font-bold text-gray-900">Payment Methods</h2>
+      <p className="text-sm text-gray-600 mt-1">Cards on file</p>
     </div>
-  );
-};
+    <div className="space-y-6">
+        <NotAvailable
+          feature="Payment method management"
+          detail="No payment method is stored. No card has been charged or saved through this CRM."
+        />
+    </div>
+  </div>
+);
 
 export default PaymentMethods;

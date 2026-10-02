@@ -5,6 +5,7 @@ import { computeWeeklyBuckets } from '../../utils/contactEngagement';
 import { EmailDetailModal, ShareSummaryModal, LogActivityModal } from './DealActivityModals';
 import { MeetingSchedulerModal } from './DealModals';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 interface Activity {
@@ -88,6 +89,7 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
   const [showScheduleFollowup, setShowScheduleFollowup] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const { showToast } = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   // ── Heatmap data ─────────────────────────────────────────────────────────
@@ -632,7 +634,10 @@ export const DealActivityTimeline: React.FC<DealActivityTimelineProps> = ({ acti
         isOpen={showScheduleFollowup}
         onClose={() => setShowScheduleFollowup(false)}
         onSchedule={handleMeetingScheduled}
-        attendees={['John Smith', 'Alex Rodriguez']}
+        // Was ['John Smith', 'Alex Rodriguez'] on every deal — the parent page
+        // fixed its copy of this; this one was missed. Only the signed-in user
+        // is known here, so only they are pre-filled.
+        attendees={user?.name ? [user.name] : []}
       />
     </div>
   );

@@ -121,8 +121,16 @@ describe('the administrativeOnly gate', () => {
     expect(screen.queryByRole('button', { name: /Manage Connections/i })).not.toBeInTheDocument();
   });
 
-  it('hides Team Management from a Manager — adminOnly is narrower, and stays so', () => {
+  it('shows Team Management to a Manager — ratified 2026-10-03 to match the server', () => {
+    // Was admin-only in the UI while the API let managers invite, change roles
+    // and deactivate. The decision was to open the UI, not close the API.
     mockUser.role = 'Manager';
+    renderSettings();
+    expect(screen.getByRole('button', { name: /Team Overview/i })).toBeInTheDocument();
+  });
+
+  it('still hides Team Management from a Sales user', () => {
+    mockUser.role = 'Sales';
     renderSettings();
     expect(screen.queryByRole('button', { name: /Team Overview/i })).not.toBeInTheDocument();
   });

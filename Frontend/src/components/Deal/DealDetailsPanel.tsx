@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import {
   ChevronDown, ChevronRight,
-  Shield, AlertTriangle, Target, Trophy, CheckCircle2, XCircle, Copy, Check,
+  Shield, AlertTriangle, Target, CheckCircle2, XCircle,
   Building2, FileText, Pencil, Loader2, Mail, Phone, User,
 } from 'lucide-react';
 import { formatCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
 import { BATTLE_CARDS } from '../../config/battleCards';
+import { PreviewBanner } from '../common/PreviewBanner';
 import { updateDeal, getUsers } from '../../utils/dealsApi';
 import type { RevenueSchedule } from './RevenueTimeline';
 import type { DealPayload } from '../../utils/dealsApi';
@@ -40,7 +41,6 @@ interface DealDetailsPanelProps {
   };
   competitors?: string[];
   expandedBattleCard?: string | null;
-  isAdmin?: boolean;
   battleCardRef?: React.RefObject<HTMLDivElement>;
   revenueSchedule?: RevenueSchedule | null;
   onSaveRevenueSchedule?: (schedule: RevenueSchedule) => void;
@@ -380,21 +380,13 @@ function Dash() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
-  deal, competitors, expandedBattleCard, isAdmin, battleCardRef, onDealUpdated,
+  deal, competitors, expandedBattleCard, battleCardRef, onDealUpdated,
 }) => {
   const [openBattleCard,    setOpenBattleCard]    = useState<string | null>(null);
-  const [copiedCompetitor,  setCopiedCompetitor]  = useState<string | null>(null);
 
   useEffect(() => {
     if (expandedBattleCard != null) setOpenBattleCard(expandedBattleCard);
   }, [expandedBattleCard]);
-
-  const handleCopyTalkingPoints = (key: string, points: string[]) => {
-    navigator.clipboard.writeText(points.map((p, i) => `${i + 1}. ${p}`).join('\n')).then(() => {
-      setCopiedCompetitor(key);
-      setTimeout(() => setCopiedCompetitor(null), 2000);
-    });
-  };
 
   const stageColors  = STAGE_COLOR[deal.stage?.toLowerCase()] ?? STAGE_COLOR['prospecting'];
   const stageProgressPct = deal.totalStages > 1
@@ -744,6 +736,12 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                         <div className="border-t border-gray-200 bg-white">
                           {card ? (
                             <div className="p-4 space-y-4">
+                              {/* Battle cards are static copy in config/battleCards.ts, not
+                                  research about this workspace's market. The invented customer
+                                  "Proof Point" results and the "Copy talking points" button
+                                  (which carried these claims out of the app, unlabelled) were
+                                  removed 2026-10-03; the rest is labelled. */}
+                              <PreviewBanner detail="Sample battle-card copy written as a template. It is not researched for your market and its claims (pricing, deployment time, capabilities) are unverified — do not quote them to a customer." />
                               <div>
                                 <div className="flex items-center gap-1.5 mb-2">
                                   <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -777,36 +775,10 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
                                 </div>
                                 <p className="text-sm text-blue-900 italic">"{card.killerQuestion}"</p>
                               </div>
-                              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                                <div className="flex items-center gap-1.5 mb-1.5">
-                                  <Trophy className="h-4 w-4 text-purple-600" />
-                                  <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wide">Proof Point</span>
-                                </div>
-                                <p className="text-sm text-purple-900">
-                                  <span className="font-semibold">{card.proofPoint.company}:</span> {card.proofPoint.outcome}
-                                </p>
-                              </div>
-                              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyTalkingPoints(key, card.weWinWhen)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                                >
-                                  {copiedCompetitor === key
-                                    ? <><Check className="h-3.5 w-3.5 text-green-500" /><span className="text-green-700">Copied!</span></>
-                                    : <><Copy className="h-3.5 w-3.5" />Copy talking points</>}
-                                </button>
-                                {isAdmin && (
-                                  <button type="button" className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
-                                    Update Battle Card
-                                  </button>
-                                )}
-                              </div>
                             </div>
                           ) : (
                             <div className="p-4">
                               <p className="text-sm text-gray-500">No battle card data for {competitor}.</p>
-                              {isAdmin && <button type="button" className="mt-2 text-xs text-blue-600 hover:underline">+ Create Battle Card</button>}
                             </div>
                           )}
                         </div>

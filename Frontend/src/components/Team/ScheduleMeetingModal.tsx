@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
-import { X, Video, MapPin, Building, Calendar, Clock, Users, Link as LinkIcon, RefreshCw } from 'lucide-react';
+import { X, Video, MapPin, Building, Calendar, Clock, Users, RefreshCw } from 'lucide-react';
 
 interface ScheduleMeetingModalProps {
   isOpen: boolean;
@@ -73,7 +73,6 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
   const [recurring, setRecurring] = useState<'one-time' | 'weekly' | 'biweekly' | 'monthly'>('one-time');
   const [reminders, setReminders] = useState({ fifteenMin: true, oneDay: true });
   const [scheduling, setScheduling] = useState(false);
-  const [generatingLink, setGeneratingLink] = useState(false);
 
   useEffect(() => {
     if (isOpen && !date) {
@@ -93,14 +92,6 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
 
   const firstName = memberName.split(' ')[0];
 
-  const handleGenerateVideoLink = async () => {
-    setGeneratingLink(true);
-    setTimeout(() => {
-      const mockLink = `https://zoom.us/j/${Math.floor(Math.random() * 1000000000)}`;
-      setLocationDetails(mockLink);
-      setGeneratingLink(false);
-    }, 1000);
-  };
 
   const handleAddAttendee = () => {
     if (newAttendee.trim() && !additionalAttendees.includes(newAttendee.trim())) {
@@ -315,40 +306,17 @@ export const ScheduleMeetingModal: React.FC<ScheduleMeetingModalProps> = ({
                   </div>
                   {locationType === 'video' && (
                     <div className="mt-2">
-                      {locationDetails ? (
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="url"
-                            value={locationDetails}
-                            onChange={(e) => setLocationDetails(e.target.value)}
-                            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          />
-                          <button
-                            onClick={() => setLocationDetails('')}
-                            className="px-3 py-2 text-slate-600 hover:text-slate-800 transition-colors text-sm"
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={handleGenerateVideoLink}
-                          disabled={generatingLink}
-                          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors text-sm"
-                        >
-                          {generatingLink ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
-                              Generating...
-                            </>
-                          ) : (
-                            <>
-                              <LinkIcon className="w-4 h-4" />
-                              Generate Zoom Link
-                            </>
-                          )}
-                        </button>
-                      )}
+                      {/* Paste only. A "Generate Zoom Link" button used to mint a fake
+                          zoom.us/j/<random> URL — a link someone could send in an invite.
+                          Removed 2026-10-03; there is no Zoom integration. */}
+                      <input
+                        type="url"
+                        value={locationDetails}
+                        onChange={(e) => setLocationDetails(e.target.value)}
+                        placeholder="Paste a meeting link (Zoom, Meet, Teams)"
+                        aria-label="Meeting link"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      />
                     </div>
                   )}
                 </div>

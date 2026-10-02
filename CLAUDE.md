@@ -1249,6 +1249,82 @@ two passages above are about it. So the tests assert its absence ON PURPOSE:
   client-side allowlist and `hr` is precisely what gets filtered, and that test fails.
 - Both were mutation-tested: restoring `hr` to `ASSIGNABLE_ROLES` and `RANK` fails them.
 
+### UI-vs-API role audit — RATIFIED 2026-10-03 (Venkat), step 4
+Every UI role gate was compared against the API. Four mismatches, all four resolved by
+making the UI MATCH the server, not by closing the server:
+- **Lead conversion: every role.** Was manager+ in `utils/permissions.ts` only; conversion
+  is an ordinary `PUT /leads/:id` the API never restricted.
+- **Saved lead views (create / update / delete): every role.** Same shape.
+- **Team Management: admin AND manager.** The page and nav were admin-only while the API
+  has always let managers invite, change roles and deactivate within `canActOn`.
+- **"Sales see only their own leads" stays a DISPLAY FILTER, deliberately deferred.**
+  `useLeadsPageState` filters client-side; `GET /leads` returns every lead in the
+  workspace. It is NOT a security control and must not be described as one. Row-level
+  visibility remains the open product decision `middleware/auth.ts` records.
+
+**And one real server gap the audit exposed: `deactivateUser` / `reactivateUser` had no
+`canActOn`.** A manager could deactivate an admin whenever another privileged member
+remained — the escalation `canActOn` exists to stop, hidden only because the Team page was
+admin-only in the UI. Both now 403, and `GET /users` serves a per-row `can_deactivate`
+(the mutation responses carry it too, like the other flags). Mutation-tested in
+`roundTrip.userManagement.test.ts`.
+
+**Still UI-only, and why they are not 403s:** `leads.bulk_actions` (hides the bulk bar from
+sales — but bulk is a loop of single `PUT /leads/:id` calls the server cannot tell apart,
+and bulk DELETE already 403s per row) and `leads.override_qualification_guard` (the
+qualification guard itself exists only in the browser, so there is nothing server-side to
+override). Enforcing either means building the server half first.
+
+### TRACKED GAP — lead owners are free text, and the owner pickers are not the roster
+Found in the step-4 sweep, deliberately NOT fixed in it:
+- `leads.assigned_to` is `varchar` holding display names. Live values ("John Smith" on 22
+  leads, "Sarah Lee", "Emily Chen", "Michael Torres") match NO user — seed data.
+- `utils/leadOwnerRouting.ts` `TEAM_MEMBERS` is not the roster: its three invented people
+  were removed; "SDR Team", "Account Manager" and "HR Partner" placeholder queues remain,
+  and the browser-only assignment-rules engine (`utils/assignmentRules/`, localStorage)
+  routes to them. Its seed rules were emptied.
+- Four pages hardcode owner `<option>`s for Alex Rodriguez / Sarah Chen / Mike Johnson /
+  Emily Davis — the live workspace's REAL users, hardcoded rather than fetched, so wrong in
+  any other workspace: `Accounts/Form/CRMSettingsSection.tsx`, `DealsGridView.tsx`,
+  `ActivitiesPage.tsx`, `ImportLeadsPage.tsx`.
+The fix is one decision then one slice: does a lead owner become a user FK (like
+`deals.assigned_to_user_id`, migration 039), and then every picker reads `GET /users`.
+
+### DONE — two scores shown without reasons are SUPPRESSED (2026-10-03)
+Applied, not redesigned: under the Evidence-Based AI standard a score whose reasons cannot
+be computed is not shown.
+- **Analytics "AI Predictions"** (`aiEngine.predictDealOutcome`: a probability, "expected
+  close in N days" and a canned recommendation per open deal) — the card is removed.
+  `predictDealOutcome` itself is untouched and now has no caller on that page.
+- **The deal form's win probability** was the stage baseline plus FIXED boosts (+10/+15 for
+  buyer roles, +5 for a hardcoded 40K-60K USD "sweet spot", -8 "competitor risk" for
+  lead-gen sources), labelled "AI Score" and SAVED as `probability` / `win_prob_ai`. It is
+  now the workspace's stage probability and nothing else — the one reason the form can
+  state — everywhere it renders (`AIInsightsPanel`, `DealPreviewPanel`, the override UI in
+  `DealFormBasicInfo`). A rep can still override it with a reason. Deals saved BEFORE this
+  keep their stored boosted value; nothing was backfilled.
+- Not in scope and still to look at under the same rule: the Kanban card's `deal.aiScore`
+  and the Analytics "AI Score 80+" high-fit lead count (`aiEngine.scoreLeadFit`).
+
+### DECIDED — `/sequences` stays as an honest stub (confirmed by Venkat, 2026-10-03)
+Outbound sequences belong to the Lead Generation product. The page's fabricated stats and
+"✓ Database schema created" note were replaced with a stub saying so. Confirmed: no further
+change — the route stays as it is.
+
+### STILL OPEN after step 4
+- **Qualification override — STEP 5 SCOPE.** Only a manager/admin may override the
+  qualification gate when a lead is dragged to Qualified — but that check exists ONLY in the
+  browser (`KanbanQualifyModal`, `leads.override_qualification_guard`), with no server
+  enforcement. Lead conversion is the same shape. Both are plain stage changes
+  (`PUT /leads/:id`) and the server has no concept of either a qualification gate or a
+  conversion. The fix is NOT a standalone 403: it needs the server-side lead
+  stage-transition logic step 5 builds, after which the override becomes a role check on
+  that transition.
+- **"Sales see only their own leads" — confirmed 2026-10-03 to stay a display filter** (see
+  the UI-vs-API audit above). Unchanged, deliberately.
+- Lead owners are free text and the pickers are not the roster (tracked gap above).
+- `leads.bulk_actions` is UI-only (see the audit above).
+
 ### FIXED — `AuthContext`'s role map fails closed
 `ROLE_MAP` in `contexts/AuthContext.tsx` used to fall back `?? 'Sales'`, so any role string
 the UI did not recognise silently presented as a real role, with CRM navigation attached.

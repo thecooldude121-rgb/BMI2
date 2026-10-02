@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Bell, Mail, Settings, LogOut, ChevronDown, Plus,
   DollarSign, Users, UserPlus, Building2, CheckSquare,
-  AlertCircle, Sparkles, X, Menu
+  X, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -54,13 +54,14 @@ export const NEW_MENU_ITEMS = [
   { label: 'New Task',    icon: CheckSquare,  href: '/crm/tasks?new=1' },
 ];
 
-const MOCK_NOTIFICATIONS = [
-  { id: 'u1', group: 'URGENT',     icon: AlertCircle, color: 'text-red-500',    text: 'Acme Corp deal closing in 2 days — no next step set',         time: '5m' },
-  { id: 'u2', group: 'URGENT',     icon: AlertCircle, color: 'text-red-500',    text: 'GlobalTech contract overdue — last activity 18 days ago',      time: '1h' },
-  { id: 'f1', group: 'FOLLOW-UP',  icon: Bell,        color: 'text-amber-500',  text: 'Sarah Chen replied to your email about pricing',              time: '2h' },
-  { id: 'f2', group: 'FOLLOW-UP',  icon: Bell,        color: 'text-amber-500',  text: 'Follow-up due: TechStart Expansion — scheduled for today',     time: '3h' },
-  { id: 'a1', group: 'AI INSIGHT', icon: Sparkles,    color: 'text-indigo-500', text: 'Win probability on Meridian deal dropped 12% this week',       time: '1d' },
-];
+/*
+ * There is NO notification feed. The bell used to render five invented alerts
+ * (a closing Acme deal, an overdue GlobalTech contract, a reply from "Sarah
+ * Chen", an "AI insight" about a Meridian deal) and a red "5" badge on every
+ * page — fabricated data in the one place a user glances at most. Removed
+ * 2026-10-03. The bell stays as a visible empty state; the badge returns only
+ * with a real notifications source.
+ */
 
 /**
  * `onOpenMobileNav` is supplied by Layout below the `lg` breakpoint, where the
@@ -74,12 +75,10 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifRead, setNotifRead] = useState(false);
   const newMenuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const crumb = getBreadcrumb(pathname);
-  const unreadCount = notifRead ? 0 : MOCK_NOTIFICATIONS.length;
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -90,10 +89,6 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const groupedNotifs = ['URGENT', 'FOLLOW-UP', 'AI INSIGHT'].map(g => ({
-    group: g,
-    items: MOCK_NOTIFICATIONS.filter(n => n.group === g),
-  })).filter(g => g.items.length > 0);
 
   return (
     <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between gap-2 px-4 lg:px-6 shrink-0 z-40 sticky top-0">
@@ -173,55 +168,24 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => { setShowNotifications(v => !v); }}
-            aria-label={`${unreadCount} unread notifications`}
+            aria-label="Notifications"
             className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 h-3.5 w-3.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                {unreadCount}
-              </span>
-            )}
           </button>
 
           {showNotifications && (
             <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                 <span className="text-sm font-semibold text-gray-900">Notifications</span>
-                <div className="flex items-center gap-2">
-                  {!notifRead && (
-                    <button onClick={() => setNotifRead(true)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
-                      Mark all read
-                    </button>
-                  )}
-                  <button onClick={() => setShowNotifications(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-                {groupedNotifs.map(({ group, items }) => (
-                  <div key={group}>
-                    <div className="px-4 py-2 bg-gray-50">
-                      <span className="text-[10px] font-bold text-gray-400 tracking-widest uppercase">{group}</span>
-                    </div>
-                    {items.map(({ id, icon: Icon, color, text, time }) => (
-                      <div key={id} className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 ${notifRead ? 'opacity-60' : ''}`}>
-                        <Icon className={`h-4 w-4 ${color} shrink-0 mt-0.5`} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs text-gray-700 leading-snug">{text}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{time} ago</p>
-                        </div>
-                        {!notifRead && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-1.5" />}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-              <div className="px-4 py-2.5 border-t border-gray-100 text-center">
-                <button className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
-                  View all notifications
+                <button onClick={() => setShowNotifications(false)} aria-label="Close notifications" className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                  <X className="h-3.5 w-3.5" />
                 </button>
+              </div>
+              <div className="px-4 py-8 text-center">
+                <Bell className="h-6 w-6 text-gray-300 mx-auto mb-2" aria-hidden="true" />
+                <p className="text-sm font-medium text-gray-700">Notifications are not available yet</p>
+                <p className="text-xs text-gray-500 mt-1">Nothing generates notifications in this CRM yet, so there is nothing to show.</p>
               </div>
             </div>
           )}

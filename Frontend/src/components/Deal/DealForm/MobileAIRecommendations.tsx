@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../ui/Button';
-import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2 } from 'lucide-react';
+import { Lightbulb, Tag, TrendingUp, User, CheckCircle2 } from 'lucide-react';
 import { hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
 interface MobileAIRecommendationsProps {
@@ -33,22 +33,12 @@ export const MobileAIRecommendations: React.FC<MobileAIRecommendationsProps> = (
   const additionalContacts: StakeholderContact[] = formData.additionalContacts ?? [];
   if (!hasSeniorBuyer(formData.contactRole, additionalContacts)) {
     recommendations.push({
-      id: 3, title: 'Add Decision Maker', reason: 'Deals with a senior buyer close 40% more often',
+      id: 3, title: 'Add Decision Maker', reason: 'No contact on this deal holds a decision-maker or economic-buyer role',
       action: () => {},
       icon: User,
     });
   }
-  if (formData.closeDate) {
-    const d = new Date(formData.closeDate);
-    d.setDate(d.getDate() - 3);
-    recommendations.push({
-      id: 4,
-      title: `Move Close Date to ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-      reason: 'Similar deals close ~3 days early',
-      action: () => onApplyRecommendation('closeDate', d.toISOString().split('T')[0]),
-      icon: Calendar,
-    });
-  }
+  // "Similar deals close ~3 days early" date-shift removed 2026-10-03 — see AIRecommendationsPanel.
   recommendations.push({
     id: 5, title: 'Schedule discovery call', reason: 'Best practice for this stage',
     action: () => {},

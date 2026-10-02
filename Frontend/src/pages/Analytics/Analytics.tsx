@@ -117,7 +117,6 @@ const Analytics: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm text-gray-600">Total Pipeline</p>
               <p className="text-2xl font-bold text-gray-900">${totalPipelineValue.toLocaleString()}</p>
-              <p className="text-sm text-green-600">+12.5% from last month</p>
             </div>
           </div>
         </div>
@@ -130,7 +129,6 @@ const Analytics: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm text-gray-600">Won Revenue</p>
               <p className="text-2xl font-bold text-gray-900">${wonValue.toLocaleString()}</p>
-              <p className="text-sm text-green-600">+8.3% from last month</p>
             </div>
           </div>
         </div>
@@ -143,7 +141,6 @@ const Analytics: React.FC = () => {
             <div className="ml-4">
               <p className="text-sm text-gray-600">Conversion Rate</p>
               <p className="text-2xl font-bold text-gray-900">{conversionRate.toFixed(1)}%</p>
-              <p className="text-sm text-green-600">+2.1% from last month</p>
             </div>
           </div>
         </div>
@@ -212,30 +209,11 @@ const Analytics: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">AI Predictions</h3>
-            <div className="space-y-4">
-              {deals.filter(d => !d.stage.startsWith('closed')).slice(0, 3).map(deal => {
-                const prediction = aiEngine.predictDealOutcome(deal, deals, stageLookup);
-                return (
-                  <div key={deal.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-medium text-gray-900">{deal.title}</h4>
-                      <span className="text-sm font-bold text-blue-600">{prediction.probability}%</span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-2">
-                      Expected close: {Math.round(prediction.timeToClose)} days
-                    </p>
-                    {prediction.recommendations.length > 0 && (
-                      <div className="text-xs text-gray-500">
-                        Recommendation: {prediction.recommendations[0]}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* "AI Predictions" (a probability, "expected close in N days" and a
+              canned recommendation per open deal, from aiEngine.predictDealOutcome)
+              is suppressed — 2026-10-03, CLAUDE.md Evidence-Based AI: a score is
+              not shown when its reasons cannot be computed, and this one showed
+              none. Restore it only with 2-3 concrete reasons per prediction. */}
         </div>
       )}
 

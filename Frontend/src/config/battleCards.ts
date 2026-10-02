@@ -1,11 +1,14 @@
+/**
+ * TEMPLATE COPY, NOT RESEARCH. Rendered behind a PreviewBanner on the deal
+ * page. A `proofPoint` (a named customer and an invented outcome — "3× rep
+ * adoption", "forecast accuracy 48% → 81%") used to sit on every card; those
+ * were fabricated customer results and were deleted 2026-10-03. Do not add
+ * a customer claim here that the business cannot substantiate.
+ */
 export interface BattleCard {
   weWinWhen: string[];    // 3 bullets — our key advantages
   theyWinWhen: string[];  // 2 bullets — their honest strengths
   killerQuestion: string; // 1 discovery question to expose a weakness
-  proofPoint: {
-    company: string;
-    outcome: string;
-  };
 }
 
 export const BATTLE_CARDS: Record<string, BattleCard> = {
@@ -21,11 +24,6 @@ export const BATTLE_CARDS: Record<string, BattleCard> = {
     ],
     killerQuestion:
       'How much of your current Salesforce budget goes to licenses vs. the consultants you need just to keep it running?',
-    proofPoint: {
-      company: 'TechStart Inc',
-      outcome:
-        'Displaced Salesforce — deployed in 5 weeks, 3× rep adoption vs. previous tool within Month 1',
-    },
   },
 
   hubspot: {
@@ -40,9 +38,5 @@ export const BATTLE_CARDS: Record<string, BattleCard> = {
     ],
     killerQuestion:
       'When you lose a deal to a competitor, how quickly can HubSpot tell you which competitor beat you and why — or does the answer still live in the rep\'s memory?',
-    proofPoint: {
-      company: 'GrowthCo',
-      outcome: 'Moved from HubSpot to BMI — forecast accuracy jumped from 48% to 81% in the first quarter',
-    },
   },
 };

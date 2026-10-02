@@ -101,6 +101,8 @@ export interface UserRow {
   can_change_role?: boolean;
   /** Migration 041. Server-decided, same rule as can_change_role. */
   can_change_manager?: boolean;
+  /** Server-decided (canActOn), same rule as can_change_role. */
+  can_deactivate?: boolean;
   manager_id?: number | null;
   /** Resolved by the server through a tenant-matched join. */
   manager_name?: string | null;
@@ -138,6 +140,11 @@ export interface WorkspaceMember {
    * same `canActOn` the endpoint enforces with — see canChangeRole above.
    */
   canChangeManager: boolean;
+  /**
+   * Whether THIS caller may deactivate / reactivate this person. Served by the
+   * same `canActOn` POST /users/:id/deactivate and /reactivate enforce with.
+   */
+  canDeactivate: boolean;
   /** null when nobody is recorded above them, which is a real state. */
   managerId: string | null;
   /**
@@ -192,6 +199,7 @@ export function toMember(row: UserRow): WorkspaceMember {
     // server that does not send these must not be read as permitting anything,
     // nor as having no manager on record when it simply did not say.
     canChangeManager: row.can_change_manager === true,
+    canDeactivate: row.can_deactivate === true,
     managerId: row.manager_id === null || row.manager_id === undefined ? null : String(row.manager_id),
     managerName: row.manager_name ?? null,
   };

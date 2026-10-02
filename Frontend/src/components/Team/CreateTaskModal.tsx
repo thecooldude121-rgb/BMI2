@@ -157,11 +157,9 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             onChange={(e) => setAssignedTo(e.target.value)}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            {/* Four invented colleagues ("John Martinez (CEO)", "Michael
+                Torres (VP Sales)"…) were offered here; removed 2026-10-03. */}
             <option value={memberName}>{memberName}</option>
-            <option value="John Martinez (CEO)">John Martinez (CEO)</option>
-            <option value="Michael Torres (VP Sales)">Michael Torres (VP Sales)</option>
-            <option value="Emily Watson (Admin)">Emily Watson (Admin)</option>
-            <option value="David Kim (Analyst)">David Kim (Analyst)</option>
           </select>
         </div>
 
