@@ -37,13 +37,38 @@
  * calling code, never from a request. Both parameters are bound.
  */
 export function canViewPredicate(alias: string, userParam: number): string {
+  return canViewPredicateFor(alias, `$${userParam}`);
+}
+
+/**
+ * THE SAME RULE, evaluated against an arbitrary SQL expression rather than a
+ * bound parameter.
+ *
+ * This exists for scheduled delivery, which has to answer "may this person see
+ * it" for EVERY recipient in one query — the user is a column
+ * (`rec.user_id`), not a single bound value, so the `$N` form cannot express
+ * it.
+ *
+ * `userExpr` IS SQL AND IS NEVER REQUEST INPUT. Call sites pass either a
+ * placeholder built here or a column reference they wrote themselves. That
+ * constraint is why this is a separate, explicitly-named function instead of
+ * loosening `canViewPredicate`: the parameter-bound version keeps its guarantee
+ * at every existing call site, and anything reaching for the looser one has to
+ * say so.
+ *
+ * Crucially this is ONE implementation of the visibility rule, not two. A
+ * schedule that decided for itself who may receive a report would be a second
+ * answer to the question the API already answers — and the whole of P3 has kept
+ * exactly one.
+ */
+export function canViewPredicateFor(alias: string, userExpr: string): string {
   return `(
-    ${alias}.owner_id = $${userParam}
+    ${alias}.owner_id = ${userExpr}
     OR EXISTS (
       SELECT 1 FROM saved_report_grants g
        WHERE g.report_id = ${alias}.id
          AND g.tenant_id = ${alias}.tenant_id
-         AND g.user_id   = $${userParam}
+         AND g.user_id   = ${userExpr}
     )
   )`;
 }

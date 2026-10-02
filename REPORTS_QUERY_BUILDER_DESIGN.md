@@ -2,7 +2,7 @@
 
 **Status: REVIEWED AND APPROVED 2026-09-19. All nine product decisions are made —
 see §6, which now records the ANSWERS, not the questions. Phases 0 and 1 are
-BUILT, and so are Phases 2 through 7.**
+BUILT, and so are Phases 2 through 7. Phase 8's SCHEMA AND ACCESS MODEL are built; its send path is deliberately not.**
 
 ### Two things Phase 1 discovered that changed the design
 
@@ -32,8 +32,8 @@ BUILT, and so are Phases 2 through 7.**
 | **5** | `ReportDetailView` | **built** (routed by id; + the saved-reports list) |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | **built** |
 | **7** | Exports (CSV, then PDF/Excel) | **built** — CSV, Excel and PDF |
-| **8** | Scheduling | **next** — schema + access logic only; job runner and mail provider are out of scope |
-| **9** | Caching with result age (small, droppable) | |
+| **8** | Scheduling | **schema + access model built** (migration 057); send path blocked on infrastructure |
+| **9** | Caching with result age (small, droppable) | next |
 
 ### Phase 7b — Excel, where the FORMAT solves the injection problem
 
@@ -65,6 +65,61 @@ name flag, and it throws rather than writing an archive it cannot represent
 correctly. The archive is verified in tests with the SYSTEM `unzip`, not by
 re-reading our own offsets, because a test that parses its own output agrees
 with whatever it produced.
+
+### Phase 8 — the schedule schema and the send-time access check
+
+**No send path, and no endpoint that creates a schedule.** A job runner and a
+mail provider are both missing (`EMAIL_TRANSPORT=log` renders to the log and
+does NOT deliver), and both are Venkat's to scope. Shipping a schedule UI over
+machinery that cannot fire would be a control promising delivery that never
+happens. So the tables and the rule exist, tested, and nothing writes to them.
+
+**THE DECISION, MADE STRUCTURAL: recipients are USER REFERENCES, not email
+addresses.** This is the single most important column choice in migration 057.
+A `recipient_email TEXT` would make the agreed model *unenforceable* — there is
+no user to re-check, so an address typed into a form becomes a standing export
+of workspace data to someone who may have no account, may have left, or may
+never have been a member. A `user_id` makes "does this person still have access"
+a question the database can answer every time, against the same predicate the
+API uses. The cost is accepted: you cannot schedule a report to a customer, an
+auditor, or a personal address. That is a feature boundary needing its own
+decision, not an oversight.
+
+**There is no cached visibility and no `send_as_user_id`.** `canViewPredicate`
+was generalised to `canViewPredicateFor(alias, userExpr)` so the SAME rule can
+be evaluated against a column, once per recipient, in one query. One
+implementation of visibility, not two.
+
+Consequences, each pinned by a test:
+- revoke a grant and delivery stops on the next send, with nothing to clean up;
+- deactivate an account and it stops receiving mail — reported as `inactive`
+  rather than `no_access`, because "their account is off" has a different fix
+  from "their access was revoked";
+- the creator losing their account changes nothing for anyone else, because the
+  creator was never the authority for another person's access.
+
+**Skipped recipients are REPORTED, not filtered away.** A schedule that silently
+stops mailing someone is a support mystery — they say they stopped getting the
+report and nothing anywhere says why. `recipientsFor` returns a verdict per
+person. A schedule nobody can currently receive is surfaced, never auto-deleted:
+grants may be restored tomorrow, and discarding someone's configuration is worse
+than carrying a dormant row.
+
+**A CHECK CONSTRAINT ACCEPTS A NULL RESULT, and the first version of the cadence
+constraint shipped with that bug.** `day_of_week BETWEEN 0 AND 6` is NULL — not
+FALSE — when the column is NULL, so a weekly schedule with no weekday evaluated
+the branch to NULL, the OR chain to NULL, and the constraint accepted it. The
+one unsatisfiable row it existed to refuse was the one it let through. Found by
+probing the constraint behaviourally, not by reading it; every branch now
+carries an explicit `IS NOT NULL`.
+
+`day_of_month` is capped at 28 deliberately: 29-31 do not exist in every month,
+and "the 31st means the last day" is a product decision nobody has made. The cap
+refuses the ambiguous case rather than silently resolving it.
+
+**Migration 057 is NOT applied to live.** It is validated against
+`bmi_crm_iso_test` and dry-run against `bmi_crm` inside a rolled-back
+transaction. Applying it can wait for the infrastructure that uses it.
 
 ### PDF — built on pdfkit, and the footer is the point
 
