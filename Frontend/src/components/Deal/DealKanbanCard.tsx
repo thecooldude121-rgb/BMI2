@@ -28,7 +28,7 @@
  */
 
 import React, { useState } from 'react';
-import { Sparkles, CheckCircle2, AlertTriangle, Mail, Activity, Edit2, MoreHorizontal, ArrowRight } from 'lucide-react';
+import { Mail, Activity, Edit2, MoreHorizontal, ArrowRight } from 'lucide-react';
 import {
   formatCloseDate,
   formatRelativeTime,
@@ -40,7 +40,6 @@ import {
 } from '../../utils/dealState';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { outcomeOf } from '../../utils/pipelinesApi';
-import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { StakeholderContact } from '../../config/contactRoles';
 import CommitteeCoverageBar from './CommitteeCoverageBar';
 import { formatCurrencyCompact, convertToBaseCurrency, BASE_CURRENCY_CODE } from '../../utils/currencyUtils';
@@ -94,14 +93,12 @@ export interface DealKanbanCardProps {
   density: 'standard' | 'compact';
   isHighlighted: boolean;
   isDragging: boolean;
-  showScoreTooltip: boolean;
   /** When true the card renders in manager inspection mode. */
   inspectionMode?: boolean;
   /** Badge descriptor from getInspectionBadge(). Null = clean deal (dimmed in inspection mode). */
   inspectionBadge?: { label: string; style: string; title: string } | null;
   onCardClick: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
-  onScoreClick: (e: React.MouseEvent, id: string) => void;
   onContactClick: (e: React.MouseEvent, id: string) => void;
   onStatusClick: (e: React.MouseEvent, deal: DealCard) => void;
   onQuickEdit: (e: React.MouseEvent, id: string) => void;
@@ -147,13 +144,6 @@ function closeDateTextClass(daysLeft: number | null): string {
   return 'text-gray-600';
 }
 
-/** AI score bar fill colour — three-tier aligned with global thresholds (70/40). */
-function aiBarColor(score: number): string {
-  if (score >= 70) return '#10b981'; // emerald-500 — Healthy
-  if (score >= 40) return '#f59e0b'; // amber-500 — Watch
-  return '#ef4444';                  // red-500 — At Risk
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
@@ -162,12 +152,10 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
   density,
   isHighlighted,
   isDragging,
-  showScoreTooltip,
   inspectionMode = false,
   inspectionBadge = null,
   onCardClick,
   onContextMenu,
-  onScoreClick,
   onContactClick,
   onStatusClick,
   onQuickEdit,
@@ -196,9 +184,6 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
   // ── Resolve the canonical deal state ──────────────────────────────────────
   const state  = resolveDealState(deal, closeDaysLeft, outcome, stalledOverride);
   const tokens = STATE_TOKENS[state.primary];
-
-  // ── Health explanation — computed once, used in score button + popover ────
-  const healthExpl = isClosed ? null : explainDealHealth(deal, closeDaysLeft);
 
   // ── Card border style ──────────────────────────────────────────────────────
   // Override border completely when dragging or highlighted to avoid competing
@@ -488,34 +473,11 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
             <span className="truncate max-w-[100px]">{deal.owner || 'Unassigned'}</span>
           </button>
 
-          {!isClosed && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onScoreClick(e, deal.id); }}
-              className="flex items-center space-x-1.5 flex-shrink-0 hover:opacity-70 transition-opacity"
-              title={`AI Health: ${deal.aiScore}/100 — click for breakdown`}
-            >
-              <div className="w-12 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{ width: `${deal.aiScore}%`, backgroundColor: aiBarColor(deal.aiScore) }}
-                />
-              </div>
-              <span className="relative flex items-center">
-                <span
-                  className="text-[11px] font-semibold tabular-nums"
-                  style={{ color: aiBarColor(deal.aiScore) }}
-                >
-                  {deal.aiScore}
-                </span>
-                {healthExpl?.hasHighRisk && (
-                  <span
-                    className="absolute -top-1 -right-2 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-white"
-                    title="High-impact risk detected"
-                  />
-                )}
-              </span>
-            </button>
-          )}
+          {/* An "AI Health" bar + number sat here: deal.aiScore, which is the
+              stored win probability (stage baseline or a rep override), with a
+              click-through "breakdown" of activity signals that never fed into
+              that number. Suppressed 2026-10-03 — Evidence-Based AI: no score
+              without the reasons that produced it. */}
         </div>
 
         {/* Committee coverage — self-separates via border-t border-gray-50 */}
@@ -524,86 +486,6 @@ const DealKanbanCard: React.FC<DealKanbanCardProps> = ({
         )}
       </div>
 
-      {/* ── Health driver popover ─────────────────────────────────────────── */}
-      {/* Replaces the old delta-based tooltip.  Shows the explanation model
-          from dealHealthDrivers.ts — no fake arithmetic, just observable facts
-          with one action each.  Mounted inside the card for stacking context. */}
-      {showScoreTooltip && !isClosed && healthExpl && (
-        <div className="absolute z-50 left-0 top-full mt-1.5 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden">
-          {/* Header — score + tier */}
-          <div className="px-3 pt-3 pb-2 border-b border-gray-50">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center space-x-1 text-[11px] font-semibold text-indigo-600">
-                <Sparkles className="h-3 w-3" />
-                <span>AI Health</span>
-              </span>
-              <span
-                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full
-                  ${healthExpl.tier === 'strong' ? 'bg-emerald-50 text-emerald-700'
-                  : healthExpl.tier === 'fair'   ? 'bg-amber-50 text-amber-700'
-                  :                                'bg-red-50 text-red-700'}`}
-              >
-                {healthExpl.tierLabel}
-              </span>
-            </div>
-            {/* Score bar */}
-            <div className="flex items-center space-x-2">
-              <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{ width: `${healthExpl.score}%`, backgroundColor: aiBarColor(healthExpl.score) }}
-                />
-              </div>
-              <span className="text-[11px] font-bold tabular-nums" style={{ color: aiBarColor(healthExpl.score) }}>
-                {healthExpl.score}
-              </span>
-            </div>
-            <p className="text-[10px] text-gray-500 mt-1.5 leading-snug">{healthExpl.headline}</p>
-          </div>
-
-          {/* Risk drivers */}
-          {healthExpl.risks.length > 0 && (
-            <div className="px-3 py-2 border-b border-gray-50">
-              <p className="text-[9px] font-semibold text-red-500 uppercase tracking-wider mb-1.5">Risks</p>
-              <div className="space-y-1.5">
-                {healthExpl.risks.slice(0, 4).map(r => (
-                  <div key={r.id} className="flex items-start justify-between gap-2">
-                    <span className="flex items-start space-x-1 min-w-0">
-                      <AlertTriangle className={`h-3 w-3 flex-shrink-0 mt-px
-                        ${r.impact === 'high' ? 'text-red-500' : 'text-amber-500'}`}
-                      />
-                      <span className="text-[11px] text-gray-700 leading-snug">{r.label}</span>
-                    </span>
-                    {r.action && (
-                      <span className="text-[10px] text-indigo-500 whitespace-nowrap flex-shrink-0 font-medium">
-                        {r.action} →
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Positive drivers */}
-          {healthExpl.positives.length > 0 && (
-            <div className="px-3 py-2">
-              <p className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wider mb-1.5">Strengths</p>
-              <div className="flex flex-wrap gap-1">
-                {healthExpl.positives.slice(0, 4).map(p => (
-                  <span
-                    key={p.id}
-                    className="inline-flex items-center space-x-0.5 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] rounded-full"
-                  >
-                    <CheckCircle2 className="h-2.5 w-2.5 flex-shrink-0" />
-                    <span>{p.label}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── Hover quick actions ───────────────────────────────────────────── */}
       {/*
