@@ -1303,8 +1303,16 @@ be computed is not shown.
   state — everywhere it renders (`AIInsightsPanel`, `DealPreviewPanel`, the override UI in
   `DealFormBasicInfo`). A rep can still override it with a reason. Deals saved BEFORE this
   keep their stored boosted value; nothing was backfilled.
-- Not in scope and still to look at under the same rule: the Kanban card's `deal.aiScore`
-  and the Analytics "AI Score 80+" high-fit lead count (`aiEngine.scoreLeadFit`).
+- **Also suppressed (same day): the Kanban card's "AI Health" score** — `deal.aiScore`, which
+  is just the stored win probability, with a click-through "breakdown" of activity signals
+  (`explainDealHealth`) that never fed into the number it claimed to explain; the bar, the
+  popover and the stage-breakdown "AI Score:" line are gone. **And the Analytics "High-Fit
+  Leads — AI Score 80+" card** (`aiEngine.scoreLeadFit`), removed.
+- **STILL SHOWING the same probability-as-health score, not yet suppressed:** the Deals
+  Grid view, the Deals List view (health tier + `scoreBelow` filter) and the deal
+  slide-out panel all render `aiScore` with `explainDealHealth` drivers. Same defect; same
+  fix when someone takes it on. (The deal DETAIL hero's score is different —
+  `dealHealthScore` — and was not reviewed.)
 
 ### DECIDED — `/sequences` stays as an honest stub (confirmed by Venkat, 2026-10-03)
 Outbound sequences belong to the Lead Generation product. The page's fabricated stats and

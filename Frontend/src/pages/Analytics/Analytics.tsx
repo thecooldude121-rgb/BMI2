@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { BarChart3, TrendingUp, Users, DollarSign, Target, Filter, Download } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
-import { aiEngine } from '../../utils/aiEngine';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { isWonWith } from '../../utils/pipelinesApi';
 
@@ -21,7 +20,6 @@ const Analytics: React.FC = () => {
   const wonValue = wonDeals.reduce((sum, deal) => sum + deal.value, 0);
   const avgDealSize = wonDeals.length > 0 ? wonValue / wonDeals.length : 0;
   
-  const highFitLeads = leads.filter(lead => aiEngine.scoreLeadFit(lead) > 80).length;
   const conversionRate = leads.length > 0 ? (wonDeals.length / leads.length) * 100 : 0;
 
   // Sales funnel data
@@ -108,7 +106,7 @@ const Analytics: React.FC = () => {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-lg bg-blue-100">
@@ -145,18 +143,9 @@ const Analytics: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-lg bg-yellow-100">
-              <Users className="h-6 w-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm text-gray-600">High-Fit Leads</p>
-              <p className="text-2xl font-bold text-gray-900">{highFitLeads}</p>
-              <p className="text-sm text-green-600">AI Score 80+</p>
-            </div>
-          </div>
-        </div>
+        {/* "High-Fit Leads — AI Score 80+" removed 2026-10-03: a count of leads
+            over a threshold of aiEngine.scoreLeadFit, a score shown nowhere with
+            its reasons (Evidence-Based AI). */}
       </div>
 
       {/* Metric Tabs */}

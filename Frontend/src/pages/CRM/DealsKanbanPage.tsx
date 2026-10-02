@@ -91,7 +91,6 @@ const DealsKanbanPage: React.FC = () => {
   const [highlightedDeals, setHighlightedDeals] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'closeDate' | 'value' | 'health' | 'activity' | 'stage'>('closeDate');
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'grid' | 'calendar'>('kanban');
-  const [showScoreTooltip, setShowScoreTooltip] = useState<string | null>(null);
   const [showContextMenu, setShowContextMenu] = useState<{ dealId: string; x: number; y: number } | null>(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivityDeal, setSelectedActivityDeal] = useState<DealCard | null>(null);
@@ -906,11 +905,6 @@ const DealsKanbanPage: React.FC = () => {
   const handleOwnerClick = (e: React.MouseEvent, dealId: string) => {
     e.stopPropagation();
     navigate(`/settings/team/${dealId}`);
-  };
-
-  const handleScoreClick = (e: React.MouseEvent, dealId: string) => {
-    e.stopPropagation();
-    setShowScoreTooltip(showScoreTooltip === dealId ? null : dealId);
   };
 
   const handleStatusClick = (e: React.MouseEvent, deal: DealCard) => {
@@ -2371,13 +2365,11 @@ const DealsKanbanPage: React.FC = () => {
                                 density={cardDensity}
                                 isHighlighted={highlightedDeals.includes(deal.id)}
                                 isDragging={snapshot.isDragging}
-                                showScoreTooltip={showScoreTooltip === deal.id}
                                 inspectionMode={inspectionMode}
                                 inspectionBadge={inspectionMode ? getInspectionBadge(deal) : null}
                                 stalledOverride={isStalled(deal)}
                                 onCardClick={handleCardClick}
                                 onContextMenu={handleContextMenu}
-                                onScoreClick={handleScoreClick}
                                 onContactClick={handleContactClick}
                                 onStatusClick={handleStatusClick}
                                 onQuickEdit={handleQuickEdit}
@@ -2766,9 +2758,8 @@ const DealsKanbanPage: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-gray-900">{formatCurrency(deal.amount)}</div>
-                        {!['closed-won', 'closed-lost'].includes(selectedStageForBreakdown.id) && (
-                          <div className="text-xs text-gray-600">AI Score: {deal.aiScore}</div>
-                        )}
+                        {/* "AI Score: {aiScore}" removed 2026-10-03 — the stored probability
+                            relabelled as AI, with no reasons (Evidence-Based AI). */}
                       </div>
                     </div>
                   ))}
