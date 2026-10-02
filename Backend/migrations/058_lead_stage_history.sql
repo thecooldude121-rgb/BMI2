@@ -1,4 +1,9 @@
--- Migration 055: record every lead stage change, including qualification overrides.
+-- Migration 058: record every lead stage change, including qualification overrides.
+--
+-- NUMBERED 058, NOT 055: branch claude/leadgen-session already owns 055-057
+-- (055_reports_readonly_rls, 056_saved_reports, 057_saved_report_schedules),
+-- two of which are applied to live. This file was briefly 055 on 2026-10-03
+-- and was renumbered before merging so the two branches cannot collide.
 --
 -- Step 5, slice A. Ratified 2026-10-03 (Venkat): every lead stage change goes
 -- through POST /leads/:id/stage-transition, and PUT /leads/:id no longer accepts
