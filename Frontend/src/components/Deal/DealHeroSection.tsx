@@ -3,7 +3,7 @@ import { stageHex } from '../../utils/pipelinesApi';
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/Button';
 import {
-  Edit, Building2, Sparkles,
+  Edit, Building2,
   Mail, Phone, CalendarDays, FileText, TrendingUp, TrendingDown,
   ChevronDown, ChevronUp, DollarSign, AlertTriangle,
   MoreHorizontal, X,
@@ -1041,15 +1041,18 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
         </div>
 
-        {/* AI Health Score — items 8, 9, 10 */}
+        {/* Record completeness score — items 8, 9, 10 */}
         <div
           className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 border border-purple-200 mb-4 cursor-pointer select-none"
           onClick={() => setShowHealthFactors(v => !v)}
         >
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-semibold text-purple-900">AI Health Score</span>
+              {/* Was "AI Health Score" with an AI sparkle. This number is
+                  calculateDealHealthScore — record completeness and richness,
+                  "not win likelihood" by its own definition — and its itemised
+                  factors are real. Only the AI label was false (2026-10-03). */}
+              <span className="text-sm font-semibold text-purple-900">Record Completeness</span>
             </div>
             <div className="flex items-center gap-3">
               {momentumResult && <DealMomentum result={momentumResult} />}

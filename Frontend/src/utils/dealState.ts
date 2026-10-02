@@ -172,7 +172,6 @@ const STALLED_DAYS       = 7;   // days without contact before "stalled"
 const AT_RISK_CLOSE_DAYS = 7;   // days to close date that triggers at-risk (with stale contact)
 const AT_RISK_STALE_DAYS = 3;   // days since contact that, combined with near close, = at-risk
 const MISSING_STEP_DAYS  = 3;   // days since contact before "missing next step" applies
-const HIGH_CONFIDENCE_AI = 80;  // aiScore threshold for high-confidence state
 const HIGH_VALUE_AMOUNT  = 100_000; // deal value threshold for the high-value modifier
 
 // ── Main resolver ─────────────────────────────────────────────────────────────
@@ -282,17 +281,12 @@ export function resolveDealState(
     };
   }
 
-  // ── Rule 5: High Confidence ──────────────────────────────────────────────
-  // Strong AI score + healthy health + not overdue = likely to close.
-  // Shown with emerald so managers can quickly identify deals to fast-track.
-  if (deal.aiScore >= HIGH_CONFIDENCE_AI && deal.health === 'healthy') {
-    return {
-      primary:     'high-confidence',
-      isHighValue,
-      chipLabel:   'High Confidence',
-      description: `AI score ${deal.aiScore}/100 — strong close probability`,
-    };
-  }
+  // ── Rule 5: High Confidence — REMOVED 2026-10-03 ─────────────────────────
+  // Fired on aiScore >= 80 and labelled the card "High Confidence — AI score
+  // N/100, strong close probability". aiScore is the stored win probability
+  // (stage baseline or a rep's override), not an AI judgement, and the chip
+  // gave no reasons (Evidence-Based AI). The 'high-confidence' state is left in
+  // the type and tokens so nothing that switches on it breaks; nothing sets it.
 
   // ── Rule 6: Normal ───────────────────────────────────────────────────────
   // No active signal — chip is hidden; only the activity timestamp shows on the

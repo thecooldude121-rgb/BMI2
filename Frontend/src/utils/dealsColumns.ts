@@ -5,7 +5,10 @@ export type ColumnKey =
   | 'dealName' | 'account' | 'owner' | 'contact'
   | 'value' | 'stage' | 'closeDate' | 'lastActivity' | 'lastContact'
   | 'nextStep' | 'dealAge' | 'probability' | 'source'
-  | 'health' | 'relationship' | 'competitor' | 'actions';
+  | 'relationship' | 'competitor' | 'actions';
+// 'health' was a column: deal.aiScore (the stored win probability) shown as an
+// AI "Win Score" with an explanation it never came from. Removed 2026-10-03;
+// the same value stays available, honestly labelled, as 'probability'.
 
 export const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'dealName',     label: 'Deal Name'       },
@@ -21,7 +24,6 @@ export const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'dealAge',      label: 'Time in Pipeline' },
   { key: 'probability',  label: 'Probability'     },
   { key: 'source',       label: 'Source'          },
-  { key: 'health',        label: 'Health'           },
   { key: 'relationship',  label: 'Relationship'     },
   { key: 'competitor',   label: 'Competitor'       },
   { key: 'actions',       label: 'Actions'          },
@@ -34,7 +36,7 @@ export const DEFAULT_COLUMN_ORDER: ColumnKey[] = [
   'dealName', 'account', 'owner', 'contact',
   'value', 'stage', 'closeDate', 'lastActivity', 'lastContact',
   'nextStep', 'dealAge', 'probability', 'source',
-  'health', 'relationship', 'competitor', 'actions',
+  'relationship', 'competitor', 'actions',
 ];
 
 // Columns visible on first load and after "Reset to default".

@@ -85,7 +85,6 @@ export function getNextBestAction(deal: DealForNBA, stageMeta?: StageMeta | null
   const closeDateDaysUntil = deal.closeDate ? daysUntil(deal.closeDate) : null;
   const hasContact = !!(deal.contactName?.trim());
   const hasNextStep = !!(deal.nextStep?.trim());
-  const aiScore = deal.aiScore ?? null;
 
   // Closed deals — no action needed
   if (isClosed) {
@@ -167,17 +166,9 @@ export function getNextBestAction(deal: DealForNBA, stageMeta?: StageMeta | null
     };
   }
 
-  // PRIORITY 7 — High win score, healthy deal — positive signal
-  if (aiScore !== null && aiScore >= 70) {
-    const closingSuffix = closeDateDaysUntil !== null
-      ? ` — closes in ${closeDateDaysUntil} day${closeDateDaysUntil !== 1 ? 's' : ''}`
-      : '';
-    return {
-      text: `Strong win signal (score: ${aiScore})${closingSuffix} — keep momentum and confirm close plan`,
-      shortLabel: 'Strong signal — keep momentum',
-      urgency: 'low',
-    };
-  }
+  // PRIORITY 7 — "Strong win signal (score: N)" — REMOVED 2026-10-03. The
+  // "score" was deal.aiScore, the stored win probability, presented as a win
+  // signal with no reasons (Evidence-Based AI).
 
   // PRIORITY 8 — Fallback: deal appears on track
   const closingSuffix = closeDateDaysUntil !== null
