@@ -314,9 +314,15 @@ export default function LeadConversionWizard({
       // The write decides what the user is told. This previously ignored the
       // result and advanced to step 4 unconditionally, so a rejected 400 produced
       // a "Conversion complete" screen naming a contact and account that were
-      // never created. Lead conversion is not implemented server-side at all (no
-      // converted_* columns, and 'converted' is not a valid stage), so today this
-      // branch is ALWAYS the one that runs.
+      // never created.
+      //
+      // CORRECTED 2026-10-03: the old claim here ("'converted' is not a valid
+      // stage, so this branch ALWAYS runs") was false — leadsApi renamed status
+      // to stage, the server accepted it with 200, and the success screen showed
+      // the stub ids above as if they were real records. Since step 5 slice A the
+      // server refuses it (a stage change goes through the transition endpoint,
+      // which answers 409 "convert it instead"), so this rejection branch now
+      // genuinely always runs. Slice B replaces this with POST /leads/:id/convert.
       const accepted = await onUpdateLead(lead.id, {
         status:                  'converted',
         converted_at:            new Date().toISOString(),

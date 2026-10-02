@@ -75,6 +75,9 @@ export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
   await pool.query('DELETE FROM deals WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM companies WHERE tenant_id = $1', [ws.tenantId]);
+  // Before leads (it would cascade) and users (its actor FK) — explicit rather
+  // than relying on the cascade order.
+  await pool.query('DELETE FROM lead_stage_history WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM leads WHERE tenant_id = $1', [ws.tenantId]);
   // AFTER deals, which reference pipeline_stages via stage_id (migration 037),
   // and stages before pipelines, which they reference in turn. Same reason

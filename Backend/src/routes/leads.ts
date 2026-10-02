@@ -1,5 +1,8 @@
 import { Router } from 'express';
-import { getLeads, getLeadById, createLead, updateLead, deleteLead } from '../controllers/leadsController';
+import {
+  getLeads, getLeadById, createLead, updateLead, deleteLead,
+  transitionLeadStage, getLeadStageHistory,
+} from '../controllers/leadsController';
 import {
   getActivities, createActivity, updateActivity,
   getNotes, createNote, updateNote, deleteNote,
@@ -22,6 +25,13 @@ router.post('/',   createLead);
 router.get('/:id', getLeadById);
 router.put('/:id', updateLead);
 router.delete('/:id', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteLead);
+
+// ── Stage transitions (step 5, ratified 2026-10-03) ──────────────────────────
+// The ONLY way a lead's stage changes. No requireRole: every role moves leads;
+// the manager/admin rule for overriding the qualification gate is enforced
+// inside the handler, where the gate's outcome is known.
+router.post('/:id/stage-transition', transitionLeadStage);
+router.get('/:id/stage-history', getLeadStageHistory);
 
 // ── Sub-resources ─────────────────────────────────────────────────────────────
 router.get( '/:leadId/activities',           getActivities);
