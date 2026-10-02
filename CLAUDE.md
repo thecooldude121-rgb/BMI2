@@ -187,6 +187,53 @@ The names differ by one word. The concepts do not overlap.
 - All timestamps are `TIMESTAMPTZ`. All primary keys are UUID (`gen_random_uuid()`).
 - Soft delete only where noted; no hard deletes without explicit ask.
 
+## Product standards — Honest Feedback, Evidence-Based AI, Definition of Done
+Adopted 2026-10-03 from the Design System and PRD documents, **before Phase 0 work starts**,
+so every phase is built against them rather than retrofitted. Those two source documents
+are NOT in this repo; this section is the on-disk record of what they require. If they are
+later added, link them here and reconcile any difference out loud.
+
+### (a) Honest Feedback
+- **A success state fires only after the server confirms the save.** No toast, checkmark,
+  optimistic "Saved", or navigation-as-success before a 2xx response from the API. On a
+  non-2xx the UI shows the error and keeps the user's input. (This project's signature
+  failure is a success toast over an unchanged database — see lessons 2 and 5.)
+- **A feature that is not built is hidden, or shown as a disabled control labelled
+  "Coming soon".** Never a button that appears to work, never a fake success, never a
+  `setTimeout` standing in for a request.
+- Relationship to the existing `PreviewBanner` / `PREVIEW · SAMPLE CONTENT` convention:
+  that remains the label for a *read-only panel* that displays non-live content. For an
+  *action* (save, send, connect, export, share), "Coming soon" + disabled is the rule.
+
+### (b) Evidence-Based AI
+- **Any AI score or suggestion shows 2-3 concrete reasons behind it — never a bare
+  number.** Reasons are derived from the workspace's own data and name the values that
+  produced them (e.g. "No activity in 21 days", "Close date passed 2026-09-30").
+- Applies equally to any computed score presented as a judgement (lead score, health,
+  win likelihood), whether or not it is labelled "AI". `utils/salesGuidance.ts` is the
+  reference pattern: `Problem` cannot be constructed without its `evidence`.
+- If the reasons cannot be computed, the score is not shown. AI features remain Phase 2;
+  this rule governs how they are built when they open, and any score that exists today.
+
+### (c) Definition of Done (PRD) — a feature is not done until all four hold
+1. **Every save action has a reload test.** The data must survive a full page reload (and
+   be confirmed in Postgres), not merely appear saved in client state.
+2. **Every role restriction is enforced with a 403 at the API**, not just hidden in the UI.
+   The UI hiding a control is a courtesy; the 403 is the control, and it has a test.
+   Scope note, so nothing settled gets "fixed" by mistake: this is about *role* checks
+   (`requireRole`, `rolesAssignableBy`, `canActOn`). It does NOT change the settled **400**
+   for a foreign key outside the caller's workspace, nor the rule that a row you may not
+   see is **absent** rather than a 403 (targets visibility) — those are tenant/row scoping,
+   and a 403 there would disclose that the row exists.
+3. **No sample/demo data is ever shown without an explicit "sample data" label.** This
+   restates and does not weaken "No fabricated data — ever" below; fabricated credentials
+   are still deleted, not labelled. Seeded rows (`is_seed`) count as demo data when
+   summarised.
+4. **Lists work correctly at 10,000 records** — server-side pagination/filtering/sorting,
+   no fetch-everything-and-filter-in-the-browser, counts that come from the server, and
+   acceptable render time. Verify against a 10k-row dataset in a `_test` database, never by
+   seeding live data.
+
 ## No fabricated data — ever
 This project has already lost multiple sessions to fake data presented as real (a dashboard
 of six widgets built entirely from hardcoded literals with no queries behind them; stale
