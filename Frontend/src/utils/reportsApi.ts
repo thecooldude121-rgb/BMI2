@@ -390,11 +390,11 @@ async function downloadCsv(res: Response, fallbackName: string): Promise<void> {
 /**
  * The formats a report can be downloaded as.
  *
- * PDF is deliberately absent rather than disabled: it needs a rendering
- * dependency this project has not agreed to add, and an option that cannot
- * work is worse than one that is not offered.
+ * PDF joined in Phase 7 once pdfkit was approved. It was ABSENT rather than
+ * disabled until then — an option that cannot work is worse than one that is
+ * not offered.
  */
-export type ExportFormat = 'csv' | 'xlsx';
+export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
 
 export async function exportReport(reportId: string, format: ExportFormat): Promise<void> {
   await downloadCsv(

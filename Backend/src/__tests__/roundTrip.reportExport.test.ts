@@ -230,6 +230,51 @@ describe('Report CSV export', () => {
     expect(res.status).toBe(409);
   });
 
+  // ── PDF ──────────────────────────────────────────────────────────────────
+
+  it('exports pdf with the right content type and an attachment disposition', async () => {
+    const res = await request(app).get(`/api/v1/reports/${reportId}/export.pdf`)
+      .set(auth(ws)).buffer().parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition']).toContain('.pdf');
+    expect((res.body as Buffer).subarray(0, 5).toString('ascii')).toBe('%PDF-');
+  });
+
+  it('pdf enforces the same visibility as csv and xlsx, through the same resolver', async () => {
+    const res = await request(app).get(`/api/v1/reports/${reportId}/export.pdf`).set(auth(outsider));
+    expect(res.status).toBe(404);
+  });
+
+  it('pdf requires authentication too', async () => {
+    expect((await request(app).get(`/api/v1/reports/${reportId}/export.pdf`)).status).toBe(401);
+    expect((await request(app).post('/api/v1/reports/export.pdf').send({})).status).toBe(401);
+  });
+
+  it('exports an unsaved definition as pdf', async () => {
+    const res = await request(app).post('/api/v1/reports/export.pdf').set(auth(ws)).send({
+      name: 'Scratch',
+      definition: { v: 1, base: 'deals', dimensions: [{ field: 'deals.source' }], metrics: [{ agg: 'count' }] },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toContain('scratch-');
+  });
+
+  it('a stale saved report is 409 in pdf as well, matching every other format', async () => {
+    const broken = await pool.query(
+      `INSERT INTO saved_reports (tenant_id, name, definition, owner_id)
+       VALUES ($1, 'Broken pdf', $2::jsonb, $3) RETURNING id`,
+      [ws.tenantId, JSON.stringify({ v: 1, base: 'deals', dimensions: [{ field: 'deals.nope' }] }), ws.userId],
+    );
+    const res = await request(app)
+      .get(`/api/v1/reports/${broken.rows[0].id}/export.pdf`).set(auth(ws));
+    expect(res.status).toBe(409);
+  });
+
   it('the ad-hoc name is display text, and cannot break the filename header', async () => {
     const res = await request(app).post('/api/v1/reports/export.csv').set(auth(ws)).send({
       name: '../../etc/passwd',

@@ -3,6 +3,7 @@ import {
   listReports, getReport, createReport, updateReport, deleteReport,
   listGrants, setGrant, revokeGrant, runAdHoc, runSaved,
   exportSaved, exportAdHoc, exportSavedXlsx, exportAdHocXlsx,
+  exportSavedPdf, exportAdHocPdf,
 } from '../controllers/savedReportsController';
 import { protect } from '../middleware/auth';
 
@@ -31,6 +32,7 @@ router.post('/run', runAdHoc);
  */
 router.post('/export.csv', exportAdHoc);
 router.post('/export.xlsx', exportAdHocXlsx);
+router.post('/export.pdf', exportAdHocPdf);
 router.get('/:id', getReport);
 router.patch('/:id', updateReport);
 router.delete('/:id', deleteReport);
@@ -38,6 +40,7 @@ router.delete('/:id', deleteReport);
 router.get('/:id/run', runSaved);
 router.get('/:id/export.csv', exportSaved);
 router.get('/:id/export.xlsx', exportSavedXlsx);
+router.get('/:id/export.pdf', exportSavedPdf);
 
 router.get('/:id/grants', listGrants);
 router.put('/:id/grants', setGrant);

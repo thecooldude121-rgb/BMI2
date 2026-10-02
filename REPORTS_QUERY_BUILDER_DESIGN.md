@@ -31,8 +31,8 @@ BUILT, and so are Phases 2 through 7.**
 | **4** | `CustomReportBuilder` wired | **built** (a rewrite — see below) |
 | **5** | `ReportDetailView` | **built** (routed by id; + the saved-reports list) |
 | **6** | Canned reports, incl. Revenue by Industry and by-owner with disclosure | **built** |
-| **7** | Exports (CSV, then PDF/Excel) | **CSV + Excel built**; PDF needs a dependency decision |
-| **8** | Scheduling | next — needs a job runner that does not exist |
+| **7** | Exports (CSV, then PDF/Excel) | **built** — CSV, Excel and PDF |
+| **8** | Scheduling | **next** — schema + access logic only; job runner and mail provider are out of scope |
 | **9** | Caching with result age (small, droppable) | |
 
 ### Phase 7b — Excel, where the FORMAT solves the injection problem
@@ -66,7 +66,53 @@ correctly. The archive is verified in tests with the SYSTEM `unzip`, not by
 re-reading our own offsets, because a test that parses its own output agrees
 with whatever it produced.
 
-### PDF IS NOT BUILT, AND THIS IS THE REASON
+### PDF — built on pdfkit, and the footer is the point
+
+`pdfkit` was approved and added (pure JS, no native build, no bundled browser).
+`puppeteer` was refused: it downloads a Chromium build, so rendering a table
+would mean running a browser on the server. **The dependency introduced no new
+vulnerabilities** — all 8 `npm audit` findings predate it (express, body-parser,
+qs, morgan, multer, uuid, brace-expansion, and ip-address via
+express-rate-limit); neither pdfkit nor fontkit is flagged.
+
+**Placement: a block under the title on page 1, AND a condensed line in the
+footer of EVERY page.** The footer is what makes PDF different from the other
+two formats, and the reason is the artefact's life after it leaves: a PDF is the
+format most likely to be printed, forwarded, or screenshotted a page at a time,
+so **page 4 on its own must still say what it is made of**. A note that exists
+only on page 1 survives exactly as long as nobody separates the pages — and
+separating the pages is what people do with PDFs. The column headers repeat for
+the same reason.
+
+The footer line is DERIVED from the same provenance block rather than written
+independently, so it cannot assert something the page-1 note contradicts. It is
+shorter because it must fit at 7pt on every page, and it keeps the two facts
+that change how a figure is read: the seeded share, and whether the result was
+cut off.
+
+**A value that would be a formula elsewhere is rendered verbatim here**, with no
+apostrophe. There is nothing to execute in a PDF, and copying the CSV's
+workaround into a format that does not need it would put a stray `'` in front of
+a legitimate value. Pinned by a test so nobody "fixes" it later.
+
+**Verification used a real reader (pypdf), not our own bytes.** pdfkit
+compresses its content streams, so grepping the buffer for a sentence would find
+nothing even when the sentence renders — and worse, could be made to pass by
+writing text somewhere invisible. Extraction is the only check that answers
+"would a reader see this".
+
+### Three formats, three placements, one rule
+
+| Format | Where the note goes | The failure it guards against |
+|---|---|---|
+| CSV | One block above the data | One sheet, nowhere else to put it |
+| XLSX | Its own first sheet AND above the data | A sheet is a thing you can fail to visit |
+| PDF | Under the title AND in every page footer | Pages get separated, printed, forwarded |
+
+All three resolve through the SAME access helper, so they cannot drift on who
+may export what.
+
+### (historical) PDF IS NOT BUILT, AND THIS WAS THE REASON
 
 PDF is the one piece of Phase 7 that cannot be done without adding a runtime
 dependency, and CLAUDE.md's "Tech stack (fixed — do not substitute without

@@ -720,16 +720,38 @@ describe('Excel export', () => {
     expect(urlsFetched().some(u => u.endsWith('/export.csv'))).toBe(false);
   });
 
-  it('does NOT offer PDF, because it is not built', async () => {
+  it('offers all three formats, each hitting its own endpoint', async () => {
     /*
-     * Offered as absent rather than disabled. A disabled control advertises
-     * something that does not exist — the same call TeamManagement's role
-     * picker makes, and the reason the old export menu was deleted rather than
-     * greyed out.
+     * UPDATED IN PHASE 7. This asserted PDF was NOT offered, which was correct
+     * while it did not exist — absent rather than disabled, because a disabled
+     * control advertises something unavailable. pdfkit was approved and PDF is
+     * real now, so the assertion inverts.
      */
+    const saved = stub();
     mockServer();
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/export.pdf')) {
+        return {
+          ok: true, status: 200,
+          headers: { get: () => 'attachment; filename="deals-2026-10-03.pdf"' },
+          blob: async () => new Blob(['%PDF-']),
+        } as unknown as Response;
+      }
+      if (/\/run$/.test(u)) return { ok: true, status: 200, json: async () => RUN } as Response;
+      return { ok: true, status: 200, json: async () => ({ success: true, data: REPORT }) } as Response;
+    });
+
+    const user = userEvent.setup();
     render(<ReportDetailView />);
     await screen.findByRole('table');
-    expect(screen.queryByRole('button', { name: /pdf/i })).not.toBeInTheDocument();
+
+    for (const name of [/Export CSV/i, /Export Excel/i, /Export PDF/i]) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole('button', { name: /Export PDF/i }));
+    await waitFor(() => expect(saved.name).toBe('deals-2026-10-03.pdf'));
+    expect(urlsFetched().some(u => u.endsWith('/reports/R7/export.pdf'))).toBe(true);
   });
 });

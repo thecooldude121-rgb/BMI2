@@ -19,6 +19,7 @@ import {
 import { runReport, ReportTimeout } from '../services/reports/runner';
 import { toCsv, csvFilename } from '../services/reports/csv';
 import { toXlsx, xlsxFilename, XLSX_CONTENT_TYPE } from '../services/reports/xlsx';
+import { toPdf, pdfFilename } from '../services/reports/pdf';
 import { streamHeaders } from '../config/fileStorage';
 
 /**
@@ -724,6 +725,65 @@ export const exportAdHocXlsx = async (req: AuthRequest, res: Response, next: Nex
 
     res.set(streamHeaders(xlsxFilename(reportName, generatedAt), XLSX_CONTENT_TYPE));
     res.send(toXlsx(run, { reportName, generatedAt }));
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(400).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+
+/** GET /api/v1/reports/:id/export.pdf */
+export const exportSavedPdf = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const userId = Number(req.user?.id);
+
+    // Third format, SAME resolver. Three places to forget the visibility
+    // predicate would be three places to get it wrong.
+    const target = await resolveForExport(req, tenantId, userId);
+    if (!target) { res.status(404).json({ success: false, message: 'Report not found' }); return; }
+
+    const run = await runReport(target.definition as never, tenantId);
+    const generatedAt = new Date().toISOString();
+    const pdf = await toPdf(run, { reportName: target.name, generatedAt, caveat: target.caveat });
+
+    res.set(streamHeaders(pdfFilename(target.name, generatedAt), 'application/pdf'));
+    res.send(pdf);
+  } catch (error) {
+    if (error instanceof ReportDefinitionError) {
+      res.status(409).json({ success: false, message: error.message });
+      return;
+    }
+    if (error instanceof ReportTimeout) {
+      res.status(504).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+};
+
+/** POST /api/v1/reports/export.pdf — an unsaved definition, from the builder. */
+export const exportAdHocPdf = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const { definition, name } = req.body ?? {};
+    if (!definition) {
+      res.status(400).json({ success: false, message: 'definition is required' });
+      return;
+    }
+    const run = await runReport(definition, tenantId);
+    const generatedAt = new Date().toISOString();
+    const reportName = typeof name === 'string' && name.trim() ? name.trim() : 'Untitled report';
+
+    res.set(streamHeaders(pdfFilename(reportName, generatedAt), 'application/pdf'));
+    res.send(await toPdf(run, { reportName, generatedAt }));
   } catch (error) {
     if (error instanceof ReportDefinitionError) {
       res.status(400).json({ success: false, message: error.message });

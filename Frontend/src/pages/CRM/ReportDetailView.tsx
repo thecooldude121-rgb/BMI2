@@ -398,7 +398,7 @@ const ReportDetailView: React.FC = () => {
               * spreadsheet they become someone's evidence."
               */}
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              {(['csv', 'xlsx'] as ExportFormat[]).map(fmt => (
+              {(['csv', 'xlsx', 'pdf'] as ExportFormat[]).map(fmt => (
                 <Button
                   key={fmt}
                   variant="secondary"
@@ -416,14 +416,14 @@ const ReportDetailView: React.FC = () => {
                   disabled={exporting !== null}
                 >
                   <Download className="h-4 w-4 mr-1.5" aria-hidden="true" />
-                  {exporting === fmt ? 'Preparing…' : `Export ${fmt === 'csv' ? 'CSV' : 'Excel'}`}
+                  {exporting === fmt ? 'Preparing…' : `Export ${fmt === 'csv' ? 'CSV' : fmt === 'xlsx' ? 'Excel' : 'PDF'}`}
                 </Button>
               ))}
               <span className="text-[12px] text-gray-400">
-                {/* PDF is not offered at all rather than shown disabled: a
-                    control for something that does not exist invites a support
-                    question and tells the user nothing. */}
-                Both include the data note above. Scheduled delivery isn&rsquo;t built yet.
+                {/* All three carry the data note; where it SITS differs per
+                    format, because each has a different way of losing it — see
+                    services/reports/pdf.ts for the reasoning. */}
+                All three include the data note above. Scheduled delivery isn&rsquo;t built yet.
               </span>
             </div>
             {exportError && (

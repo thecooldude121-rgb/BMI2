@@ -545,7 +545,7 @@ const CustomReportBuilder: React.FC = () => {
                     * would mean the file is the first place the numbers appear,
                     * with nobody having seen the disclosure on screen first.
                     */}
-                  {run && (['csv', 'xlsx'] as ExportFormat[]).map(fmt => (
+                  {run && (['csv', 'xlsx', 'pdf'] as ExportFormat[]).map(fmt => (
                     <button
                       key={fmt}
                       onClick={async () => {
@@ -562,7 +562,7 @@ const CustomReportBuilder: React.FC = () => {
                       disabled={exporting !== null}
                       className="text-[12px] text-indigo-600 hover:text-indigo-800 disabled:text-gray-400"
                     >
-                      {exporting === fmt ? 'Preparing…' : `Export ${fmt === 'csv' ? 'CSV' : 'Excel'}`}
+                      {exporting === fmt ? 'Preparing…' : `Export ${fmt === 'csv' ? 'CSV' : fmt === 'xlsx' ? 'Excel' : 'PDF'}`}
                     </button>
                   ))}
                 </span>
