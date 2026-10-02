@@ -65,7 +65,7 @@ const defaultQuickActions: QuickAction[] = [
     id: 'leads',
     label: '🎯 Which leads to contact today?',
     icon: <Target className="w-4 h-4" />,
-    prompt: 'Which leads should I contact today? I have 12 new leads this week.'
+    prompt: 'Which leads should I contact today?'
   },
   {
     id: 'email',
@@ -77,7 +77,7 @@ const defaultQuickActions: QuickAction[] = [
     id: 'forecast',
     label: '📈 Sales forecast this month',
     icon: <TrendingUp className="w-4 h-4" />,
-    prompt: "What's my sales forecast for this month? How likely am I to hit my $250K target?"
+    prompt: "What's my sales forecast for this month?"
   },
   {
     id: 'strategy',
@@ -186,12 +186,15 @@ export default function EnhancedChatInterface({ messages, onSendMessage, isLoadi
                 <div className="flex-1">
                   <p className="font-medium text-gray-900 mb-2">AI Assistant</p>
                   <p className="text-gray-700 leading-relaxed">
-                    Hello! I'm your AI Sales Copilot. I can help you with deal strategy,
-                    lead prioritization, email writing, and sales forecasting.
+                    The AI Sales Copilot is not built yet. It cannot read your deals,
+                    leads or forecast, and every question gets the same answer saying so.
                   </p>
-                  <p className="text-gray-700 mt-3">
-                    What would you like help with today?
-                  </p>
+                  {/* Was "Hello! I'm your AI Sales Copilot. I can help you with deal
+                      strategy, lead prioritization, email writing, and sales
+                      forecasting" — a claim the page could not keep, made before the
+                      user had typed anything. Quick-action prompts also embedded
+                      invented figures ("12 new leads", a "$250K target"). Corrected
+                      2026-10-03. */}
                 </div>
               </div>
             </div>

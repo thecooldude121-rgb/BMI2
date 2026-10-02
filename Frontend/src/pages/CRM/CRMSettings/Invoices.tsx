@@ -1,44 +1,27 @@
 import React from 'react';
-import { Download, FileText } from 'lucide-react';
+import { NotAvailable } from '../../../components/common/NotAvailable';
 
-const Invoices: React.FC = () => {
-  const invoices = [
-    { id: 'INV-001', date: '2024-02-15', amount: '$99.00', status: 'Paid' },
-    { id: 'INV-002', date: '2024-01-15', amount: '$99.00', status: 'Paid' },
-    { id: 'INV-003', date: '2023-12-15', amount: '$99.00', status: 'Paid' }
-  ];
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
-        <p className="text-sm text-gray-600 mt-1">View and download your invoices</p>
-      </div>
-
-      <div className="space-y-3">
-        {invoices.map((invoice) => (
-          <div key={invoice.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-            <div className="flex items-center gap-3">
-              <FileText className="h-5 w-5 text-gray-400" />
-              <div>
-                <div className="font-medium text-gray-900">{invoice.id}</div>
-                <div className="text-sm text-gray-600">{invoice.date}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="font-medium text-gray-900">{invoice.amount}</div>
-                <div className="text-xs text-green-600">{invoice.status}</div>
-              </div>
-              <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                <Download className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+/**
+ * Invoices — NOT BUILT.
+ *
+ * Rewritten 2026-10-03 (step 4, sample-data sweep). This page used to render
+ * three invented invoices marked "Paid" with dead download buttons. None of it was backed by a table or an endpoint, and nothing
+ * resembling real security, billing or configuration state may render
+ * unlabelled. Restore the real screen only alongside the API that backs it.
+ */
+const Invoices: React.FC = () => (
+  <div>
+    <div className="mb-6">
+      <h2 className="text-2xl font-bold text-gray-900">Invoices</h2>
+      <p className="text-sm text-gray-600 mt-1">Billing history</p>
     </div>
-  );
-};
+    <div className="space-y-6">
+        <NotAvailable
+          feature="Invoice history"
+          detail="No invoice has ever been issued through this CRM, so there is no billing history to list."
+        />
+    </div>
+  </div>
+);
 
 export default Invoices;

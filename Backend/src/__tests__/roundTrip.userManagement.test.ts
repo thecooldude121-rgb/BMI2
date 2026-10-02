@@ -254,6 +254,50 @@ describe('User management — round trip', () => {
     expect((await pool.query('SELECT is_active FROM users WHERE id = $1', [victim.userId])).rows[0].is_active).toBe(true);
   });
 
+  /**
+   * canActOn on deactivate/reactivate — added 2026-10-03. Before it, a manager
+   * could deactivate an admin whenever another privileged member remained;
+   * only the UI (Team page admin-only) hid the control.
+   */
+  it('a manager CANNOT deactivate an admin — 403, and the admin stays active', async () => {
+    const admin2 = await addUserWithRole(ws, 'admin');
+    const res = await request(app).post(`/api/v1/users/${admin2.userId}/deactivate`).set(auth(manager));
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(res.body.message).toMatch(/cannot deactivate a admin/);
+    expect((await pool.query('SELECT is_active FROM users WHERE id = $1', [admin2.userId])).rows[0].is_active).toBe(true);
+  });
+
+  it('a manager CANNOT reactivate an admin either', async () => {
+    const admin3 = await addUserWithRole(ws, 'admin');
+    await request(app).post(`/api/v1/users/${admin3.userId}/deactivate`).set(auth(ws));
+    const res = await request(app).post(`/api/v1/users/${admin3.userId}/reactivate`).set(auth(manager));
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect((await pool.query('SELECT is_active FROM users WHERE id = $1', [admin3.userId])).rows[0].is_active).toBe(false);
+  });
+
+  it('a manager CAN still deactivate and reactivate a sales user, and the response carries the flag', async () => {
+    const rep = await addUserWithRole(ws, 'sales');
+    const off = await request(app).post(`/api/v1/users/${rep.userId}/deactivate`).set(auth(manager));
+    expect(off.status, JSON.stringify(off.body)).toBe(200);
+    expect(off.body.data.can_deactivate).toBe(true);
+    expect((await pool.query('SELECT is_active FROM users WHERE id = $1', [rep.userId])).rows[0].is_active).toBe(false);
+
+    const on = await request(app).post(`/api/v1/users/${rep.userId}/reactivate`).set(auth(manager));
+    expect(on.status, JSON.stringify(on.body)).toBe(200);
+    expect(on.body.data.can_deactivate).toBe(true);
+    expect((await pool.query('SELECT is_active FROM users WHERE id = $1', [rep.userId])).rows[0].is_active).toBe(true);
+  });
+
+  it('GET /users serves can_deactivate: false on an admin row for a manager, true for an admin caller', async () => {
+    const asManager = await request(app).get('/api/v1/users').set(auth(manager));
+    const adminRow = asManager.body.data.find((u: { id: number }) => String(u.id) === String(ws.userId));
+    expect(adminRow.can_deactivate).toBe(false);
+
+    const asAdmin = await request(app).get('/api/v1/users').set(auth(ws));
+    const managerRow = asAdmin.body.data.find((u: { id: number }) => String(u.id) === String(manager.userId));
+    expect(managerRow.can_deactivate).toBe(true);
+  });
+
   it('tenant isolation: a user in another workspace is 404, not 403, and is untouched', async () => {
     const other = await setupWorkspace('usermgmt-iso');
     try {

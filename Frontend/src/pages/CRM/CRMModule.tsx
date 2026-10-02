@@ -29,7 +29,6 @@ import ReportsPage from './ReportsPage';
 import ReportDetailView from './ReportDetailView';
 import CustomReportBuilder from './CustomReportBuilder';
 import DocumentsLibrary from './DocumentsLibrary';
-import DocumentsContextDemo from './DocumentsContextDemo';
 import DocumentDetailPage from './DocumentDetailPage';
 import CRMSettings from './CRMSettings';
 import AICopilotPage from './AICopilotPage';
@@ -90,7 +89,6 @@ const CRMModule = () => {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/custom-report-builder" element={<CustomReportBuilder />} />
           <Route path="/reports/:reportSlug" element={<ReportDetailView />} />
-          <Route path="/documents-demo" element={<DocumentsContextDemo />} />
           <Route path="/documents" element={<DocumentsLibrary />} />
           <Route path="/documents/:documentId" element={<DocumentDetailPage />} />
           <Route path="/ai-copilot" element={<AICopilotPage />} />

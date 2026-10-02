@@ -128,18 +128,18 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
           <div>
             {(() => {
               const sp = stageLookup(formData.stage, formData.pipelineId ?? null)?.probability ?? null;
-              const aiProb = formData.probability ?? sp;
+              // Stage baseline only. An "AI Score" (baseline + fixed boosts) was
+              // shown when the stored value exceeded the stage's — suppressed
+              // 2026-10-03, Evidence-Based AI: its reasons were never computed.
+              const baseline = sp ?? 0;
               const isOverride = winProbOverrideEnabled && winProbOverrideValue !== '';
-              const displayProb = isOverride ? Number(winProbOverrideValue) : aiProb;
-              const isAI = !isOverride && sp !== null && aiProb > sp;
+              const displayProb = isOverride ? Number(winProbOverrideValue) : baseline;
               return (
                 <>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-1.5">
                       {isOverride ? (
                         <span className="text-sm font-medium text-indigo-600">Rep Override</span>
-                      ) : isAI ? (
-                        <span className="text-sm font-medium text-gray-700">AI Score</span>
                       ) : (
                         <span className="text-sm font-medium text-gray-700">Stage Baseline</span>
                       )}
@@ -149,7 +149,7 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
                         {displayProb}%
                       </span>
                       {isOverride && (
-                        <span className="text-xs text-gray-400 line-through">AI: {aiProb}%</span>
+                        <span className="text-xs text-gray-400 line-through">Stage: {baseline}%</span>
                       )}
                     </div>
                   </div>
@@ -163,9 +163,6 @@ export const DealPreviewPanel: React.FC<DealPreviewPanelProps> = ({
                       style={{ width: `${displayProb}%` }}
                     />
                   </div>
-                  {isAI && !isOverride && (
-                    <div className="mt-1 text-xs text-gray-400 text-right">Stage: {sp}%</div>
-                  )}
                 </>
               );
             })()}

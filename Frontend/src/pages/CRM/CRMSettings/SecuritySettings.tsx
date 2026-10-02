@@ -47,7 +47,7 @@ const SecuritySettings: React.FC = () => {
 
         <NotAvailable
           feature="API keys"
-          detail="The API has no key-issuing endpoint — programmatic access currently uses the same short-lived token as the web app."
+          detail="There is no screen for issuing keys. Module-to-module service credentials exist on the server (admin or manager, through the API) but are not managed here."
         />
 
         <NotAvailable

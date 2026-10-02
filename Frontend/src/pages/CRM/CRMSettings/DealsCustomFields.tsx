@@ -1,50 +1,27 @@
 import React from 'react';
-import { Button } from '../../../components/ui/Button';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { NotAvailable } from '../../../components/common/NotAvailable';
 
-const DealsCustomFields: React.FC = () => {
-  const fields = [
-    { name: 'Deal Type', type: 'Dropdown', required: true },
-    { name: 'Competitor', type: 'Text', required: false },
-    { name: 'Next Step', type: 'Text', required: false },
-    { name: 'Expected Close Date', type: 'Date', required: true }
-  ];
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Deals Custom Fields</h2>
-          <p className="text-sm text-gray-600 mt-1">Add custom fields to your deals</p>
-        </div>
-        <Button >
-          <Plus className="h-4 w-4" />
-          Add Field
-        </Button>
-      </div>
-
-      <div className="space-y-3">
-        {fields.map((field) => (
-          <div key={field.name} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-            <div>
-              <div className="font-medium text-gray-900">{field.name}</div>
-              <div className="text-sm text-gray-600">
-                Type: {field.type} {field.required && <span className="text-red-500">*</span>}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded">
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+/**
+ * Deal Custom Fields — NOT BUILT.
+ *
+ * Rewritten 2026-10-03 (step 4, sample-data sweep). This page used to render
+ * invented field definitions presented as this workspace's configuration. None of it was backed by a table or an endpoint, and nothing
+ * resembling real security, billing or configuration state may render
+ * unlabelled. Restore the real screen only alongside the API that backs it.
+ */
+const DealsCustomFields: React.FC = () => (
+  <div>
+    <div className="mb-6">
+      <h2 className="text-2xl font-bold text-gray-900">Deal Custom Fields</h2>
+      <p className="text-sm text-gray-600 mt-1">Extra fields on deals</p>
     </div>
-  );
-};
+    <div className="space-y-6">
+        <NotAvailable
+          feature="Custom field management for deals"
+          detail="There is no custom-field definition table or endpoint yet."
+        />
+    </div>
+  </div>
+);
 
 export default DealsCustomFields;

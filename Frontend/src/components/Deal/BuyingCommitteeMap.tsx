@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Users, Plus } from 'lucide-react';
+import { Users, Plus } from 'lucide-react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -340,14 +340,10 @@ export const BuyingCommitteeMap: React.FC<BuyingCommitteeMapProps> = ({
         </div>
       )}
 
-      {/* ── AI Insight ── */}
-      <div className="mt-5 flex items-start gap-2 bg-purple-50 border border-purple-200 rounded-lg px-4 py-3">
-        <Sparkles className="h-4 w-4 text-purple-600 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-purple-900">
-          <span className="font-semibold">AI Insight:</span> Decision Maker and Economic Buyer not yet aligned — deals with both engaged close{' '}
-          <span className="font-semibold">2.4× faster</span>
-        </p>
-      </div>
+      {/* An unconditional "AI Insight: … close 2.4× faster" line sat here,
+          shown even when both roles WERE engaged. The 2.4× was a literal and
+          nothing could compute it; deleted 2026-10-03, as CLAUDE.md's backlog
+          asked. */}
     </div>
   );
 };

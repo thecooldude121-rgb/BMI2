@@ -16,8 +16,10 @@ import TeamManagement from './TeamManagement';
  * unwinding.
  */
 
+/** The signed-in session role. Admin by default; tests that need another set it and reset it. */
+let sessionRole = 'Admin';
 vi.mock('../../../contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: '1', name: 'Admin User', email: 'admin@example.com', role: 'Admin' } }),
+  useAuth: () => ({ user: { id: '1', name: 'Session User', email: 'session@example.com', role: sessionRole } }),
 }));
 const showToast = vi.fn();
 vi.mock('../../../contexts/ToastContext', () => ({ useToast: () => ({ showToast }) }));
@@ -182,14 +184,18 @@ describe('TeamManagement — the real roster', () => {
 });
 
 describe('TeamManagement — deactivate', () => {
+  /** Rows as the server sends them to a caller allowed to act on everyone. */
+  const actable = rows.map(r => ({ ...r, can_deactivate: true }));
+
   it('POSTs to the real endpoint and renders the state the server returned', async () => {
     const user = userEvent.setup();
     mockServer({
+      users: actable,
       onPost: (url) => {
         expect(url).toBe('http://localhost:5001/api/v1/users/1/deactivate');
         return {
           ok: true, status: 200,
-          json: async () => ({ success: true, data: { ...rows[0], is_active: false } }),
+          json: async () => ({ success: true, data: { ...actable[0], is_active: false } }),
         } as Response;
       },
     });
@@ -216,6 +222,7 @@ describe('TeamManagement — deactivate', () => {
   it('a 409 shows the server\'s real reason and leaves the member active', async () => {
     const user = userEvent.setup();
     mockServer({
+      users: actable,
       onPost: () => ({
         ok: false, status: 409,
         json: async () => ({ success: false, message: 'Cannot deactivate the last admin or manager in this workspace' }),
@@ -239,11 +246,12 @@ describe('TeamManagement — deactivate', () => {
   it('reactivate calls the real endpoint and reflects the response', async () => {
     const user = userEvent.setup();
     mockServer({
+      users: actable,
       onPost: (url) => {
         expect(url).toContain('/users/3/reactivate');
         return {
           ok: true, status: 200,
-          json: async () => ({ success: true, data: { ...rows[2], is_active: true } }),
+          json: async () => ({ success: true, data: { ...actable[2], is_active: true } }),
         } as Response;
       },
     });
@@ -254,6 +262,49 @@ describe('TeamManagement — deactivate', () => {
     await waitFor(() => expect(callsTo('/reactivate').length).toBe(1));
     // The INACTIVE badge is gone because the server returned is_active: true.
     await waitFor(() => expect(screen.queryByText('INACTIVE')).not.toBeInTheDocument());
+  });
+
+  it('renders NO deactivate or reactivate control where the server says can_deactivate is false', async () => {
+    // What a manager receives for admin rows: canActOn is false, so the server
+    // would 403 — and the UI must not offer a button that always fails.
+    mockServer({
+      users: [
+        { ...rows[0], role: 'admin', can_deactivate: false },   // Priya, active admin
+        { ...rows[1], can_deactivate: true },                   // Sam, sales
+        { ...rows[2], role: 'admin', can_deactivate: false },   // Dee, inactive admin
+      ],
+    });
+    render(<TeamManagement />);
+    await screen.findByText('Priya Nair');
+
+    // Exactly one Deactivate button: Sam's. Absent, not disabled, for Priya.
+    expect(screen.getAllByRole('button', { name: /^deactivate$/i })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /reactivate/i })).toBeNull();
+  });
+});
+
+describe('TeamManagement — who may open it (ratified 2026-10-03)', () => {
+  afterEach(() => { sessionRole = 'Admin'; });
+
+  it('a Manager can open the page — the server has always allowed managers to manage the team', async () => {
+    sessionRole = 'Manager';
+    mockServer();
+    render(<TeamManagement />);
+    expect(await screen.findByText('Sam Okafor')).toBeInTheDocument();
+    expect(screen.queryByText(/403 - Access Forbidden/)).toBeNull();
+  });
+
+  it('a Sales user still gets the 403 page, with no roster or controls', async () => {
+    // (The roster fetch itself is not asserted absent: the page's effect runs
+    // before the role check, and GET /users is deliberately open to every role
+    // because assignment pickers need it. The controls are what is gated.)
+    sessionRole = 'Sales';
+    mockServer();
+    render(<TeamManagement />);
+    expect(screen.getByText(/403 - Access Forbidden/)).toBeInTheDocument();
+    await waitFor(() => expect(callsTo('/users').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Sam Okafor')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^deactivate$/i })).toBeNull();
   });
 });
 

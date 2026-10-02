@@ -1,107 +1,27 @@
-import React, { useState } from 'react';
-import { Button } from '../../../components/ui/Button';
-import { Save } from 'lucide-react';
+import React from 'react';
+import { NotAvailable } from '../../../components/common/NotAvailable';
 
-const DisplayPreferences: React.FC = () => {
-  const [display, setDisplay] = useState({
-    theme: 'light',
-    density: 'comfortable',
-    sidebarCollapsed: false,
-    showAvatars: true,
-    animationsEnabled: true
-  });
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Display Preferences</h2>
-        <p className="text-sm text-gray-600 mt-1">Customize the appearance of your CRM interface</p>
-      </div>
-
-      <div className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Theme</label>
-          <select aria-label="Theme"
-            value={display.theme}
-            onChange={(e) => setDisplay({ ...display, theme: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="auto">Auto (System)</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Display Density</label>
-          <select aria-label="Display Density"
-            value={display.density}
-            onChange={(e) => setDisplay({ ...display, density: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="comfortable">Comfortable</option>
-            <option value="compact">Compact</option>
-            <option value="spacious">Spacious</option>
-          </select>
-        </div>
-
-        <div className="flex items-center justify-between py-3 border-b border-gray-200">
-          <div>
-            <div className="text-sm font-medium text-gray-700">Collapse Sidebar by Default</div>
-            <div className="text-xs text-gray-500">Start with a collapsed sidebar on page load</div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={display.sidebarCollapsed}
-              onChange={(e) => setDisplay({ ...display, sidebarCollapsed: e.target.checked })}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
-          </label>
-        </div>
-
-        <div className="flex items-center justify-between py-3 border-b border-gray-200">
-          <div>
-            <div className="text-sm font-medium text-gray-700">Show User Avatars</div>
-            <div className="text-xs text-gray-500">Display profile pictures throughout the interface</div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={display.showAvatars}
-              onChange={(e) => setDisplay({ ...display, showAvatars: e.target.checked })}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
-          </label>
-        </div>
-
-        <div className="flex items-center justify-between py-3 border-b border-gray-200">
-          <div>
-            <div className="text-sm font-medium text-gray-700">Enable Animations</div>
-            <div className="text-xs text-gray-500">Use smooth transitions and animations</div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={display.animationsEnabled}
-              onChange={(e) => setDisplay({ ...display, animationsEnabled: e.target.checked })}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
-          </label>
-        </div>
-
-        <div className="pt-4 border-t border-gray-200">
-          <Button size="lg">
-            <Save className="h-4 w-4" />
-            Save Display Settings
-          </Button>
-        </div>
-      </div>
+/**
+ * Display — NOT BUILT.
+ *
+ * Rewritten 2026-10-03 (step 4, sample-data sweep). This page used to render
+ * a theme and layout selector held in local state that was never saved and changed nothing. None of it was backed by a table or an endpoint, and nothing
+ * resembling real security, billing or configuration state may render
+ * unlabelled. Restore the real screen only alongside the API that backs it.
+ */
+const DisplayPreferences: React.FC = () => (
+  <div>
+    <div className="mb-6">
+      <h2 className="text-2xl font-bold text-gray-900">Display</h2>
+      <p className="text-sm text-gray-600 mt-1">Theme and layout</p>
     </div>
-  );
-};
+    <div className="space-y-6">
+        <NotAvailable
+          feature="Saving display preferences"
+          detail="No theme or layout preference is stored and the CRM has no dark theme to switch to."
+        />
+    </div>
+  </div>
+);
 
 export default DisplayPreferences;

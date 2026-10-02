@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../../ui/Button';
-import { Lightbulb, Tag, TrendingUp, User, Calendar, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Lightbulb, Tag, TrendingUp, User, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { hasSeniorBuyer, StakeholderContact } from '../../../config/contactRoles';
 
 interface AIRecommendationsPanelProps {
@@ -58,24 +58,16 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
     recommendations.push({
       id: 3,
       title: 'Add a Decision Maker or Economic Buyer',
-      reason: 'Deals without a senior buyer role close 40% less often',
+      // Was "close 40% less often" — a statistic nothing computes.
+      reason: 'No contact on this deal holds a decision-maker or economic-buyer role',
       action: () => {},
       icon: User
     });
   }
 
-  if (formData.closeDate) {
-    const closeDate = new Date(formData.closeDate);
-    const suggestedDate = new Date(closeDate);
-    suggestedDate.setDate(suggestedDate.getDate() - 3);
-    recommendations.push({
-      id: 4,
-      title: `Close Date: Move to ${suggestedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-      reason: 'Similar deals close 3 days early',
-      action: () => onApplyRecommendation('closeDate', suggestedDate.toISOString().split('T')[0]),
-      icon: Calendar
-    });
-  }
+  // A "move your close date 3 days earlier — similar deals close 3 days
+  // early" recommendation lived here, with a button that rewrote the date.
+  // Nothing measures similar deals; removed 2026-10-03.
 
   recommendations.push({
     id: 5,
@@ -92,7 +84,7 @@ export const AIRecommendationsPanel: React.FC<AIRecommendationsPanelProps> = ({
         <h2 className="text-lg font-bold text-gray-900">💡 AI RECOMMENDATIONS</h2>
       </div>
 
-      <p className="text-sm text-gray-600 mb-4">Based on data analysis:</p>
+      <p className="text-sm text-gray-600 mb-4">Checklist based on the fields in this form:</p>
 
       <div className="space-y-3">
         {recommendations.map((rec) => {

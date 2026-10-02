@@ -75,8 +75,8 @@ const CRMSettings: React.FC = () => {
       icon: <Palette className="h-4 w-4" />,
       subsections: [
         { id: 'preferences', label: 'Preferences' },
-        { id: 'general', label: 'General (Legacy)' },
-        { id: 'display', label: 'Display (Legacy)' }
+        { id: 'general', label: 'General' },
+        { id: 'display', label: 'Display' }
       ]
     },
     {
@@ -179,7 +179,8 @@ const CRMSettings: React.FC = () => {
       label: 'TEAM MANAGEMENT',
       icon: <Users className="h-4 w-4" />,
       subsections: [],
-      adminOnly: true
+      // Admin + Manager since 2026-10-03, matching the server (see TeamManagement).
+      administrativeOnly: true
     },
     {
       // Administrative, not admin-only: minting a setup code and disconnecting

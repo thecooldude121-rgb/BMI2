@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
-import { X, Phone, Video, MapPin, Calendar, Clock, Link as LinkIcon } from 'lucide-react';
+import { X, Phone, Video, MapPin, Calendar, Clock } from 'lucide-react';
 
 interface ScheduleCallModalProps {
   isOpen: boolean;
@@ -43,7 +43,6 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
   const [sendInvite, setSendInvite] = useState(true);
   const [addToCalendar, setAddToCalendar] = useState(true);
   const [scheduling, setScheduling] = useState(false);
-  const [generatingLink, setGeneratingLink] = useState(false);
 
   // Set default date to tomorrow. Must stay above the `isOpen` early return —
   // a hook below it changes the hook count when the modal opens, which makes
@@ -60,15 +59,6 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
 
   const firstName = memberName.split(' ')[0];
 
-  const handleGenerateZoomLink = async () => {
-    setGeneratingLink(true);
-    // Simulate API call to Zoom
-    setTimeout(() => {
-      const mockZoomLink = `https://zoom.us/j/${Math.floor(Math.random() * 1000000000)}`;
-      setVideoLink(mockZoomLink);
-      setGeneratingLink(false);
-    }, 1000);
-  };
 
   const handleSchedule = async () => {
     if (!date || !time || !subject.trim()) return;
@@ -295,40 +285,17 @@ export const ScheduleCallModal: React.FC<ScheduleCallModalProps> = ({
           {callType === 'video' && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Video Link</label>
-              {videoLink ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    value={videoLink}
-                    onChange={(e) => setVideoLink(e.target.value)}
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={() => setVideoLink('')}
-                    className="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors text-sm"
-                  >
-                    Clear
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={handleGenerateZoomLink}
-                  disabled={generatingLink}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:bg-slate-100 disabled:text-slate-400 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {generatingLink ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <LinkIcon className="w-4 h-4" />
-                      Generate Zoom Link
-                    </>
-                  )}
-                </button>
-              )}
+              {/* Paste only. A "Generate Zoom Link" button used to mint a fake
+                  zoom.us/j/<random> URL — a link someone could send in an invite.
+                  Removed 2026-10-03; there is no Zoom integration. */}
+              <input
+                type="url"
+                value={videoLink}
+                onChange={(e) => setVideoLink(e.target.value)}
+                placeholder="Paste a meeting link (Zoom, Meet, Teams)"
+                aria-label="Meeting link"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
           )}
 

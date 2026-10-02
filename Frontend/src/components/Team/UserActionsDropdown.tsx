@@ -20,7 +20,8 @@ interface UserActionsDropdownProps {
   onSendWelcomeEmail: () => void;
   onUnlockAccount: () => void;
   onViewActivityLog: () => void;
-  onDeactivate: () => void;
+  /** Omitted when the server says this caller may not deactivate this person (can_deactivate). */
+  onDeactivate?: () => void;
   onDelete: () => void;
   isAccountLocked: boolean;
 }
@@ -156,13 +157,15 @@ const UserActionsDropdown: React.FC<UserActionsDropdownProps> = ({
 
         <div className="my-2 border-t border-gray-200"></div>
 
-        <button
-          onClick={() => handleAction(onDeactivate)}
-          className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-3"
-        >
-          <AlertTriangle className="h-4 w-4 text-red-500" />
-          Deactivate User
-        </button>
+        {onDeactivate && (
+          <button
+            onClick={() => handleAction(onDeactivate)}
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-3"
+          >
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            Deactivate User
+          </button>
+        )}
 
         <button
           onClick={() => handleAction(onDelete)}

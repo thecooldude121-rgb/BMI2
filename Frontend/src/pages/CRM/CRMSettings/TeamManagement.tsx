@@ -153,12 +153,16 @@ const TeamManagement: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchQuery]);
 
-  // Check if user is Admin
-  if (!user || user.role !== 'Admin') {
+  // Admin AND Manager — ratified 2026-10-03 to match the server, which has
+  // always let managers invite, change roles and deactivate within the
+  // never-above-your-own-role rules. Which rows a manager may act on is served
+  // per row (can_change_role / can_change_manager / can_deactivate), never
+  // decided here.
+  if (!user || (user.role !== 'Admin' && user.role !== 'Manager')) {
     return (
       <ForbiddenAccess
         title="403 - Access Forbidden"
-        message="Team Management settings are only accessible to Admin users. Contact your system administrator for access."
+        message="Team Management settings are only accessible to Admins and Managers. Contact your system administrator for access."
         returnPath="/crm/settings"
         returnLabel="Return to Settings"
       />
@@ -874,7 +878,7 @@ const TeamManagement: React.FC = () => {
                     onSendWelcomeEmail={() => handleSendWelcomeEmail(member)}
                     onUnlockAccount={() => handleUnlockAccount(member)}
                     onViewActivityLog={() => handleViewActivityLog(member)}
-                    onDeactivate={() => handleDeactivateUser(member)}
+                    onDeactivate={member.canDeactivate ? () => handleDeactivateUser(member) : undefined}
                     onDelete={() => handleDeleteUser(member)}
                     /* `users` has no lock column; nothing can be locked, so nothing shows as locked. */
                     isAccountLocked={false}
@@ -1081,6 +1085,7 @@ const TeamManagement: React.FC = () => {
                 </Button>
                 {member.status === 'inactive' ? (
                   <>
+                    {member.canDeactivate && (
                     <button
                       onClick={() => void handleReactivate(member)}
                       disabled={busyMemberId === member.id}
@@ -1089,6 +1094,7 @@ const TeamManagement: React.FC = () => {
                       <CheckCircle className="h-4 w-4" />
                       Reactivate
                     </button>
+                    )}
                     <button
                       onClick={() => handleDeleteUser(member)}
                       className="px-4 py-2 border border-red-300 text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-sm flex items-center gap-2"
@@ -1102,6 +1108,7 @@ const TeamManagement: React.FC = () => {
                     {/* Deactivation is a real action now, so it gets a visible
                         control rather than only a dropdown entry — matching
                         Reactivate for inactive members. */}
+                    {member.canDeactivate && (
                     <button
                       onClick={() => handleDeactivateUser(member)}
                       disabled={busyMemberId === member.id}
@@ -1110,6 +1117,7 @@ const TeamManagement: React.FC = () => {
                       <Shield className="h-4 w-4" />
                       Deactivate
                     </button>
+                    )}
                     <button
                       onClick={() => handleResetPassword(member)}
                       className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm flex items-center gap-2"
@@ -1145,53 +1153,53 @@ const TeamManagement: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          <button className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors group">
+          <button onClick={() => navigate('/crm/team')} className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors group">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Users className="h-5 w-5 text-blue-600" />
               </div>
               <div className="text-left">
                 <div className="font-medium text-gray-900">View Team Performance</div>
-                <div className="text-sm text-gray-600">Opens "More → Team" dashboard to view team metrics</div>
+                <div className="text-sm text-gray-600">Opens the Team dashboard</div>
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600" />
           </button>
 
-          <button className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors group">
+          <button type="button" disabled aria-disabled="true" title="Coming soon" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg opacity-60 cursor-not-allowed group">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
                 <Shield className="h-5 w-5 text-purple-600" />
               </div>
               <div className="text-left">
                 <div className="font-medium text-gray-900">Configure Role Permissions</div>
-                <div className="text-sm text-gray-600">Manage permissions matrix (Phase 2 feature)</div>
+                <div className="text-sm text-gray-600">Coming soon — roles are fixed (admin, manager, sales) and enforced by the server</div>
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600" />
           </button>
 
-          <button className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors group">
+          <button type="button" disabled aria-disabled="true" title="Coming soon" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg opacity-60 cursor-not-allowed group">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
                 <BarChart3 className="h-5 w-5 text-green-600" />
               </div>
               <div className="text-left">
                 <div className="font-medium text-gray-900">View User Activity Report</div>
-                <div className="text-sm text-gray-600">Generate report on login activity, usage stats</div>
+                <div className="text-sm text-gray-600">Coming soon — sign-ins are not recorded yet</div>
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600" />
           </button>
 
-          <button className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors group">
+          <button type="button" disabled aria-disabled="true" title="Coming soon" className="w-full flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-lg opacity-60 cursor-not-allowed group">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
                 <FileText className="h-5 w-5 text-orange-600" />
               </div>
               <div className="text-left">
                 <div className="font-medium text-gray-900">Audit Log</div>
-                <div className="text-sm text-gray-600">View all user management changes (who added/edited/deleted users)</div>
+                <div className="text-sm text-gray-600">Coming soon — user-management changes are not logged yet</div>
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600" />

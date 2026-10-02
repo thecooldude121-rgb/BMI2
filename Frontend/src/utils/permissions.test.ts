@@ -33,13 +33,22 @@ describe('permissions', () => {
     expect(roleHas('sales', 'leads.view_all')).toBe(false);
   });
 
+  it('every role may convert a lead and manage saved views — ratified 2026-10-03, matching the API', () => {
+    // The API never restricted either. Hiding them from sales was a UI-only
+    // rule, and the decision was to open the UI rather than close the server.
+    for (const role of ['sdr', 'senior_sdr', 'sales', 'manager', 'admin'] as Role[]) {
+      expect(roleHas(role, 'leads.convert'), `${role} should convert`).toBe(true);
+      expect(roleHas(role, 'leads.manage_views'), `${role} should manage views`).toBe(true);
+    }
+  });
+
   it('sdr and senior_sdr survive as aliases, and are not silently collapsed', () => {
     expect(ROLE_PERMISSIONS.sdr).toBeDefined();
     expect(ROLE_PERMISSIONS.senior_sdr).toBeDefined();
     // senior_sdr is a genuinely wider tier than sdr/sales — if these ever became
     // the same set, the four-tier model would have quietly become three.
-    expect(roleHas('senior_sdr', 'leads.convert')).toBe(true);
-    expect(roleHas('sdr', 'leads.convert')).toBe(false);
+    expect(roleHas('senior_sdr', 'leads.bulk_actions')).toBe(true);
+    expect(roleHas('sdr', 'leads.bulk_actions')).toBe(false);
   });
 
   it('manager and admin keep the destructive permissions the API also allows them', () => {

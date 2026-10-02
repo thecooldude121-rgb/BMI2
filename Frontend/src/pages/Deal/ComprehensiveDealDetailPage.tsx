@@ -102,10 +102,6 @@ const DealDetail: React.FC = () => {
   const [expandedBattleCard] = useState<string | null>(null);
   const [savedRevenueSchedule, setSavedRevenueSchedule] = useState<RevenueSchedule | null>(null);
   const [activeTab, setActiveTab] = useState<string>('overview');
-  // Was `true`, unconditionally, which showed admin-only fields on the Deal
-  // Info panel to every user. RBAC is enforced at the API per CLAUDE.md; this
-  // only governs what the panel renders.
-  const isAdmin = user?.role === 'Admin';
   const battleCardRef      = useRef<HTMLDivElement>(null);
   const revenueTimelineRef = useRef<HTMLDivElement>(null);
   const heroRef            = useRef<HTMLDivElement>(null);
@@ -1370,7 +1366,6 @@ const DealDetail: React.FC = () => {
               // deals.competitors is a real jsonb column the form writes.
               competitors={dealCompetitors}
               expandedBattleCard={expandedBattleCard}
-              isAdmin={isAdmin}
               battleCardRef={battleCardRef}
               revenueSchedule={activeRevenueSchedule}
               onSaveRevenueSchedule={(sched) => setSavedRevenueSchedule(sched)}

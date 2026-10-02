@@ -1,49 +1,27 @@
-import React, { useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React from 'react';
+import { NotAvailable } from '../../../components/common/NotAvailable';
 
-const DataDeletion: React.FC = () => {
-  const [confirmText, setConfirmText] = useState('');
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Delete Account Data</h2>
-        <p className="text-sm text-gray-600 mt-1">Permanently delete your account and all data</p>
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="h-6 w-6 text-red-600 flex-shrink-0 mt-1" />
-          <div>
-            <h4 className="text-sm font-semibold text-red-900 mb-2">Warning: This action cannot be undone</h4>
-            <p className="text-sm text-red-800">
-              Deleting your account will permanently remove all your data including contacts, deals, activities, and custom configurations.
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Type "DELETE" to confirm
-          </label>
-          <input aria-label="Type &quot;DELETE&quot; to confirm"
-            type="text"
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            placeholder="DELETE"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-          />
-        </div>
-
-        <button
-          disabled={confirmText !== 'DELETE'}
-          className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Delete My Account
-        </button>
-      </div>
+/**
+ * Delete Account — NOT BUILT.
+ *
+ * Rewritten 2026-10-03 (step 4, sample-data sweep). This page used to render
+ * an account-deletion screen whose button did nothing. None of it was backed by a table or an endpoint, and nothing
+ * resembling real security, billing or configuration state may render
+ * unlabelled. Restore the real screen only alongside the API that backs it.
+ */
+const DataDeletion: React.FC = () => (
+  <div>
+    <div className="mb-6">
+      <h2 className="text-2xl font-bold text-gray-900">Delete Account</h2>
+      <p className="text-sm text-gray-600 mt-1">Permanently delete your account</p>
     </div>
-  );
-};
+    <div className="space-y-6">
+        <NotAvailable
+          feature="Account deletion"
+          detail="There is no account-deletion flow. An admin or manager can deactivate a member under Team Management, which is soft and reversible."
+        />
+    </div>
+  </div>
+);
 
 export default DataDeletion;
