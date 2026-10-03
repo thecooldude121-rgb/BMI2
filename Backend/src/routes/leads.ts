@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  getLeads, getLeadById, createLead, updateLead, deleteLead,
+  getLeads, getLeadSummary, getLeadById, createLead, updateLead, deleteLead,
   transitionLeadStage, getLeadStageHistory,
 } from '../controllers/leadsController';
 import { convertLead } from '../controllers/leadConversionController';
@@ -22,6 +22,8 @@ router.use(protect);
 
 // ── Core CRUD ─────────────────────────────────────────────────────────────────
 router.get('/',    getLeads);
+// Before '/:id', or 'summary' would be read as a lead id.
+router.get('/summary', getLeadSummary);
 router.post('/',   createLead);
 router.get('/:id', getLeadById);
 router.put('/:id', updateLead);
