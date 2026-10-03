@@ -872,7 +872,7 @@ const DealsKanbanPage: React.FC = () => {
       Stage: d.stage,
       CloseDate: d.closeDate,
       Owner: d.owner,
-      Score: d.aiScore,
+      'Probability (%)': d.aiScore,
       Health: d.health
     }));
   };
@@ -881,7 +881,7 @@ const DealsKanbanPage: React.FC = () => {
     switch (sortBy) {
       case 'closeDate': return 'Close Date';
       case 'value': return 'Deal Value';
-      case 'health': return 'AI Health Score';
+      case 'health': return 'Win Probability';
       case 'activity': return 'Last Activity';
       case 'stage': return 'Stage Progress';
       default: return 'Close Date';
@@ -1871,7 +1871,7 @@ const DealsKanbanPage: React.FC = () => {
                 {([
                   ['closeDate', 'Close date'],
                   ['value',     'Deal value'],
-                  ['health',    'AI health score'],
+                  ['health',    'Win probability'],
                   ['activity',  'Last activity'],
                   ['stage',     'Stage progress'],
                 ] as const).map(([key, label]) => (

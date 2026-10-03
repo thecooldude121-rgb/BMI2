@@ -4,7 +4,7 @@ import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isW
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Building2, User, Sparkles, Mail, Phone, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Copy, Trash2, Archive, StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX, Pencil, ArrowLeftRight, UserCog, Zap, FileText, CheckSquare, ClipboardList, Workflow, Link2, ListFilter, Swords, AlertCircle, Search, TrendingUp, TrendingDown } from 'lucide-react';
 import { formatAmountUSD, formatAmountCompact, type SupportedCurrency, CURRENCY_SYMBOLS, getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency } from '../../utils/currencyUtils';
-import { explainDealHealth, scoreToHealthTier } from '../../utils/dealHealthDrivers';
+import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
 import { type ColumnKey, ALL_COLUMNS, DEFAULT_COLUMN_ORDER, DEFAULT_VISIBLE_COLUMNS } from '../../utils/dealsColumns';
@@ -62,15 +62,6 @@ function evaluateCondition(deal: {
       return c.operator === 'olderThan'
         ? deal.daysSinceContact > c.valueNumber
         : deal.daysSinceContact <= c.valueNumber;
-    case 'health': {
-      const { tier } = scoreToHealthTier(deal.aiScore);
-      if (c.operator === 'is')
-        return c.valueStrings.length === 0 || c.valueStrings.includes(tier);
-      if (c.operator === 'isNot')
-        return c.valueStrings.length === 0 || !c.valueStrings.includes(tier);
-      if (c.valueNumber === null) return true;
-      return c.operator === 'scoreBelow' ? deal.aiScore < c.valueNumber : deal.aiScore > c.valueNumber;
-    }
     case 'contact':
       return c.operator === 'isSet' ? !!deal.contactName : !deal.contactName;
     default:
@@ -318,8 +309,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     return p ? new Set(p.split(',').filter(Boolean)) : new Set();
   });
   const [selectedHealthTiers, setSelectedHealthTiers] = useState<Set<HealthTierFilter>>(() => {
-    const p = searchParams.get('healthTiers');
-    return p ? new Set(p.split(',').filter(Boolean) as HealthTierFilter[]) : new Set();
+    // Deliberately ignores a `healthTiers` URL param: the filter is gone, and
+    // reading it would count an active filter the user cannot see or clear.
+    return new Set();
   });
   const [velocityFilter, setVelocityFilter] = useState<Set<'ahead' | 'slipping'>>(() => {
     const p = searchParams.get('velocity');
@@ -359,13 +351,12 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   });
 
   const [sortBy, setSortBy] = useState<
-    'deal' | 'account' | 'value' | 'stage' | 'closeDate' | 'health'
+    'deal' | 'account' | 'value' | 'stage' | 'closeDate'
     | 'owner' | 'contact' | 'probability' | 'dealAge' | 'source' | 'competitor'
   >('closeDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
-  const [hoveredScore, setHoveredScore] = useState<string | null>(null);
   const [hoveredStage, setHoveredStage] = useState<string | null>(null);
   const [contextMenuDeal, setContextMenuDeal] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -625,10 +616,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       if (selectedSources.size > 0 && !selectedSources.has(deal.source)) return false;
 
       // Health tier
-      if (selectedHealthTiers.size > 0) {
-        const { tier } = scoreToHealthTier(deal.aiScore);
-        if (!selectedHealthTiers.has(tier)) return false;
-      }
+      // (Health-tier filtering removed 2026-10-03 with the score it filtered on.)
 
       // Velocity
       if (velocityFilter.size > 0) {
@@ -717,9 +705,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       case 'closeDate':
         // parseDateMs returns Infinity for empty/invalid dates — sorts them to end, never NaN
         comparison = parseDateMs(a.closeDate) - parseDateMs(b.closeDate);
-        break;
-      case 'health':
-        comparison = a.aiScore - b.aiScore;
         break;
       case 'owner':
         comparison = (a.owner || '').localeCompare(b.owner || '');
@@ -1339,7 +1324,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     if (externalFilters.stages)           setSelectedStages(externalFilters.stages);
     if (externalFilters.owners)           setSelectedOwners(externalFilters.owners);
     if (externalFilters.sources)          setSelectedSources(externalFilters.sources);
-    if (externalFilters.healthTiers)      setSelectedHealthTiers(externalFilters.healthTiers);
     if (externalFilters.closeDateFilter)  setCloseDateFilter(externalFilters.closeDateFilter);
     if (externalFilters.valueFilter)      setValueFilter(externalFilters.valueFilter);
     if (externalFilters.pipelineAgeFilter) setPipelineAgeFilter(externalFilters.pipelineAgeFilter);
@@ -1493,8 +1477,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         return <th key="probability" className={`${p4} ${thSort}`} onClick={() => handleSort('probability')}><div className="flex items-center gap-1"><span>Probability</span><SortIcon column="probability" /></div></th>;
       case 'source':
         return <th key="source" className={`${p4} ${thSort}`} onClick={() => handleSort('source')}><div className="flex items-center gap-1"><span>Source</span><SortIcon column="source" /></div></th>;
-      case 'health':
-        return <th key="health" className={`${p2} ${thSort}`} onClick={() => handleSort('health')}><div className="flex items-center gap-1"><span>Win Score</span><SortIcon column="health" /></div></th>;
       case 'relationship':
         return <th key="relationship" className={`${p2} ${thBase}`}>Relationship</th>;
       case 'competitor':
@@ -2081,134 +2063,6 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           </td>
         );
 
-      case 'health': {
-        const isClosed = ['closed-won', 'closed-lost'].includes(deal.stage);
-        if (isClosed) {
-          return (
-            <td key="health" className={`hidden md:table-cell ${cellPadding}`}>
-              <span className={`inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-full ${
-                isWonWith(stageLookup)(deal)
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-red-100 text-red-600'
-              }`}>
-                {isWonWith(stageLookup)(deal) ? 'Won' : 'Lost'}
-              </span>
-            </td>
-          );
-        }
-
-        const mergedDeal = localEdits[deal.id] ? { ...deal, ...localEdits[deal.id] } : deal;
-        const cardLite = toDealCardLite(mergedDeal);
-        const closeDaysLeft = mergedDeal.closeDate ? daysFromNow(mergedDeal.closeDate) : null;
-        const healthExpl = explainDealHealth(cardLite, closeDaysLeft);
-        const barColor = healthExpl.tier === 'strong' ? '#10b981'
-          : healthExpl.tier === 'fair' ? '#f59e0b' : '#ef4444';
-        const tierCls = healthExpl.tier === 'strong'
-          ? 'bg-emerald-100 text-emerald-700'
-          : healthExpl.tier === 'fair'
-            ? 'bg-amber-100 text-amber-700'
-            : 'bg-red-100 text-red-700';
-
-        return (
-          <td key="health" className={`hidden md:table-cell ${cellPadding}`}>
-            <div
-              className="relative"
-              onMouseEnter={() => setHoveredScore(deal.id)}
-              onMouseLeave={() => setHoveredScore(null)}
-            >
-              <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium cursor-default ${tierCls}`}>
-                <span className="font-bold tabular-nums">{deal.aiScore}</span>
-                <span>·</span>
-                <span>{healthExpl.tierLabel}</span>
-              </div>
-              {/* 5-point sparkline trend */}
-              {(() => {
-                const s = deal.aiScore;
-                const pts = [Math.max(0,s-15), Math.max(0,s-8), Math.max(0,s-4), Math.max(0,s+2), s];
-                const minP = Math.min(...pts), maxP = Math.max(...pts, minP+1);
-                const toY = (v: number) => 12 - Math.round(((v - minP) / (maxP - minP)) * 10);
-                return (
-                  <svg width="32" height="12" viewBox="0 0 32 12" className="inline-block ml-1" aria-hidden="true">
-                    <polyline points={pts.map((v, i) => `${i * 8},${toY(v)}`).join(' ')} fill="none" stroke={barColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    <circle cx="32" cy={toY(s)} r="2" fill={barColor} />
-                  </svg>
-                );
-              })()}
-              <div className="mt-1.5 h-1 bg-gray-100 rounded-full w-20 overflow-hidden">
-                <div
-                  className="h-1 rounded-full"
-                  style={{ width: `${deal.aiScore}%`, backgroundColor: barColor }}
-                />
-              </div>
-
-              {hoveredScore === deal.id && (
-                <div
-                  className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-gray-900">AI Win Probability</span>
-                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${tierCls}`}>
-                      {healthExpl.tierLabel}
-                    </span>
-                  </div>
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] text-gray-500">Score</span>
-                      <span className="text-sm font-bold tabular-nums" style={{ color: barColor }}>
-                        {healthExpl.score}/100
-                      </span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-2 rounded-full"
-                        style={{ width: `${healthExpl.score}%`, backgroundColor: barColor }}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-gray-500 mb-3 leading-snug">{healthExpl.headline}</p>
-                  {healthExpl.risks.length > 0 && (
-                    <div className="mb-2.5">
-                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Risks</div>
-                      <div className="space-y-1.5">
-                        {healthExpl.risks.slice(0, 3).map(r => (
-                          <div key={r.id} className="flex items-start justify-between gap-2">
-                            <div className="flex items-start space-x-1.5 min-w-0">
-                              <AlertTriangle className="h-3 w-3 text-red-400 flex-shrink-0 mt-0.5" />
-                              <span className="text-[11px] text-gray-700 leading-snug">{r.label}</span>
-                            </div>
-                            {r.action && (
-                              <span className="text-[10px] text-gray-400 flex-shrink-0 italic">{r.action}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {healthExpl.positives.length > 0 && (
-                    <div className="mb-2.5">
-                      <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Positives</div>
-                      <div className="space-y-1.5">
-                        {healthExpl.positives.slice(0, 2).map(p => (
-                          <div key={p.id} className="flex items-center space-x-1.5">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                            <span className="text-[11px] text-gray-700">{p.label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
-                    <Sparkles className="h-3 w-3 text-indigo-400 shrink-0" />
-                    <p className="text-[9px] text-indigo-400 font-medium">Powered by BMI AI</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </td>
-        );
-      }
-
       case 'relationship': {
         const relRisk = getRelationshipRisk(deal);
         const relTierConfig = {
@@ -2537,11 +2391,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     const expandedCardLite = toDealCardLite(expandedMerged);
     const expandedCloseDays = expandedMerged.closeDate ? daysFromNow(expandedMerged.closeDate) : null;
     const healthExpl = isClosed ? null : explainDealHealth(expandedCardLite, expandedCloseDays);
-    const { tier: healthTier } = scoreToHealthTier(deal.aiScore);
-    const accentClass = isClosed ? 'border-gray-300'
-      : healthTier === 'strong' ? 'border-green-400'
-      : healthTier === 'fair'   ? 'border-amber-400'
-      : 'border-red-400';
+    // The accent used to be coloured green/amber/red by deal.aiScore's tier — a
+    // verdict from the stored probability with no reasons. Neutral since
+    // 2026-10-03; the signals below are observable facts and stay.
+    const accentClass = isClosed ? 'border-gray-300' : 'border-gray-200';
     const pipelineDays = getDealAgeDays(deal.createdAt);
     const pipelineDaysLabel = pipelineDays < 1 ? '<1d' : `${pipelineDays}d`;
     const pipelineDaysCls = pipelineDays < 14 ? 'bg-gray-100 text-gray-600'
@@ -3392,66 +3245,9 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             );
           })()}
 
-          {/* ── Health / Win Score ─────────────────────────────── */}
-          {(() => {
-            const HEALTH_OPTIONS: Array<{ key: HealthTierFilter; label: string; dot: string }> = [
-              { key: 'strong', label: 'Healthy',          dot: 'bg-green-500'  },
-              { key: 'fair',   label: 'Needs Attention',  dot: 'bg-amber-500'  },
-              { key: 'weak',   label: 'At Risk',          dot: 'bg-red-500'    },
-            ];
-            const isOpen = openFilter === 'health';
-            return (
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={() => setOpenFilter(isOpen ? null : 'health')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
-                    selectedHealthTiers.size > 0
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  Health
-                  {selectedHealthTiers.size > 0 && (
-                    <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                      {selectedHealthTiers.size}
-                    </span>
-                  )}
-                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isOpen && (
-                  <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30">
-                    {HEALTH_OPTIONS.map(({ key, label, dot }) => (
-                      <label key={key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={selectedHealthTiers.has(key)}
-                          onChange={() => setSelectedHealthTiers(prev => {
-                            const next = new Set(prev);
-                            if (next.has(key)) next.delete(key); else next.add(key);
-                            return next;
-                          })}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
-                        />
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
-                        <span className="flex-1 text-[13px] text-gray-700">{label}</span>
-                      </label>
-                    ))}
-                    {selectedHealthTiers.size > 0 && (
-                      <div className="border-t border-gray-100 mt-1 pt-1">
-                        <button
-                          onClick={() => { setSelectedHealthTiers(new Set()); setOpenFilter(null); }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
-                        >
-                          Clear health filter
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          {/* The "Health / Win Score" filter sat here — tiers of deal.aiScore,
+              the stored win probability presented as an AI score. Removed
+              2026-10-03 (Evidence-Based AI). */}
 
           {/* ── Deal Age ───────────────────────────────────────── */}
           {(() => {
@@ -4779,7 +4575,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             onClick={() => {
               const selectedList = allDeals.filter(d => selectedDealSet.has(d.id));
               const today = new Date().toISOString().slice(0, 10);
-              const headers = ['Deal Name', 'Account', 'Owner', 'Contact', 'Value (Native)', 'Currency', 'Value (USD)', 'Stage', 'Close Date', 'Health Score', 'Source', 'Deal Age (days)', 'Competitor (Primary)', 'Competitors (Secondary)'];
+              const headers = ['Deal Name', 'Account', 'Owner', 'Contact', 'Value (Native)', 'Currency', 'Value (USD)', 'Stage', 'Close Date', 'Probability (%)', 'Source', 'Deal Age (days)', 'Competitor (Primary)', 'Competitors (Secondary)'];
               const rows = selectedList.map(d => [
                 d.dealName,
                 d.companyName || d.accountName || '',

@@ -191,7 +191,8 @@ export const SAVED_VIEWS: SavedView[] = [
   {
     id:          'best-probability',
     label:       'Best Probability',
-    description: `Deals with AI health score ≥ ${HIGH_PROBABILITY_AI_SCORE} and healthy status`,
+    // Was "AI health score": aiScore is the stored win probability, not an AI score.
+    description: `Deals with a win probability of ${HIGH_PROBABILITY_AI_SCORE}% or more and healthy status`,
     emoji:       '⭐',
     filterPreset: { sortBy: 'health' },
     predicate: (deal) =>

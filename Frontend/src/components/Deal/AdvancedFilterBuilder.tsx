@@ -3,7 +3,10 @@ import { Plus, Trash2, ChevronDown, X } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type FieldKey =
-  | 'stage' | 'owner' | 'value' | 'closeDate' | 'lastActivity' | 'health' | 'contact';
+  | 'stage' | 'owner' | 'value' | 'closeDate' | 'lastActivity' | 'contact';
+// 'health' was a field here: a tier / score filter on deal.aiScore, which is the
+// stored win probability presented as an AI health score. Removed 2026-10-03
+// with every other rendering of that score (Evidence-Based AI).
 
 export type OperatorKey =
   | 'isAnyOf' | 'isNoneOf'
@@ -33,7 +36,6 @@ const FIELD_LABELS: Record<FieldKey, string> = {
   value:        'Value',
   closeDate:    'Close Date',
   lastActivity: 'Last Activity',
-  health:       'Health',
   contact:      'Contact',
 };
 
@@ -87,16 +89,6 @@ const FIELD_DEFS: Record<FieldKey, FieldDef> = {
     ],
     defaultOperator: 'olderThan',
     valueType: () => 'days',
-  },
-  health: {
-    operators: [
-      { key: 'is',         label: 'is' },
-      { key: 'isNot',      label: 'is not' },
-      { key: 'scoreBelow', label: 'score is below' },
-      { key: 'scoreAbove', label: 'score is above' },
-    ],
-    defaultOperator: 'is',
-    valueType: (op) => (op === 'scoreBelow' || op === 'scoreAbove') ? 'score' : 'tier',
   },
   contact: {
     operators: [

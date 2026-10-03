@@ -4,9 +4,7 @@ import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isW
 import { useNavigate } from 'react-router-dom';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { isWonWith, isLostWith } from '../../utils/pipelinesApi';
-import { Download, Settings, BarChart3, Building2, User, Calendar, Sparkles, Mail, Phone, Eye, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, FileText } from 'lucide-react';
-import { explainDealHealth } from '../../utils/dealHealthDrivers';
-import type { DealCard } from '../../components/Deal/DealKanbanCard';
+import { Download, Settings, BarChart3, Building2, User, Calendar, Mail, Phone, Eye, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Edit, Copy, Trash2, FileText } from 'lucide-react';
 import { getStageStyle } from '../../config/stageColors';
 
 interface Deal {
@@ -56,7 +54,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   const [showCallModal, setShowCallModal] = useState<Deal | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
   const [showProposalModal, setShowProposalModal] = useState<Deal | null>(null);
-  const [showScoreTooltip, setShowScoreTooltip] = useState<string | null>(null);
   const [showContextMenu, setShowContextMenu] = useState<{ dealId: string; x: number; y: number } | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [displayLimit, setDisplayLimit] = useState(12);
@@ -128,30 +125,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
     return `Stage ${currentIndex + 1} of ${stages.length}`;
   };
 
-  // Coerce Grid Deal → DealCard shape for explainDealHealth.
-  const toDealCardLite = (deal: Deal): DealCard => ({
-    id: deal.id,
-    companyName: deal.companyName ?? '',
-    dealName: deal.dealName ?? '',
-    accountName: deal.accountName ?? '',
-    amount: deal.amount,
-    closeDate: deal.closeDate,
-    stage: deal.stage,
-    aiScore: deal.aiScore,
-    contactName: deal.contactName ?? '',
-    contactTitle: deal.contactTitle ?? '',
-    owner: deal.owner ?? '',
-    lastActivity: deal.lastActivity ?? '',
-    daysSinceContact: deal.daysSinceContact ?? 0,
-    priority: deal.priority ?? 'low',
-    health: (['healthy', 'at-risk', 'stalled'] as const).includes(deal.health as never)
-      ? (deal.health as 'healthy' | 'at-risk' | 'stalled')
-      : deal.health === 'excellent' ? 'healthy'
-      : deal.health === 'critical'  ? 'stalled'
-      : 'healthy',
-    source: deal.source ?? '',
-  });
-
   const handleStageChange = (dealId: string, newStage: string) => {
     if (onStageChange) {
       onStageChange(dealId, newStage);
@@ -171,7 +144,6 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   useEffect(() => {
     const handleClickOutside = () => {
       setShowActionDropdown(null);
-      setShowScoreTooltip(null);
       setShowContextMenu(null);
     };
     document.addEventListener('click', handleClickOutside);
@@ -460,7 +432,10 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                   </div>
                 </div>
 
-                {/* AI Health Score */}
+                {/* Outcome badge for closed deals. Open deals used to show an "AI Health
+                    Score" here — deal.aiScore (the stored win probability) with a
+                    popover of activity signals that never produced it. Removed
+                    2026-10-03 (Evidence-Based AI). */}
                 {(() => {
                   if (isWon || isLost) {
                     return (
@@ -473,102 +448,7 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
                       </div>
                     );
                   }
-                  const cardLite = toDealCardLite(deal);
-                  const closeDaysLeft = deal.closeDate ? daysFromNow(deal.closeDate) : null;
-                  const healthExpl = explainDealHealth(cardLite, closeDaysLeft);
-                  const barColor = healthExpl.tier === 'strong' ? '#10b981'
-                    : healthExpl.tier === 'fair' ? '#f59e0b' : '#ef4444';
-                  const tierCls = healthExpl.tier === 'strong'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : healthExpl.tier === 'fair'
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-red-100 text-red-700';
-                  return (
-                    <div className="mb-4 pb-4 border-b border-gray-100 relative">
-                      <div
-                        className="flex items-center justify-between mb-2 cursor-pointer hover:opacity-80"
-                        onClick={(e) => { e.stopPropagation(); setShowScoreTooltip(showScoreTooltip === deal.id ? null : deal.id); }}
-                        title="AI win probability — click for breakdown"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <Sparkles className="h-4 w-4" style={{ color: '#667eea' }} />
-                          <span className="font-bold text-lg tabular-nums" style={{ color: '#667eea' }}>{deal.aiScore}</span>
-                        </div>
-                        <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-full ${tierCls}`}>
-                          {healthExpl.tierLabel}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-1.5 mb-1">
-                        <div
-                          className="h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${deal.aiScore}%`, backgroundColor: barColor }}
-                        />
-                      </div>
-
-                      {showScoreTooltip === deal.id && (
-                        <div
-                          className="absolute left-0 bottom-full mb-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm font-semibold text-gray-900">AI Win Probability</span>
-                            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${tierCls}`}>
-                              {healthExpl.tierLabel}
-                            </span>
-                          </div>
-                          <div className="mb-3">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[11px] text-gray-500">Score</span>
-                              <span className="text-sm font-bold tabular-nums" style={{ color: barColor }}>
-                                {healthExpl.score}/100
-                              </span>
-                            </div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-2 rounded-full"
-                                style={{ width: `${healthExpl.score}%`, backgroundColor: barColor }}
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[11px] text-gray-500 mb-3 leading-snug">{healthExpl.headline}</p>
-                          {healthExpl.risks.length > 0 && (
-                            <div className="mb-2.5">
-                              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Risks</div>
-                              <div className="space-y-1.5">
-                                {healthExpl.risks.slice(0, 3).map(r => (
-                                  <div key={r.id} className="flex items-start justify-between gap-2">
-                                    <div className="flex items-start space-x-1.5 min-w-0">
-                                      <AlertTriangle className="h-3 w-3 text-red-400 flex-shrink-0 mt-0.5" />
-                                      <span className="text-[11px] text-gray-700 leading-snug">{r.label}</span>
-                                    </div>
-                                    {r.action && (
-                                      <span className="text-[10px] text-gray-400 flex-shrink-0 italic">{r.action}</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {healthExpl.positives.length > 0 && (
-                            <div className="mb-2.5">
-                              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Positives</div>
-                              <div className="space-y-1.5">
-                                {healthExpl.positives.slice(0, 2).map(p => (
-                                  <div key={p.id} className="flex items-center space-x-1.5">
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                                    <span className="text-[11px] text-gray-700">{p.label}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <p className="text-[9px] text-gray-400 mt-2 pt-2 border-t border-gray-100 leading-snug">
-                            Score reflects AI-estimated win probability based on engagement, close date, next-step discipline, and deal attributes.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  );
+                  return null;
                 })()}
 
                 {/* Contact Info */}

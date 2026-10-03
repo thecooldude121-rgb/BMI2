@@ -43,7 +43,7 @@ import { createPortal } from 'react-dom';
 import {
   X, ExternalLink, Edit2, Check, XCircle as CancelIcon,
   Building2, User, Calendar, Clock, Tag,
-  ChevronRight, AlertTriangle, Sparkles,
+  ChevronRight, AlertTriangle,
   RefreshCw, FileText, CheckCircle2, Users, ShieldAlert,
   TrendingUp, TrendingDown,
 } from 'lucide-react';
@@ -57,7 +57,6 @@ import {
 import { resolveDealState, STATE_TOKENS } from '../../utils/dealState';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { outcomeOf } from '../../utils/pipelinesApi';
-import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import { computeCommitteeCoverage } from '../../utils/dealCommittee';
 import { getContactRole, roleChipClasses, type StakeholderContact } from '../../config/contactRoles';
 import type { DealCard } from './DealKanbanCard';
@@ -709,7 +708,6 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
   // ── Compute state chip for the deal ──────────────────────────────────────
   const closeDaysLeft = deal ? daysFromNow(deal.closeDate) : null;
   const outcome       = deal ? outcomeOf(stageLookup)(deal) : 'open';
-  const isClosed      = outcome !== 'open';
 
   // Build a minimal DealCard-compatible object so we can reuse resolveDealState
   const dealCardShape: DealCard | null = deal ? {
@@ -742,9 +740,6 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
     ? resolveDealState(dealCardShape, closeDaysLeft, outcome)
     : null;
   const stateTokens = cardState ? STATE_TOKENS[cardState.primary] : null;
-  const healthExpl  = dealCardShape && !isClosed
-    ? explainDealHealth(dealCardShape, closeDaysLeft)
-    : null;
 
   const committee = deal ? computeCommitteeCoverage(deal.stakeholders) : null;
 
@@ -1323,100 +1318,10 @@ const DealSlideoutPanel: React.FC<DealSlideoutPanelProps> = ({
                 )}
               </Section>
 
-              {/* ── AI HEALTH ─────────────────────────────────────────── */}
-              {!isClosed && deal.aiScore > 0 && healthExpl && (
-                <Section title="AI Health">
-                  <div className="py-3 space-y-3">
-
-                    {/* Score bar + tier label */}
-                    <div className="flex items-center space-x-3">
-                      <Sparkles className="h-4 w-4 text-indigo-400 flex-shrink-0" />
-                      <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${healthExpl.score}%`,
-                            backgroundColor:
-                              healthExpl.score >= 75 ? '#10b981' :
-                              healthExpl.score >= 50 ? '#6366f1' : '#f59e0b',
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="text-[13px] font-bold tabular-nums w-6 text-right"
-                        style={{
-                          color:
-                            healthExpl.score >= 75 ? '#10b981' :
-                            healthExpl.score >= 50 ? '#6366f1' : '#f59e0b',
-                        }}
-                      >
-                        {healthExpl.score}
-                      </span>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0
-                        ${healthExpl.tier === 'strong' ? 'bg-emerald-50 text-emerald-700'
-                        : healthExpl.tier === 'fair'   ? 'bg-amber-50 text-amber-700'
-                        :                                'bg-red-50 text-red-700'}`}
-                      >
-                        {healthExpl.tierLabel}
-                      </span>
-                    </div>
-
-                    {/* Headline */}
-                    <p className="text-[12px] text-gray-600 leading-relaxed">
-                      {healthExpl.headline}
-                    </p>
-
-                    {/* Risk drivers */}
-                    {healthExpl.risks.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wider mb-1.5">
-                          Risks
-                        </p>
-                        <div className="space-y-2">
-                          {healthExpl.risks.slice(0, 5).map(r => (
-                            <div key={r.id} className="flex items-start justify-between gap-2">
-                              <span className="flex items-start space-x-1.5 min-w-0">
-                                <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5
-                                  ${r.impact === 'high' ? 'text-red-500' : 'text-amber-500'}`}
-                                />
-                                <span className="text-[12px] text-gray-700 leading-snug">
-                                  {r.label}
-                                </span>
-                              </span>
-                              {r.action && (
-                                <span className="text-[11px] text-indigo-500 font-medium whitespace-nowrap flex-shrink-0">
-                                  {r.action} →
-                                </span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Positive drivers */}
-                    {healthExpl.positives.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-1.5">
-                          Strengths
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {healthExpl.positives.slice(0, 5).map(p => (
-                            <span
-                              key={p.id}
-                              className="inline-flex items-center space-x-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] rounded-full border border-emerald-100"
-                            >
-                              <CheckCircle2 className="h-3 w-3 flex-shrink-0" />
-                              <span>{p.label}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-                </Section>
-              )}
+              {/* An "AI Health" section sat here: deal.aiScore (the stored win
+                  probability) as a score, with activity signals presented as its
+                  explanation though they never produced it. Removed 2026-10-03
+                  (Evidence-Based AI). */}
 
               {/* ── TAGS ─────────────────────────────────────────────── */}
               {deal.tags.length > 0 && (
