@@ -392,7 +392,17 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
       (assigned_to_user_id as number | null | undefined) ??
       (await userIdForName(assigned_to, tenantId));
 
-    const result = await pool.query(
+    // One transaction: the deal and its FIRST stage-history row land together.
+    // createDeal used to write no history at all (step 4 gap, approved fix
+    // 2026-10-03), so a deal's timeline started at its first MOVE and a deal
+    // created straight into a closed stage had no recorded close time.
+    // Forward-only: existing deals are NOT backfilled — an invented history row
+    // would give closed deals a fabricated close date in the projections.
+    const client = await pool.connect();
+    let result;
+    try {
+    await client.query('BEGIN');
+    result = await client.query(
       `INSERT INTO deals
          (name, title, lead_id, value, currency, base_amount_usd,
           pipeline_id, pipeline_name, deal_type,
@@ -446,6 +456,23 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         tenantId,
       ]
     );
+    await client.query(
+      `INSERT INTO deal_stage_history
+         (deal_id, from_stage, to_stage, probability, probability_override, reason_code, changed_by, tenant_id)
+       VALUES ($1, NULL, $2, $3, $4, 'created', $5, $6)`,
+      [
+        result.rows[0].id, stageRow.slug, result.rows[0].probability,
+        !!(win_prob_override_reason && String(win_prob_override_reason).trim()),
+        resolveActorName(req), tenantId,
+      ],
+    );
+    await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
     // RETURNING * cannot join, but the resolved stage row is already in scope,
     // so the response carries the same `stage` the read paths project rather
     // than the raw column. Keeps every response shape identical through C2.

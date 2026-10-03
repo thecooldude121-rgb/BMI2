@@ -124,7 +124,7 @@ describe('Maximum-length actor name survives every write path', () => {
       .send({ to_stage: 'negotiation' });
     expect(move.status, JSON.stringify(move.body)).toBe(200);
 
-    const row = await pool.query('SELECT changed_by FROM deal_stage_history WHERE deal_id = $1', [dealId]);
+    const row = await pool.query('SELECT changed_by FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [dealId]);
     expect(row.rows.length).toBe(1);
     expect(row.rows[0].changed_by).toBe(longActor.name);
     expect(row.rows[0].changed_by.length).toBe(101);

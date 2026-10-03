@@ -286,7 +286,7 @@ describe('Pipeline stages — Phase A round trip', () => {
     expect(stored.probability).toBe(100);
 
     const hist = await pool.query(
-      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1 ORDER BY changed_at DESC LIMIT 1',
+      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\' ORDER BY changed_at DESC LIMIT 1',
       [id],
     );
     expect(hist.rows[0]).toMatchObject({ from_stage: 'prospecting', to_stage: 'closed-won' });
@@ -301,7 +301,7 @@ describe('Pipeline stages — Phase A round trip', () => {
     expect(res.status).toBe(400);
 
     expect((await row(id)).stage).toBe('prospecting');
-    const hist = await pool.query('SELECT count(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
+    const hist = await pool.query('SELECT count(*)::int AS n FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
     expect(hist.rows[0].n).toBe(0);
   });
 

@@ -330,6 +330,26 @@ describe('Deals — round trip', () => {
    * deal_stage_history row with correct prior/new stage and changed_by —
    * queried directly from Postgres, never from the transition response body.
    */
+  /**
+   * Step 4 (2026-10-03): createDeal writes the deal's FIRST stage-history row in
+   * the same transaction — from_stage NULL, reason_code 'created'. Before this a
+   * deal's timeline began at its first move. The projection ignores this row for
+   * close timing (only a real move dates a closure) — see roundTrip.projection.
+   */
+  it('creating a deal writes exactly one "created" history row (from NULL) in the same transaction', async () => {
+    const create = await request(app).post('/api/v1/deals').set(auth(ws)).send({
+      name: `Created Row Deal ${Date.now()}`, value: 1000, company_id: companyId, stage: 'qualified',
+    });
+    expect(create.status, JSON.stringify(create.body)).toBe(201);
+    dealIds.push(create.body.data.id);
+    const h = await pool.query(
+      'SELECT from_stage, to_stage, reason_code, changed_by, tenant_id FROM deal_stage_history WHERE deal_id = $1',
+      [create.body.data.id]);
+    expect(h.rows).toHaveLength(1);
+    expect(h.rows[0]).toMatchObject({ from_stage: null, to_stage: 'qualified', reason_code: 'created', tenant_id: ws.tenantId });
+    expect(h.rows[0].changed_by).toBeTruthy();
+  });
+
   it('REGRESSION: Move Stage writes a real deal_stage_history row, not just a UI toast', async () => {
     const create = await request(app).post('/api/v1/deals').set(auth(ws)).send({
       name: `Stage Move Deal ${Date.now()}`, value: 40000, company_id: companyId, stage: 'prospecting',
@@ -337,7 +357,7 @@ describe('Deals — round trip', () => {
     const id = create.body.data.id;
     dealIds.push(id);
 
-    const beforeHistory = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
+    const beforeHistory = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
     expect(beforeHistory.rows[0].n).toBe(0);
 
     const move = await request(app).post(`/api/v1/deals/${id}/stage-transition`).set(auth(ws))
@@ -351,7 +371,7 @@ describe('Deals — round trip', () => {
 
     // Assert the audit row exists with the correct prior/new stage.
     const history = await pool.query(
-      'SELECT from_stage, to_stage, probability, probability_override, changed_by FROM deal_stage_history WHERE deal_id = $1',
+      'SELECT from_stage, to_stage, probability, probability_override, changed_by FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'',
       [id],
     );
     expect(history.rows.length).toBe(1);
@@ -371,7 +391,7 @@ describe('Deals — round trip', () => {
 
     const move = await request(app).post(`/api/v1/deals/${id}/stage-transition`).set(auth(ws)).send({ to_stage: 'prospecting' });
     expect(move.status).toBe(200);
-    const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
+    const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
     expect(history.rows[0].n).toBe(0);
   });
 
@@ -386,7 +406,7 @@ describe('Deals — round trip', () => {
     expect(res.status).toBe(400);
     const row = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
     expect(row.rows[0].stage).toBe('prospecting');
-    const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
+    const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
     expect(history.rows[0].n).toBe(0);
   });
 
@@ -407,7 +427,7 @@ describe('Deals — round trip', () => {
 
       const row = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
       expect(row.rows[0].stage).toBe('prospecting'); // untouched
-      const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1', [id]);
+      const history = await pool.query('SELECT COUNT(*)::int AS n FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
       expect(history.rows[0].n).toBe(0);
     } finally {
       await teardownWorkspace(wsB);
