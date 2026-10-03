@@ -87,6 +87,7 @@ describe('Lead pagination — 10,000 leads', () => {
     ['score band', 'score_band=60-79', `coalesce(score,0) >= 60 AND coalesce(score,0) < 80`],
     ['search', 'search=Company%2042', `company ILIKE '%Company 42%' OR email ILIKE '%Company 42%' OR (coalesce(first_name,'')||' '||coalesce(last_name,'')) ILIKE '%Company 42%'`],
     ['insight: untouched', 'insight=untouched', `(last_contact IS NULL OR last_contact < CURRENT_DATE - 30)`],
+    ['insight: new_unworked (what the card counts)', 'insight=new_unworked', `stage IN ('new','assigned') AND last_contact IS NULL`],
     ['kanban lane stages', 'stages=nurture,disqualified', `stage IN ('nurture','disqualified')`],
   ])('filter total matches an independent SQL count — %s', async (_label, qs, where) => {
     const res = await list(`limit=10&${qs}`);
