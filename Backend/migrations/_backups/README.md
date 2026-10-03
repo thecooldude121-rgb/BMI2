@@ -27,3 +27,20 @@ replayed as-is. Two caveats:
    other genuine deal. `dlj22yl` in particular carried a client-minted id from
    before migration 031 wired `deals.id` to a sequence — replaying it would put
    that malformed id straight back.
+
+## `ZZ_audit_test_debris_rows.sql` — deleted 2026-10-03
+
+Stray audit/verification debris in the live workspace, deleted on Venkat's
+explicit approval after checking nothing real referenced it: deals **D055**
+"ZZ Audit Test Deal" and **D056** "Copy of ZZ Audit Test Deal", plus D055's three
+dependents, each itself labelled as test data — task **T016** ("please delete"),
+meeting **MTG001** ("Please delete"), and document `zz_audit_doc`.
+
+- Checked before deleting: every FK into `deals` (activities, deal_stage_history,
+  quotes, sales_orders — 0 rows), the polymorphic references (tasks, documents,
+  meetings — exactly the three above), and a scan of every text/jsonb column for
+  the ids or the name (nothing else).
+- Each statement recreates its row exactly (`json_populate_record`); restore deals
+  before dependents. Verified restorable inside a rolled-back transaction.
+- **The document's file is not here.** It was deleted through the documents API,
+  which removes the stored blob (1,134-byte PNG).
