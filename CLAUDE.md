@@ -1388,7 +1388,7 @@ share-locked. The lead row is locked first, so two conversions serialise.
   `assigned_to_user_id`). INTERIM until the owner model is settled; there is no owner field
   in the request and the wizard's owner picker is hidden.
 
-**Defaults chosen while building — NOT ratified:**
+**Also RATIFIED 2026-10-03 (Venkat) — chosen while building, then approved as built:**
 - A created contact takes the lead's name/email/phone/position; a lead with no last name
   needs one supplied (`contact.last_name`) rather than storing a blank (createContact
   requires it). `contacts.source = 'converted'`.
@@ -1396,7 +1396,8 @@ share-locked. The lead row is locked first, so two conversions serialise.
   copied (the lead's industry is a different vocabulary from the constrained one).
 - A deal goes into the chosen pipeline's (default `new-business`) first OPEN stage with that
   stage's probability, `base_amount_usd = value` exactly as createDeal does, and NO
-  `deal_stage_history` row — the same known gap createDeal has.
+  `deal_stage_history` row — the same known gap createDeal has. That deal-side
+  stage-history gap is folded into STEP 4 (data integrity), not fixed here.
 - Tags, notes and activity history are NOT copied to the new records; the wizard says so
   (its "carry over" checkboxes promised it and nothing did it).
 
