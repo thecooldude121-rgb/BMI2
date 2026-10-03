@@ -128,7 +128,6 @@ interface LeadContextType {
   convertLead: (leadId: string, request: ConversionRequest) => Promise<LeadConversionResult>;
 
   detectDuplicates: (leadId: string) => Promise<any[]>;
-  mergeLeads: (primaryId: string, secondaryIds: string[]) => Promise<boolean>;
 
   exportLeads: (leadIds: string[], format: 'csv' | 'xlsx') => Promise<string | null>;
   importLeads: (file: File, mapping: Record<string, string>) => Promise<{ success: number; failed: number }>;
@@ -480,9 +479,9 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   };
   const detectDuplicates = async (_leadId: string): Promise<any[]> => [];
 
-  const mergeLeads = async (primaryId: string, secondaryIds: string[]): Promise<boolean> => {
-    return true;
-  };
+  // mergeLeads() lived here and returned `true` having written nothing. It had
+  // no callers; it is removed (2026-10-03) so nothing can be built on a merge
+  // that claims success. Real merging is scheduled for step 8.
 
   const exportLeads = async (leadIds: string[], format: 'csv' | 'xlsx'): Promise<string | null> => {
     return 'export_url';
@@ -557,7 +556,6 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     createTag,
     convertLead,
     detectDuplicates,
-    mergeLeads,
     exportLeads,
     importLeads
   };

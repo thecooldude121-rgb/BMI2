@@ -1401,8 +1401,13 @@ share-locked. The lead row is locked first, so two conversions serialise.
 - Tags, notes and activity history are NOT copied to the new records; the wizard says so
   (its "carry over" checkboxes promised it and nothing did it).
 
-**Found on the way, not fixed:** `LeadContext.mergeLeads` returns `true` without doing
-anything — a success with no write behind it.
+**Merging leads is "Coming soon" (2026-10-03; real merge scheduled for step 8).**
+`LeadContext.mergeLeads` returned `true` having written nothing (no callers — removed). The
+real fake was `MergeReviewModal`: it fired two lead writes without checking either and toasted
+"Leads merged" regardless, with "carry over notes / activities" options that did nothing. Its
+merge button is now disabled and labelled, the write path is gone, and the read-only
+comparison stays. Also found, not fixed: `LeadContext.exportLeads` returns a literal
+`'export_url'`.
 
 ### STILL OPEN after step 4
 - **Qualification override — DONE in step 5 slice A** (above). Lead conversion remains:

@@ -1463,11 +1463,6 @@ const LeadsPage: React.FC = () => {
           candidates={duplicateCandidateMap.get(activeLead.id) ?? []}
           isOpen
           onClose={closeModal}
-          onUpdateLead={updateLead}
-          onShowToast={showToast}
-          onMergeComplete={(absorbedId, absorbedName) =>
-            actions.merge(activeLead, absorbedId, absorbedName)
-          }
         />
       )}
 
