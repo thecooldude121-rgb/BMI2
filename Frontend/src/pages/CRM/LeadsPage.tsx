@@ -36,6 +36,7 @@ import type { AdvancedFilter, FilterGroup } from '../../types/leadFilter';
 import type { Lead } from '../../types/lead';
 import type { ModalId } from '../../hooks/useLeadsPageState';
 import { LeadStageError } from '../../utils/leadsApi';
+import { toCsv } from '../../utils/csv';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -333,13 +334,16 @@ const LeadsPage: React.FC = () => {
   };
 
   const handleBulkExport = () => {
-    const csvContent = [
+    // RFC 4180 via utils/csv (the contacts export's tested builder). This used to
+    // join cells with bare commas, so "Acme, Inc" split into two columns and a
+    // quote broke the row — a corrupted file under an "exported" success toast.
+    const csvContent = toCsv(
       ['Name', 'Company', 'Email', 'Phone', 'Status', 'Score'],
-      ...selectedLeads.map(l => [
+      selectedLeads.map(l => [
         getLeadName(l), l.company || '', l.email || '', l.phone || '',
         l.status, String(getLeadScore(l)),
       ]),
-    ].map(row => row.join(',')).join('\n');
+    );
     const url = window.URL.createObjectURL(new Blob([csvContent], { type: 'text/csv' }));
     const a = document.createElement('a');
     a.href = url;

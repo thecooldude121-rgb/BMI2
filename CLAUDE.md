@@ -1406,8 +1406,12 @@ share-locked. The lead row is locked first, so two conversions serialise.
 real fake was `MergeReviewModal`: it fired two lead writes without checking either and toasted
 "Leads merged" regardless, with "carry over notes / activities" options that did nothing. Its
 merge button is now disabled and labelled, the write path is gone, and the read-only
-comparison stays. Also found, not fixed: `LeadContext.exportLeads` returns a literal
-`'export_url'`.
+comparison stays. **`LeadContext.exportLeads`** returned a literal `'export_url'` — it had
+no callers, so no user ever saw it; removed the same day. The bulk-bar Export is a REAL
+client-side file and stays, now built with the tested RFC 4180 `utils/csv` (it joined cells
+with bare commas, so "Acme, Inc" split columns under an "exported" toast). Not done, a
+decision for Venkat: CSV formula-injection guarding (the standard guard also prefixes leading
+`+`/`-`, which would mangle phone numbers in both exports). Real server-side export: step 8.
 
 ### STEP 4 — data integrity (migrations 060, 061). Approved 2026-10-03 (Venkat).
 - **`deals.company_id` is a COMPOSITE reference** `(company_id, tenant_id) -> companies(id,
