@@ -490,7 +490,9 @@ const LeadDetailPage: React.FC = () => {
             <Calendar className="h-4 w-4 mr-2" />
             Schedule meeting
           </button>
-          {/* Tertiary: convert — disabled+tooltip when role can't convert */}
+          {/* Tertiary: convert — disabled+tooltip when role can't convert. Hidden once
+              converted: a lead converts once, and the server would refuse. */}
+          {lead.status !== 'converted' && (
           <button
             onClick={() => can('leads.convert') && setShowConvertModal(true)}
             disabled={!can('leads.convert')}
@@ -504,8 +506,42 @@ const LeadDetailPage: React.FC = () => {
             <Users className="h-4 w-4 mr-2" />
             Convert
           </button>
+          )}
         </div>
       </div>
+
+      {/* What this lead became — from the server's converted_* columns (migration
+          059). Each link is a real record created or linked by POST /leads/:id/convert. */}
+      {lead.status === 'converted' && (
+        <div className="mx-8 mt-6 rounded-xl border border-green-200 bg-green-50 px-5 py-4" data-testid="converted-panel">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-green-600" aria-hidden="true" />
+            <h2 className="text-sm font-semibold text-green-900">
+              Converted{lead.converted_at ? ` on ${new Date(lead.converted_at).toLocaleDateString()}` : ''}
+            </h2>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-4 text-sm">
+            {lead.converted_to_contact_id && (
+              <button onClick={() => navigate(`/crm/contacts/${lead.converted_to_contact_id}`)} className="text-green-800 underline hover:text-green-900">
+                Contact {lead.converted_to_contact_id}
+              </button>
+            )}
+            {lead.converted_to_company_id && (
+              <button onClick={() => navigate(`/crm/accounts/${lead.converted_to_company_id}`)} className="text-green-800 underline hover:text-green-900">
+                Account {lead.converted_to_company_id}
+              </button>
+            )}
+            {lead.converted_to_deal_id && (
+              <button onClick={() => navigate(`/crm/deals/${lead.converted_to_deal_id}`)} className="text-green-800 underline hover:text-green-900">
+                Deal {lead.converted_to_deal_id}
+              </button>
+            )}
+            {!lead.converted_to_contact_id && !lead.converted_to_company_id && !lead.converted_to_deal_id && (
+              <span className="text-green-800">The records it was converted into have since been deleted.</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Conversion Readiness Card */}
       {(() => {
@@ -580,18 +616,11 @@ const LeadDetailPage: React.FC = () => {
           readiness={computeConversionReadiness(lead, computeMultiFactorScore(lead))}
           isOpen={showConvertModal}
           onClose={() => setShowConvertModal(false)}
-          onUpdateLead={async (id, updates) => {
-            // Returned so the wizard can tell success from a rejected write.
-            const accepted = await updateLead(id, updates);
-            if (!accepted) return false;
-            if (updates.status === 'converted') {
-              const targetType =
-                updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
-                : updates.converted_to_deal_id    ? 'deal'
-                : 'contact';
-              actions.convert(lead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
-            }
-            return true;
+          onConverted={(res) => {
+            // Fires only after the SERVER created/linked the records.
+            const targetType = res.deal ? 'both' : 'contact';
+            actions.convert(lead, targetType, res.deal?.id ?? res.contact.id);
+            setLead(res.lead);
           }}
         />
       )}

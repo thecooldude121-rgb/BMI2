@@ -93,6 +93,11 @@ export function mapRowToLead(row: any): Lead {
     // override could qualify anything. Set by logged calls / emails / completed
     // activities since step 5.
     ...(row.last_contact ? { last_contact_date: String(row.last_contact).slice(0, 10) } : {}),
+    // Migration 059 — what a converted lead became. Server-written only.
+    ...(row.converted_at ? { converted_at: String(row.converted_at) } : {}),
+    ...(row.converted_contact_id ? { converted_to_contact_id: String(row.converted_contact_id) } : {}),
+    ...(row.converted_company_id ? { converted_to_company_id: String(row.converted_company_id) } : {}),
+    ...(row.converted_deal_id ? { converted_to_deal_id: String(row.converted_deal_id) } : {}),
     is_deleted:     false,
     email_opens_count:  0,
     email_clicks_count: 0,
@@ -257,6 +262,50 @@ export async function transitionLeadStageViaAPI(
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new LeadStageError(res.status, json);
   return mapRowToLead(json.data);
+}
+
+// ── Conversion (step 5 slice B) ───────────────────────────────────────────────
+
+export type ConversionContact = { mode: 'create'; first_name?: string; last_name?: string } | { mode: 'link'; contact_id: string };
+export type ConversionCompany = { mode: 'none' } | { mode: 'create'; name?: string } | { mode: 'link'; company_id: string };
+export interface ConversionDeal { name: string; value: number; currency?: string; expected_close_date?: string; pipeline_id?: string }
+export interface ConversionRequest { contact: ConversionContact; company: ConversionCompany; deal: ConversionDeal | null }
+
+export interface LeadConversionResult {
+  lead: Lead;
+  contact: { id: string; name: string; created: boolean };
+  company: { id: string; name: string; created: boolean } | null;
+  deal: { id: string; name: string } | null;
+}
+
+/**
+ * A refused conversion with the server's reason. On CONTACT_EMAIL_EXISTS,
+ * `existingContact` names the contact so the UI can offer an EXPLICIT link —
+ * never an automatic one (ratified 2026-10-03).
+ */
+export class LeadConversionError extends Error {
+  status: number;
+  code?: string;
+  existingContact?: { id: string; name: string };
+  constructor(status: number, body: any) {
+    super(body?.message || `Could not convert the lead (HTTP ${status})`);
+    this.name = 'LeadConversionError';
+    this.status = status;
+    this.code = body?.code;
+    if (body?.existing_contact?.id) this.existingContact = body.existing_contact;
+  }
+}
+
+/** POST /leads/:id/convert — creates/links everything in one server transaction. */
+export async function convertLeadViaAPI(id: string, request: ConversionRequest): Promise<LeadConversionResult> {
+  const res = await fetch(`${API_BASE}/leads/${id}/convert`, {
+    method:  'POST',
+    headers: getAuthHeaders(),
+    body:    JSON.stringify(request),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new LeadConversionError(res.status, json);
+  return { ...json.data, lead: mapRowToLead(json.data.lead) };
 }
 
 export async function deleteLeadViaAPI(id: string): Promise<boolean> {

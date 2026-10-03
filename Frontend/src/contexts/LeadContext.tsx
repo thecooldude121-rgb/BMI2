@@ -6,6 +6,7 @@ import {
   createLeadViaAPI,
   updateLeadViaAPI,
   transitionLeadStageViaAPI,
+  convertLeadViaAPI,
   deleteLeadViaAPI,
   fetchActivitiesFromAPI,
   createActivityViaAPI,
@@ -31,6 +32,7 @@ import {
   deleteViewViaAPI,
   enrichLeadViaAPI,
 } from '../utils/leadsApi';
+import type { ConversionRequest, LeadConversionResult } from '../utils/leadsApi';
 import { useAuth } from './AuthContext';
 import { Lead, LeadActivity, LeadNote, LeadTask, LeadEmail, LeadCall, LeadMeeting, Tag, LeadPipeline, LeadView, LeadAIInsight, LeadFilters, BulkOperation, LeadEnrichmentRequest, LeadEnrichmentResponse } from '../types/lead';
 
@@ -117,7 +119,13 @@ interface LeadContextType {
   fetchTags: () => Promise<void>;
   createTag: (tag: Partial<Tag>) => Promise<Tag | null>;
 
-  convertLead: (leadId: string, createDeal: boolean) => Promise<{ contactId?: string; dealId?: string } | null>;
+  /**
+   * REAL conversion (step 5 slice B): POST /leads/:id/convert. Resolves with the
+   * records the server created/linked; THROWS LeadConversionError carrying the
+   * server's reason (and, on a duplicate email, the existing contact to offer).
+   * Was a stub returning { contactId: undefined } that nothing called.
+   */
+  convertLead: (leadId: string, request: ConversionRequest) => Promise<LeadConversionResult>;
 
   detectDuplicates: (leadId: string) => Promise<any[]>;
   mergeLeads: (primaryId: string, secondaryIds: string[]) => Promise<boolean>;
@@ -464,8 +472,12 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
 
   // Pipelines have no DB table yet — stub keeps the interface intact
   const fetchPipelines = async () => { setPipelines([]); };
-  const convertLead     = async (_leadId: string, createDeal: boolean): Promise<{ contactId?: string; dealId?: string } | null> =>
-    ({ contactId: undefined, dealId: createDeal ? undefined : undefined });
+  const convertLead = async (leadId: string, request: ConversionRequest): Promise<LeadConversionResult> => {
+    const result = await convertLeadViaAPI(leadId, request);
+    // Merge the SERVER's lead row — stage and converted_* come from it.
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...result.lead } : l));
+    return result;
+  };
   const detectDuplicates = async (_leadId: string): Promise<any[]> => [];
 
   const mergeLeads = async (primaryId: string, secondaryIds: string[]): Promise<boolean> => {

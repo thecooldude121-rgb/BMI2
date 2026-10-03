@@ -1,6 +1,16 @@
 // Guided 4-step lead conversion wizard.
-// Replaces the thin ConversionWorkflowModal routing shim.
-// TODO: replace stub ID generation with real entity-creation API calls when available.
+//
+// REAL since step 5 slice B (2026-10-03): "Convert Lead" calls
+// POST /leads/:id/convert, which creates the contact / account / deal in ONE
+// server transaction, and step 4 shows the records the server returned. It used
+// to mint client-side ids (cnt_/acc_/deal_) and show "New records created
+// successfully" over a database where nothing had been created.
+//
+// Ratified rules this screen keeps: a deal needs a real value (blank blocks the
+// button; it is never silently 0); a contact email that already exists is a 409
+// the rep must answer by explicitly linking or cancelling; the person converting
+// owns what is created (interim — the owner picker is hidden until the owner
+// model is settled).
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button } from '../ui/Button';
 import {
@@ -9,7 +19,8 @@ import {
 } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { ConversionReadinessResult, ConversionReadinessState } from '../../utils/conversionReadiness';
-import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
+import { LeadConversionError } from '../../utils/leadsApi';
+import type { ConversionContact, LeadConversionResult } from '../../utils/leadsApi';
 import { useLeads } from '../../contexts/LeadContext';
 import { findDuplicates, computeRisk } from '../../utils/leadDuplicates';
 import { getPlaybook } from '../../utils/leadSourcePlaybook';
@@ -24,16 +35,15 @@ export type WizardPath =
 
 type WizardStep = 1 | 2 | 3 | 4;
 
+/** What step 4 renders — built ONLY from the server's response. */
 interface ConversionResult {
-  contactId:    string;
-  contactName:  string;
-  accountId?:   string;
-  accountName?: string;
-  dealId?:      string;
-  dealName?:    string;
-  ownerLabel:   string;
-  carriedOver:  string[];
-  isLinked:     boolean;
+  contactId:      string;
+  contactName:    string;
+  contactCreated: boolean;
+  accountId?:     string;
+  accountName?:   string;
+  dealId?:        string;
+  dealName?:      string;
 }
 
 export interface LeadConversionWizardProps {
@@ -41,9 +51,8 @@ export interface LeadConversionWizardProps {
   readiness:    ConversionReadinessResult;
   isOpen:       boolean;
   onClose:      () => void;
-  /** Must report whether the write was accepted. Returning void is how this
-   *  wizard used to show "Conversion complete" for a rejected 400. */
-  onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
+  /** Called once the SERVER has confirmed the conversion (e.g. for an audit entry). */
+  onConverted?: (result: LeadConversionResult) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -58,8 +67,6 @@ const WARN_TEXT: Partial<Record<ConversionReadinessState, string>> = {
   needs_qualification: 'This lead is not yet formally qualified. Qualify before converting for best results.',
   ready_for_contact:   'Only a contact record can be created — company info is missing for an account.',
 };
-
-const DEAL_STAGES = ['Prospecting', 'Discovery', 'Proposal', 'Negotiation', 'Closed Won'];
 
 // Static mock accounts — used for "link to existing" dropdown.
 // TODO: replace with live account search when search API exists.
@@ -207,9 +214,9 @@ function CheckRow({ label, met }: { label: string; met: boolean }) {
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
 export default function LeadConversionWizard({
-  lead, readiness, isOpen, onClose, onUpdateLead,
+  lead, readiness, isOpen, onClose, onConverted,
 }: LeadConversionWizardProps) {
-  const { leads: allLeads, lastWriteErrorRef } = useLeads();
+  const { leads: allLeads, convertLead } = useLeads();
 
   // ── Duplicate detection (for Step 2 high-risk gating) ─────────────────────
   const leadDuplicateCandidates = useMemo(
@@ -227,17 +234,14 @@ export default function LeadConversionWizard({
   // Step 2
   const [dupDismissed,    setDupDismissed]    = useState(false);
   const [convertError, setConvertError] = useState<string | null>(null);
-  const [linkedContactId, setLinkedContactId] = useState('');
-  const [linkedAccountId, setLinkedAccountId] = useState('');
+  /** Set when the server answered CONTACT_EMAIL_EXISTS — offered, never auto-applied. */
+  const [existingContact, setExistingContact] = useState<{ id: string; name: string } | null>(null);
 
-  // Step 3
-  const [ownerId,    setOwnerId]    = useState(lead.owner_id ?? TEAM_MEMBERS[0]?.id ?? '');
-  const [carryTags,  setCarryTags]  = useState(true);
-  const [carryNotes, setCarryNotes] = useState(true);
-  const [carryActs,  setCarryActs]  = useState(false);
+  // Step 3. The deal value starts BLANK: a value is required (ratified) and is
+  // never silently 0. (It used to start from lead.estimated_value, which the
+  // API mapper hardcodes to 0 — so every deal defaulted to a value of zero.)
   const [dealName,   setDealName]   = useState(() => defaultDealName(lead));
-  const [dealValue,  setDealValue]  = useState(lead.estimated_value ?? 0);
-  const [dealStage,  setDealStage]  = useState('Prospecting');
+  const [dealValue,  setDealValue]  = useState('');
 
   // Step 4
   const [result,     setResult]     = useState<ConversionResult | null>(null);
@@ -250,16 +254,10 @@ export default function LeadConversionWizard({
       setPath(defaultPath(readiness.state, lead.source));
       setNotReadyAck(false);
       setDupDismissed(false);
-      setLinkedContactId('');
-      setLinkedAccountId('');
       setConvertError(null);
-      setOwnerId(lead.owner_id ?? TEAM_MEMBERS[0]?.id ?? '');
-      setCarryTags(true);
-      setCarryNotes(true);
-      setCarryActs(false);
+      setExistingContact(null);
       setDealName(defaultDealName(lead));
-      setDealValue(lead.estimated_value ?? 0);
-      setDealStage('Prospecting');
+      setDealValue('');
       setResult(null);
       setConverting(false);
     }
@@ -278,79 +276,50 @@ export default function LeadConversionWizard({
   const includesDeal    = path === 'contact_account_deal';
   const isLinkExisting  = path === 'link_existing';
 
+  const dealValueNumber = dealValue.trim() === '' ? NaN : Number(dealValue);
+  const dealValueValid  = Number.isFinite(dealValueNumber) && dealValueNumber >= 0;
+  const dealReady       = !includesDeal || (dealValueValid && dealName.trim() !== '');
+
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  const handleConvert = useCallback(async () => {
+  /**
+   * One server call. `contact` is 'create' first; if the server says the email
+   * already belongs to a contact, the rep is shown that contact and may resubmit
+   * with { mode: 'link', contact_id } — an explicit choice, never automatic.
+   */
+  const submitConversion = useCallback(async (contact: ConversionContact) => {
     setConverting(true);
     setConvertError(null);
     try {
-      const ts = Date.now();
-      const contactId = (isLinkExisting && linkedContactId) ? linkedContactId : `cnt_${ts}`;
-      const accountId = !includesAccount && !isLinkExisting ? undefined
-        : (isLinkExisting && linkedAccountId) ? linkedAccountId
-        : includesAccount ? `acc_${ts}` : undefined;
-      const dealId    = includesDeal ? `deal_${ts}` : undefined;
-
-      const ownerMember = TEAM_MEMBERS.find(m => m.id === ownerId);
-      const carriedOver: string[] = [];
-      if (carryTags  && lead.tags?.length > 0)   carriedOver.push('Tags');
-      if (carryNotes && lead.quick_notes)          carriedOver.push('Notes');
-      if (carryActs  && (lead.call_count > 0 || lead.email_sent_count > 0)) {
-        carriedOver.push('Activities');
-      }
-
-      const res: ConversionResult = {
-        contactId,
-        contactName:  leadDisplayName(lead),
-        accountId,
-        accountName:  accountId ? (lead.company ?? 'Account') : undefined,
-        dealId,
-        dealName:     dealId ? dealName : undefined,
-        ownerLabel:   ownerMember?.label ?? ownerId,
-        carriedOver,
-        isLinked:     isLinkExisting,
-      };
-
-      // The write decides what the user is told. This previously ignored the
-      // result and advanced to step 4 unconditionally, so a rejected 400 produced
-      // a "Conversion complete" screen naming a contact and account that were
-      // never created.
-      //
-      // CORRECTED 2026-10-03: the old claim here ("'converted' is not a valid
-      // stage, so this branch ALWAYS runs") was false — leadsApi renamed status
-      // to stage, the server accepted it with 200, and the success screen showed
-      // the stub ids above as if they were real records. Since step 5 slice A the
-      // server refuses it (a stage change goes through the transition endpoint,
-      // which answers 409 "convert it instead"), so this rejection branch now
-      // genuinely always runs. Slice B replaces this with POST /leads/:id/convert.
-      const accepted = await onUpdateLead(lead.id, {
-        status:                  'converted',
-        converted_at:            new Date().toISOString(),
-        converted_to_contact_id: contactId,
-        ...(dealId    ? { converted_to_deal_id: dealId }  : {}),
-        ...(accountId ? { account_id: accountId }         : {}),
-      } as Partial<Lead>);
-
-      if (!accepted) {
-        // Read through the ref: state set during the await is not visible to this
-        // closure, so `lastWriteError` would still be null here.
-        setConvertError(
-          lastWriteErrorRef.current ??
-          'The server rejected the conversion and nothing was saved.'
-        );
-        return;
-      }
-
-      setResult(res);
+      const res = await convertLead(lead.id, {
+        contact,
+        company: includesAccount ? { mode: 'create' } : { mode: 'none' },
+        deal: includesDeal ? { name: dealName.trim(), value: dealValueNumber } : null,
+      });
+      setExistingContact(null);
+      setResult({
+        contactId:      res.contact.id,
+        contactName:    res.contact.name,
+        contactCreated: res.contact.created,
+        accountId:      res.company?.id,
+        accountName:    res.company?.name,
+        dealId:         res.deal?.id,
+        dealName:       res.deal?.name,
+      });
       setStep(4);
+      onConverted?.(res);
+    } catch (e) {
+      if (e instanceof LeadConversionError && e.code === 'CONTACT_EMAIL_EXISTS' && e.existingContact) {
+        setExistingContact(e.existingContact);
+      } else {
+        setConvertError(e instanceof Error ? e.message : 'The server rejected the conversion and nothing was saved.');
+      }
     } finally {
       setConverting(false);
     }
-  }, [
-    lead, isLinkExisting, linkedContactId, linkedAccountId,
-    includesAccount, includesDeal, ownerId, carryTags, carryNotes, carryActs,
-    dealName, onUpdateLead, lastWriteErrorRef,
-  ]);
+  }, [convertLead, lead.id, includesAccount, includesDeal, dealName, dealValueNumber, onConverted]);
+
+  const handleConvert = useCallback(() => submitConversion({ mode: 'create' }), [submitConversion]);
 
   if (!isOpen) return null;
 
@@ -581,42 +550,20 @@ export default function LeadConversionWizard({
           {/* ── STEP 3: CONFIGURE ─────────────────────────────────────────── */}
           {step === 3 && (
             <div className="space-y-5">
-              {/* Owner */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Owner</label>
-                <select aria-label="Owner"
-                  value={ownerId}
-                  onChange={e => setOwnerId(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white"
-                >
-                  {TEAM_MEMBERS.map(m => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </select>
+              {/* Owner — interim rule (ratified 2026-10-03): the person converting owns
+                  what is created. The picker listed placeholder queues, not users. */}
+              <div className="rounded-lg bg-gray-50 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Owner</p>
+                <p className="text-sm text-gray-700 mt-1">You — the new records will be owned by you.</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Choosing a different owner is not available yet.</p>
               </div>
 
-              {/* Carry-over */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Carry Over</p>
-                <div className="bg-gray-50 rounded-xl px-4 py-3 space-y-3">
-                  {[
-                    { label: `Tags (${lead.tags?.length ?? 0})`,       checked: carryTags,  set: setCarryTags,  disabled: !lead.tags?.length },
-                    { label: 'Quick notes',                             checked: carryNotes, set: setCarryNotes, disabled: !lead.quick_notes  },
-                    { label: 'Activity history (as related records)',   checked: carryActs,  set: setCarryActs,  disabled: false              },
-                  ].map(({ label, checked, set, disabled }) => (
-                    <label key={label} className={`flex items-center gap-2.5 ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
-                      <input
-                        type="checkbox"
-                        checked={checked && !disabled}
-                        disabled={disabled}
-                        onChange={e => set(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded accent-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              {/* A "Carry over tags / notes / activity history" section sat here. Nothing
+                  on the server copies any of it, so the checkboxes promised work that
+                  never happened. Stated instead. */}
+              <p className="text-[11px] text-gray-500">
+                Tags, notes and activity history stay on the lead; they are not copied to the new records yet.
+              </p>
 
               {/* Deal fields — only if path includes deal */}
               {includesDeal && (
@@ -632,28 +579,29 @@ export default function LeadConversionWizard({
                         className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Est. Value</label>
-                        <input aria-label="Est. Value"
-                          type="number"
-                          min={0}
-                          value={dealValue}
-                          onChange={e => setDealValue(Number(e.target.value))}
-                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-600 mb-1 block">Stage</label>
-                        <select aria-label="Stage"
-                          value={dealStage}
-                          onChange={e => setDealStage(e.target.value)}
-                          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 bg-white"
-                        >
-                          {DEAL_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
+                    <div>
+                      <label htmlFor="deal-value" className="text-xs font-medium text-gray-600 mb-1 block">
+                        Deal Value <span className="text-red-500">*</span>
+                      </label>
+                      <input id="deal-value" aria-label="Deal Value"
+                        type="number"
+                        min={0}
+                        inputMode="decimal"
+                        value={dealValue}
+                        onChange={e => setDealValue(e.target.value)}
+                        aria-invalid={dealValue !== '' && !dealValueValid}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400"
+                      />
+                      {!dealValueValid && (
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          {dealValue === '' ? 'Required — enter the deal value to create a deal.' : 'Enter a number of 0 or more.'}
+                        </p>
+                      )}
                     </div>
+                    {/* A stage picker with five hardcoded names sat here; the server
+                        places the deal in its pipeline's first stage, from the
+                        workspace's own configuration. */}
+                    <p className="text-[11px] text-gray-500">The deal starts in the first stage of your New Business pipeline.</p>
                   </div>
                 </div>
               )}
@@ -670,14 +618,14 @@ export default function LeadConversionWizard({
                 </div>
                 <h3 className="text-base font-bold text-gray-900">Conversion complete</h3>
                 <p className="text-sm text-gray-500 mt-1 text-center">
-                  {result.isLinked ? 'Lead linked to existing records' : 'New records created successfully'}
+                  Saved — the records below now exist.
                 </p>
               </div>
 
               {/* What was created */}
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                  {result.isLinked ? 'Linked Records' : 'Created Records'}
+                  Records
                 </p>
 
                 <div className="space-y-2.5">
@@ -687,7 +635,10 @@ export default function LeadConversionWizard({
                       <UserPlus size={12} />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-gray-800">{result.contactName}</p>
+                      <p className="text-xs font-semibold text-gray-800">
+                        {result.contactName}
+                        <span className="ml-1.5 text-[10px] font-normal text-gray-500">{result.contactCreated ? 'new contact' : 'existing contact, linked'}</span>
+                      </p>
                       <p className="text-[10px] text-gray-400 font-mono">{result.contactId}</p>
                     </div>
                     <button
@@ -738,18 +689,9 @@ export default function LeadConversionWizard({
                 </div>
               </div>
 
-              {/* Carry-over summary */}
-              {result.carriedOver.length > 0 && (
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <CheckCircle size={12} className="text-green-500 shrink-0" />
-                  <span>Carried over: {result.carriedOver.join(', ')}</span>
-                </div>
-              )}
-
-              {/* Owner */}
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <CheckCircle size={12} className="text-green-500 shrink-0" />
-                <span>Assigned to: <span className="font-medium text-gray-700">{result.ownerLabel}</span></span>
+                <span>Owned by you.</span>
               </div>
             </div>
           )}
@@ -769,9 +711,40 @@ export default function LeadConversionWizard({
                 Conversion failed — nothing was saved
               </p>
               <p className="text-[11px] text-red-700 mt-1">{convertError}</p>
-              <p className="text-[11px] text-red-600 mt-1">
-                Lead conversion is not implemented on the server yet. The lead is unchanged.
-              </p>
+              <p className="text-[11px] text-red-600 mt-1">The lead is unchanged and no records were created.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Duplicate email — the server refused to create a second contact. Linking
+            is offered as an explicit choice; nothing happens until the rep picks. */}
+        {existingContact && (
+          <div role="alert" className="shrink-0 mx-6 mb-1 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-amber-800">A contact with this email already exists</p>
+                <p className="text-[11px] text-amber-700 mt-1">
+                  {existingContact.name} ({existingContact.id}) already uses {lead.email}. Nothing was saved.
+                  Link this lead to that contact, or cancel.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 pl-6">
+              <button
+                onClick={() => void submitConversion({ mode: 'link', contact_id: existingContact.id })}
+                disabled={converting}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-60"
+              >
+                Link to {existingContact.name}
+              </button>
+              <button
+                onClick={() => setExistingContact(null)}
+                disabled={converting}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-100"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -809,8 +782,8 @@ export default function LeadConversionWizard({
                 </Button>
               ) : (
                 <button
-                  onClick={handleConvert}
-                  disabled={converting}
+                  onClick={() => void handleConvert()}
+                  disabled={converting || !dealReady || existingContact !== null}
                   className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 disabled:opacity-60 transition-colors"
                 >
                   {converting ? (
