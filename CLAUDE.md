@@ -1319,15 +1319,56 @@ Outbound sequences belong to the Lead Generation product. The page's fabricated 
 "✓ Database schema created" note were replaced with a stub saying so. Confirmed: no further
 change — the route stays as it is.
 
+### STEP 5 SLICE A — lead stage transitions are server-side (migration 058)
+**RATIFIED 2026-10-03 (Venkat):**
+- **One path for a lead's stage:** `POST /leads/:id/stage-transition`. `PUT /leads/:id` no
+  longer accepts a stage CHANGE (400 `STAGE_NOT_EDITABLE`); an unchanged `stage` in a
+  full-object save is tolerated and ignored, so edit forms keep working.
+- **The qualification gate** is the three criteria the Kanban modal already used — email or
+  phone, a company, a recorded last contact — enforced on the server when a lead ENTERS the
+  qualifying lane (`qualified` / `sales_accepted`). Failing is a 409 naming each unmet
+  criterion plus a served `can_override`. Score >= 40 stays advisory, client-side only.
+- **Override:** manager or admin only (403 otherwise — the rule that was a hidden button),
+  with a required reason. `lead_stage_history` records the override AND which criteria it
+  overrode.
+- **What sets `leads.last_contact`:** logging a call, an email, or a lead activity of type
+  call/email/meeting. Nothing wrote the column before, so the third criterion was
+  unsatisfiable for any lead created in the app.
+- **Conversion (slice B, not built yet) will be allowed only from qualified or
+  sales_accepted.** Until it ships, `converted` is unreachable: the transition endpoint
+  answers 409 `USE_CONVERSION`, and a converted lead is terminal (409 `LEAD_CONVERTED`).
+
+**Defaults chosen while building — NOT ratified, so ask before relying on them:**
+- Creating a lead directly into a gated stage runs the gate with no override (in practice a
+  new lead cannot start qualified — it has no last contact); creating one as `converted` is a
+  400.
+- Creating a lead writes its first history row (`from_stage` NULL).
+- An override may only land on `qualified`, never `sales_accepted` (enforced by a CHECK).
+- Any logged call counts as contact, answered or not; a planned activity, a draft/failed/
+  scheduled email, a note, and a future-dated touch do not; the date only moves forward.
+
+**What the frontend does now:** `leadsApi.updateLeadViaAPI` sends a `status` (the frontend's
+name for stage) to the transition endpoint and PUTs only the other fields; a disqualify /
+lost reason becomes the transition's recorded reason (it used to be sent as
+`disqualified_reason` / `lost_reason`, which no column holds). The Kanban qualify modal
+waits for the server, shows its refusal verbatim, and requires a reason to override; the
+score check no longer forces an override. Bulk actions await every write and report
+succeeded/refused counts; bulk convert says it is not available. `last_contact` is now
+mapped, so the modal's preview is no longer always failing.
+
+**Two corrections this exposed, worth not repeating:**
+- `roundTrip.leads` asserted the conversion wizard's payload was refused — but it tested
+  `status: 'converted'`, and the browser sends `stage` (leadsApi renamed it). The real
+  request had been ACCEPTED, and the wizard showed "New records created successfully" over
+  stub ids. Lesson 1, again: the test now sends the wire payload.
+- **Migration numbers collide across branches.** `claude/leadgen-session` owns 055-057 (two
+  applied to live). This migration was briefly 055 and was renumbered to 058 before merge;
+  the stale ledger row was deleted from `bmi_crm` and `bmi_crm_iso_test` and re-counted.
+  Before numbering a migration, check every branch, not just the one you are on.
+
 ### STILL OPEN after step 4
-- **Qualification override — STEP 5 SCOPE.** Only a manager/admin may override the
-  qualification gate when a lead is dragged to Qualified — but that check exists ONLY in the
-  browser (`KanbanQualifyModal`, `leads.override_qualification_guard`), with no server
-  enforcement. Lead conversion is the same shape. Both are plain stage changes
-  (`PUT /leads/:id`) and the server has no concept of either a qualification gate or a
-  conversion. The fix is NOT a standalone 403: it needs the server-side lead
-  stage-transition logic step 5 builds, after which the override becomes a role check on
-  that transition.
+- **Qualification override — DONE in step 5 slice A** (above). Lead conversion remains:
+  slice B.
 - **"Sales see only their own leads" — confirmed 2026-10-03 to stay a display filter** (see
   the UI-vs-API audit above). Unchanged, deliberately.
 - Lead owners are free text and the pickers are not the roster (tracked gap above).

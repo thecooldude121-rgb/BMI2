@@ -5,6 +5,7 @@ import {
   fetchLeadByIdFromAPI,
   createLeadViaAPI,
   updateLeadViaAPI,
+  transitionLeadStageViaAPI,
   deleteLeadViaAPI,
   fetchActivitiesFromAPI,
   createActivityViaAPI,
@@ -48,6 +49,12 @@ interface LeadContextType {
   getLead: (id: string) => Promise<Lead | null>;
   createLead: (lead: Partial<Lead>) => Promise<Lead | null>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
+  /**
+   * POST /leads/:id/stage-transition with an override / reason. THROWS
+   * LeadStageError carrying the server's unmet criteria and can_override, for
+   * callers (the qualify modal) that must render the refusal, not just a flag.
+   */
+  transitionLead: (id: string, toStage: string, opts?: { override?: boolean; reason?: string }) => Promise<Lead>;
   /** Server message from the last rejected write, so a caller can show the real
    *  reason instead of reporting success. Cleared on the next successful write.
    *  Use for RENDERING. */
@@ -244,6 +251,15 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
       setLastWriteError(message);
       return false;
     }
+  };
+
+  const transitionLead = async (
+    id: string, toStage: string, opts: { override?: boolean; reason?: string } = {},
+  ): Promise<Lead> => {
+    const lead = await transitionLeadStageViaAPI(id, toStage, opts);
+    // Merge the SERVER's row, not what was asked for.
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, status: lead.status } : l));
+    return lead;
   };
 
   const deleteLead = async (id: string): Promise<boolean> => {
@@ -491,6 +507,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     getLead,
     createLead,
     updateLead,
+    transitionLead,
     deleteLead,
     bulkDeleteLeads,
     getLeadActivities,

@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import type { PoolClient } from 'pg';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
@@ -12,6 +13,51 @@ const assertLeadInTenant = async (leadId: string, tenantId: string): Promise<boo
   const result = await pool.query('SELECT id FROM leads WHERE id = $1 AND tenant_id = $2', [leadId, tenantId]);
   return !!result.rows[0];
 };
+
+/**
+ * LAST CONTACT — what sets leads.last_contact. Ratified 2026-10-03 (Venkat):
+ * logging a call, an email, or a lead activity of type call / email / meeting.
+ *
+ * Nothing wrote this column before, so the qualification gate's "has a
+ * recorded last contact" criterion (utils/leadQualification) was unsatisfiable
+ * for any lead created through the app; only seeded rows had a value.
+ *
+ * Rules: only a touch that HAPPENED counts (a planned activity or a draft
+ * email does not), a future-dated touch does not count, and the date only moves
+ * forward — logging an old call never makes a lead look less recently
+ * contacted. Runs inside the caller's transaction, so the touch and the date
+ * are written together or not at all.
+ */
+
+const recordLeadContact = async (
+  db: PoolClient, leadId: string, tenantId: string, when: unknown,
+): Promise<void> => {
+  const at = when ? new Date(String(when)) : new Date();
+  if (Number.isNaN(at.getTime()) || at.getTime() > Date.now()) return;
+  await db.query(
+    `UPDATE leads SET last_contact = GREATEST(COALESCE(last_contact, $1::date), $1::date)
+      WHERE id = $2 AND tenant_id = $3`,
+    [at.toISOString().slice(0, 10), leadId, tenantId],
+  );
+};
+
+/** Runs `work` in a transaction on one client. */
+const inTransaction = async <T>(work: (db: PoolClient) => Promise<T>): Promise<T> => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await work(client);
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw e;
+  } finally {
+    client.release();
+  }
+};
+
+const CONTACT_ACTIVITY_TYPES = ['call', 'email', 'meeting'];
 
 // ── Activities (uses existing `activities` table) ─────────────────────────────
 
@@ -45,19 +91,25 @@ export const createActivity = async (req: AuthRequest, res: Response, next: Next
     const safeStatus = ['planned','completed','cancelled','no_show','rescheduled'].includes(status)
       ? status : 'completed';
 
-    const result = await pool.query(
-      `INSERT INTO activities
-         (lead_id, subject, type, direction, status, description, outcome,
-          duration, scheduled_at, completed_at, created_by, assigned_to, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12)
-       RETURNING *`,
-      [
-        req.params.leadId, subject, safeType, direction || null, safeStatus,
-        description || null, outcome || null,
-        duration_minutes || null, scheduled_at || null, completed_at || null,
-        req.user?.id || '', tenantId,
-      ]
-    );
+    const result = await inTransaction(async db => {
+      const ins = await db.query(
+        `INSERT INTO activities
+           (lead_id, subject, type, direction, status, description, outcome,
+            duration, scheduled_at, completed_at, created_by, assigned_to, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12)
+         RETURNING *`,
+        [
+          req.params.leadId, subject, safeType, direction || null, safeStatus,
+          description || null, outcome || null,
+          duration_minutes || null, scheduled_at || null, completed_at || null,
+          req.user?.id || '', tenantId,
+        ]
+      );
+      if (CONTACT_ACTIVITY_TYPES.includes(safeType) && safeStatus === 'completed') {
+        await recordLeadContact(db, req.params.leadId, tenantId, completed_at);
+      }
+      return ins;
+    });
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
 };
@@ -231,17 +283,25 @@ export const logEmail = async (req: AuthRequest, res: Response, next: NextFuncti
     if (!from_email || !subject) {
       res.status(400).json({ success: false, message: 'from_email and subject are required' }); return;
     }
-    const result = await pool.query(
-      `INSERT INTO lead_emails
-         (lead_id, direction, from_email, to_emails, cc_emails, subject,
-          body_text, body_html, template_id, sent_at, status, created_by, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [
-        req.params.leadId, direction, from_email, to_emails, cc_emails, subject,
-        body_text || null, body_html || null, template_id || null,
-        sent_at || new Date().toISOString(), status, req.user?.id || '', tenantId,
-      ]
-    );
+    const sentAt = sent_at || new Date().toISOString();
+    const result = await inTransaction(async db => {
+      const ins = await db.query(
+        `INSERT INTO lead_emails
+           (lead_id, direction, from_email, to_emails, cc_emails, subject,
+            body_text, body_html, template_id, sent_at, status, created_by, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [
+          req.params.leadId, direction, from_email, to_emails, cc_emails, subject,
+          body_text || null, body_html || null, template_id || null,
+          sentAt, status, req.user?.id || '', tenantId,
+        ]
+      );
+      // A draft or failed email is not contact; one that went out or came in is.
+      if (!['draft', 'failed', 'bounced', 'scheduled'].includes(String(status))) {
+        await recordLeadContact(db, req.params.leadId, tenantId, sentAt);
+      }
+      return ins;
+    });
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
 };
@@ -266,15 +326,20 @@ export const logCall = async (req: AuthRequest, res: Response, next: NextFunctio
       res.status(404).json({ success: false, message: 'Lead not found' }); return;
     }
     const { direction = 'outbound', duration_seconds, outcome, disposition, notes, started_at, ended_at } = req.body;
-    const result = await pool.query(
-      `INSERT INTO lead_calls
-         (lead_id, direction, duration_seconds, outcome, disposition, notes, started_at, ended_at, created_by, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [
-        req.params.leadId, direction, duration_seconds || null, outcome || null,
-        disposition || null, notes || null, started_at || null, ended_at || null, req.user?.id || '', tenantId,
-      ]
-    );
+    const result = await inTransaction(async db => {
+      const ins = await db.query(
+        `INSERT INTO lead_calls
+           (lead_id, direction, duration_seconds, outcome, disposition, notes, started_at, ended_at, created_by, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [
+          req.params.leadId, direction, duration_seconds || null, outcome || null,
+          disposition || null, notes || null, started_at || null, ended_at || null, req.user?.id || '', tenantId,
+        ]
+      );
+      // A logged call is a touch, answered or not — the attempt is the contact.
+      await recordLeadContact(db, req.params.leadId, tenantId, started_at || ended_at);
+      return ins;
+    });
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }
 };

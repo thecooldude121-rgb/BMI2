@@ -35,6 +35,7 @@ import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScor
 import type { AdvancedFilter, FilterGroup } from '../../types/leadFilter';
 import type { Lead } from '../../types/lead';
 import type { ModalId } from '../../hooks/useLeadsPageState';
+import { LeadStageError } from '../../utils/leadsApi';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ const KANBAN_SWIM_LANES: Array<{
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { leads: contextLeads, loading, updateLead, deleteLead, updateView: ctxUpdateView } = useLeads();
+  const { leads: contextLeads, loading, updateLead, transitionLead, deleteLead, updateView: ctxUpdateView, lastWriteErrorRef } = useLeads();
   const actions = useLeadActions(updateLead);
 
   const { can } = usePermissions();
@@ -289,11 +290,38 @@ const LeadsPage: React.FC = () => {
 
   // ── Bulk action handlers (delegated from BulkActionBar) ───────────────────
 
+  /**
+   * Runs one write per lead, AWAITS all of them, and reports what the server
+   * actually did. These used to fire-and-forget and toast success for every
+   * selected lead — and since step 5 a stage move can be refused (the
+   * qualification gate), so "N leads moved" was not even a likely truth.
+   */
+  const runBulk = async (ids: string[], write: (id: string) => Promise<boolean>, done: string) => {
+    const results = await Promise.all(ids.map(write));
+    const ok = results.filter(Boolean).length;
+    const failed = ids.length - ok;
+    const plural = (n: number) => `${n} lead${n !== 1 ? 's' : ''}`;
+    if (failed === 0) showToast(`${plural(ok)} ${done}`, 'success');
+    else if (ok === 0) showToast(`No leads ${done} — the server refused all ${ids.length}.`, 'error');
+    else showToast(`${plural(ok)} ${done}; ${failed} refused by the server.`, 'info');
+  };
+
+  /**
+   * A single stage move, with the server's verdict shown either way. Since
+   * step 5 the server can refuse a move (the qualification gate, a converted
+   * lead) and a silent snap-back reads as a glitch, not a rule.
+   */
+  const moveLead = async (id: string, status: Lead['status'], successMsg?: string) => {
+    const target = contextLeads.find(l => l.id === id);
+    const ok = target ? await actions.changeStatus(target, status) : await updateLead(id, { status });
+    if (ok) { if (successMsg) showToast(successMsg, 'success'); }
+    else showToast(lastWriteErrorRef.current || 'The server refused the move.', 'error');
+  };
+
   const handleBulkChangeStatus = (status: Lead['status']) => {
-    const n = selectedLeadIds.length;
-    selectedLeadIds.forEach(id => updateLead(id, { status }));
-    showToast(`${n} lead${n !== 1 ? 's' : ''} → ${status}`, 'success');
+    const ids = [...selectedLeadIds];
     clearSelection();
+    void runBulk(ids, id => updateLead(id, { status }), `moved to ${status}`);
   };
 
   const handleBulkSetFollowUp = (date: string, _type: FollowUpType) => {
@@ -321,10 +349,11 @@ const LeadsPage: React.FC = () => {
     // Intentionally do NOT clear selection — user may want to take another action
   };
 
-  const handleBulkConvert = (ids: string[]) => {
-    ids.forEach(id => updateLead(id, { status: 'converted' as Lead['status'] }));
-    showToast(`${ids.length} lead${ids.length !== 1 ? 's' : ''} converted`, 'success');
-    clearSelection();
+  const handleBulkConvert = (_ids: string[]) => {
+    // Was: a stage write per lead and "N leads converted" — no contact, account
+    // or deal was ever created. Real conversion (step 5, slice B) creates those
+    // records through POST /leads/:id/convert; until then this says so.
+    showToast('Converting leads in bulk is not available yet — nothing was converted.', 'info');
   };
 
   const handleBulkArchive = () => setBulkTerminalAction('lost');
@@ -334,14 +363,13 @@ const LeadsPage: React.FC = () => {
   const handleTerminalConfirm = (reason: string, notes: string) => {
     if (bulkTerminalAction !== null) {
       const status = bulkTerminalAction;
-      const n = selectedLeadIds.length;
       const extra = status === 'disqualified'
         ? { disqualified_reason: reason, disqualified_reason_notes: notes || undefined }
         : { lost_reason: reason, lost_reason_notes: notes || undefined };
-      // TODO: wire bulk terminal actions through actions.disqualify/markLost per-lead for audit trail
-      selectedLeadIds.forEach(id => updateLead(id, { status, ...extra } as Partial<Lead>));
-      showToast(`${n} lead${n !== 1 ? 's' : ''} marked ${status}`, 'success');
+      // The reason now travels as the stage transition's recorded reason.
+      const ids = [...selectedLeadIds];
       clearSelection();
+      void runBulk(ids, id => updateLead(id, { status, ...extra } as Partial<Lead>), `marked ${status}`);
       setBulkTerminalAction(null);
     } else if (activeLead) {
       const isSingleDisqualify = isModalOpen('terminalDisqualify');
@@ -384,11 +412,7 @@ const LeadsPage: React.FC = () => {
 
     // Unguarded lanes — update directly.
     const lane = KANBAN_SWIM_LANES.find(l => l.id === laneId);
-    if (lane) {
-      const draggedLead = contextLeads.find(l => l.id === draggableId);
-      if (draggedLead) void actions.changeStatus(draggedLead, lane.dropTarget);
-      else updateLead(draggableId, { status: lane.dropTarget });
-    }
+    if (lane) void moveLead(draggableId, lane.dropTarget);
   };
 
   // ── Kanban card (workflow-aware) ──────────────────────────────────────────
@@ -1207,12 +1231,7 @@ const LeadsPage: React.FC = () => {
                           }
                           openModal(modal, l);
                         }}
-                        onUpdateStatus={(id, status) => {
-                          const target = contextLeads.find(l => l.id === id);
-                          if (target) void actions.changeStatus(target, status);
-                          else updateLead(id, { status });
-                          showToast(`Lead marked as ${status}`, 'success');
-                        }}
+                        onUpdateStatus={(id, status) => { void moveLead(id, status, `Lead marked as ${status}`); }}
                         duplicateRisk={duplicateCandidateMap.get(lead.id)?.[0]?.risk}
                         isOverdue={overdueIdSet.has(lead.id)}
                         isUntouched={untouchedIdSet.has(lead.id)}
@@ -1474,11 +1493,23 @@ const LeadsPage: React.FC = () => {
         <KanbanQualifyModal
           lead={pendingLead}
           canOverride={can('leads.override_qualification_guard')}
-          onConfirm={() => {
-            void actions.changeStatus(pendingLead, 'qualified');
-            setPendingDropLeadId(null);
-            setKanbanModal(null);
-            showToast(`${pendingLead.first_name || 'Lead'} moved to Qualifying`, 'success');
+          onConfirm={async (opts) => {
+            // Step 5: the server runs the gate. The toast fires only after it
+            // confirms; a refusal goes back to the modal, which stays open and
+            // shows the server's reasons. (It used to fire the PUT without
+            // awaiting it and toast success regardless.)
+            try {
+              await transitionLead(pendingLead.id, 'qualified', opts);
+              setPendingDropLeadId(null);
+              setKanbanModal(null);
+              showToast(`${pendingLead.first_name || 'Lead'} moved to Qualifying`, 'success');
+              return null;
+            } catch (e) {
+              if (e instanceof LeadStageError) {
+                return { message: e.message, unmetCriteria: e.unmetCriteria, canOverride: e.canOverride };
+              }
+              return { message: e instanceof Error ? e.message : 'Could not move the lead.' };
+            }
           }}
           onClose={() => { setPendingDropLeadId(null); setKanbanModal(null); }}
         />
@@ -1547,10 +1578,7 @@ const LeadsPage: React.FC = () => {
             }
             openModal(modal, l);
           }}
-          onUpdateStatus={(id, status) => {
-            updateLead(id, { status });
-            showToast(`Lead marked as ${status}`, 'success');
-          }}
+          onUpdateStatus={(id, status) => { void moveLead(id, status, `Lead marked as ${status}`); }}
         />
       )}
     </div>

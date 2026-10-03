@@ -18,7 +18,13 @@ import { app, setupWorkspace, teardownWorkspace, auth, TestWorkspace } from './h
  * changes only that lead's own row and creates no linked records) rather than
  * testing a conversion feature that has not been built yet.
  *
- * TODO(next session that builds real conversion): once a POST
+ * STEP 5 (2026-10-03): a lead's stage is no longer editable through PUT —
+ * every move goes through POST /leads/:id/stage-transition (pinned in
+ * roundTrip.leadTransitions.test.ts). The stage tests below now use it, and the
+ * conversion tests assert the NEW honest failure: PUT refuses the stage change
+ * outright, and the transition endpoint refuses 'converted'.
+ *
+ * TODO(slice B, which builds real conversion): once a POST
  * /leads/:id/convert endpoint and the linking columns exist, replace
  * "conversion has no linking side effect" below with a real positive test:
  * submit through the endpoint, then confirm a contact/account/deal actually
@@ -68,17 +74,19 @@ describe('Leads — round trip', () => {
    * These specific values were previously rejected by the CHECK constraint —
    * test exactly the ones HANDOFF.md names as newly valid.
    */
+  // sales_accepted is gated by the qualification criteria since step 5, so it
+  // lives in roundTrip.leadTransitions.test.ts rather than here.
   it.each([
     'assigned', 'enriching', 'attempting_contact', 'engaged',
-    'sales_accepted', 'nurture', 'disqualified',
-  ])('create+edit: previously-rejected stage "%s" is now accepted and persists', async (stage) => {
+    'nurture', 'disqualified',
+  ])('create+transition: previously-rejected stage "%s" is accepted and persists', async (stage) => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
       first_name: 'Stage', last_name: 'Test', email: `stage-${stage}-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
     });
     const id = create.body.data.id;
     leadIds.push(id);
 
-    const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ stage });
+    const res = await request(app).post(`/api/v1/leads/${id}/stage-transition`).set(auth(ws)).send({ to_stage: stage });
     expect(res.status, `${stage}: ${JSON.stringify(res.body)}`).toBe(200);
     const row = await pool.query('SELECT stage FROM leads WHERE id = $1', [id]);
     expect(row.rows[0].stage).toBe(stage);
@@ -91,9 +99,9 @@ describe('Leads — round trip', () => {
     const id = create.body.data.id;
     leadIds.push(id);
 
-    const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ stage: 'made-up-stage' });
+    const res = await request(app).post(`/api/v1/leads/${id}/stage-transition`).set(auth(ws)).send({ to_stage: 'made-up-stage' });
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/stage must be one of/);
+    expect(res.body.message).toMatch(/to_stage must be one of/);
     const row = await pool.query('SELECT stage FROM leads WHERE id = $1', [id]);
     expect(row.rows[0].stage).toBe('new');
   });
@@ -111,7 +119,7 @@ describe('Leads — round trip', () => {
       expect(res.status).toBe(404);
     });
 
-    it('setting stage to "converted" changes only the lead itself — no contact, account, or deal is fabricated as a side effect', async () => {
+    it('"converted" cannot be reached by PUT or by a stage move — and nothing is fabricated', async () => {
       const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
         first_name: 'ToConvert', last_name: 'Lead', email: `toconvert-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company: 'Contoso',
       });
@@ -122,16 +130,19 @@ describe('Leads — round trip', () => {
       const beforeCompanies = await pool.query('SELECT COUNT(*)::int AS n FROM companies WHERE tenant_id = $1', [ws.tenantId]);
       const beforeDeals = await pool.query('SELECT COUNT(*)::int AS n FROM deals WHERE tenant_id = $1', [ws.tenantId]);
 
-      const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ stage: 'converted' });
-      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      const put = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({ stage: 'converted' });
+      expect(put.status, JSON.stringify(put.body)).toBe(400);
+      expect(put.body.code).toBe('STAGE_NOT_EDITABLE');
+
+      const move = await request(app).post(`/api/v1/leads/${id}/stage-transition`).set(auth(ws)).send({ to_stage: 'converted' });
+      expect(move.status, JSON.stringify(move.body)).toBe(409);
+      expect(move.body.code).toBe('USE_CONVERSION');
 
       const row = await pool.query('SELECT stage FROM leads WHERE id = $1', [id]);
-      expect(row.rows[0].stage).toBe('converted');
+      expect(row.rows[0].stage).toBe('new');
 
-      // The honest part: nothing else got created. If this suite is re-run
-      // after conversion is actually built, THIS assertion is expected to
-      // start failing — that failure means replace this whole describe block
-      // per the TODO at the top of the file, not "fix" the count back to zero.
+      // Nothing else got created. When slice B builds real conversion, replace
+      // this block per the TODO at the top of the file.
       const afterContacts = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
       const afterCompanies = await pool.query('SELECT COUNT(*)::int AS n FROM companies WHERE tenant_id = $1', [ws.tenantId]);
       const afterDeals = await pool.query('SELECT COUNT(*)::int AS n FROM deals WHERE tenant_id = $1', [ws.tenantId]);
@@ -144,40 +155,42 @@ describe('Leads — round trip', () => {
   /**
    * THE REAL FORM'S PAYLOAD, not a hand-written one (recorded lesson 1).
    *
-   * The block above submits `stage: 'converted'`, which is a valid stage and
-   * therefore succeeds. That is NOT what the real UI sends. Read off
-   * Frontend/src/components/Leads/LeadConversionWizard.tsx (handleConvert),
-   * the wizard mints CLIENT-SIDE stub ids (cnt_/acc_/deal_) and calls
-   * onUpdateLead with `status: 'converted'` plus converted_at,
-   * converted_to_contact_id, converted_to_deal_id and account_id.
+   * CORRECTED 2026-10-03. This test used to send `status: 'converted'` and
+   * assert a 400 "status must be one of" — and concluded the real Convert
+   * button "cannot succeed today". That payload is not what the browser sends:
+   * Frontend/src/utils/leadsApi.ts updateLeadViaAPI RENAMES `status` to `stage`
+   * before the PUT. The real request was `{ stage: 'converted', converted_at,
+   * converted_to_contact_id, converted_to_deal_id, account_id }`, which the
+   * server ACCEPTED with 200 — so the wizard showed "New records created
+   * successfully" over a lead whose only change was its stage. The test passed
+   * over exactly the bug it existed to catch, because it tested a hand-built
+   * payload (lesson 1, again).
    *
-   * `status` is a different field from `stage` (CLAUDE.md's schema-drift note):
-   * leads.status is active | inactive | nurturing, so 'converted' is invalid
-   * there, and none of the four converted_* / account_id columns exist on the
-   * table at all. So the real Convert button cannot succeed today.
-   *
-   * This locks in the HONEST FAILURE: rejected, with the real reason, and
-   * nothing fabricated. It is deliberately not a blessing of the current
-   * state — see the TODO at the top of this file. When conversion is really
-   * built, this test is expected to fail, and the fix is to replace it with a
-   * positive round trip, never to loosen it.
+   * Now the wire payload is what is sent, and step 5's rule refuses it: a
+   * stage change through PUT is a 400, so the wizard cannot fake success. When
+   * slice B builds real conversion, replace this with a positive round trip.
    */
-  it('the real wizard payload is rejected with the real reason, and fabricates nothing', async () => {
+  it('the real wizard payload (status renamed to stage by leadsApi) is refused, and fabricates nothing', async () => {
     const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
       first_name: 'Wizard', last_name: 'Payload',
-      email: `wizard-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company: 'Contoso', stage: 'qualified',
+      email: `wizard-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`, company: 'Contoso',
     });
     expect(create.status, JSON.stringify(create.body)).toBe(201);
     const id = create.body.data.id;
     leadIds.push(id);
+    // Qualify it the real way: a logged call records last contact, then move.
+    await request(app).post(`/api/v1/leads/${id}/calls`).set(auth(ws)).send({ outcome: 'connected' });
+    const q = await request(app).post(`/api/v1/leads/${id}/stage-transition`).set(auth(ws)).send({ to_stage: 'qualified' });
+    expect(q.status, JSON.stringify(q.body)).toBe(200);
 
     const beforeContacts = await pool.query('SELECT COUNT(*)::int AS n FROM contacts WHERE tenant_id = $1', [ws.tenantId]);
     const beforeCompanies = await pool.query('SELECT COUNT(*)::int AS n FROM companies WHERE tenant_id = $1', [ws.tenantId]);
     const beforeDeals = await pool.query('SELECT COUNT(*)::int AS n FROM deals WHERE tenant_id = $1', [ws.tenantId]);
 
     const ts = Date.now();
+    // Byte-for-byte what updateLeadViaAPI puts on the wire.
     const res = await request(app).put(`/api/v1/leads/${id}`).set(auth(ws)).send({
-      status: 'converted',
+      stage: 'converted',
       converted_at: new Date().toISOString(),
       converted_to_contact_id: `cnt_${ts}`,
       converted_to_deal_id: `deal_${ts}`,
@@ -188,7 +201,7 @@ describe('Leads — round trip', () => {
     // fallback or a swallowed null.
     expect(res.status, JSON.stringify(res.body)).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.message).toMatch(/status must be one of/);
+    expect(res.body.code).toBe('STAGE_NOT_EDITABLE');
     expect(res.body.message).not.toMatch(/Internal Server Error/);
 
     // The lead's own row is untouched — a rejected write must not half-apply.

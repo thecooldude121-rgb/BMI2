@@ -88,6 +88,11 @@ export function mapRowToLead(row: any): Lead {
     do_not_contact: false,
     gdpr_consent:   false,
     is_qualified:   false,
+    // leads.last_contact was never mapped, so the qualification modal's
+    // "contacted" criterion failed for every API-loaded lead and only a manager
+    // override could qualify anything. Set by logged calls / emails / completed
+    // activities since step 5.
+    ...(row.last_contact ? { last_contact_date: String(row.last_contact).slice(0, 10) } : {}),
     is_deleted:     false,
     email_opens_count:  0,
     email_clicks_count: 0,
@@ -177,12 +182,32 @@ export async function createLeadViaAPI(lead: Partial<Lead>): Promise<Lead | null
  * `lastWriteError` so a caller can show what actually went wrong.
  */
 export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Promise<Lead> {
-  // Translate frontend field names → DB column names (status → stage)
+  // STAGE CHANGES DO NOT GO THROUGH PUT (step 5, ratified 2026-10-03). The
+  // frontend's `status` IS the stage; when it is present it is sent to
+  // POST /leads/:id/stage-transition, which enforces the qualification gate and
+  // records history, and only the remaining fields are PUT. A disqualify / lost
+  // reason rides along as the transition's reason — before this it was sent
+  // as disqualified_reason / lost_reason, which no column holds, and silently
+  // dropped.
   const payload: Record<string, any> = { ...updates };
+  let last: Lead | null = null;
+
   if ('status' in payload) {
-    payload.stage = payload.status;
-    delete payload.status;
+    const toStage = payload.status as string;
+    const reasonParts = [
+      payload.disqualified_reason ?? payload.lost_reason,
+      payload.disqualified_reason_notes ?? payload.lost_reason_notes,
+    ].filter(v => typeof v === 'string' && v.trim());
+    for (const k of ['status', 'disqualified_reason', 'disqualified_reason_notes', 'lost_reason', 'lost_reason_notes']) {
+      delete payload[k];
+    }
+    last = await transitionLeadStageViaAPI(id, toStage, {
+      ...(reasonParts.length ? { reason: reasonParts.join(' — ') } : {}),
+    });
   }
+
+  if (Object.keys(payload).length === 0 && last) return last;
+
   const res = await fetch(`${API_BASE}/leads/${id}`, {
     method:  'PUT',
     headers: getAuthHeaders(),
@@ -192,6 +217,45 @@ export async function updateLeadViaAPI(id: string, updates: Partial<Lead>): Prom
   if (!res.ok) {
     throw new Error(json.message || `Failed to update lead (HTTP ${res.status})`);
   }
+  return mapRowToLead(json.data);
+}
+
+/** One criterion of the server's qualification gate. */
+export interface QualificationCriterion { id: string; label: string; met: boolean }
+
+/**
+ * A refused stage move, carrying the server's reasons. `unmetCriteria` and
+ * `canOverride` come from the 409 body — the client renders the server's rule
+ * rather than recomputing it.
+ */
+export class LeadStageError extends Error {
+  status: number;
+  code?: string;
+  unmetCriteria: QualificationCriterion[];
+  canOverride: boolean;
+  constructor(status: number, body: any) {
+    super(body?.message || `Could not move the lead (HTTP ${status})`);
+    this.name = 'LeadStageError';
+    this.status = status;
+    this.code = body?.code;
+    this.unmetCriteria = Array.isArray(body?.unmet_criteria) ? body.unmet_criteria : [];
+    this.canOverride = body?.can_override === true;
+  }
+}
+
+/** POST /leads/:id/stage-transition. Throws LeadStageError on any refusal. */
+export async function transitionLeadStageViaAPI(
+  id: string,
+  toStage: string,
+  opts: { override?: boolean; reason?: string } = {},
+): Promise<Lead> {
+  const res = await fetch(`${API_BASE}/leads/${id}/stage-transition`, {
+    method:  'POST',
+    headers: getAuthHeaders(),
+    body:    JSON.stringify({ to_stage: toStage, ...opts }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new LeadStageError(res.status, json);
   return mapRowToLead(json.data);
 }
 

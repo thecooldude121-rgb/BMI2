@@ -146,11 +146,10 @@ const LeadDetailPage: React.FC = () => {
     // value Postgres never accepted, under a success toast. That is the exact
     // pattern CLAUDE.md records from the account address form.
     //
-    // NOTE: the dropdown offers the frontend's lead vocabulary (assigned,
-    // enriching, attempting_contact, engaged, sales_accepted, nurture) while the
-    // API validates against VALID_STAGES (new, contacted, qualified, proposal,
-    // won, lost). Most options therefore 400 today. That mismatch is a separate
-    // open item — see HANDOFF; this only stops it being reported as success.
+    // Since step 5 the move goes through POST /leads/:id/stage-transition, which
+    // can refuse it (e.g. the qualification gate: 409 naming the unmet criteria);
+    // the server's message is what the toast shows. (The vocabulary mismatch an
+    // earlier note described was closed by migration 025.)
     const accepted = await actions.changeStatus(lead, newStatus as Lead['status']);
     setShowStatusDropdown(false);
     setPendingStatus(null);
