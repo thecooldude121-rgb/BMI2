@@ -63,3 +63,11 @@ probe) and lead view **"ZZ Audit view"**, deleted on Venkat's approval.
   text/jsonb scan for the email, the payload and the view id found only the rows
   themselves.
 - Deleted through the API; restorable, verified in a rolled-back transaction.
+
+## `ZZ_leads_51_52_rows.sql` — deleted 2026-10-03
+
+Leads **51** "ZZ Audit Test Lead" and **52** "ZZ Import Valid", test debris, deleted
+on Venkat's approval. Same trace as lead 53: every FK into `leads`, the polymorphic
+tasks / documents / meetings, and a text/jsonb scan for both emails and names —
+nothing but the rows themselves. Deleted through the API; restorable, verified in a
+rolled-back transaction. No `ZZ` lead remains in the live workspace.
