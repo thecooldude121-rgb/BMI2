@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { X, AlertTriangle, ChevronLeft, ChevronRight, Merge, CheckSquare, Square } from 'lucide-react';
+import { X, AlertTriangle, ChevronLeft, ChevronRight, Merge } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { DuplicateCandidate } from '../../utils/leadDuplicates';
 import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
@@ -53,13 +53,9 @@ interface Props {
   candidates:  DuplicateCandidate[];
   isOpen:      boolean;
   onClose:     () => void;
-  // Promise<boolean> in practice — LeadContext.updateLead reports whether the
-  // write was accepted. Typed as Promise<void> here, which rejected the real
-  // function.
-  onUpdateLead: (id: string, updates: Partial<Lead>) => Promise<boolean | void>;
-  onShowToast:  (msg: string, type: 'success' | 'error' | 'info') => void;
-  onMergeComplete?: (absorbedLeadId: string, absorbedLeadName: string) => void;
 }
+// onUpdateLead / onShowToast / onMergeComplete props were removed with the
+// merge action itself — see the note at the footer.
 
 export default function MergeReviewModal({
   lead,
@@ -68,16 +64,9 @@ export default function MergeReviewModal({
   candidates,
   isOpen,
   onClose,
-  onUpdateLead,
-  onShowToast,
-  onMergeComplete,
 }: Props) {
   const [activeCandidateId, setActiveCandidateId] = useState(candidateId);
   const [choices, setChoices] = useState<Partial<Record<keyof Lead, FieldChoice>>>({});
-  const [mergeTags, setMergeTags]           = useState(true);
-  const [mergeNotes, setMergeNotes]         = useState(true);
-  const [carryActivities, setCarryActivities] = useState(true);
-  const [merging, setMerging] = useState(false);
 
   const candidate = useMemo(
     () => allLeads.find(l => l.id === activeCandidateId),
@@ -108,43 +97,6 @@ export default function MergeReviewModal({
 
   function differ(key: keyof Lead): boolean {
     return displayValue(lead, key) !== displayValue(candidate!, key);
-  }
-
-  async function handleMerge() {
-    if (!candidate) return;
-    setMerging(true);
-    try {
-      // Build merged field set: left = current lead, right = candidate
-      const merged: Partial<Lead> = {};
-      for (const f of MERGE_FIELDS) {
-        const src = getChoice(f.key) === 'left' ? lead : candidate;
-        (merged as Record<string, unknown>)[f.key as string] = src[f.key];
-      }
-
-      // Merge tags if checked
-      if (mergeTags) {
-        const combinedTags = Array.from(new Set([...(lead.tags ?? []), ...(candidate.tags ?? [])]));
-        merged.tags = combinedTags;
-      }
-
-      // TODO: merge notes and activities via backend API when ready
-
-      // Master = current lead (left side); loser = candidate
-      await onUpdateLead(lead.id, merged);
-      await onUpdateLead(candidate.id, {
-        status: 'disqualified',
-        disqualified_reason: `merged_into_${lead.id}`,
-      });
-
-      const loserName = [candidate.first_name, candidate.last_name].filter(Boolean).join(' ') || candidate.email || candidate.id;
-      onShowToast(`Leads merged. ${loserName} marked as disqualified.`, 'success');
-      onMergeComplete?.(candidate.id, loserName);
-      onClose();
-    } catch {
-      onShowToast('Merge failed — please try again.', 'error');
-    } finally {
-      setMerging(false);
-    }
   }
 
   const leftName  = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || lead.id;
@@ -283,46 +235,35 @@ export default function MergeReviewModal({
 
         {/* Options + footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex-shrink-0 space-y-3">
-          {/* Merge options */}
-          <div className="flex items-center gap-6">
-            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700">
-              <button type="button" onClick={() => setMergeTags(v => !v)} className="text-blue-600">
-                {mergeTags ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-gray-400" />}
-              </button>
-              Merge tags from both leads
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700">
-              <button type="button" onClick={() => setMergeNotes(v => !v)} className="text-blue-600">
-                {mergeNotes ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-gray-400" />}
-              </button>
-              Carry over notes
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700">
-              <button type="button" onClick={() => setCarryActivities(v => !v)} className="text-blue-600">
-                {carryActivities ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-gray-400" />}
-              </button>
-              Carry over activities
-            </label>
-          </div>
-          {/* Action buttons */}
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-400">
-              The duplicate will be marked as <strong>disqualified</strong> and cannot be undone.
+          {/* MERGING IS NOT AVAILABLE YET ("Coming soon", step 1 convention;
+              disabled 2026-10-03, real merge scheduled for step 8).
+              This footer used to fire two lead writes — update the kept lead,
+              disqualify the other — WITHOUT checking either result, then toast
+              "Leads merged" regardless; its "carry over notes / activities"
+              options did nothing at all, and LeadContext.mergeLeads returned
+              true having written nothing. A success with no merge behind it.
+              The comparison above stays: it is read-only and still useful for
+              deciding which lead to keep. */}
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-xs text-gray-500">
+              Merging leads is coming soon. Nothing on this screen changes either lead.
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Cancel
+                Close
               </button>
               <button
-                onClick={handleMerge}
-                disabled={merging}
-                className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                type="button"
+                disabled
+                aria-disabled="true"
+                title="Coming soon"
+                className="px-4 py-2 text-sm font-medium bg-gray-300 text-white rounded-lg cursor-not-allowed flex items-center gap-1.5"
               >
                 <Merge className="h-3.5 w-3.5" />
-                {merging ? 'Merging…' : 'Merge Leads'}
+                Merge Leads — coming soon
               </button>
             </div>
           </div>

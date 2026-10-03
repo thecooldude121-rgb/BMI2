@@ -1203,13 +1203,6 @@ const LeadDetailPage: React.FC = () => {
           candidates={duplicateCandidates}
           isOpen
           onClose={() => setShowMergeModal(false)}
-          onUpdateLead={updateLead}
-          onShowToast={(msg, type) => {
-            showToast(msg);
-          }}
-          onMergeComplete={(absorbedId, absorbedName) =>
-            actions.merge(lead, absorbedId, absorbedName)
-          }
         />
       )}
 
