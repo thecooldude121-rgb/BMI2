@@ -1409,6 +1409,32 @@ merge button is now disabled and labelled, the write path is gone, and the read-
 comparison stays. Also found, not fixed: `LeadContext.exportLeads` returns a literal
 `'export_url'`.
 
+### STEP 4 — data integrity (migrations 060, 061). Approved 2026-10-03 (Venkat).
+- **`deals.company_id` is a COMPOSITE reference** `(company_id, tenant_id) -> companies(id,
+  tenant_id)`, so the DATABASE refuses a company from another workspace (a hand-typed UPDATE,
+  the CSV importer, a backfill), not only the controller. Required `UNIQUE (id, tenant_id)`
+  on companies. Deleting a company clears only `company_id` (column-listed SET NULL).
+- **`leads.assigned_to_user_id`** (composite, SET NULL) is dual-written with the name, the
+  039 rule: explicit id must be in the workspace (400 otherwise); a name resolves only on an
+  exact unique match; an unresolvable name stores NULL. The owner PICKERS still offer
+  placeholders (`TEAM_MEMBERS`) — wiring them to `GET /users` is still open.
+- **Live data (061, guarded and scoped, prior values backed up):** the seeded owner names that
+  named nobody ("John Smith" 22 leads + 15 deals, Sarah Lee, Emily Chen, Michael Torres) are
+  cleared to unassigned; **12** seeded deals whose probability differed from the stage
+  default with no reason are reset to it (the plan first said 14 — that miscount included
+  D026, a test deal; only seeded rows were touched); D006 -> C006 and D010 -> C010 (the
+  domain near-misses, decided: same company). Coverage is now 18/22 deals with a company.
+  D057 "ZZ Draft deal" deleted (backed up).
+- **No inflated probability from the removed heuristic existed.** `win_prob_ai` was 0 on every
+  seeded deal; the divergent values were seed randomness, now reset.
+- **The deal-side stage-history gap is closed going forward:** createDeal (now
+  transactional) and conversion write the deal's first row (`from_stage` NULL,
+  `reason_code 'created'`). **Not backfilled, deliberately** — an invented row would give
+  closed deals a fabricated close date. **And only a real MOVE dates a closure**:
+  `loadProjectionDeals` requires `from_stage IS NOT NULL`, so a deal ENTERED already closed
+  (often back-entered data) stays untimed instead of counting as closed today with a 0-day
+  cycle. Tests that count history now count moves (`reason_code IS DISTINCT FROM 'created'`).
+
 ### STILL OPEN after step 4
 - **Qualification override — DONE in step 5 slice A** (above). Lead conversion remains:
   slice B.

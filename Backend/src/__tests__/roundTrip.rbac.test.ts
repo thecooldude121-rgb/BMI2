@@ -265,7 +265,7 @@ describe('RBAC', () => {
         .send({ to_stage: 'closed-won' });
       expect(move.status, JSON.stringify(move.body)).toBe(200);
 
-      const hist = await pool.query('SELECT changed_by FROM deal_stage_history WHERE deal_id = $1', [deal.body.data.id]);
+      const hist = await pool.query('SELECT changed_by FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [deal.body.data.id]);
       expect(hist.rows.length).toBe(1);
       expect(hist.rows[0].changed_by).toBeTruthy();
     });

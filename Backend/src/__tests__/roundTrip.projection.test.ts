@@ -130,8 +130,10 @@ describe('Projection — real history through the real endpoints', () => {
   it('LIVE-LIKE: two dated closures and one undated -> "not enough historical data yet", nothing projected', async () => {
     await closeDeal(ws, rep.userId, 'won', 50000, 30);
     await closeDeal(ws, rep.userId, 'lost', 50000, 40);
-    // Created directly in a won stage: createDeal writes no history, so this
-    // deal is closed with NO recorded close time — the state of live D005.
+    // Created directly in a won stage. Since step 4 createDeal writes a
+    // 'created' history row (from_stage NULL), but only a real MOVE dates a
+    // closure, so this deal is still closed with NO recorded close time — the
+    // state of live D005.
     await createDeal(ws, { value: 55000, stage: 'closed-won', assigned_to_user_id: Number(rep.userId) });
 
     // Twelve closures in ANOTHER workspace, ten of them wins. If the loader's
@@ -191,6 +193,7 @@ describe('Projection — real history through the real endpoints', () => {
          FROM deals d
          JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
          JOIN deal_stage_history h ON h.deal_id = d.id AND h.tenant_id = d.tenant_id AND h.to_stage = ps.slug
+                                  AND h.from_stage IS NOT NULL   -- a real MOVE, not the 'created' row
         WHERE d.tenant_id = $1 AND d.is_test = false AND ps.stage_type IN ('won', 'lost')
           AND h.changed_at > NOW() - INTERVAL '365 days'
         GROUP BY ps.stage_type`, [ws.tenantId]);

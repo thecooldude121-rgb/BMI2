@@ -71,3 +71,18 @@ on Venkat's approval. Same trace as lead 53: every FK into `leads`, the polymorp
 tasks / documents / meetings, and a text/jsonb scan for both emails and names —
 nothing but the rows themselves. Deleted through the API; restorable, verified in a
 rolled-back transaction. No `ZZ` lead remains in the live workspace.
+
+## `step4_owner_probability_company_before.sql` — values before migration 061 (2026-10-03)
+
+Prior values of every row migration 061 changed on the live workspace: the 38 leads
+whose owner name named nobody, and all 15 seeded deals (owner name, probability and
+company_id). Running the file restores those columns exactly. 061 cleared the
+non-user owner names to NULL, reset 12 seeded probabilities that had no reason to the
+stage default, and linked D006 -> C006 and D010 -> C010. Approved by Venkat.
+
+## `ZZ_draft_deal_D057_row.sql` — deleted 2026-10-03
+
+D057 "ZZ Draft deal", test debris, deleted on approval. Nothing referenced it (every FK
+into `deals`, the polymorphic tasks / documents / meetings, a text/jsonb scan).
+Deleted through the API; restorable, verified in a rolled-back transaction. No `ZZ`
+deal remains.

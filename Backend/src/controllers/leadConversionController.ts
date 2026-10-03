@@ -192,6 +192,13 @@ export const convertLead = async (req: AuthRequest, res: Response, next: NextFun
         ],
       );
       deal = { id: ins.rows[0].id, name: ins.rows[0].name };
+      // The deal's first stage-history row, as createDeal writes (step 4).
+      await client.query(
+        `INSERT INTO deal_stage_history
+           (deal_id, from_stage, to_stage, probability, probability_override, reason_code, changed_by, tenant_id)
+         VALUES ($1, NULL, $2, $3, false, 'created', $4, $5)`,
+        [deal.id, resolved.stage!.slug, resolved.stage!.probability ?? 0, actorName, tenantId],
+      );
     }
 
     // ── The lead ──────────────────────────────────────────────────────────

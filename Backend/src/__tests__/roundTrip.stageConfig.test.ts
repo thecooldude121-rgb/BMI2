@@ -328,7 +328,7 @@ describe('Stage configuration — round trip', () => {
       // A stage deletion that silently relocated deals would be
       // indistinguishable from data loss when someone later asks why.
       const h = await pool.query(
-        `SELECT from_stage, to_stage, reason_code FROM deal_stage_history WHERE deal_id = $1`, [id]);
+        `SELECT from_stage, to_stage, reason_code FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM 'created'`, [id]);
       expect(h.rows[0]).toMatchObject({
         from_stage: 'proposal', to_stage: 'negotiation', reason_code: 'stage-deleted',
       });

@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { resolveActorName } from '../utils/actorName';
+import { foreignIdsInTenant, userIdForName, userNameForId } from '../utils/tenantScope';
 import { PRIVILEGED_ROLES } from '../utils/roles';
 import {
   OVERRIDE_TARGET, isGatedMove, unmetCriteria, evaluateQualification,
@@ -21,8 +22,12 @@ import {
 const UPDATABLE_FIELDS = [
   'first_name', 'last_name', 'email', 'phone', 'company',
   'position', 'industry', 'status', 'score', 'source',
-  'assigned_to', 'notes', 'tags', 'custom_fields',
+  'assigned_to', 'assigned_to_user_id', 'notes', 'tags', 'custom_fields',
 ];
+// assigned_to_user_id (migration 060) is DUAL-WRITTEN with the display name, the
+// deals/039 rule: an explicit id must belong to the caller's workspace (400
+// otherwise); a name resolves to a user only on an exact, unique match, and an
+// unresolvable name stores NULL — an unresolved owner, never a guessed one.
 // `stage` is deliberately ABSENT (ratified 2026-10-03): every stage change goes
 // through POST /leads/:id/stage-transition, which enforces the qualification
 // gate and writes lead_stage_history. See updateLead for how an unchanged
@@ -114,7 +119,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
     const tenantId = requireTenantId(req);
     const {
       first_name, last_name, email, phone, company, position,
-      industry, stage, status, score, source, owner_id, assigned_to,
+      industry, stage, status, score, source, owner_id, assigned_to, assigned_to_user_id,
       notes, tags, custom_fields,
     } = req.body;
 
@@ -159,6 +164,15 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
       }
     }
 
+    const badOwner = await foreignIdsInTenant(
+      [{ field: 'assigned_to_user_id', table: 'users', value: assigned_to_user_id }], tenantId);
+    if (badOwner) { res.status(400).json({ success: false, message: badOwner }); return; }
+    const ownerName: string | null = assigned_to || owner_id || null;
+    const resolvedOwnerId: number | null =
+      (assigned_to_user_id ?? null) !== null ? Number(assigned_to_user_id) : await userIdForName(ownerName, tenantId);
+    const resolvedOwnerName: string | null =
+      ownerName ?? (resolvedOwnerId !== null ? await userNameForId(resolvedOwnerId, tenantId) : null);
+
     const client = await pool.connect();
     try {
     await client.query('BEGIN');
@@ -166,8 +180,8 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
       `INSERT INTO leads
          (first_name, last_name, email, phone, company, position,
           industry, stage, status, score, source, assigned_to, notes,
-          tags, custom_fields, tenant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+          tags, custom_fields, tenant_id, assigned_to_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       [
         String(first_name).trim(),
@@ -180,7 +194,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
         status   || 'active',   // lifecycle flag, not the pipeline stage
         score    ?? 0,
         source   || null,
-        assigned_to || owner_id || null,
+        resolvedOwnerName,
         notes    || null,
         // tags is text[] since migration 012 — pass the array through and let
         // the driver map it. It was JSON.stringify'd into a text column before,
@@ -188,6 +202,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
         Array.isArray(tags) ? tags : [],
         custom_fields ? JSON.stringify(custom_fields) : '{}',
         tenantId,
+        resolvedOwnerId,
       ]
     );
     // The lead's first stage is history too (from_stage NULL), so a timeline
@@ -247,6 +262,19 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
     const badScore = scoreError(req.body.score);
     if (badScore) { res.status(400).json({ success: false, message: badScore }); return; }
 
+    // Owner dual-write (migration 060). `owner_id` is the legacy alias for the
+    // NAME column. A name change without an explicit id re-resolves the id, so
+    // the two never disagree; an explicit id must be in this workspace.
+    if (req.body.assigned_to === undefined && req.body.owner_id !== undefined) {
+      req.body.assigned_to = req.body.owner_id || null;
+    }
+    const badOwner = await foreignIdsInTenant(
+      [{ field: 'assigned_to_user_id', table: 'users', value: req.body.assigned_to_user_id }], tenantId);
+    if (badOwner) { res.status(400).json({ success: false, message: badOwner }); return; }
+    if (req.body.assigned_to !== undefined && req.body.assigned_to_user_id === undefined) {
+      req.body.assigned_to_user_id = await userIdForName(req.body.assigned_to, tenantId);
+    }
+
     const updates: string[] = [];
     const params: any[] = [];
     let i = 1;
@@ -261,11 +289,7 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
       else params.push(v);
     });
 
-    // Accept `owner_id` as an alias for the live assigned_to column.
-    if (req.body.assigned_to === undefined && req.body.owner_id !== undefined) {
-      updates.push(`assigned_to = $${i++}`);
-      params.push(req.body.owner_id || null);
-    }
+    // (`owner_id` was folded into assigned_to above, before the owner resolution.)
 
     if (!updates.length) {
       res.status(400).json({ success: false, message: 'No valid fields to update' });

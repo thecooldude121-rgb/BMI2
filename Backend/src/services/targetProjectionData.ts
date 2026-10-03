@@ -40,11 +40,17 @@ export async function loadProjectionDeals(tenantId: string): Promise<{
             d.expected_close_date::text AS expected_close_date,
             d.is_archived,
             ps.slug, ps.name AS stage_name, ps.position, ps.stage_type,
+            -- Only a real MOVE into the closed stage dates a closure. Since step 4
+            -- (2026-10-03) createDeal and conversion write a 'created' row with
+            -- from_stage NULL; a deal ENTERED already closed (often back-entered
+            -- data) must stay untimed, or it would count as closed "today" with
+            -- a 0-day cycle and skew win rate and cycle length.
             (SELECT max(h.changed_at)
                FROM deal_stage_history h
               WHERE h.deal_id = d.id
                 AND h.tenant_id = d.tenant_id
-                AND h.to_stage = ps.slug) AS closed_at
+                AND h.to_stage = ps.slug
+                AND h.from_stage IS NOT NULL) AS closed_at
        FROM deals d
        JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
       WHERE d.tenant_id = $1 AND d.is_test = false`,

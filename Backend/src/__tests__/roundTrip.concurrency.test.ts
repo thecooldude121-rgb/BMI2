@@ -64,7 +64,7 @@ describe('Concurrent writes to the same row', () => {
     // target stage (the first holds the row lock until commit) and short-circuits
     // as a no-op, so the audit trail records the move once. Two rows would mean
     // the trail double-counts a single user action.
-    const hist = await pool.query('SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1', [id]);
+    const hist = await pool.query('SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
     expect(hist.rows.length, `expected 1 history row, got ${JSON.stringify(hist.rows)}`).toBe(1);
     expect(hist.rows[0].from_stage).toBe('prospecting');
     expect(hist.rows[0].to_stage).toBe('negotiation');
@@ -84,7 +84,7 @@ describe('Concurrent writes to the same row', () => {
 
     const deal = await pool.query(`SELECT ps.slug AS stage FROM deals d LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id WHERE d.id = $1`, [id]);
     const hist = await pool.query(
-      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1',
+      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'',
       [id],
     );
 
@@ -205,7 +205,7 @@ describe('Concurrent writes to the same row', () => {
     expect(res.status, JSON.stringify(res.body)).toBe(200);
 
     const hist = await pool.query(
-      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1', [id]);
+      'SELECT from_stage, to_stage FROM deal_stage_history WHERE deal_id = $1 AND reason_code IS DISTINCT FROM \'created\'', [id]);
     expect(hist.rows.length).toBe(1);
     expect(hist.rows[0].from_stage).toBe('qualified');
     expect(hist.rows[0].to_stage).toBe('negotiation');
