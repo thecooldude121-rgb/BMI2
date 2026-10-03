@@ -151,6 +151,17 @@ describe('Lead stage transitions — round trip', () => {
     expect(last.changed_by_user_id).toBe(manager.userId);
   });
 
+  it('an ADMIN can override too — the rule is manager OR admin', async () => {
+    const id = await newLead();                       // missing company and last contact
+    const res = await move(id, { to_stage: 'qualified', override: true, reason: 'Exec referral' }, ws);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await stageOf(id)).toBe('qualified');
+    const rows = await history(id);
+    expect(rows[rows.length - 1].qualification_override).toBe(true);
+    expect(rows[rows.length - 1].unmet_criteria).toEqual(['company', 'last_contact']);
+    expect(rows[rows.length - 1].changed_by_user_id).toBe(ws.userId);
+  });
+
   it('an override can only land on qualified, not sales_accepted', async () => {
     const id = await newLead();
     const res = await move(id, { to_stage: 'sales_accepted', override: true, reason: 'x' }, manager);
