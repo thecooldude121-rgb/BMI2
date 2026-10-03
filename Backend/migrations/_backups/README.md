@@ -44,3 +44,22 @@ meeting **MTG001** ("Please delete"), and document `zz_audit_doc`.
   before dependents. Verified restorable inside a rolled-back transaction.
 - **The document's file is not here.** It was deleted through the documents API,
   which removes the stored blob (1,134-byte PNG).
+
+## `ZZ_xss_probe_lead_and_audit_view_rows.sql` — deleted 2026-10-03
+
+Lead **53** (`ZZ <img src=x onerror="window.__xss=1"> Edge 😀 Tést`, a stored-XSS
+probe) and lead view **"ZZ Audit view"**, deleted on Venkat's approval.
+
+- **Before deleting, the probe was verified to render SAFELY:** no
+  `dangerouslySetInnerHTML` / `innerHTML` / `insertAdjacentHTML` / `document.write`
+  / `srcDoc` / `javascript:` sink exists in the frontend, and a headless Chromium
+  run through the real login showed the name as literal text on the Kanban view,
+  the searched list and `/crm/leads/53`, with the payload's marker never set and no
+  `<img>` injected. A control run that injected the same payload AS HTML did set
+  the marker, so the detector works. Not a vulnerability; test debris.
+- Dependency trace: every FK into `leads` (deals, activities, lead_notes,
+  lead_tasks, lead_emails, lead_calls, lead_meetings, lead_stage_history) — 0 rows;
+  polymorphic tasks / documents / meetings — 0; nothing references `lead_views`; a
+  text/jsonb scan for the email, the payload and the view id found only the rows
+  themselves.
+- Deleted through the API; restorable, verified in a rolled-back transaction.
