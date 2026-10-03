@@ -272,7 +272,7 @@ describe('Lead stage transitions — round trip', () => {
     expect(res.body.code).toBe('USE_CONVERSION');
 
     // Simulate a lead converted by slice B's endpoint, then try to move it.
-    await pool.query("UPDATE leads SET stage = 'converted' WHERE id = $1", [id]);
+    await pool.query("UPDATE leads SET stage = 'converted', converted_at = NOW() WHERE id = $1", [id]);
     const out = await move(id, { to_stage: 'engaged' }, manager);
     expect(out.status).toBe(409);
     expect(out.body.code).toBe('LEAD_CONVERTED');

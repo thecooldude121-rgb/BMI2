@@ -87,3 +87,36 @@ describe('transitionLeadStageViaAPI', () => {
     expect(calls()[0].body).toEqual({ to_stage: 'qualified', override: true, reason: 'Met at expo' });
   });
 });
+
+describe('convertLeadViaAPI', () => {
+  it('POSTs the request to /convert and maps the returned lead', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true, status: 201,
+      json: async () => ({ success: true, data: {
+        lead: row({ stage: 'converted', converted_contact_id: 'CT9', converted_deal_id: 'D9', converted_at: '2026-10-03T00:00:00Z' }),
+        contact: { id: 'CT9', name: 'A B', created: true }, company: null, deal: { id: 'D9', name: 'X' },
+      } }),
+    } as Response);
+    const { convertLeadViaAPI } = await import('./leadsApi');
+    const res = await convertLeadViaAPI('7', { contact: { mode: 'create' }, company: { mode: 'none' }, deal: { name: 'X', value: 10 } });
+    expect(calls()[0]).toEqual({
+      url: expect.stringMatching(/\/leads\/7\/convert$/), method: 'POST',
+      body: { contact: { mode: 'create' }, company: { mode: 'none' }, deal: { name: 'X', value: 10 } },
+    });
+    expect(res.lead.status).toBe('converted');
+    expect(res.lead.converted_to_contact_id).toBe('CT9');
+    expect(res.lead.converted_to_deal_id).toBe('D9');
+  });
+
+  it('a 409 duplicate carries the existing contact for an explicit link offer', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false, status: 409,
+      json: async () => ({ success: false, code: 'CONTACT_EMAIL_EXISTS', message: 'exists', existing_contact: { id: 'CT1', name: 'Z' } }),
+    } as Response);
+    const { convertLeadViaAPI, LeadConversionError } = await import('./leadsApi');
+    const err = await convertLeadViaAPI('7', { contact: { mode: 'create' }, company: { mode: 'none' }, deal: null }).catch(e => e);
+    expect(err).toBeInstanceOf(LeadConversionError);
+    expect(err.code).toBe('CONTACT_EMAIL_EXISTS');
+    expect(err.existingContact).toEqual({ id: 'CT1', name: 'Z' });
+  });
+});

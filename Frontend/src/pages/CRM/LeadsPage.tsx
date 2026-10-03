@@ -1446,18 +1446,10 @@ const LeadsPage: React.FC = () => {
           readiness={computeConversionReadiness(activeLead, computeMultiFactorScore(activeLead))}
           isOpen={isModalOpen('convertLead')}
           onClose={closeModal}
-          onUpdateLead={async (id, updates) => {
-            // Returned so the wizard can tell success from a rejected write.
-            const accepted = await updateLead(id, updates);
-            if (!accepted) return false;
-            if (updates.status === 'converted') {
-              const targetType =
-                updates.converted_to_contact_id && updates.converted_to_deal_id ? 'both'
-                : updates.converted_to_deal_id    ? 'deal'
-                : 'contact';
-              actions.convert(activeLead, targetType, updates.converted_to_deal_id ?? updates.converted_to_contact_id);
-            }
-            return true;
+          onConverted={(res) => {
+            // Fires only after the SERVER created/linked the records.
+            const targetType = res.deal ? 'both' : 'contact';
+            actions.convert(activeLead, targetType, res.deal?.id ?? res.contact.id);
           }}
         />
       )}

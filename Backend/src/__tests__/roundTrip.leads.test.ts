@@ -24,11 +24,10 @@ import { app, setupWorkspace, teardownWorkspace, auth, TestWorkspace } from './h
  * conversion tests assert the NEW honest failure: PUT refuses the stage change
  * outright, and the transition endpoint refuses 'converted'.
  *
- * TODO(slice B, which builds real conversion): once a POST
- * /leads/:id/convert endpoint and the linking columns exist, replace
- * "conversion has no linking side effect" below with a real positive test:
- * submit through the endpoint, then confirm a contact/account/deal actually
- * exist in Postgres, correctly linked back to the lead.
+ * SLICE B (2026-10-03) BUILT REAL CONVERSION: POST /leads/:id/convert creates
+ * the contact / company / deal in one transaction. It is pinned in
+ * roundTrip.leadConversion.test.ts; the tests below now only assert that the
+ * OLD routes to "converted" (PUT, a stage move) stay closed.
  */
 describe('Leads — round trip', () => {
   let ws: TestWorkspace;
@@ -106,8 +105,8 @@ describe('Leads — round trip', () => {
     expect(row.rows[0].stage).toBe('new');
   });
 
-  describe('conversion — current honest-failure behavior (see file header)', () => {
-    it('there is no conversion endpoint yet: POST /leads/:id/convert does not exist', async () => {
+  describe('conversion — the old routes to "converted" stay closed (see file header)', () => {
+    it('the conversion endpoint now EXISTS, and refuses an unqualified lead with nothing created', async () => {
       const create = await request(app).post('/api/v1/leads').set(auth(ws)).send({
         first_name: 'Convert', last_name: 'Me', email: `convert-${Date.now()}.${Math.random().toString(36).slice(2, 8)}@example.com`,
       });
@@ -115,8 +114,9 @@ describe('Leads — round trip', () => {
       leadIds.push(id);
 
       const res = await request(app).post(`/api/v1/leads/${id}/convert`).set(auth(ws)).send({});
-      // notFound middleware returns 404 for any unmatched route.
-      expect(res.status).toBe(404);
+      // Was a 404 (no route). Now: the route exists and a 'new' lead is refused.
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('LEAD_NOT_QUALIFIED');
     });
 
     it('"converted" cannot be reached by PUT or by a stage move — and nothing is fabricated', async () => {

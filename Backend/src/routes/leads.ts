@@ -3,6 +3,7 @@ import {
   getLeads, getLeadById, createLead, updateLead, deleteLead,
   transitionLeadStage, getLeadStageHistory,
 } from '../controllers/leadsController';
+import { convertLead } from '../controllers/leadConversionController';
 import {
   getActivities, createActivity, updateActivity,
   getNotes, createNote, updateNote, deleteNote,
@@ -32,6 +33,10 @@ router.delete('/:id', requireRole(...DESTRUCTIVE_ACTION_ROLES), deleteLead);
 // inside the handler, where the gate's outcome is known.
 router.post('/:id/stage-transition', transitionLeadStage);
 router.get('/:id/stage-history', getLeadStageHistory);
+// Real conversion (step 5 slice B): creates / links the contact, company and
+// deal in one transaction. No requireRole — every role converts (ratified
+// 2026-10-03, step 4); the qualified-only rule is enforced in the handler.
+router.post('/:id/convert', convertLead);
 
 // ── Sub-resources ─────────────────────────────────────────────────────────────
 router.get( '/:leadId/activities',           getActivities);

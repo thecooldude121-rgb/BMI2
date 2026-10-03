@@ -1366,6 +1366,44 @@ mapped, so the modal's preview is no longer always failing.
   the stale ledger row was deleted from `bmi_crm` and `bmi_crm_iso_test` and re-counted.
   Before numbering a migration, check every branch, not just the one you are on.
 
+### STEP 5 SLICE B — real lead conversion (migration 059)
+`POST /leads/:id/convert` creates or links the contact, optionally creates or links a company
+and creates a deal — in ONE transaction, with the lead marked converted and its
+`converted_contact_id` / `converted_company_id` / `converted_deal_id` / `converted_by_user_id`
+/ `converted_at` set (all SET NULL on delete; a converted lead must carry `converted_at`).
+Every linked id is proven to belong to the caller's workspace inside the transaction and
+share-locked. The lead row is locked first, so two conversions serialise.
+
+**RATIFIED 2026-10-03 (Venkat):**
+- Only from `qualified` / `sales_accepted` (409 `LEAD_NOT_QUALIFIED`); once only (409
+  `LEAD_ALREADY_CONVERTED`). Every role may convert (step 4 ratification).
+- **A deal created at conversion requires a real value** — absent / blank / null /
+  non-numeric / negative is a 400; an explicit 0 is accepted as a real choice. The wizard's
+  value field starts BLANK and blocks Convert (it used to start from `estimated_value`, which
+  the API mapper hardcodes to 0).
+- **A contact email that already exists is a 409 `CONTACT_EMAIL_EXISTS` naming that
+  contact — never an automatic link.** The wizard offers "Link to <name>" as an explicit
+  choice, or Cancel; nothing is sent until the rep picks.
+- **The converting user owns created records** (contact `owner_id`, deal
+  `assigned_to_user_id`). INTERIM until the owner model is settled; there is no owner field
+  in the request and the wizard's owner picker is hidden.
+
+**Also RATIFIED 2026-10-03 (Venkat) — chosen while building, then approved as built:**
+- A created contact takes the lead's name/email/phone/position; a lead with no last name
+  needs one supplied (`contact.last_name`) rather than storing a blank (createContact
+  requires it). `contacts.source = 'converted'`.
+- A created company takes the lead's company name (or `company.name`); nothing else is
+  copied (the lead's industry is a different vocabulary from the constrained one).
+- A deal goes into the chosen pipeline's (default `new-business`) first OPEN stage with that
+  stage's probability, `base_amount_usd = value` exactly as createDeal does, and NO
+  `deal_stage_history` row — the same known gap createDeal has. That deal-side
+  stage-history gap is folded into STEP 4 (data integrity), not fixed here.
+- Tags, notes and activity history are NOT copied to the new records; the wizard says so
+  (its "carry over" checkboxes promised it and nothing did it).
+
+**Found on the way, not fixed:** `LeadContext.mergeLeads` returns `true` without doing
+anything — a success with no write behind it.
+
 ### STILL OPEN after step 4
 - **Qualification override — DONE in step 5 slice A** (above). Lead conversion remains:
   slice B.
