@@ -129,7 +129,6 @@ interface LeadContextType {
 
   detectDuplicates: (leadId: string) => Promise<any[]>;
 
-  exportLeads: (leadIds: string[], format: 'csv' | 'xlsx') => Promise<string | null>;
   importLeads: (file: File, mapping: Record<string, string>) => Promise<{ success: number; failed: number }>;
 }
 
@@ -483,9 +482,11 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   // no callers; it is removed (2026-10-03) so nothing can be built on a merge
   // that claims success. Real merging is scheduled for step 8.
 
-  const exportLeads = async (leadIds: string[], format: 'csv' | 'xlsx'): Promise<string | null> => {
-    return 'export_url';
-  };
+  // exportLeads() lived here and returned the literal string 'export_url' — a
+  // fabricated "download link" for an export that never ran. It had no callers
+  // (the bulk-bar Export builds a real file client-side), so nothing ever
+  // surfaced it; removed 2026-10-03 so nothing can be wired to it. A real,
+  // server-side leads export is scheduled for step 8.
 
   const importLeads = async (file: File, mapping: Record<string, string>): Promise<{ success: number; failed: number }> => {
     return { success: 0, failed: 0 };
@@ -556,7 +557,6 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     createTag,
     convertLead,
     detectDuplicates,
-    exportLeads,
     importLeads
   };
 
