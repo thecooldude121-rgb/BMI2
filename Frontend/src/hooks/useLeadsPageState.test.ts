@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useLeadsPageState } from './useLeadsPageState';
 import type { Lead } from '../types/lead';
@@ -35,8 +35,21 @@ vi.mock('../contexts/CurrentUserContext', () => ({
   }),
 }));
 
+/**
+ * The server is the seam now (step 5 pagination): filtering, sorting, paging and
+ * the KPI figures are the SERVER's job, so these tests assert the QUERY the hook
+ * sends and that it shows exactly the rows / total / summary that came back.
+ */
+const mockFetchLeadsPage = vi.fn();
+const mockFetchLeadSummary = vi.fn();
+vi.mock('../utils/leadsApi', () => ({
+  fetchLeadsPage: (...a: unknown[]) => mockFetchLeadsPage(...a),
+  fetchLeadSummary: (...a: unknown[]) => mockFetchLeadSummary(...a),
+}));
+
 import { useLeads } from '../contexts/LeadContext';
 const mockUseLeads = vi.mocked(useLeads);
+const lastQuery = () => mockFetchLeadsPage.mock.calls[mockFetchLeadsPage.mock.calls.length - 1][0];
 
 // ── Base Lead fixture ─────────────────────────────────────────────────────────
 
@@ -95,9 +108,17 @@ function setupMock(leads: Lead[] = TEST_LEADS) {
   } as any);
 }
 
+const SUMMARY = {
+  total: 1234, new_today: 2, hot: 300, imported_this_week: 5, new_unworked: 17,
+  new_unworked_this_week: 4, new_unworked_last_week: 1, untouched: 40, ready_to_convert: 90,
+  source_quality_week: { top_source: 'Website', top_source_avg_score: 71, top_source_count: 9, weekly_leads: 20 },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   setupMock();
+  mockFetchLeadsPage.mockResolvedValue({ leads: TEST_LEADS, total: 1234 });
+  mockFetchLeadSummary.mockResolvedValue(SUMMARY);
 });
 
 afterEach(() => {
@@ -114,10 +135,11 @@ describe('useLeadsPageState — initial state', () => {
     expect(result.current.filterState).toEqual({ status: 'all', source: 'all', score: 'all' });
   });
 
-  it('starts with priority sort and correct sortLabel', () => {
+  it('starts sorted by Newest — priority is a client-computed score the server cannot order by yet', async () => {
     const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.sortBy).toBe('priority');
-    expect(result.current.sortLabel).toBe('Priority (Recommended)');
+    expect(result.current.sortBy).toBe('newest');
+    await waitFor(() => expect(mockFetchLeadsPage).toHaveBeenCalled());
+    expect(lastQuery()).toMatchObject({ sort: 'newest', limit: 20, offset: 0 });
   });
 
   it('starts with no selection and no active modal', () => {
@@ -138,62 +160,47 @@ describe('useLeadsPageState — view mode', () => {
   });
 });
 
-describe('useLeadsPageState — filters', () => {
-  it('setFilterStatus narrows filteredLeads to matching status', () => {
+describe('useLeadsPageState — server list', () => {
+  it('shows the SERVER\'s rows and its real total, not the length of the page', async () => {
     const { result } = renderHook(() => useLeadsPageState());
-    act(() => { result.current.setFilterStatus('qualified'); });
-    expect(result.current.filteredLeads).toHaveLength(1);
-    expect(result.current.filteredLeads[0].id).toBe('2');
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(3));
+    expect(result.current.listTotal).toBe(1234);
   });
 
-  it('setFilterSource narrows filteredLeads by source substring', () => {
+  it('a status / source / score filter is sent to the server, not applied to the page', async () => {
     const { result } = renderHook(() => useLeadsPageState());
+    await waitFor(() => expect(mockFetchLeadsPage).toHaveBeenCalled());
+    act(() => { result.current.setFilterStatus('__qualified__'); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ status: '__qualified__', offset: 0 }));
     act(() => { result.current.setFilterSource('HRMS'); });
-    expect(result.current.filteredLeads).toHaveLength(1);
-    expect(result.current.filteredLeads[0].id).toBe('2');
-  });
-
-  it('setFilterScore narrows filteredLeads to 80-100 band', () => {
-    const { result } = renderHook(() => useLeadsPageState());
+    await waitFor(() => expect(lastQuery()).toMatchObject({ source: 'HRMS' }));
     act(() => { result.current.setFilterScore('80-100'); });
-    expect(result.current.filteredLeads).toHaveLength(1);
-    expect(result.current.filteredLeads[0].id).toBe('1');
-  });
-
-  it('resetFilters restores all filters to all', () => {
-    const { result } = renderHook(() => useLeadsPageState());
-    act(() => { result.current.setFilterStatus('qualified'); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ score_band: '80-100' }));
     act(() => { result.current.resetFilters(); });
-    expect(result.current.filterState).toEqual({ status: 'all', source: 'all', score: 'all' });
-    expect(result.current.filteredLeads).toHaveLength(3);
+    await waitFor(() => expect(lastQuery()).toMatchObject({ status: 'all', source: 'all', score_band: 'all' }));
   });
-});
 
-describe('useLeadsPageState — sorting', () => {
-  it('default priority sort ranks qualified leads ahead of raw score alone', () => {
+  it('search is debounced, then sent', async () => {
     const { result } = renderHook(() => useLeadsPageState());
-    // Bob (id='2') is qualified → conversionBonus lifts his priority above Alice (id='1')
-    // even though Alice has a higher raw score (90 vs 70)
-    expect(result.current.sortedLeads[0].id).toBe('2');
+    act(() => { result.current.setSearchQuery('acme'); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ search: 'acme' }), { timeout: 1500 });
   });
 
-  it('setSortBy score_low_high reverses score order', () => {
+  it('a server-supported sort is sent; an unsupported one is NOT fetched and says why', async () => {
     const { result } = renderHook(() => useLeadsPageState());
     act(() => { result.current.setSortBy('score_low_high'); });
-    expect(result.current.sortedLeads[0].id).toBe('3'); // score 40
+    await waitFor(() => expect(lastQuery()).toMatchObject({ sort: 'score_low_high' }));
+    const calls = mockFetchLeadsPage.mock.calls.length;
+    act(() => { result.current.setSortBy('priority'); });
+    await waitFor(() => expect(result.current.listUnavailableReason).toMatch(/coming soon/));
+    expect(mockFetchLeadsPage.mock.calls.length).toBe(calls);
+    expect(result.current.sortedLeads).toHaveLength(0);
   });
 
-  it('setSortBy oldest puts the oldest lead first', () => {
+  it('a server refusal is surfaced, not swallowed into an empty list', async () => {
+    mockFetchLeadsPage.mockImplementation(async () => { throw new Error('filtering on sla_stale is not available yet'); });
     const { result } = renderHook(() => useLeadsPageState());
-    act(() => { result.current.setSortBy('oldest'); });
-    // All three leads share the same created_at, so order is stable; just verify no crash
-    expect(result.current.sortedLeads).toHaveLength(3);
-  });
-
-  it('sortLabel updates when sortBy changes', () => {
-    const { result } = renderHook(() => useLeadsPageState());
-    act(() => { result.current.setSortBy('score_high_low'); });
-    expect(result.current.sortLabel).toBe('Score (High to Low)');
+    await waitFor(() => expect(result.current.listError).toMatch(/not available yet/));
   });
 });
 
@@ -206,16 +213,18 @@ describe('useLeadsPageState — selection', () => {
     expect(result.current.selectedLeadIds).not.toContain('1');
   });
 
-  it('selectAllLeads selects all sorted leads, second call deselects', () => {
+  it('selectAllLeads selects all loaded leads, second call deselects', async () => {
     const { result } = renderHook(() => useLeadsPageState());
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(3));
     act(() => { result.current.selectAllLeads(); });
     expect(result.current.selectedLeadIds).toHaveLength(3);
     act(() => { result.current.selectAllLeads(); });
     expect(result.current.selectedLeadIds).toHaveLength(0);
   });
 
-  it('clearSelection empties the selection', () => {
+  it('clearSelection empties the selection', async () => {
     const { result } = renderHook(() => useLeadsPageState());
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(3));
     act(() => { result.current.selectAllLeads(); });
     act(() => { result.current.clearSelection(); });
     expect(result.current.selectedLeadIds).toHaveLength(0);
@@ -278,46 +287,56 @@ describe('useLeadsPageState — toast', () => {
 });
 
 describe('useLeadsPageState — pagination', () => {
-  it('loadMore increases displayedCount by 20 when more leads exist', () => {
-    const manyLeads = Array.from({ length: 45 }, (_, i) => ({
-      ...BASE_LEAD, id: String(i + 10), first_name: `Lead${i}`,
-    }));
-    setupMock(manyLeads);
+  it('loadMore asks the server for the NEXT page and appends it', async () => {
+    const page1 = Array.from({ length: 20 }, (_, i) => ({ ...BASE_LEAD, id: `p1-${i}` }));
+    const page2 = Array.from({ length: 20 }, (_, i) => ({ ...BASE_LEAD, id: `p2-${i}` }));
+    mockFetchLeadsPage.mockResolvedValueOnce({ leads: page1, total: 45 }).mockResolvedValueOnce({ leads: page2, total: 45 });
     const { result } = renderHook(() => useLeadsPageState());
-    const initial = result.current.displayedCount;
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(20));
     act(() => { result.current.loadMore(); });
-    expect(result.current.displayedCount).toBe(initial + 20);
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(40));
+    expect(lastQuery()).toMatchObject({ limit: 20, offset: 20 });
+    expect(result.current.listTotal).toBe(45);
   });
 
-  it('paginatedLeads is a slice of sortedLeads up to displayedCount', () => {
+  it('loadMore does nothing once every lead is loaded', async () => {
+    mockFetchLeadsPage.mockResolvedValue({ leads: TEST_LEADS, total: 3 });
     const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.paginatedLeads.length).toBeLessThanOrEqual(result.current.displayedCount);
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(3));
+    const calls = mockFetchLeadsPage.mock.calls.length;
+    act(() => { result.current.loadMore(); });
+    expect(mockFetchLeadsPage.mock.calls.length).toBe(calls);
   });
 });
 
-describe('useLeadsPageState — insight selectors', () => {
-  it('readyToConvertLeads contains only qualified leads', () => {
+describe('useLeadsPageState — KPI figures and insights', () => {
+  it('kpiMetrics come from the server summary over ALL leads', async () => {
     const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.readyToConvertLeads).toHaveLength(1);
-    expect(result.current.readyToConvertLeads[0].id).toBe('2');
+    await waitFor(() => expect(result.current.kpiMetrics.total).toBe(1234));
+    expect(result.current.kpiMetrics).toMatchObject({ newToday: 2, hot: 300, importedThisWeek: 5 });
+    expect(result.current.newUnworkedDelta).toBe(3);
+    expect(result.current.sourceQualityThisWeek).toMatchObject({ topSource: 'Website', topSourceAvgScore: 71 });
   });
 
-  it('duplicateRiskLeads returns leads sharing the same email', () => {
-    const dupLead: Lead = { ...BASE_LEAD, id: '4', email: 'bob@test.com' };
-    setupMock([...TEST_LEADS, dupLead]);
+  it('the New Unworked insight filters to exactly what it counts', async () => {
     const { result } = renderHook(() => useLeadsPageState());
-    const dupeIds = result.current.duplicateRiskLeads.map(l => l.id);
-    expect(dupeIds).toContain('2');
-    expect(dupeIds).toContain('4');
+    act(() => { result.current.setActiveInsight('untouched'); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ insight: 'new_unworked' }));
   });
 
-  it('kpiMetrics.total equals the full lead count', () => {
-    const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.kpiMetrics.total).toBe(3);
-  });
+  it.each(['overdue', 'duplicateRisk', 'slaBreach', 'nbaAction'] as const)(
+    'the %s insight is Coming soon — not fetched, and never a silently unfiltered list', async (insight) => {
+      const { result } = renderHook(() => useLeadsPageState());
+      await waitFor(() => expect(mockFetchLeadsPage).toHaveBeenCalled());
+      act(() => { result.current.setActiveInsight(insight); });
+      await waitFor(() => expect(result.current.listUnavailableReason).toMatch(/coming soon/i));
+      expect(result.current.sortedLeads).toHaveLength(0);
+    });
 
-  it('domainLeads length equals contextLeads length', () => {
+  it('duplicate detection is empty, not computed over one page', async () => {
     const { result } = renderHook(() => useLeadsPageState());
-    expect(result.current.domainLeads).toHaveLength(3);
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(3));
+    expect(result.current.duplicateCandidateMap.size).toBe(0);
+    expect(result.current.duplicateRiskLeads).toHaveLength(0);
   });
 });

@@ -1439,6 +1439,51 @@ decision for Venkat: CSV formula-injection guarding (the standard guard also pre
   (often back-entered data) stays untimed instead of counting as closed today with a 0-day
   cycle. Tests that count history now count moves (`reason_code IS DISTINCT FROM 'created'`).
 
+### STEP 5 (pagination) SLICE A — the Leads list pages on the SERVER (migration 062)
+The Leads page sent no limit, so it received the API's default **50** leads and filtered,
+sorted and paged those in the browser with no total — lead #51 onwards was invisible,
+silently. Now `GET /leads` filters, sorts and pages in SQL (`utils/leadListQuery`) over every
+lead and returns `{ data, count, total, limit, offset }`; `GET /leads/summary` computes the KPI
+figures over all leads. Pinned at **10,000 leads** against independent SQL counts
+(`roundTrip.leadPagination`), including "every page walked returns each lead exactly once".
+
+**Decided 2026-10-03 (Venkat):** full-set features are "Coming soon" until slice B ports them —
+Priority and the other score/SLA/duplicate sorts, duplicate badges and the duplicate card, the
+SLA-breached and action-required counts, the source breakdown. Default sort is Newest. The
+**advanced filter is ported** to parameterised SQL over an allowlist of real columns (status,
+source, score, lead age, last contacted, company, position); every other field is offered as
+"(coming soon)" and refused by the server with a 400 — never silently ignored.
+
+**How it stays honest:** a filter, sort or insight the server cannot run is refused (400) or not
+requested at all, with the reason on screen — never an unfiltered list that looks filtered.
+Per-row SLA badges stay (each is computed from that lead alone). The status-vocabulary migration
+(`contacted` shown as `attempting_contact`, a `new` lead with an owner shown as `assigned`) is
+mirrored exactly by the server's status filters. Kanban lanes each fetch their own stages with a
+real total and "load more". Rows past 50 can be opened, dragged, selected and exported (lookups use
+the page's loaded rows, not LeadContext's capped list). A lead write bumps
+`LeadContext.writeVersion`, which refetches the page.
+
+**Found and fixed on the way:**
+- **Sales users had never seen a lead on this page**: the "own leads" filter compared
+  `lead.owner_id`, which the API never set. It is now `assigned_to_user_id` (migration 060), sent to
+  the server — still a DISPLAY filter, not security (ratified). It fails closed with a stated reason.
+- **The "New Unworked" card counted one set and filtered to another** ("untouched"). It now
+  filters to exactly what it counts (`insight=new_unworked`).
+- The advanced-filter drawer's live "N leads match" was computed over the 50 rows; it now asks the
+  server.
+
+**Still open (tracked, not fixed):**
+- **`next_follow_up_date` has no column** — follow-up dates set in the UI are dropped by the server,
+  so "Overdue" is "Coming soon" (it used to say "All follow-ups on track").
+- **DB stages `proposal` (9 live) and `won` (4 live) have no Kanban lane and no status chip** — the
+  board shows 25 of 38. Pre-existing; a vocabulary decision.
+- **`DataContext` still loads `limit: 500`** for other screens (dashboard etc.), and LeadContext still
+  fetches its own 50 on mount though the Leads page no longer reads them. Other screens' caps were
+  out of this step's scope.
+- **The "My Leads" preset filters on source = "Manual"**, not on owner. Misleading; untouched.
+- The T14 "49-request pattern" could not be reproduced on live data (32 requests on load, duplicated
+  provider fetches, no per-lead fan-out).
+
 ### STILL OPEN after step 4
 - **Qualification override — DONE in step 5 slice A** (above). Lead conversion remains:
   slice B.

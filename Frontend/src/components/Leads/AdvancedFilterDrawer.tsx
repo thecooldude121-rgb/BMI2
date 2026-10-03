@@ -6,7 +6,8 @@ import {
   FILTER_FIELDS, FILTER_FIELD_CATEGORIES,
   OPERATOR_FULL_LABELS,
 } from '../../types/leadFilter';
-import { applyAdvancedFilter } from '../../utils/leadFilterEngine';
+import { fetchLeadsPage } from '../../utils/leadsApi';
+import type { LeadListQuery } from '../../utils/leadsApi';
 import type { Lead } from '../../types/lead';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -15,9 +16,20 @@ export interface AdvancedFilterDrawerProps {
   open:            boolean;
   advancedFilter:  AdvancedFilter;
   leads:           Lead[];
+  /**
+   * The page's other filters as a server query (step 5). The live "N leads
+   * match" count is asked of the SERVER with the draft filter, over every lead.
+   * It used to run the filter over LeadContext's list — capped at 50.
+   */
+  serverQuery?:    Omit<LeadListQuery, 'limit' | 'offset'>;
   onChange:        (filter: AdvancedFilter) => void;
   onClose:         () => void;
 }
+
+/** Fields the server can filter on (Backend utils/leadListQuery SERVER_FILTER_FIELDS). */
+export const SERVER_FILTER_FIELDS = new Set<FilterFieldId>([
+  'status', 'source', 'score', 'lead_age', 'last_contact_age', 'company', 'position',
+]);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -236,7 +248,11 @@ function ConditionRow({ condition, leads, onChange, onDelete }: ConditionRowProp
           <optgroup key={cat} label={cat}>
             {fieldIds.map(id => {
               const f = FILTER_FIELDS.find(f => f.id === id)!;
-              return <option key={id} value={id}>{f.label}</option>;
+              // No column, or needs every lead (SLA / duplicates / readiness):
+              // offered as "coming soon", not selectable — the server would refuse it.
+              return SERVER_FILTER_FIELDS.has(id)
+                ? <option key={id} value={id}>{f.label}</option>
+                : <option key={id} value={id} disabled>{f.label} (coming soon)</option>;
             })}
           </optgroup>
         ))}
@@ -425,7 +441,7 @@ function GroupCard({ group, leads, groupIndex, onUpdate, onDelete, onDuplicate }
 // ── Drawer ────────────────────────────────────────────────────────────────────
 
 export default function AdvancedFilterDrawer({
-  open, advancedFilter, leads, onChange, onClose,
+  open, advancedFilter, leads, serverQuery, onChange, onClose,
 }: AdvancedFilterDrawerProps) {
   const [draft, setDraft] = useState<AdvancedFilter>({ groups: [] });
 
@@ -434,28 +450,23 @@ export default function AdvancedFilterDrawer({
     if (open) setDraft(advancedFilter);
   }, [open, advancedFilter]);
 
-  // Live count — debounced 200ms
+  // Live count — debounced 300ms, from the SERVER over every lead (step 5).
   const [count, setCount] = useState<number | null>(null);
+  const [countError, setCountError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countSeq = useRef(0);
   useEffect(() => {
     if (!open) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      const dupes = new Set<string>(
-        Object.entries(
-          leads.reduce((acc, l) => {
-            const d = l.email?.split('@')[1];
-            if (d) acc[d] = (acc[d] ?? 0) + 1;
-            return acc;
-          }, {} as Record<string, number>),
-        )
-          .filter(([, n]) => n > 1)
-          .map(([d]) => d),
-      );
-      setCount(applyAdvancedFilter(leads, draft, dupes).length);
-    }, 200);
+      const mine = ++countSeq.current;
+      fetchLeadsPage({ ...(serverQuery ?? {}), filter: draft, limit: 1, offset: 0 })
+        .then(p => { if (mine === countSeq.current) { setCount(p.total); setCountError(null); } })
+        .catch(e => { if (mine === countSeq.current) { setCount(null); setCountError(e instanceof Error ? e.message : 'Could not count.'); } });
+    }, 300);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [draft, leads, open]);
+  }, [draft, serverQuery, open]);
+  void leads;
 
   const addGroup = useCallback(() => {
     setDraft(d => ({
@@ -566,9 +577,10 @@ export default function AdvancedFilterDrawer({
           <div className="flex-1 text-xs text-gray-500">
             {count !== null && (
               <span>
-                {count} lead{count !== 1 ? 's' : ''} match
+                {count.toLocaleString()} lead{count !== 1 ? 's' : ''} match
               </span>
             )}
+            {countError && <span className="text-red-600">{countError}</span>}
           </div>
           <button
             onClick={handleClear}

@@ -212,6 +212,11 @@ export function buildLeadListQuery(tenantId: string, q: LeadListParams): BuiltLe
   if (q.insight) {
     if (q.insight === 'untouched') {
       where.push(`(l.last_contact IS NULL OR l.last_contact < CURRENT_DATE - 30)`);
+    } else if (q.insight === 'new_unworked') {
+      // Exactly what the "New Unworked" card COUNTS (summary.new_unworked), so
+      // clicking it lists those leads — it used to count one set and filter
+      // to another ('untouched').
+      where.push(`(l.stage IN ('new', 'assigned') AND l.last_contact IS NULL)`);
     } else if (q.insight === 'ready_to_convert') {
       where.push(`l.stage IN ('qualified', 'sales_accepted')`);
     } else {
