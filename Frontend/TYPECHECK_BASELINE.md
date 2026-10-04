@@ -17,7 +17,16 @@ cd Frontend && npm run typecheck        # tsc -p tsconfig.app.json --noEmit
 cd Frontend && npm run typecheck:count  # just the number
 ```
 
-## Baseline: 216 errors at HEAD (2026-09-16)
+## Baseline: 200 errors at HEAD (2026-10-05)
+
+Lowered from 216, which was stale: the real count had already fallen to 207 by the step-4/5
+work without this line being updated, so CI was gating against a number nine too high. The
+Figma phase-3 Leads slices removed seven more, all with deleted or rewritten code (the old
+`LeadTableRow` score/grade helpers and its `title` on an icon, `BulkActionBar`'s unused
+`onArchive` / `onDisqualify` destructures, and `LeadsPage`'s dead score/source/CTA helpers).
+None was fixed as such.
+
+## Previous baseline: 216 errors (2026-09-16)
 
 Lowered from 223 by the Meeting Agent rewire and the Gamification panel removal
 (2026-09-16): seven more left with the deleted fixtures and modals. None was fixed as

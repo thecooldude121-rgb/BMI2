@@ -1,20 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  MoreVertical, Clock, Phone, Mail, Calendar,
-  AlertCircle, CalendarClock, Bot, Pencil,
+  MoreVertical, Phone, Mail, Calendar,
+  Pencil,
   Target, Users, PenLine, Globe, CircleDot, Eye,
   MessageSquare, MessageCircle, RotateCcw, TrendingUp,
   Briefcase, ArrowRightCircle, Heart, XCircle,
-  GitMerge, UserCheck, Tag, Sparkles, Archive, Trash2,
+  GitMerge, UserCheck, Tag, Sparkles, Archive, Trash2, Info,
 } from 'lucide-react';
 import type { Lead } from '../../types/lead';
 import type { ModalId } from '../../hooks/useLeadsPageState';
-import { formatRelativeDate, formatFollowUpDate } from '../../utils/dateUtils';
+import { formatRelativeDate } from '../../utils/dateUtils';
 import { getSecondaryActions, type ActionId, type ActionVariant, type LeadAction } from '../../utils/leadActions';
 import { computeNBA } from '../../utils/leadNBA/engine';
 import type { NBAResult } from '../../utils/leadNBA/engine';
-import { computeConversionReadiness } from '../../utils/conversionReadiness';
-import ConversionReadinessBadge from './ConversionReadinessBadge';
 import SLABadge, { EscalationMarker } from './SLABadge';
 import type { LeadSLAResult } from '../../utils/leadSla';
 import { HEALTHY_SLA_RESULT } from '../../utils/leadSla';
@@ -29,6 +27,16 @@ import {
 } from '../../utils/leadScoring/scoreFeedback';
 import { useLeadActions } from '../../hooks/useLeadActions';
 import { useLeads } from '../../contexts/LeadContext';
+import Badge from '../ui/Badge';
+import { Button } from '../ui/Button';
+
+/**
+ * Not built, so offered DISABLED and labelled rather than as a live item that
+ * only toasts "coming soon" on click (Honest Feedback). Editing a lead has no
+ * page at all — /crm/leads/:id/edit has no route; the frame itself reads "Edit
+ * unavailable". Re-enrich is on hold (vendor decision pending).
+ */
+const COMING_SOON_ACTIONS = new Set<ActionId>(['edit_lead', 'assign_owner', 'add_tag', 'enrich', 'reenrich']);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,36 +59,22 @@ export type LeadTableRowProps = {
 // ── Sub-helpers ───────────────────────────────────────────────────────────────
 
 function statusBadge(status: Lead['status']): { label: string; cls: string } {
+  // Figma: one indigo pill for working stages; amber / green / red only where
+  // the stage itself says so (nurture, qualified / converted, lost).
+  const brand = 'bg-brand-50 text-brand-600';
   switch (status) {
-    case 'new':               return { label: 'New',               cls: 'bg-blue-100 text-blue-700' };
-    case 'assigned':          return { label: 'Assigned',          cls: 'bg-indigo-100 text-indigo-700' };
-    case 'enriching':         return { label: 'Enriching',         cls: 'bg-cyan-100 text-cyan-700' };
-    case 'attempting_contact': return { label: 'Attempting',       cls: 'bg-orange-100 text-orange-700' };
-    case 'engaged':           return { label: 'Engaged',           cls: 'bg-emerald-100 text-emerald-700' };
-    case 'qualified':         return { label: 'Qualified',         cls: 'bg-green-100 text-green-700' };
-    case 'sales_accepted':    return { label: 'Sales Accepted',    cls: 'bg-teal-100 text-teal-700' };
-    case 'nurture':           return { label: 'Nurture',           cls: 'bg-purple-100 text-purple-700' };
-    case 'disqualified':      return { label: 'Disqualified',      cls: 'bg-gray-100 text-gray-500' };
-    case 'converted':         return { label: 'Converted',         cls: 'bg-teal-100 text-teal-600' };
-    case 'lost':              return { label: 'Lost',              cls: 'bg-red-100 text-red-500' };
-    default:                  return { label: status,              cls: 'bg-gray-100 text-gray-500' };
-  }
-}
-
-function scoreColor(score: number): string {
-  if (score >= 80) return 'text-green-600';
-  if (score >= 60) return 'text-yellow-600';
-  return 'text-red-500';
-}
-
-function gradeColor(grade: string): string {
-  switch (grade) {
-    case 'A': return 'bg-green-500';
-    case 'B': return 'bg-blue-500';
-    case 'C': return 'bg-yellow-500';
-    case 'D': return 'bg-orange-500';
-    case 'F': return 'bg-red-500';
-    default:  return 'bg-gray-400';
+    case 'new':               return { label: 'New',            cls: brand };
+    case 'assigned':          return { label: 'Assigned',       cls: brand };
+    case 'enriching':         return { label: 'Enriching',      cls: brand };
+    case 'attempting_contact': return { label: 'Contacted',     cls: brand };
+    case 'engaged':           return { label: 'Engaged',        cls: brand };
+    case 'qualified':         return { label: 'Qualified',      cls: 'bg-success-100 text-success-700' };
+    case 'sales_accepted':    return { label: 'Sales Accepted', cls: 'bg-success-100 text-success-700' };
+    case 'nurture':           return { label: 'Nurturing',      cls: 'bg-warning-100 text-warning-700' };
+    case 'disqualified':      return { label: 'Disqualified',   cls: 'bg-surface-sunken text-ink-secondary' };
+    case 'converted':         return { label: 'Converted',      cls: 'bg-success-100 text-success-700' };
+    case 'lost':              return { label: 'Lost',           cls: 'bg-danger-100 text-danger-700' };
+    default:                  return { label: status,           cls: 'bg-surface-sunken text-ink-secondary' };
   }
 }
 
@@ -127,27 +121,13 @@ function ActionIcon({ id }: { id: ActionId }): JSX.Element | null {
   }
 }
 
-// ── CTA button classes per variant ────────────────────────────────────────────
-
-const CTA_CLS: Record<ActionVariant, string> = {
-  urgent:  'bg-red-500 text-white hover:bg-red-600 border border-transparent',
-  warn:    'border border-amber-200 text-amber-700 hover:bg-amber-50',
-  ready:   'bg-green-500 text-white hover:bg-green-600 border border-transparent',
-  active:  'border border-blue-200 text-blue-600 hover:bg-blue-50',
-  teal:    'border border-teal-200 text-teal-700 hover:bg-teal-50',
-  default: 'border border-gray-200 text-gray-600 hover:bg-gray-50',
-  muted:   'border border-gray-100 text-gray-400 hover:bg-gray-50',
-  danger:  'border border-red-200 text-red-600 hover:bg-red-50',
-};
-
 // ── Menu item classes per variant ─────────────────────────────────────────────
 
 function menuItemCls(variant: ActionVariant): string {
-  if (variant === 'danger') return 'text-red-600 hover:bg-red-50';
-  if (variant === 'muted')  return 'text-gray-400 hover:bg-gray-50';
-  if (variant === 'ready')  return 'text-green-700 hover:bg-green-50';
-  if (variant === 'teal')   return 'text-teal-700 hover:bg-teal-50';
-  return 'text-gray-700 hover:bg-gray-50';
+  if (variant === 'danger') return 'text-danger-700 hover:bg-danger-50';
+  if (variant === 'muted')  return 'text-ink-muted hover:bg-black/5';
+  if (variant === 'ready')  return 'text-success-700 hover:bg-success-50';
+  return 'text-ink hover:bg-black/5';
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -195,7 +175,6 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   const mfs             = computeMultiFactorScore(lead);
   const expl            = explainScore(lead, mfs);
   const nbaResult: NBAResult = computeNBA(lead, { ...signals, slaResult, mfs });
-  const readiness       = computeConversionReadiness(lead, mfs);
   const primaryAction   = nbaResult.action;
   const secondaryGroups = getSecondaryActions(lead, signals);
 
@@ -261,257 +240,154 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   }
 
   // ── Display values ────────────────────────────────────────────────────────
-  const displayScore    = lead.manual_score_override ?? lead.ai_score ?? lead.score ?? 0;
+  const displayScore = lead.manual_score_override ?? lead.ai_score ?? lead.score ?? 0;
   const { label: statusLabel, cls: statusCls } = statusBadge(lead.status);
-  const followUpDate    = lead.next_follow_up_date ? new Date(lead.next_follow_up_date) : null;
-  const isOverdueFollowUp = followUpDate !== null && followUpDate < new Date();
+  const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
+  const recency = lead.last_contact_date ? (formatRelativeDate(lead.last_contact_date) || lead.last_contact_date) : null;
 
-  // ── Row classes ───────────────────────────────────────────────────────────
+  // ── Row classes (Figma "Lead row" 61:185) ─────────────────────────────────
   const rowCls = [
-    'group border-b border-gray-100 transition-colors duration-100 cursor-pointer',
-    isSelected ? 'bg-blue-50 hover:bg-blue-50' : 'hover:bg-gray-50',
-    isOverdue ? 'border-l-4 border-l-red-400' : '',
+    'group border-b border-line transition-colors duration-100 cursor-pointer',
+    isSelected ? 'bg-brand-50' : 'hover:bg-black/[0.03]',
+    isOverdue ? 'border-l-4 border-l-danger-700' : '',
   ].filter(Boolean).join(' ');
 
   return (
     <>
     <tr className={rowCls} onClick={() => onNavigate(lead.id)}>
 
-      {/* ── Zone 1: Checkbox ─────────────────────────────────────────────── */}
-      <td className="w-12 px-4 py-3">
+      {/* ── Selection ────────────────────────────────────────────────────── */}
+      <td className="w-12 px-4 py-2.5 align-top">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={() => onToggleSelect(lead.id)}
           onClick={e => e.stopPropagation()}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          aria-label={`Select ${name}`}
+          className="mt-1 h-4 w-4 cursor-pointer rounded border-line text-brand-600 focus:ring-brand-600"
         />
       </td>
 
-      {/* ── Zone 2: Identity ─────────────────────────────────────────────── */}
-      <td className="w-72 px-4 py-3">
+      {/* ── Identity: name, company (indigo), email ─────────────────────── */}
+      <td className="w-72 px-4 py-2.5 align-top">
         <div className="flex flex-col gap-0.5">
-          <span className="font-medium text-sm text-gray-900 flex items-center gap-1">
-            {[lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—'}
+          <span className="flex items-center gap-1 text-sm font-semibold leading-5 text-ink">
+            {name}
             {slaResult.escalate && <EscalationMarker />}
           </span>
-          {(lead.company || lead.position) && (
-            <span className="text-xs text-gray-500 truncate">
-              {[lead.company, lead.position].filter(Boolean).join(' · ')}
+          {lead.company && <span className="truncate text-xs leading-[18px] text-brand-600">{lead.company}</span>}
+          {(lead.email || lead.position) && (
+            <span className="max-w-[260px] truncate text-xs leading-[18px] text-ink-muted">
+              {[lead.email, lead.position].filter(Boolean).join(' · ')}
             </span>
           )}
-          {lead.email && (
-            <a
-              href={`mailto:${lead.email}`}
-              onClick={e => e.stopPropagation()}
-              className="text-xs text-gray-400 hover:text-blue-500 truncate max-w-[240px]"
-            >
-              {lead.email}
-            </a>
-          )}
           {(isDuplicateRisk || isUntouched) && (
-            <div className="flex items-center gap-1 mt-1 flex-wrap">
-              {duplicateRisk === 'high' && (
-                <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] px-1.5 py-0.5 rounded-full font-medium">
-                  High risk dup
-                </span>
-              )}
-              {duplicateRisk === 'medium' && (
-                <span className="bg-amber-50 text-amber-600 border border-amber-200 text-[10px] px-1.5 py-0.5 rounded-full">
-                  Possible dup
-                </span>
-              )}
-              {duplicateRisk === 'low' && (
-                <span className="bg-gray-100 text-gray-500 border border-gray-200 text-[10px] px-1.5 py-0.5 rounded-full">
-                  Low risk dup
-                </span>
-              )}
-              {isUntouched && (
-                <span className="bg-gray-100 text-gray-500 border border-gray-200 text-[10px] px-1.5 py-0.5 rounded-full">
-                  Unworked
-                </span>
-              )}
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              {duplicateRisk === 'high' && <Badge tone="danger">High risk dup</Badge>}
+              {duplicateRisk === 'medium' && <Badge tone="warning">Possible dup</Badge>}
+              {duplicateRisk === 'low' && <Badge tone="neutral">Low risk dup</Badge>}
+              {isUntouched && <Badge tone="neutral">Unworked</Badge>}
             </div>
           )}
         </div>
       </td>
 
-      {/* ── Zone 3: Qualification ────────────────────────────────────────── */}
-      <td className="w-48 px-4 py-3">
-        <div className="flex flex-col gap-1.5">
-          <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full w-fit ${statusCls}`}>
+      {/* ── Qualification: status + the STORED score, no verdict colour ──── */}
+      <td className="w-48 px-4 py-2.5 align-top">
+        <div className="flex flex-col items-start gap-1">
+          <span className={`inline-block w-fit rounded-full px-2 py-[3px] text-xs font-semibold leading-[18px] ${statusCls}`}>
             {statusLabel}
           </span>
-          <ConversionReadinessBadge state={readiness.state} leadStatus={lead.status} />
           <div
             className="relative flex items-center gap-1"
             onMouseEnter={() => setScoreHovered(true)}
             onMouseLeave={() => setScoreHovered(false)}
           >
-            <span className={`text-lg font-bold ${scoreColor(displayScore)}`}>
-              {displayScore}
-            </span>
+            {/* Figma "84 stored": the value on the record, not a judgement —
+                it used to be a large green / yellow / red number. */}
+            <span className="text-xs leading-[18px] text-ink-muted">{displayScore} stored</span>
             {lead.manual_score_override != null && (
-              <Pencil size={10} className="text-gray-400" title="Manual override" />
+              <Pencil size={10} className="text-ink-muted" aria-label="Manual override" />
             )}
-            {lead.grade && (
-              <span
-                className={`${gradeColor(lead.grade)} text-white text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ml-1`}
-              >
-                {lead.grade}
-              </span>
-            )}
-            {/* Feedback dot — persists across sessions */}
             {feedbackMark && (
               <span
                 title={`Feedback: ${FEEDBACK_META[feedbackMark].label}`}
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  feedbackMark === 'accurate' ? 'bg-green-500' :
-                  feedbackMark === 'bad_data' ? 'bg-red-500'   : 'bg-amber-500'
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  feedbackMark === 'accurate' ? 'bg-success-700' :
+                  feedbackMark === 'bad_data' ? 'bg-danger-700' : 'bg-warning-700'
                 }`}
               />
             )}
-            {/* Sparkles icon — visible on row hover, opens explainability drawer */}
             <button
               onClick={e => { e.stopPropagation(); setDrawerOpen(true); }}
-              title="Score explanation & feedback"
-              className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-0.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-500"
+              aria-label={`Why ${name} has this score`}
+              className="ml-0.5 rounded p-0.5 text-ink-muted opacity-0 transition-opacity hover:bg-brand-50 hover:text-brand-600 focus:opacity-100 group-hover:opacity-100"
             >
-              <Sparkles size={10} />
+              <Info size={11} />
             </button>
             {scoreHovered && <ScoreTooltip mfs={mfs} explanation={expl} />}
           </div>
-          {lead.probability > 0 && (
-            <span className="text-[10px] text-gray-400">P: {lead.probability}%</span>
-          )}
-          <div className="flex items-center gap-1 text-[10px] text-gray-400">
+        </div>
+      </td>
+
+      {/* ── Engagement: source · last contact, then owner ───────────────── */}
+      <td className="w-44 px-4 py-2.5 align-top">
+        <div className="flex flex-col gap-1 text-xs leading-[18px]">
+          <span className="flex items-center gap-1 font-semibold text-ink">
             <SourceIcon source={lead.source} />
-            <span>{lead.source || '—'}</span>
-          </div>
+            {[lead.source || '—', recency].filter(Boolean).join(' · ')}
+          </span>
+          <span className="text-ink-muted">{recency ? (lead.owner_name || 'Unassigned') : 'Never contacted'}</span>
         </div>
       </td>
 
-      {/* ── Zone 4: Engagement ───────────────────────────────────────────── */}
-      <td className="w-44 px-4 py-3">
-        <div className="flex flex-col gap-1">
-          {lead.last_contact_date ? (
-            <span className="text-xs text-gray-500 flex items-center gap-1">
-              <Clock size={10} className="shrink-0" />
-              {formatRelativeDate(lead.last_contact_date) || lead.last_contact_date}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-300 italic">Never contacted</span>
-          )}
-          {(lead.call_count > 0 || lead.email_sent_count > 0 || lead.meeting_count > 0) && (
-            <div className="flex items-center gap-2">
-              {lead.call_count > 0 && (
-                <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                  <Phone size={9} />{lead.call_count}
-                </span>
-              )}
-              {lead.email_sent_count > 0 && (
-                <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                  <Mail size={9} />{lead.email_sent_count}
-                </span>
-              )}
-              {lead.meeting_count > 0 && (
-                <span className="text-[10px] text-gray-400 flex items-center gap-0.5">
-                  <Calendar size={9} />{lead.meeting_count}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+      {/* ── Urgency: the per-lead SLA (computed from this lead alone) ─────── */}
+      <td className="w-56 px-4 py-2.5 align-top">
+        <SLABadge result={slaResult} />
       </td>
 
-      {/* ── Zone 5: Urgency ──────────────────────────────────────────────── */}
-      <td className="w-56 px-4 py-3">
-        <div className="flex flex-col gap-1">
-          <SLABadge result={slaResult} />
-          {followUpDate ? (
-            isOverdueFollowUp ? (
-              <span className="text-xs font-medium text-red-500 flex items-center gap-1">
-                <AlertCircle size={10} className="shrink-0" />
-                Overdue · {formatFollowUpDate(followUpDate)}
-              </span>
-            ) : (
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <CalendarClock size={10} className="shrink-0" />
-                {formatFollowUpDate(followUpDate)}
-              </span>
-            )
-          ) : (
-            <span className="text-xs text-gray-300 italic">No follow-up set</span>
-          )}
-          {lead.quick_notes ? (
-            <p className="text-[10px] text-gray-400 line-clamp-2 flex items-start gap-1">
-              <Bot size={9} className="mt-0.5 shrink-0" />
-              {lead.quick_notes}
-            </p>
-          ) : (
-            <span className="text-[10px] text-gray-300 italic">No AI insights yet</span>
-          )}
-        </div>
-      </td>
+      {/* ── Actions: Open (Figma) + the rule-based actions in ⋯ ──────────── */}
+      <td className="w-44 px-4 py-2.5 align-top" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-1.5">
+          <Button size="sm" onClick={() => onNavigate(lead.id)} aria-label={`Open ${name}`}>Open</Button>
 
-      {/* ── Zone 6: Actions ──────────────────────────────────────────────── */}
-      <td
-        className="w-44 px-4 py-3"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 justify-end">
-          {/* Primary CTA */}
-          {(() => {
-            const isConvertCta = primaryAction.id === 'convert_to_contact' || primaryAction.id === 'convert_to_deal' || primaryAction.id === 'complete_qualification';
-            const blocked      = isConvertCta && !canConvert;
-            return (
-              <button
-                onClick={() => !blocked && handleAction(primaryAction)}
-                disabled={blocked}
-                title={blocked ? 'Not available for your role — contact your manager' : undefined}
-                className={`text-xs font-medium px-2.5 py-1 rounded-md whitespace-nowrap flex items-center gap-1 ${
-                  blocked ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200' : CTA_CLS[primaryAction.variant]
-                }`}
-              >
-                <ActionIcon id={primaryAction.id} />
-                {primaryAction.label}
-              </button>
-            );
-          })()}
-
-          {/* ⋯ overflow menu */}
           <div className="relative" ref={menuRef}>
             <button
               onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
-              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-              aria-label="More actions"
+              className="rounded p-1 text-ink-muted hover:bg-black/5 hover:text-ink"
+              aria-label={`More actions for ${name}`}
+              aria-expanded={menuOpen}
             >
               <MoreVertical size={14} />
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
-                {secondaryGroups.map((group, gi) => (
+              <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-56 rounded-card border border-line bg-surface-panel py-1 shadow-lg">
+                {[{ id: 'primary', items: [primaryAction] }, ...secondaryGroups].map((group, gi) => (
                   <React.Fragment key={group.id}>
-                    {gi > 0 && <div className="my-1 border-t border-gray-100" />}
+                    {gi > 0 && <div className="my-1 border-t border-line" />}
                     {group.items.map(action => {
                       const isConvertAction = action.id === 'convert_to_contact' || action.id === 'convert_to_deal' || action.id === 'complete_qualification';
                       const isDeleteAction  = action.id === 'delete';
                       // Destructive actions are hidden when not permitted (vs disabled)
                       if (isDeleteAction && !canDelete) return null;
+                      if (gi > 0 && action.id === primaryAction.id) return null;
                       const blocked = isConvertAction && !canConvert;
+                      const soon = COMING_SOON_ACTIONS.has(action.id);
                       return (
                         <button
-                          key={action.id}
-                          onClick={() => !blocked && handleAction(action)}
-                          disabled={blocked}
-                          title={blocked ? 'Not available for your role — contact your manager' : undefined}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${
-                            blocked ? 'text-gray-300 cursor-not-allowed' : menuItemCls(action.variant)
+                          key={`${group.id}-${action.id}`}
+                          role="menuitem"
+                          onClick={() => !blocked && !soon && handleAction(action)}
+                          disabled={blocked || soon}
+                          title={soon ? 'Coming soon' : blocked ? 'Not available for your role' : undefined}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs ${
+                            blocked || soon ? 'cursor-not-allowed text-ink-muted' : menuItemCls(action.variant)
                           }`}
                         >
                           <ActionIcon id={action.id} />
                           {action.label}
+                          {soon && <span className="ml-auto text-[11px]">coming soon</span>}
                         </button>
                       );
                     })}

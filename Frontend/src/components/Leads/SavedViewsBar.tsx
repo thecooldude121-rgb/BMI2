@@ -58,8 +58,8 @@ const PresetTab: React.FC<{
       flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium
       whitespace-nowrap transition-colors flex-shrink-0
       ${isActive
-        ? 'bg-blue-600 text-white shadow-sm'
-        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+        ? 'bg-brand-50 text-brand-600'
+        : 'bg-surface-sunken text-ink-secondary hover:text-ink'}
     `}
   >
     <PresetIcon name={preset.icon} />
@@ -100,8 +100,8 @@ const UserViewTab: React.FC<{
           flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium
           whitespace-nowrap transition-colors
           ${isActive
-            ? 'bg-blue-600 text-white shadow-sm'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+            ? 'bg-brand-50 text-brand-600'
+            : 'bg-surface-sunken text-ink-secondary hover:text-ink'}
         `}
         {...(dragHandleProps || {})}
       >
@@ -112,36 +112,38 @@ const UserViewTab: React.FC<{
       {/* Context menu trigger (⋯) */}
       <button
         onClick={(e) => { e.stopPropagation(); setMenuOpen(prev => !prev); }}
+        aria-label={`Options for view ${view.name}`}
+        aria-expanded={menuOpen}
         className={`
-          absolute -top-1 -right-1 p-0.5 rounded-full bg-white border border-gray-200 shadow-sm
-          opacity-0 group-hover:opacity-100 transition-opacity z-10
+          absolute -top-1 -right-1 p-0.5 rounded-full bg-surface-panel border border-line shadow-sm
+          opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity z-10
           ${menuOpen ? 'opacity-100' : ''}
         `}
       >
-        <MoreHorizontal className="h-3 w-3 text-gray-500" />
+        <MoreHorizontal className="h-3 w-3 text-ink-muted" />
       </button>
 
       {/* Dropdown menu */}
       {menuOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[140px] z-50">
+        <div className="absolute top-full left-0 mt-1 bg-surface-panel rounded-card shadow-lg border border-line py-1 min-w-[140px] z-50">
           <button
             onClick={() => { onEdit(); setMenuOpen(false); }}
-            className="flex items-center space-x-2 w-full px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-700"
+            className="flex items-center space-x-2 w-full px-3 py-1.5 text-xs hover:bg-black/5 text-ink"
           >
             <Edit2 className="h-3.5 w-3.5" />
             <span>Edit view</span>
           </button>
           <button
             onClick={() => { onPin(); setMenuOpen(false); }}
-            className="flex items-center space-x-2 w-full px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-700"
+            className="flex items-center space-x-2 w-full px-3 py-1.5 text-xs hover:bg-black/5 text-ink"
           >
             <Pin className="h-3.5 w-3.5" />
             <span>{view.is_pinned ? 'Unpin' : 'Pin'}</span>
           </button>
-          <div className="border-t border-gray-100 my-1" />
+          <div className="border-t border-line my-1" />
           <button
             onClick={() => { onDelete(); setMenuOpen(false); }}
-            className="flex items-center space-x-2 w-full px-3 py-1.5 text-xs hover:bg-red-50 text-red-600"
+            className="flex items-center space-x-2 w-full px-3 py-1.5 text-xs hover:bg-danger-50 text-danger-700"
           >
             <Trash2 className="h-3.5 w-3.5" />
             <span>Delete</span>
@@ -225,7 +227,8 @@ const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
   const hasOverflow    = overflowViews.length > 0;
 
   return (
-    <div className="flex items-center space-x-2 border-b border-gray-200 pb-2 overflow-hidden">
+    <div className="flex items-center space-x-2 overflow-hidden">
+      <span className="flex-shrink-0 pr-1 text-xs font-semibold uppercase text-ink-secondary">Saved views</span>
       {/* ── Scroll region ── */}
       <div
         ref={scrollRef}
@@ -244,7 +247,7 @@ const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
 
         {/* Divider (only shown when there are user views) */}
         {savedViews.length > 0 && (
-          <div className="h-5 w-px bg-gray-300 flex-shrink-0 mx-1" />
+          <div className="h-5 w-px bg-line flex-shrink-0 mx-1" />
         )}
 
         {/* User views — draggable */}
@@ -291,30 +294,30 @@ const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
           <div className="relative" ref={moreMenuRef}>
             <button
               onClick={() => setMoreMenuOpen(prev => !prev)}
-              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+              className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full text-xs font-medium bg-surface-sunken text-ink-secondary hover:text-ink"
             >
               <span>More</span>
               <ChevronDown className="h-3 w-3" />
             </button>
             {moreMenuOpen && (
-              <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] z-50">
+              <div className="absolute top-full right-0 mt-1 bg-surface-panel rounded-card shadow-lg border border-line py-1 min-w-[160px] z-50">
                 {overflowViews.map(view => (
                   <button
                     key={view.id}
                     onClick={() => { onSelectView(view.id); setMoreMenuOpen(false); }}
                     className={`
                       flex items-center w-full px-3 py-1.5 text-xs text-left
-                      ${activeViewId === view.id ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'}
+                      ${activeViewId === view.id ? 'bg-brand-50 text-brand-700 font-medium' : 'hover:bg-black/5 text-ink'}
                     `}
                   >
-                    {view.is_pinned && <Pin className="h-3 w-3 mr-1.5 flex-shrink-0 text-blue-400" />}
+                    {view.is_pinned && <Pin className="h-3 w-3 mr-1.5 flex-shrink-0 text-brand-600" />}
                     <span className="truncate">{view.name}</span>
                   </button>
                 ))}
-                <div className="border-t border-gray-100 my-1" />
+                <div className="border-t border-line my-1" />
                 <button
                   onClick={() => { onManageViews(); setMoreMenuOpen(false); }}
-                  className="flex items-center w-full px-3 py-1.5 text-xs hover:bg-gray-50 text-gray-500"
+                  className="flex items-center w-full px-3 py-1.5 text-xs hover:bg-black/5 text-ink-muted"
                 >
                   Manage views…
                 </button>
@@ -327,7 +330,7 @@ const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
         {!hasOverflow && savedViews.length > 0 && (
           <button
             onClick={onManageViews}
-            className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 whitespace-nowrap"
+            className="px-2 py-1.5 text-xs text-ink-muted hover:text-ink whitespace-nowrap"
           >
             Manage
           </button>
@@ -337,7 +340,7 @@ const SavedViewsBar: React.FC<SavedViewsBarProps> = ({
         {onNewView && (
           <button
             onClick={onNewView}
-            className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium text-blue-600 hover:bg-blue-50 whitespace-nowrap"
+            className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-xs font-medium text-brand-600 hover:bg-brand-50 whitespace-nowrap"
           >
             <Plus className="h-3.5 w-3.5" />
             <span>New view</span>

@@ -176,6 +176,11 @@ describe('LeadDetailPage — the timeline is server rows, and a failure is never
 });
 
 describe('LeadDetailPage — no fake controls, no unexplained verdicts', () => {
+  it('Edit is disabled and labelled — there is no edit route, it used to open a blank page', async () => {
+    renderPage();
+    expect(await screen.findByRole('button', { name: /edit · coming soon/i })).toBeDisabled();
+  });
+
   it('has no re-enrich, no reminder, no follow-up; file upload is disabled and labelled', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1, name: 'Amina Farsi' });

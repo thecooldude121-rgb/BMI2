@@ -30,15 +30,23 @@ export const Card: React.FC<CardProps> = ({ padding = 'md', className = '', chil
 
 export interface SectionHeadingProps {
   title: string;
+  /**
+   * 2 (default) under a page's h1; 3 inside something that already has its own
+   * h2 — e.g. a docked panel titled by the record's name. 3 is also the frame's
+   * smaller card heading (20px).
+   */
+  level?: 2 | 3;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }
 
-export const SectionHeading: React.FC<SectionHeadingProps> = ({ title, description, actions, className = '' }) => (
+export const SectionHeading: React.FC<SectionHeadingProps> = ({ title, description, actions, level = 2, className = '' }) => (
   <div className={`flex items-end justify-between gap-4 ${className}`}>
     <div className="flex min-w-0 flex-col gap-0.5">
-      <h2 className="text-2xl font-semibold leading-8 text-ink-heading">{title}</h2>
+      {level === 3
+        ? <h3 className="text-xl font-semibold leading-7 text-ink-heading">{title}</h3>
+        : <h2 className="text-2xl font-semibold leading-8 text-ink-heading">{title}</h2>}
       {description && <p className="text-sm leading-[22px] text-ink-muted">{description}</p>}
     </div>
     {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
