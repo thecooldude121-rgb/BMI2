@@ -268,7 +268,21 @@ const LeadDetailPage: React.FC = () => {
     activities.status === 'error' ? 'Activities' : null,
   ].filter(Boolean) as string[];
   const timelineLoading = history.status === 'loading' || activities.status === 'loading';
-  const contactLine = [lead.email, lead.phone].filter(Boolean).join(' · ');
+  const location = [lead.city, lead.country].filter(Boolean).join(', ');
+  const contactLine = [lead.email, lead.phone, location].filter(Boolean).join(' · ');
+  // A value with no currency is shown as such — never with an assumed symbol.
+  const valueText = (() => {
+    if (lead.estimated_value == null) return 'Not recorded';
+    if (!lead.currency) return `${lead.estimated_value.toLocaleString('en-IN')} · currency not recorded`;
+    // Postgres accepts any three letters; Intl throws on a code it does not
+    // know, which would take the whole page down. Fall back to the plain code.
+    try {
+      return new Intl.NumberFormat('en-IN', { style: 'currency', currency: lead.currency, maximumFractionDigits: 0 }).format(lead.estimated_value);
+    } catch {
+      return `${lead.currency} ${lead.estimated_value.toLocaleString('en-IN')}`;
+    }
+  })();
+  const notRecorded = <span className="text-ink-muted">Not recorded</span>;
 
   return (
     <div className="mx-auto flex max-w-[1240px] flex-col gap-4 pt-6 pb-8 lg:px-1">
@@ -318,10 +332,9 @@ const LeadDetailPage: React.FC = () => {
               )}
             </div>
           ) : null}
-          {/* Editing a lead is not built: /crm/leads/:id/edit has NO route, so this
-              button led to a blank page. The frame says the same ("record editing
-              unavailable"). Disabled and labelled until an editor exists. */}
-          <Button variant="secondary" disabled title="Editing a lead is coming soon">Edit · coming soon</Button>
+          {/* The lead editor (Group A item 1). Until it existed this button led to a
+              blank page, then was disabled in slice 3B-2. */}
+          <Button variant="secondary" onClick={() => navigate(`/crm/leads/${lead.id}/edit`)}>Edit</Button>
           <div className="relative">
             <Button variant="secondary" iconOnly aria-label="More options" leadingIcon={<MoreHorizontal className="h-4 w-4" />}
               onClick={() => setShowOverflowMenu(v => !v)} />
@@ -426,9 +439,11 @@ const LeadDetailPage: React.FC = () => {
               <dl className="mt-2">
                 <InfoRow label="Lead owner">{lead.owner_name || 'Unassigned'}</InfoRow>
                 <InfoRow label="Lifecycle status">{stageLabel(lead.status)}</InfoRow>
-                <InfoRow label="Source">{lead.source || '—'}</InfoRow>
+                <InfoRow label="Source">{[lead.source, lead.source_detail].filter(Boolean).join(' · ') || '—'}</InfoRow>
+                <InfoRow label="Priority">{lead.priority ? stageLabel(lead.priority) : notRecorded}</InfoRow>
                 <InfoRow label="Email">{lead.email || '—'}</InfoRow>
-                <InfoRow label="Phone">{lead.phone || '—'}</InfoRow>
+                <InfoRow label="Phone">{lead.phone || notRecorded}</InfoRow>
+                <InfoRow label="Mobile">{lead.mobile || notRecorded}</InfoRow>
                 <InfoRow label="Last contacted">{lead.last_contact_date ? fmtDate(lead.last_contact_date) : 'No contact logged'}</InfoRow>
                 <InfoRow label="Created">{fmtDateTime(lead.created_at)}</InfoRow>
                 <InfoRow label="Last updated">{fmtDateTime(lead.updated_at)}</InfoRow>
@@ -443,12 +458,18 @@ const LeadDetailPage: React.FC = () => {
               <SectionHeading title="Company information" />
               <dl className="mt-2">
                 <InfoRow label="Company">{lead.company || '—'}</InfoRow>
-                <InfoRow label="Industry">{lead.industry || '—'}</InfoRow>
-                <InfoRow label="Title">{lead.position || '—'}</InfoRow>
+                <InfoRow label="Industry">{lead.industry || notRecorded}</InfoRow>
+                <InfoRow label="Title">{lead.position || notRecorded}</InfoRow>
+                <InfoRow label="Employees">{lead.company_size ? `${lead.company_size} employees` : notRecorded}</InfoRow>
+                <InfoRow label="Website">
+                  {lead.website
+                    ? <a className="text-brand-600 hover:underline" href={/^https?:\/\//i.test(lead.website) ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer">{lead.website}</a>
+                    : notRecorded}
+                </InfoRow>
+                <InfoRow label="Location">{location || notRecorded}</InfoRow>
+                <InfoRow label="Est. value">{valueText}</InfoRow>
               </dl>
-              <p className="mt-2 text-xs leading-[18px] text-ink-muted">
-                Employees, website, region and revenue are not stored for leads yet.
-              </p>
+              <p className="mt-2 text-xs leading-[18px] text-ink-muted">Region and revenue are not stored for leads.</p>
             </Card>
           </div>
 

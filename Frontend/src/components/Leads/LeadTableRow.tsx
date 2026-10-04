@@ -32,11 +32,11 @@ import { Button } from '../ui/Button';
 
 /**
  * Not built, so offered DISABLED and labelled rather than as a live item that
- * only toasts "coming soon" on click (Honest Feedback). Editing a lead has no
- * page at all — /crm/leads/:id/edit has no route; the frame itself reads "Edit
- * unavailable". Re-enrich is on hold (vendor decision pending).
+ * only toasts "coming soon" on click (Honest Feedback). Editing is real now
+ * (/crm/leads/:id/edit, Group A item 1). Re-enrich is on hold (vendor decision
+ * pending); owner and tags have their own items.
  */
-const COMING_SOON_ACTIONS = new Set<ActionId>(['edit_lead', 'assign_owner', 'add_tag', 'enrich', 'reenrich']);
+const COMING_SOON_ACTIONS = new Set<ActionId>(['assign_owner', 'add_tag', 'enrich', 'reenrich']);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -209,7 +209,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
         onGoTo(`/crm/leads/${lead.id}`);
         break;
       case 'edit_lead':
-        onOpenModal('editLead', lead);
+        onGoTo(`/crm/leads/${lead.id}/edit`);
         break;
       case 'assign_owner':
         onOpenModal('assignOwner', lead);
@@ -276,9 +276,10 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
             {slaResult.escalate && <EscalationMarker />}
           </span>
           {lead.company && <span className="truncate text-xs leading-[18px] text-brand-600">{lead.company}</span>}
-          {(lead.email || lead.position) && (
+          {(lead.email || lead.city || lead.position) && (
             <span className="max-w-[260px] truncate text-xs leading-[18px] text-ink-muted">
-              {[lead.email, lead.position].filter(Boolean).join(' · ')}
+              {/* Figma: "amina@gulfaxis.ae · Dubai" — city when recorded, else the title */}
+              {[lead.email, lead.city || lead.position].filter(Boolean).join(' · ')}
             </span>
           )}
           {(isDuplicateRisk || isUntouched) && (

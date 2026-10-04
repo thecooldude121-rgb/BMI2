@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { profileFieldsError, normalizeProfileFields } from '../utils/leadProfileFields';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
@@ -217,6 +218,10 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
     }
     const badScore = scoreError(score);
     if (badScore) { res.status(400).json({ success: false, message: badScore }); return; }
+    // Migration 063 profile fields (and the estimated value + currency).
+    const badProfile = profileFieldsError(req.body);
+    if (badProfile) { res.status(400).json({ success: false, message: badProfile }); return; }
+    const profile = normalizeProfileFields(req.body);
     if (stage && !VALID_STAGES.includes(stage)) {
       res.status(400).json({ success: false, message: `stage must be one of: ${VALID_STAGES.join(', ')}` });
       return;
@@ -258,12 +263,16 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
     const client = await pool.connect();
     try {
     await client.query('BEGIN');
+    // Profile columns are appended only when supplied; column names come from
+    // the module's allowlist, never from the request.
+    const profileCols = Object.keys(profile);
+    const profilePlaceholders = profileCols.map((_, k) => `$${18 + k}`);
     const result = await client.query(
       `INSERT INTO leads
          (first_name, last_name, email, phone, company, position,
           industry, stage, status, score, source, assigned_to, notes,
-          tags, custom_fields, tenant_id, assigned_to_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          tags, custom_fields, tenant_id, assigned_to_user_id${profileCols.map(c => `, ${c}`).join('')})
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17${profilePlaceholders.map(ph => `, ${ph}`).join('')})
        RETURNING *`,
       [
         String(first_name).trim(),
@@ -285,6 +294,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
         custom_fields ? JSON.stringify(custom_fields) : '{}',
         tenantId,
         resolvedOwnerId,
+        ...profileCols.map(c => profile[c]),
       ]
     );
     // The lead's first stage is history too (from_stage NULL), so a timeline
@@ -343,6 +353,8 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
 
     const badScore = scoreError(req.body.score);
     if (badScore) { res.status(400).json({ success: false, message: badScore }); return; }
+    const badProfile = profileFieldsError(req.body);
+    if (badProfile) { res.status(400).json({ success: false, message: badProfile }); return; }
 
     // Owner dual-write (migration 060). `owner_id` is the legacy alias for the
     // NAME column. A name change without an explicit id re-resolves the id, so
@@ -372,6 +384,12 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
     });
 
     // (`owner_id` was folded into assigned_to above, before the owner resolution.)
+
+    // Migration 063 profile fields + estimated value / currency (allowlisted).
+    for (const [col, v] of Object.entries(normalizeProfileFields(req.body))) {
+      updates.push(`${col} = $${i++}`);
+      params.push(v);
+    }
 
     if (!updates.length) {
       res.status(400).json({ success: false, message: 'No valid fields to update' });

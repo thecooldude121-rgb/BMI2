@@ -85,9 +85,14 @@ export class LeadScoringEngine {
   private static scoreActivityRecency(lead: Lead): ScoreFactor {
     let points = 0;
     const maxPoints = 15;
+    // last_activity_date is set by nothing; leads.last_contact (mapped to
+    // last_contact_date, written by logged calls / emails / meetings since step
+    // 5) is the real signal. Reading only the former made recency 0 for every
+    // lead (Group A item 1, 2026-10-05).
+    const lastTouch = lead.last_activity_date ?? lead.last_contact_date;
 
-    if (lead.last_activity_date) {
-      const daysSince = Math.floor((Date.now() - new Date(lead.last_activity_date).getTime()) / (1000 * 60 * 60 * 24));
+    if (lastTouch) {
+      const daysSince = Math.floor((Date.now() - new Date(lastTouch).getTime()) / (1000 * 60 * 60 * 24));
 
       if (daysSince <= 1) points = 15;
       else if (daysSince <= 3) points = 12;
@@ -101,9 +106,9 @@ export class LeadScoringEngine {
       name: 'Activity Recency',
       points,
       maxPoints,
-      description: lead.last_activity_date
-        ? `Last activity: ${this.formatTimeAgo(lead.last_activity_date)}`
-        : 'No recent activity',
+      description: lastTouch
+        ? `Last contact: ${this.formatTimeAgo(lastTouch)}`
+        : 'No contact recorded',
       category: 'timing'
     };
   }
@@ -224,7 +229,13 @@ export class LeadScoringEngine {
       points += 2;
     }
 
-    if (lead.country && ['United States', 'Canada', 'United Kingdom'].includes(lead.country)) {
+    // Was +1 for the United States, Canada or the United Kingdom only — the
+    // wrong market for India / Middle East / Africa, and dormant only because
+    // country was never stored. Now that it is (migration 063), that rule would
+    // have marked down every target-market lead. Replaced by a neutral
+    // "location recorded" point until an ideal-customer profile is defined —
+    // a product decision, flagged rather than guessed (2026-10-05, unratified).
+    if (lead.country) {
       points += 1;
     }
 
@@ -236,7 +247,11 @@ export class LeadScoringEngine {
       name: 'Demographics',
       points: Math.min(points, maxPoints),
       maxPoints,
-      description: 'Location and industry alignment',
+      description: [
+        lead.email && !this.isPersonalEmail(lead.email) ? 'business email' : null,
+        lead.industry ? `industry ${lead.industry}` : null,
+        lead.country ? `location ${[lead.city, lead.country].filter(Boolean).join(', ')}` : null,
+      ].filter(Boolean).join(' · ') || 'No business email, industry or location recorded',
       category: 'demographics'
     };
   }
@@ -386,119 +401,9 @@ export class LeadScoringEngine {
   }
 }
 
-export class LeadEnrichmentEngine {
-  static async enrichFromEmail(email: string): Promise<any> {
-    const domain = email.split('@')[1];
+// LeadEnrichmentEngine was DELETED (Group A item 1, 2026-10-05): its
+// enrichFromEmail / enrichFromDomain / enrichFromLinkedIn returned invented
+// records — a San Francisco company, "John Doe, VP of Sales", confidence 0.85 —
+// for any input. Nothing imported it. Re-enrich is on hold pending a vendor
+// decision; when it is built, it calls that vendor, not a fixture.
 
-    return {
-      person: {
-        email,
-        verified: true,
-        deliverable: 'valid'
-      },
-      company: {
-        domain,
-        name: this.extractCompanyName(domain),
-        estimated_size: '50-200'
-      },
-      confidence: 0.85
-    };
-  }
-
-  static async enrichFromDomain(domain: string): Promise<any> {
-    return {
-      company: {
-        domain,
-        name: this.extractCompanyName(domain),
-        industry: 'Technology',
-        employee_count: 150,
-        annual_revenue: 10000000,
-        location: {
-          city: 'San Francisco',
-          state: 'CA',
-          country: 'United States'
-        }
-      },
-      confidence: 0.80
-    };
-  }
-
-  static async enrichFromLinkedIn(linkedinUrl: string): Promise<any> {
-    return {
-      person: {
-        full_name: 'John Doe',
-        position: 'VP of Sales',
-        seniority: 'VP',
-        department: 'Sales',
-        linkedin_url: linkedinUrl,
-        skills: ['Sales', 'Business Development', 'SaaS']
-      },
-      confidence: 0.90
-    };
-  }
-
-  private static extractCompanyName(domain: string): string {
-    const name = domain.split('.')[0];
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  }
-
-  static async detectIntent(lead: Lead): Promise<{
-    hasIntent: boolean;
-    signals: string[];
-    confidence: number;
-  }> {
-    const signals: string[] = [];
-    let confidence = 0;
-
-    if (lead.page_views_count > 5) {
-      signals.push('High page view count');
-      confidence += 0.2;
-    }
-
-    if (lead.email_clicks_count > 3) {
-      signals.push('Multiple email clicks');
-      confidence += 0.25;
-    }
-
-    if (lead.meeting_count > 0) {
-      signals.push('Attended meetings');
-      confidence += 0.3;
-    }
-
-    if (lead.last_activity_date) {
-      const daysSince = Math.floor((Date.now() - new Date(lead.last_activity_date).getTime()) / (1000 * 60 * 60 * 24));
-      if (daysSince <= 3) {
-        signals.push('Recent engagement');
-        confidence += 0.25;
-      }
-    }
-
-    return {
-      hasIntent: confidence >= 0.5,
-      signals,
-      confidence: Math.min(confidence, 1)
-    };
-  }
-
-  static getBuyingSignals(lead: Lead): string[] {
-    const signals: string[] = [];
-
-    if (lead.email_clicks_count > 2) {
-      signals.push('Clicked pricing page');
-    }
-
-    if (lead.page_views_count > 5) {
-      signals.push('Visited website multiple times');
-    }
-
-    if (lead.meeting_count > 0) {
-      signals.push('Attended product demo');
-    }
-
-    if (lead.call_count > 1) {
-      signals.push('Multiple conversations');
-    }
-
-    return signals;
-  }
-}

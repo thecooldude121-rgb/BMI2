@@ -176,9 +176,17 @@ describe('LeadDetailPage — the timeline is server rows, and a failure is never
 });
 
 describe('LeadDetailPage — no fake controls, no unexplained verdicts', () => {
-  it('Edit is disabled and labelled — there is no edit route, it used to open a blank page', async () => {
-    renderPage();
-    expect(await screen.findByRole('button', { name: /edit · coming soon/i })).toBeDisabled();
+  it('Edit opens the real editor route (it used to open a blank page, then was disabled)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/crm/leads/42']}>
+        <Routes>
+          <Route path="/crm/leads/:id" element={<LeadDetailPage />} />
+          <Route path="/crm/leads/:id/edit" element={<p>editor route</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByText('editor route')).toBeInTheDocument();
   });
 
   it('has no re-enrich, no reminder, no follow-up; file upload is disabled and labelled', async () => {
@@ -211,20 +219,30 @@ describe('LeadDetailPage — no fake controls, no unexplained verdicts', () => {
     expect(document.querySelector('[data-coming-soon="true"]')).toHaveTextContent('Recommended action');
   });
 
-  it('does not render fields that have no column (they could only ever read "—")', async () => {
+  it('shows the migration-063 fields, says "Not recorded" for empty ones, and never assumes a currency', async () => {
+    api.fetchLeadByIdFromAPI.mockResolvedValue({
+      ...LEAD, mobile: '+971 55 111 2222', company_size: '1000+', website: 'gulfaxis.example',
+      city: 'Dubai', country: 'United Arab Emirates', estimated_value: 2200000, currency: null, priority: 'high',
+    });
     renderPage();
     await screen.findByRole('heading', { level: 1, name: 'Amina Farsi' });
-    // Scoped to the two information cards. (The rule-based score panel names a
-    // "Company Size" FACTOR — that is a scoring input, reported separately.)
-    for (const heading of ['Basic information', 'Company information']) {
-      const card = screen.getByRole('heading', { level: 2, name: heading }).closest('div.border') as HTMLElement;
-      // Labels only (<dt>) — a VALUE can legitimately be "Website" (a source).
-      const labels = [...card.querySelectorAll('dt')].map(dt => dt.textContent);
-      for (const label of ['Mobile', 'Department', 'Annual Revenue', 'LinkedIn', 'Company Size', 'Website', 'Location']) {
-        expect(labels).not.toContain(label);
-      }
-    }
-    expect(screen.getByText(/not stored for leads yet/i)).toBeInTheDocument();
+    const value = (label: string) => screen.getAllByText(label).find(el => el.tagName === 'DT')!.nextElementSibling!;
+    expect(value('Mobile')).toHaveTextContent('+971 55 111 2222');
+    expect(value('Employees')).toHaveTextContent('1000+ employees');
+    expect(value('Location')).toHaveTextContent('Dubai, United Arab Emirates');
+    expect(value('Website').querySelector('a')).toHaveAttribute('href', 'https://gulfaxis.example');
+    expect(value('Est. value')).toHaveTextContent('22,00,000 · currency not recorded');
+    expect(value('Priority')).toHaveTextContent('High');
+    expect(screen.getByText(/amina@example.test · \+971 50 000 0000 · Dubai, United Arab Emirates/)).toBeInTheDocument();
+  });
+
+  it('an empty profile field reads "Not recorded", never a fabricated default', async () => {
+    api.fetchLeadByIdFromAPI.mockResolvedValue({ ...LEAD, estimated_value: null });
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Amina Farsi' });
+    const dt = screen.getAllByText('Employees').find(el => el.tagName === 'DT')!;
+    expect(dt.nextElementSibling).toHaveTextContent('Not recorded');
+    expect(screen.getAllByText('Est. value').find(el => el.tagName === 'DT')!.nextElementSibling).toHaveTextContent('Not recorded');
   });
 
   it('an unassigned lead says so rather than inventing an owner', async () => {
