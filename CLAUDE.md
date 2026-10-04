@@ -1200,9 +1200,29 @@ old constraint, which fails the shared-name test.
   25 rows (Figma), `page` / `pageCount` / `setPage` on `useLeadsPageState`, page 1 on a filter
   change, clamped after a write shrinks the total; `components/Leads/LeadsPager`. Status /
   source / score are dropdowns sending the chips' exact values. Pinned by `LeadsPage.test.tsx`
-  and `LeadsPager.test.tsx`. **Slice 3B-2 is next:** the Figma table rows, the inline bulk bar,
-  saved views, the docked "selected lead" panel replacing the overlay drawer, and Grid/Kanban
-  cards.
+  and `LeadsPager.test.tsx`.
+- **Figma phase 3 — Leads list, slice 3B-2 (2026-10-05).** Rows, bulk bar, saved views, the
+  docked panel and grid / kanban cards on the frame. What changed beyond the look:
+  - **Lead editing does not exist** — `/crm/leads/:id/edit` has NO route, and both Lead detail's
+    Edit button and the row menu's "Edit" led to a blank page. Both are disabled "coming soon"
+    (the frame itself reads "Edit unavailable"). Build it with Group A item 1, whose new fields
+    need an editor.
+  - Row: the stored score is "N stored" (it was a green / yellow / red number); the "No
+    follow-up set" and "No AI insights yet" placeholders are gone; "Open" is the primary action;
+    Edit / Assign owner / Add tag / Enrich are disabled "coming soon" in the menu (they were live
+    items that only toasted).
+  - Bulk bar: inline above the table. Bulk convert is "Convert unavailable" (its confirmation
+    promised a conversion, then reported "not available"); the More menu's toast-only stubs are
+    gone; the status menu no longer offers Converted (always refused) or Disqualified / Lost
+    (they need a reason — their own buttons collect one); "Select all N filtered results" is gone
+    because only the current page is loaded.
+  - `LeadSelectedPanel` replaces `LeadQuickDrawer` (deleted): docked, real position ("18 of 38"),
+    server activity per lead, related records from conversion, Files "coming soon".
+  - The page toast showed a green check for EVERY message, refusals included; the icon and role
+    now follow the type.
+  - Typecheck 207 -> 200 (all with rewritten code); `TYPECHECK_BASELINE.md` was stale at 216 and
+    now reads 200.
+  Pinned by `components/Leads/leadsSlice3b2.test.tsx` and `LeadsPage.test.tsx`.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

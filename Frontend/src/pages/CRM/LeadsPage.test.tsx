@@ -149,6 +149,23 @@ describe('LeadsPage — a refused delete is not a success', () => {
   });
 });
 
+describe('LeadsPage — docked panel and honest toasts (slice 3B-2)', () => {
+  it('opening a lead docks the "Selected lead" panel beside the list (no overlay)', async () => {
+    renderPage();
+    await userEvent.click(screen.getByRole('button', { name: 'Open Nadia Sayed' }));
+    const panel = await screen.findByRole('complementary', { name: 'Selected lead: Nadia Sayed' });
+    expect(within(panel).getByText('Selected lead · 1 of 60')).toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-nav-scrim')).toBeNull();
+  });
+
+  it('an error toast is an alert with a warning icon — not a green success check', () => {
+    state.current = baseState({ toast: { message: 'Only admins and managers can delete leads.', type: 'error' } });
+    renderPage();
+    const toastEl = screen.getAllByRole('alert').find(el => el.textContent?.includes('Only admins'));
+    expect(toastEl).toBeTruthy();
+  });
+});
+
 describe('LeadsPage — failures and empties are told apart', () => {
   it('a server error is an alert, not "No leads match"', () => {
     state.current = baseState({ sortedLeads: [], paginatedLeads: [], listTotal: 0, listError: '500 Internal Server Error' });

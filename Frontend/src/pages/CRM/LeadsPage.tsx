@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Upload, Search, ChevronDown, CheckCircle, UserPlus, Link as LinkIcon, X, BookmarkCheck, Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal } from 'lucide-react';
+import { Plus, Upload, Search, ChevronDown, CheckCircle, Info, UserPlus, Link as LinkIcon, X, BookmarkCheck, Clock, AlertTriangle, UserX, TrendingUp, Copy, BarChart2, SlidersHorizontal } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
@@ -28,7 +28,7 @@ import KanbanOutcomeModal from '../../components/Leads/KanbanOutcomeModal';
 import KanbanQualifyModal from '../../components/Leads/KanbanQualifyModal';
 import SourceQualityDrawer from '../../components/Leads/SourceQualityDrawer';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
-import LeadQuickDrawer from '../../components/Leads/LeadQuickDrawer';
+import LeadSelectedPanel from '../../components/Leads/LeadSelectedPanel';
 import OutreachComposer from '../../components/Leads/OutreachComposer';
 import { useLeadActions } from '../../hooks/useLeadActions';
 import { useLogLeadActivity, LOGGED_LABEL } from '../../hooks/useLogLeadActivity';
@@ -57,44 +57,21 @@ const formatDate = (dateStr?: string) => {
   });
 };
 
-const getScoreColor = (score: number) => {
-  if (score >= 80) return 'text-green-800 bg-green-100 border-green-200';
-  if (score >= 60) return 'text-green-700 bg-green-50 border-green-200';
-  return 'text-orange-700 bg-orange-50 border-orange-200';
-};
-
+// Figma: one indigo pill for working stages; green / amber / red only where
+// the stage itself says so. (The score is shown as "N stored" — no verdict colour.)
 const getStatusBadge = (status: string) => {
+  const brand = 'bg-brand-50 text-brand-600';
   const colors: Record<string, string> = {
-    new:               'bg-blue-500 text-white',
-    assigned:          'bg-indigo-500 text-white',
-    enriching:         'bg-cyan-500 text-white',
-    attempting_contact: 'bg-orange-500 text-white',
-    engaged:           'bg-emerald-500 text-white',
-    qualified:         'bg-green-500 text-white',
-    sales_accepted:    'bg-teal-500 text-white',
-    nurture:           'bg-purple-500 text-white',
-    disqualified:      'bg-gray-400 text-white',
-    converted:         'bg-teal-600 text-white',
-    lost:              'bg-red-500 text-white',
+    new: brand, assigned: brand, enriching: brand, attempting_contact: brand, engaged: brand,
+    qualified: 'bg-success-100 text-success-700', sales_accepted: 'bg-success-100 text-success-700',
+    converted: 'bg-success-100 text-success-700', nurture: 'bg-warning-100 text-warning-700',
+    lost: 'bg-danger-100 text-danger-700', disqualified: 'bg-surface-sunken text-ink-secondary',
   };
-  return colors[status] || 'bg-gray-500 text-white';
+  return colors[status] || 'bg-surface-sunken text-ink-secondary';
 };
 
 const getStatusLabel = (status: string) =>
   status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-const getSourceInfo = (source?: string) => {
-  const s = (source || '').toLowerCase();
-  if (s.includes('lead gen') || s.includes('apollo') || s.includes('zoom'))
-    return { icon: '🎯', color: 'text-blue-600 bg-blue-50' };
-  if (s.includes('hrms') || s.includes('recruit'))
-    return { icon: '🏢', color: 'text-yellow-600 bg-yellow-50' };
-  if (s.includes('website') || s.includes('web') || s.includes('form'))
-    return { icon: '🌐', color: 'text-green-600 bg-green-50' };
-  if (s.includes('manual') || s.includes('trade') || s.includes('conference') || s.includes('referral'))
-    return { icon: '✍️', color: 'text-gray-600 bg-gray-50' };
-  return { icon: '📋', color: 'text-gray-600 bg-gray-50' };
-};
 
 const formatRecency = (date?: string): string => {
   if (!date) return 'Never';
@@ -108,11 +85,11 @@ const formatRecency = (date?: string): string => {
 
 const getCtaStyle = (color: string): string => {
   switch (color) {
-    case 'green': return 'bg-green-600 text-white hover:bg-green-700';
-    case 'red':   return 'bg-red-600   text-white hover:bg-red-700';
-    case 'amber': return 'bg-amber-500 text-white hover:bg-amber-600';
+    case 'green': return 'bg-success-700 text-white hover:bg-success-800';
+    case 'red':   return 'bg-danger-700 text-white hover:bg-danger-800';
+    case 'amber': return 'bg-warning-700 text-white hover:bg-warning-800';
     case 'blue':  return 'bg-brand-600 text-white hover:bg-brand-700';
-    default:      return 'bg-gray-100  text-gray-700 hover:bg-gray-200';
+    default:      return 'bg-surface-sunken text-ink hover:bg-black/5';
   }
 };
 
@@ -150,13 +127,13 @@ const KANBAN_SWIM_LANES: Array<{
   dropTarget: Lead['status'];
   headerColor: string;
 }> = [
-  { id: 'incoming',   label: 'Incoming',   statuses: ['new', 'assigned'],                    dropTarget: 'new',               headerColor: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { id: 'research',   label: 'Research',   statuses: ['enriching'],                           dropTarget: 'enriching',          headerColor: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
-  { id: 'outreach',   label: 'Outreach',   statuses: ['attempting_contact'],                  dropTarget: 'attempting_contact', headerColor: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { id: 'engaged',    label: 'Engaged',    statuses: ['engaged'],                             dropTarget: 'engaged',            headerColor: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  { id: 'qualifying', label: 'Qualifying', statuses: ['qualified', 'sales_accepted'],         dropTarget: 'qualified',          headerColor: 'bg-green-100 text-green-800 border-green-200' },
-  { id: 'nurturing',  label: 'Nurturing',  statuses: ['nurture'],                             dropTarget: 'nurture',            headerColor: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { id: 'closed',     label: 'Closed',     statuses: ['converted', 'disqualified', 'lost'],  dropTarget: 'lost',               headerColor: 'bg-red-100 text-red-800 border-red-200' },
+  { id: 'incoming',   label: 'Incoming',   statuses: ['new', 'assigned'],                    dropTarget: 'new',               headerColor: 'bg-surface-sunken text-ink border-line' },
+  { id: 'research',   label: 'Research',   statuses: ['enriching'],                           dropTarget: 'enriching',          headerColor: 'bg-surface-sunken text-ink border-line' },
+  { id: 'outreach',   label: 'Outreach',   statuses: ['attempting_contact'],                  dropTarget: 'attempting_contact', headerColor: 'bg-surface-sunken text-ink border-line' },
+  { id: 'engaged',    label: 'Engaged',    statuses: ['engaged'],                             dropTarget: 'engaged',            headerColor: 'bg-surface-sunken text-ink border-line' },
+  { id: 'qualifying', label: 'Qualifying', statuses: ['qualified', 'sales_accepted'],         dropTarget: 'qualified',          headerColor: 'bg-surface-sunken text-ink border-line' },
+  { id: 'nurturing',  label: 'Nurturing',  statuses: ['nurture'],                             dropTarget: 'nurture',            headerColor: 'bg-surface-sunken text-ink border-line' },
+  { id: 'closed',     label: 'Closed',     statuses: ['converted', 'disqualified', 'lost'],  dropTarget: 'lost',               headerColor: 'bg-surface-sunken text-ink border-line' },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -460,14 +437,14 @@ const LeadsPage: React.FC = () => {
     type Sig = { cls: string; icon: React.ReactNode; title: string };
     const signals: Sig[] = [];
     if (overdueIdSet.has(lead.id))
-      signals.push({ cls: 'text-amber-500', icon: <Clock size={9} />, title: 'Overdue' });
+      signals.push({ cls: 'text-warning-700', icon: <Clock size={9} />, title: 'Overdue' });
     if (slaResult?.overall === 'breached')
-      signals.push({ cls: 'text-red-500', icon: <AlertTriangle size={9} />, title: 'SLA breach' });
+      signals.push({ cls: 'text-danger-700', icon: <AlertTriangle size={9} />, title: 'SLA breach' });
     if (duplicateCandidateMap.has(lead.id))
-      signals.push({ cls: 'text-orange-500', icon: <Copy size={9} />, title: 'Duplicate risk' });
+      signals.push({ cls: 'text-warning-700', icon: <Copy size={9} />, title: 'Duplicate risk' });
     if (nbaPri === 'urgent' || nbaPri === 'high')
       signals.push({
-        cls:   nbaPri === 'urgent' ? 'text-red-500' : 'text-amber-500',
+        cls:   nbaPri === 'urgent' ? 'text-danger-700' : 'text-warning-700',
         icon:  <TrendingUp size={9} />,
         title: `${nbaPri} priority`,
       });
@@ -475,9 +452,9 @@ const LeadsPage: React.FC = () => {
     const overflow  = Math.max(0, signals.length - 3);
 
     const ageColor =
-      ageDays < 7  ? 'bg-gray-50  text-gray-400'  :
-      ageDays < 21 ? 'bg-amber-50 text-amber-600' :
-                     'bg-red-50   text-red-600';
+      ageDays < 7  ? 'bg-surface-sunken text-ink-secondary' :
+      ageDays < 21 ? 'bg-warning-100 text-warning-700' :
+                     'bg-danger-100 text-danger-700';
 
     return (
       <Draggable key={lead.id} draggableId={lead.id} index={index}>
@@ -486,27 +463,25 @@ const LeadsPage: React.FC = () => {
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            className={`bg-white rounded-lg border p-3 mb-2 shadow-sm cursor-grab transition-shadow ${
+            className={`bg-surface-panel rounded-card border p-3 mb-2 cursor-grab transition-shadow ${
               snapshot.isDragging
-                ? 'shadow-lg border-blue-300'
-                : 'border-gray-200 hover:shadow-md'
+                ? 'shadow-lg border-brand-600'
+                : 'border-line hover:shadow-md'
             }`}
             onClick={() => setDrawerLeadId(lead.id)}
           >
             {/* Name + score */}
             <div className="flex items-start justify-between gap-1.5 mb-1">
-              <p className="text-sm font-semibold text-gray-900 truncate flex-1 min-w-0 leading-tight">
+              <p className="text-sm font-semibold text-ink truncate flex-1 min-w-0 leading-tight">
                 {getLeadName(lead)}
               </p>
-              <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border ${getScoreColor(score)}`}>
-                {score}
-              </span>
+              <span className="shrink-0 text-xs text-ink-muted" title="Stored score">{score} stored</span>
             </div>
 
             {/* Company + status badge */}
             <div className="flex items-center justify-between gap-1 mb-2.5">
-              <p className="text-xs text-gray-500 truncate flex-1 min-w-0">{lead.company || '—'}</p>
-              <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${getStatusBadge(lead.status)}`}>
+              <p className="text-xs text-brand-600 truncate flex-1 min-w-0">{lead.company || '—'}</p>
+              <span className={`shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full ${getStatusBadge(lead.status)}`}>
                 {getStatusLabel(lead.status)}
               </span>
             </div>
@@ -520,11 +495,11 @@ const LeadsPage: React.FC = () => {
                   </span>
                 ))}
                 {overflow > 0 && (
-                  <span className="text-[9px] font-bold text-gray-400">+{overflow}</span>
+                  <span className="text-xs font-bold text-ink-muted">+{overflow}</span>
                 )}
               </div>
               <span
-                className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${ageColor}`}
+                className={`text-xs font-semibold px-1.5 py-0.5 rounded ${ageColor}`}
                 title={`${ageDays}d in stage`}
               >
                 {ageDays === 0 ? 'Today' : `${ageDays}d`}
@@ -540,7 +515,6 @@ const LeadsPage: React.FC = () => {
 
   const renderGridCard = (lead: Lead) => {
     const score       = getLeadScore(lead);
-    const src         = getSourceInfo(lead.source);
     const selected    = isSelected(lead.id);
     const isDuplicate = duplicateCandidateMap.has(lead.id);
     const isOver      = overdueIdSet.has(lead.id);
@@ -570,10 +544,10 @@ const LeadsPage: React.FC = () => {
     return (
       <div
         key={lead.id}
-        className={`relative bg-white rounded-xl border flex flex-col cursor-pointer transition-all duration-150 hover:shadow-md ${
+        className={`relative bg-surface-panel rounded-card border flex flex-col cursor-pointer transition-all duration-150 hover:shadow-md ${
           selected
-            ? 'ring-2 ring-blue-500 border-blue-300 shadow-sm'
-            : 'border-gray-200 hover:border-gray-300 shadow-sm'
+            ? 'ring-2 ring-brand-600 border-transparent'
+            : 'border-line'
         }`}
         onClick={() => setDrawerLeadId(lead.id)}
       >
@@ -587,50 +561,48 @@ const LeadsPage: React.FC = () => {
               type="checkbox"
               checked={selected}
               onChange={() => toggleLeadSelection(lead.id)}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer focus:ring-blue-500"
+              className="h-4 w-4 rounded border-line text-brand-600 cursor-pointer focus:ring-brand-600"
               aria-label={`Select ${getLeadName(lead)}`}
             />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-gray-900 truncate leading-tight">{getLeadName(lead)}</p>
-            <p className="text-xs text-gray-500 truncate">{lead.company || '—'}</p>
+            <p className="text-sm font-semibold text-ink truncate leading-tight">{getLeadName(lead)}</p>
+            <p className="text-xs text-brand-600 truncate">{lead.company || '—'}</p>
           </div>
-          <span className={`shrink-0 text-sm font-bold px-2 py-0.5 rounded-lg border-2 ${getScoreColor(score)}`}>
-            {score}
-          </span>
+          <span className="shrink-0 text-xs text-ink-muted" title="Stored score">{score} stored</span>
         </div>
 
         {/* ── Identity sub-row: title + source ─────────────────────────── */}
         <div className="px-4 pb-3 flex items-center justify-between gap-2">
-          <span className="text-xs text-gray-400 truncate">{lead.position || 'No title'}</span>
-          <span className={`text-sm px-1.5 py-0.5 rounded shrink-0 ${src.color}`}>{src.icon}</span>
+          <span className="text-xs text-ink-muted truncate">{lead.position || 'No title'}</span>
+          <span className="text-xs text-ink-muted shrink-0">{lead.source || '—'}</span>
         </div>
 
         {/* ── Urgency strip (rendered only when flags exist) ────────────── */}
         {hasUrgency && (
           <div className="px-4 pb-3 flex flex-wrap gap-1">
             {isOver && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-700">
                 <Clock size={9} />Overdue
               </span>
             )}
             {hasSLABreach && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-danger-100 text-danger-700">
                 <AlertTriangle size={9} />SLA breach
               </span>
             )}
             {isDuplicate && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-700">
                 <Copy size={9} />Dup risk
               </span>
             )}
             {nbaPri === 'urgent' && !isOver && !hasSLABreach && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-danger-100 text-danger-700">
                 Urgent
               </span>
             )}
             {nbaPri === 'high' && !isOver && !hasSLABreach && !isDuplicate && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-100 text-warning-700">
                 High priority
               </span>
             )}
@@ -638,14 +610,14 @@ const LeadsPage: React.FC = () => {
         )}
 
         {/* ── Divider ──────────────────────────────────────────────────── */}
-        <div className="mx-4 border-t border-gray-100" />
+        <div className="mx-4 border-t border-line" />
 
         {/* ── State row: status badge + last contact recency ───────────── */}
         <div className="px-4 py-2.5 flex items-center justify-between gap-2">
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full truncate max-w-[120px] ${getStatusBadge(lead.status)}`}>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full truncate max-w-[120px] ${getStatusBadge(lead.status)}`}>
             {getStatusLabel(lead.status)}
           </span>
-          <span className={`text-[10px] shrink-0 tabular-nums ${recency === 'Never' ? 'text-amber-500 font-medium' : 'text-gray-400'}`}>
+          <span className={`text-xs shrink-0 tabular-nums ${recency === 'Never' ? 'text-warning-700 font-medium' : 'text-ink-muted'}`}>
             {recency === 'Never' ? 'Never contacted' : recency}
           </span>
         </div>
@@ -655,9 +627,9 @@ const LeadsPage: React.FC = () => {
           <button
             disabled={cta.blocked}
             title={cta.blocked ? 'Not available for your role' : undefined}
-            className={`w-full py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+            className={`w-full py-1.5 text-xs font-semibold rounded-ctrl transition-colors ${
               cta.blocked
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                ? 'bg-surface-sunken text-ink-muted cursor-not-allowed'
                 : getCtaStyle(cta.color)
             }`}
             onClick={e => {
@@ -688,8 +660,14 @@ const LeadsPage: React.FC = () => {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-[60] bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2">
-          <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
+        // The icon follows the message: it used to be a green check for EVERY
+        // toast, so a server refusal read as a success at a glance.
+        <div role={toast.type === 'error' ? 'alert' : 'status'} className="fixed top-4 right-4 z-[60] bg-ink text-white px-4 py-3 rounded-card shadow-lg flex items-center space-x-2">
+          {toast.type === 'error'
+            ? <AlertTriangle className="h-4 w-4 text-danger-100 flex-shrink-0" aria-hidden="true" />
+            : toast.type === 'success'
+              ? <CheckCircle className="h-4 w-4 text-success-100 flex-shrink-0" aria-hidden="true" />
+              : <Info className="h-4 w-4 text-brand-100 flex-shrink-0" aria-hidden="true" />}
           <span className="text-sm">{toast.message}</span>
           <button onClick={clearToast} className="ml-1">
             <X className="h-4 w-4 opacity-60 hover:opacity-100" />
@@ -886,15 +864,15 @@ const LeadsPage: React.FC = () => {
         <div className="space-y-3">
           {/* Active view pill + save controls */}
           {activeViewId && (
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between pb-3 border-b border-line">
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-500">Viewing:</span>
-                <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold border border-blue-200">
+                <span className="text-xs text-ink-muted">Viewing:</span>
+                <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-brand-50 text-brand-700 rounded-full text-xs font-semibold">
                   <BookmarkCheck className="h-3.5 w-3.5" />
                   <span>{activeViewLabel}</span>
                   <button
                     onClick={clearActiveView}
-                    className="ml-1 hover:text-blue-900 opacity-60 hover:opacity-100"
+                    className="ml-1 hover:text-brand-900 opacity-60 hover:opacity-100"
                     aria-label="Clear active view"
                   >
                     <X className="h-3 w-3" />
@@ -910,7 +888,7 @@ const LeadsPage: React.FC = () => {
                   )}
                   <button
                     onClick={() => openModal('createView')}
-                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 text-gray-700"
+                    className="px-3 py-1.5 border border-line bg-surface-panel rounded-ctrl text-xs font-medium hover:bg-surface-subtle text-ink"
                   >
                     Save as new view
                   </button>
@@ -1076,6 +1054,33 @@ const LeadsPage: React.FC = () => {
           : <Alert tone="info" title="This list is not available">{listUnavailableReason}</Alert>
       )}
 
+      {/* ── BULK ACTIONS BAR — inline above the results (Figma 61:157) ── */}
+      {selectedLeadIds.length > 0 && can('leads.bulk_actions') && (
+        <BulkActionBar
+          selectedIds={selectedLeadIds}
+          selectedLeads={selectedLeads}
+          totalFiltered={listTotal}
+          isPageFullySelected={isPageFullySelected}
+          areAllFiltered={areAllFiltered}
+          onSelectAllFiltered={selectAllLeads}
+          onClearSelection={clearSelection}
+          onChangeStatus={handleBulkChangeStatus}
+          onSetFollowUp={handleBulkSetFollowUp}
+          onExport={handleBulkExport}
+          onConvert={handleBulkConvert}
+          onArchive={handleBulkArchive}
+          onDisqualify={handleBulkDisqualify}
+          onOpenTerminalModal={setBulkTerminalAction}
+          onDelete={handleBulkDelete}
+          onToast={(msg, type) => showToast(msg, type)}
+          canConvert={can('leads.convert')}
+          canDelete={can('leads.delete')}
+        />
+      )}
+
+      {/* Results + the docked "Selected lead" panel (Figma 61:328) */}
+      <div className={drawerLead ? 'grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]' : ''}>
+        <div className="min-w-0">
       {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <div>
@@ -1104,7 +1109,7 @@ const LeadsPage: React.FC = () => {
                             }
                           }}
                           aria-label={isPageFullySelected ? 'Deselect all on this page' : 'Select all on this page'}
-                          className="h-4 w-4 text-blue-600 rounded border-gray-300"
+                          className="h-4 w-4 text-brand-600 rounded border-line"
                         />
                       </th>
                       <th className="w-72 px-4 py-2.5 text-left text-xs font-semibold uppercase text-ink-secondary">Identity</th>
@@ -1193,18 +1198,18 @@ const LeadsPage: React.FC = () => {
                   const laneTotal = laneData?.total ?? 0;
                   return (
                     <div key={lane.id} className="flex flex-col min-w-0">
-                      <div className={`flex items-center justify-between px-2.5 py-2 rounded-t-lg border ${lane.headerColor}`}>
+                      <div className={`flex items-center justify-between px-2.5 py-2 rounded-t-card border ${lane.headerColor}`}>
                         <span className="text-xs font-semibold truncate">{lane.label}</span>
                         <div className="flex items-center gap-1 ml-1 shrink-0">
                           {WIP_LIMITS[lane.id] != null && laneTotal > WIP_LIMITS[lane.id] && (
                             <span
-                              className="text-[9px] font-bold bg-amber-400 text-white px-1 py-0.5 rounded leading-none"
+                              className="text-xs font-bold bg-warning-100 text-warning-700 px-1 py-0.5 rounded leading-none"
                               title={`WIP limit exceeded (limit: ${WIP_LIMITS[lane.id]})`}
                             >
                               WIP
                             </span>
                           )}
-                          <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full" title={`${laneTotal} leads in this lane`}>
+                          <span className="text-xs font-bold bg-surface-panel px-1.5 py-0.5 rounded-full" title={`${laneTotal} leads in this lane`}>
                             {laneTotal}
                           </span>
                         </div>
@@ -1214,27 +1219,27 @@ const LeadsPage: React.FC = () => {
                           <div
                             ref={provided.innerRef}
                             {...provided.droppableProps}
-                            className={`flex-1 min-h-[200px] p-2 rounded-b-lg border border-t-0 border-gray-200 transition-colors ${
-                              snapshot.isDraggingOver ? 'bg-blue-50 border-blue-300' : 'bg-gray-50'
+                            className={`flex-1 min-h-[200px] p-2 rounded-b-card border border-t-0 border-line transition-colors ${
+                              snapshot.isDraggingOver ? 'bg-brand-50 border-brand-600' : 'bg-surface-subtle'
                             }`}
                           >
                             {laneLeads.map((lead, index) => renderKanbanCard(lead, index))}
                             {provided.placeholder}
                             {laneData?.error && (
-                              <p role="alert" className="text-[11px] text-red-600 text-center py-2">{laneData.error}</p>
+                              <p role="alert" className="text-xs text-danger-700 text-center py-2">{laneData.error}</p>
                             )}
                             {laneLeads.length < laneTotal && (
                               <button
                                 type="button"
                                 onClick={() => kanban.loadMoreLane(lane.id)}
                                 disabled={laneData?.loading}
-                                className="w-full mt-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 py-1.5"
+                                className="w-full mt-1 text-xs font-medium text-brand-600 hover:text-brand-700 py-1.5"
                               >
                                 {laneData?.loading ? 'Loading…' : `Showing ${laneLeads.length} of ${laneTotal} — load more`}
                               </button>
                             )}
                             {laneLeads.length === 0 && !snapshot.isDraggingOver && (
-                              <p className="text-xs text-gray-400 text-center py-6">
+                              <p className="text-xs text-ink-muted text-center py-6">
                                 {canViewAllLeads ? 'Drop here' : 'None assigned to you'}
                               </p>
                             )}
@@ -1250,29 +1255,27 @@ const LeadsPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── BULK ACTIONS BAR ──────────────────────────────────────────────── */}
-      {selectedLeadIds.length > 0 && can('leads.bulk_actions') && (
-        <BulkActionBar
-          selectedIds={selectedLeadIds}
-          selectedLeads={selectedLeads}
-          totalFiltered={listTotal}
-          isPageFullySelected={isPageFullySelected}
-          areAllFiltered={areAllFiltered}
-          onSelectAllFiltered={selectAllLeads}
-          onClearSelection={clearSelection}
-          onChangeStatus={handleBulkChangeStatus}
-          onSetFollowUp={handleBulkSetFollowUp}
-          onExport={handleBulkExport}
-          onConvert={handleBulkConvert}
-          onArchive={handleBulkArchive}
-          onDisqualify={handleBulkDisqualify}
-          onOpenTerminalModal={setBulkTerminalAction}
-          onDelete={handleBulkDelete}
-          onToast={(msg, type) => showToast(msg, type)}
-          canConvert={can('leads.convert')}
-          canDelete={can('leads.delete')}
-        />
-      )}
+        </div>
+        {drawerLead && (
+          <LeadSelectedPanel
+            lead={drawerLead}
+            position={drawerIdx >= 0 ? (page - 1) * PAGE_SIZE + drawerIdx + 1 : 0}
+            total={listTotal}
+            slaResult={leadSLAMap.get(drawerLead.id) ?? HEALTHY_SLA_RESULT}
+            isDuplicateRisk={duplicateCandidateMap.has(drawerLead.id)}
+            hasPrev={drawerIdx > 0}
+            hasNext={drawerIdx >= 0 && drawerIdx < sortedLeads.length - 1}
+            onPrev={() => { if (drawerIdx > 0) setDrawerLeadId(sortedLeads[drawerIdx - 1].id); }}
+            onNext={() => { if (drawerIdx >= 0 && drawerIdx < sortedLeads.length - 1) setDrawerLeadId(sortedLeads[drawerIdx + 1].id); }}
+            onClose={() => setDrawerLeadId(null)}
+            onOpenRecord={() => navigate(`/crm/leads/${drawerLead.id}`)}
+            onConvert={() => openModal('convertLead', drawerLead)}
+            onUpdateStatus={status => { void moveLead(drawerLead.id, status, `Lead moved to ${status.replace(/_/g, ' ')}`); }}
+            onGoTo={navigate}
+            refreshKey={writeVersion}
+          />
+        )}
+      </div>
 
       {/* Outreach Composer — opened from contactLead modal (row menu, drawer, NBA actions) */}
       {isModalOpen('contactLead') && activeLead && (
@@ -1436,34 +1439,6 @@ const LeadsPage: React.FC = () => {
         />
       )}
 
-      {/* ── Lead quick drawer ─────────────────────────────────────────────── */}
-      {drawerLead && (
-        <LeadQuickDrawer
-          lead={drawerLead}
-          slaResult={leadSLAMap.get(drawerLead.id) ?? HEALTHY_SLA_RESULT}
-          hasPrev={drawerIdx > 0}
-          hasNext={drawerIdx < sortedLeads.length - 1}
-          isDuplicateRisk={duplicateCandidateMap.has(drawerLead.id)}
-          isOverdue={overdueIdSet.has(drawerLead.id)}
-          isUntouched={untouchedIdSet.has(drawerLead.id)}
-          onClose={() => setDrawerLeadId(null)}
-          onGoTo={navigate}
-          onPrevLead={() => {
-            if (drawerIdx > 0) setDrawerLeadId(sortedLeads[drawerIdx - 1].id);
-          }}
-          onNextLead={() => {
-            if (drawerIdx < sortedLeads.length - 1) setDrawerLeadId(sortedLeads[drawerIdx + 1].id);
-          }}
-          onOpenModal={(modal, l) => {
-            if (STUB_MODALS.has(modal)) {
-              showToast(`${STUB_LABELS[modal] ?? modal} — coming soon`, 'info');
-              return;
-            }
-            openModal(modal, l);
-          }}
-          onUpdateStatus={(id, status) => { void moveLead(id, status, `Lead marked as ${status}`); }}
-        />
-      )}
     </div>
   );
 };

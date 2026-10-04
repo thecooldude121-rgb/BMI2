@@ -318,7 +318,10 @@ const LeadDetailPage: React.FC = () => {
               )}
             </div>
           ) : null}
-          <Button variant="secondary" onClick={() => navigate(`/crm/leads/${id}/edit`)}>Edit</Button>
+          {/* Editing a lead is not built: /crm/leads/:id/edit has NO route, so this
+              button led to a blank page. The frame says the same ("record editing
+              unavailable"). Disabled and labelled until an editor exists. */}
+          <Button variant="secondary" disabled title="Editing a lead is coming soon">Edit · coming soon</Button>
           <div className="relative">
             <Button variant="secondary" iconOnly aria-label="More options" leadingIcon={<MoreHorizontal className="h-4 w-4" />}
               onClick={() => setShowOverflowMenu(v => !v)} />
