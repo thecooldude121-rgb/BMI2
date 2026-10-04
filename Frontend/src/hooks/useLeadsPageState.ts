@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Lead, LeadLifecycleStage, LeadView } from '../types/lead';
 import type { LeadDomain } from '../types/leadDomain';
 import { useLeads } from '../contexts/LeadContext';
@@ -6,19 +6,18 @@ import { toLeadDomain } from '../utils/leadAdapters';
 import { SYSTEM_PRESETS } from '../utils/savedViewPresets';
 import type { PresetSetters } from '../utils/savedViewPresets';
 import type { AdvancedFilter } from '../types/leadFilter';
-import { applyAdvancedFilter } from '../utils/leadFilterEngine';
 import type { SortMode } from '../utils/leadSorting';
-import { sortLeads, getSortDescription, SORT_OPTIONS } from '../utils/leadSorting';
+import { getSortDescription, SORT_OPTIONS } from '../utils/leadSorting';
 import { computeLeadSLA, getSLAConfig } from '../utils/leadSla';
 import type { LeadSLAResult } from '../utils/leadSla';
-import { computeNBA } from '../utils/leadNBA/engine';
 import type { NBAPriority } from '../utils/leadNBA/engine';
-import { computeMultiFactorScore } from '../utils/leadScoring/multiFactorScore';
-import { findDuplicates, buildDomainSet } from '../utils/leadDuplicates';
 import type { DuplicateCandidate } from '../utils/leadDuplicates';
 import { computeSourceAnalytics } from '../utils/leadSourceAnalytics';
 import type { SourceStats } from '../utils/leadSourceAnalytics';
 import { usePermissions } from './usePermissions';
+import { useCurrentUser } from '../contexts/CurrentUserContext';
+import { fetchLeadsPage, fetchLeadSummary } from '../utils/leadsApi';
+import type { LeadListQuery, LeadSummary } from '../utils/leadsApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -137,6 +136,17 @@ export interface LeadsPageState {
   readyToConvertDelta:    number;
   advancedFilter:         AdvancedFilter;
   hasActiveAdvancedFilter: boolean;
+  /** SERVER pagination (step 5): the real number of leads matching the filters. */
+  listTotal:              number;
+  listLoading:            boolean;
+  /** The server's refusal (e.g. a saved view filtering on a field with no column). */
+  listError:              string | null;
+  /** Set when the current filters ask for something not computable yet — the list is NOT fetched. */
+  listUnavailableReason:  string | null;
+  /** The filters as a server query (without paging) — Kanban lanes reuse it. */
+  serverQuery:            Omit<LeadListQuery, 'limit' | 'offset'>;
+  /** KPI figures over ALL matching leads, or null until loaded. */
+  summary:                LeadSummary | null;
   statusViewMode:         StatusViewMode;
 
   setViewMode:         (mode: ViewMode) => void;
@@ -176,13 +186,7 @@ export interface LeadsPageState {
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
-function getLeadName(lead: Lead): string {
-  return lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
-}
-
-function getLeadScore(lead: Lead): number {
-  return lead.ai_score ?? lead.score;
-}
+// (getLeadName / getLeadScore were used by the client-side filter, now on the server.)
 
 const VALID_SORT_MODES = new Set<string>(SORT_OPTIONS.map(o => o.mode));
 function isSortOption(s: string | undefined): s is SortOption {
@@ -190,7 +194,48 @@ function isSortOption(s: string | undefined): s is SortOption {
 }
 
 const DEFAULT_FILTER: FilterState = { status: 'all', source: 'all', score: 'all' };
+
+/** Sorts the server can run in SQL (Backend utils/leadListQuery SQL_SORTS). */
+export const SERVER_SORTS = new Set<string>(['newest', 'oldest', 'score_high_low', 'score_low_high', 'recently_active']);
+
+/**
+ * Insight filters the server can run, mapped to its insight names. The rest need
+ * every lead (duplicates, SLA, next-best-action) or a column that does not exist
+ * (overdue follow-ups) — they are "Coming soon" until step 5 slice B.
+ * 'untouched' is the "New Unworked" card: it now filters to exactly what that
+ * card counts (new/assigned with no contact) rather than a different set.
+ */
+const SERVER_INSIGHTS: Partial<Record<string, LeadListQuery['insight']>> = {
+  untouched:      'new_unworked',
+  readyToConvert: 'ready_to_convert',
+};
+export const COMING_SOON_INSIGHT_REASON: Record<string, string> = {
+  overdue:       'Overdue follow-ups are coming soon — follow-up dates are not stored yet.',
+  duplicateRisk: 'Duplicate risk is coming soon — it compares every lead and is moving to the server.',
+  slaBreach:     'SLA breach filtering is coming soon — it is moving to the server.',
+  nbaAction:     'The action-required queue is coming soon — it is moving to the server.',
+};
 const PAGE_SIZE = 20;
+
+/**
+ * Display-side status migration: legacy DB stages shown in the 12-state model
+ * ('contacted' -> 'attempting_contact', …) and a 'new' lead with an owner shown
+ * as 'assigned'. The server's status filters mirror exactly this
+ * (Backend utils/leadListQuery statusPredicate), so a chip and its rows agree.
+ */
+export function migrateLegacyStatus(lead: Lead): Lead {
+  const STATUS_MAP: Record<string, LeadLifecycleStage> = {
+    contacted: 'attempting_contact',
+    working:   'attempting_contact',
+    nurturing: 'nurture',
+    unqualified: 'disqualified',
+  };
+  const migrated = STATUS_MAP[lead.status];
+  const hasOwner = Boolean(lead.owner_id) || Boolean(lead.assigned_to_user_id);
+  const derived: LeadLifecycleStage =
+    migrated ?? (lead.status === 'new' && hasOwner ? 'assigned' : lead.status as LeadLifecycleStage);
+  return derived !== lead.status ? { ...lead, status: derived } : lead;
+}
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -205,12 +250,16 @@ export function useLeadsPageState(): LeadsPageState {
     createView,
     updateView,
     deleteView: ctxDeleteView,
+    writeVersion,
   } = useLeads();
+  const { currentUser } = useCurrentUser();
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [viewMode,        setViewMode]        = useState<ViewMode>('list');
   const [searchQuery,     setSearchQuery]     = useState('');
-  const [sortBy,          setSortBy]          = useState<SortOption>('priority');
+  // Default 'newest' (step 5): 'priority' is a client-computed composite score
+  // and cannot be ordered by the server until slice B.
+  const [sortBy,          setSortBy]          = useState<SortOption>('newest');
   const [displayedCount,  setDisplayedCount]  = useState(PAGE_SIZE);
   const [filterState,     setFilterState]     = useState<FilterState>(DEFAULT_FILTER);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -232,29 +281,87 @@ export function useLeadsPageState(): LeadsPageState {
   );
 
   useEffect(() => {
-    fetchLeads();
     fetchViews();
-  }, [fetchLeads, fetchViews]);
+  }, [fetchViews]);
+  void fetchLeads; // the page no longer reads LeadContext's (capped) list — see the server fetch below
+
+  // ── Server-side list (step 5 slice A) ─────────────────────────────────────
+  // The page used to filter / sort / page LeadContext's leads — at most the
+  // API's default 50 — in the browser, with no total. It now asks the server
+  // for one page at a time, filtered and counted over EVERY lead.
+  const canViewAll = can('leads.view_all');
+  const ownerFilter = !canViewAll && /^\d+$/.test(String(currentUser.id ?? '')) ? String(currentUser.id) : undefined;
+  // A user without view_all and without a resolvable id sees nothing rather
+  // than everything — the display filter fails closed.
+  const ownerBlocked = !canViewAll && !ownerFilter;
+
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const serverQuery = useMemo((): Omit<LeadListQuery, 'limit' | 'offset'> => ({
+    status: filterState.status, source: filterState.source, score_band: filterState.score,
+    search: debouncedSearch, assigned_to_user_id: ownerFilter,
+    insight: activeInsight ? SERVER_INSIGHTS[activeInsight] : undefined,
+    filter: advancedFilter, sort: sortBy,
+  }), [filterState, debouncedSearch, ownerFilter, activeInsight, advancedFilter, sortBy]);
+
+  const listUnavailableReason: string | null =
+    ownerBlocked ? 'Your leads cannot be shown — your account has no user id to match lead owners against.'
+    : activeInsight && !SERVER_INSIGHTS[activeInsight] ? (COMING_SOON_INSIGHT_REASON[activeInsight] ?? 'This view is coming soon.')
+    : !SERVER_SORTS.has(sortBy) ? `Sorting by "${SORT_OPTIONS.find(o => o.mode === sortBy)?.label ?? sortBy}" is coming soon.`
+    : null;
+
+  const [serverRows,  setServerRows]  = useState<Lead[]>([]);
+  const [listTotal,   setListTotal]   = useState(0);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError,   setListError]   = useState<string | null>(null);
+  const reqSeq = useRef(0);
+  const loadedCountRef = useRef(PAGE_SIZE);
+  const queryKey = JSON.stringify(serverQuery);
+  const lastQueryKey = useRef(queryKey);
+
+  useEffect(() => {
+    if (listUnavailableReason) {
+      setServerRows([]); setListTotal(0); setListError(null); setListLoading(false);
+      return;
+    }
+    // A new query starts at page 1; a refetch after a write keeps what was loaded.
+    if (lastQueryKey.current !== queryKey) { loadedCountRef.current = PAGE_SIZE; lastQueryKey.current = queryKey; }
+    const seq = ++reqSeq.current;
+    setListLoading(true);
+    fetchLeadsPage({ ...serverQuery, limit: Math.max(PAGE_SIZE, loadedCountRef.current), offset: 0 })
+      .then(page => {
+        if (seq !== reqSeq.current) return;          // a newer request superseded this one
+        setServerRows(page.leads); setListTotal(page.total); setListError(null);
+      })
+      .catch(e => {
+        if (seq !== reqSeq.current) return;
+        setServerRows([]); setListTotal(0);
+        setListError(e instanceof Error ? e.message : 'Could not load leads.');
+      })
+      .finally(() => { if (seq === reqSeq.current) setListLoading(false); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey, writeVersion, listUnavailableReason]);
+
+  const [summary, setSummary] = useState<LeadSummary | null>(null);
+  useEffect(() => {
+    if (ownerBlocked) { setSummary(null); return; }
+    let live = true;
+    fetchLeadSummary(ownerFilter).then(s => { if (live) setSummary(s); }).catch(() => { if (live) setSummary(null); });
+    return () => { live = false; };
+  }, [ownerFilter, ownerBlocked, writeVersion]);
 
   // ── Frontend migration layer ──────────────────────────────────────────────
   // Normalises legacy status values from the DB into the 12-state model.
   // In production, apply the SQL migration in Backend/migrations/ first, then remove this.
-  const migratedLeads = useMemo((): Lead[] => {
-    const STATUS_MAP: Record<string, LeadLifecycleStage> = {
-      contacted: 'attempting_contact',
-      working:   'attempting_contact',
-      nurturing: 'nurture',
-      unqualified: 'disqualified',
-    };
-    return contextLeads.map(lead => {
-      const migrated = STATUS_MAP[lead.status];
-      // Auto-derive 'assigned' for new leads that already have an owner
-      const derived: LeadLifecycleStage =
-        migrated ??
-        (lead.status === 'new' && lead.owner_id ? 'assigned' : lead.status as LeadLifecycleStage);
-      return derived !== lead.status ? { ...lead, status: derived } : lead;
-    }).filter(lead => canViewLead(lead));
-  }, [contextLeads, canViewLead]);
+  const migratedLeads = useMemo((): Lead[] => serverRows.map(migrateLegacyStatus), [serverRows]);
+  // The "own leads" display filter now runs on the SERVER (assigned_to_user_id),
+  // so the total matches the rows. (canViewLead compared lead.owner_id, which
+  // the API never set — sales users saw no leads at all.)
+  void canViewLead; void contextLeads;
 
   // ── Sorted saved views (pinned first, then view_order) ───────────────────
   const savedViews = useMemo(
@@ -281,12 +388,9 @@ export function useLeadsPageState(): LeadsPageState {
     [migratedLeads],
   );
 
-  const overdueLeads = useMemo(() => {
-    const now = new Date();
-    return migratedLeads.filter(
-      l => l.next_follow_up_date && new Date(l.next_follow_up_date) < now,
-    );
-  }, [migratedLeads]);
+  // No next_follow_up_date column exists, so this can only ever be empty. The
+  // card renders "Coming soon" rather than "All follow-ups on track".
+  const overdueLeads = useMemo((): Lead[] => [], []);
 
   const untouchedLeads = useMemo(() => {
     const cutoff = new Date();
@@ -302,20 +406,12 @@ export function useLeadsPageState(): LeadsPageState {
   );
 
   // Per-lead duplicate candidate map — replaces the old coarse domain-level set
-  const duplicateCandidateMap = useMemo((): Map<string, DuplicateCandidate[]> => {
-    const map = new Map<string, DuplicateCandidate[]>();
-    for (const lead of migratedLeads) {
-      const candidates = findDuplicates(lead, migratedLeads);
-      if (candidates.length > 0) map.set(lead.id, candidates);
-    }
-    return map;
-  }, [migratedLeads]);
+  // Duplicate detection compares a lead with EVERY other lead; over one server
+  // page it would miss most matches and imply the rest are clean. Empty until
+  // step 5 slice B moves it to the server ("Coming soon" on the page).
+  const duplicateCandidateMap = useMemo((): Map<string, DuplicateCandidate[]> => new Map(), []);
 
   // Backward-compat domain set consumed by leadFilterEngine and leadSorting
-  const duplicateEmailDomainSet = useMemo(
-    () => buildDomainSet(migratedLeads),
-    [migratedLeads],
-  );
 
   const duplicateRiskLeads = useMemo(
     () => migratedLeads.filter(l => duplicateCandidateMap.has(l.id)),
@@ -361,40 +457,11 @@ export function useLeadsPageState(): LeadsPageState {
   );
 
   const sourceQualityThisWeek = useMemo((): SourceQuality => {
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setHours(0, 0, 0, 0);
-    const dow = weekStart.getDay();
-    weekStart.setDate(weekStart.getDate() - (dow === 0 ? 6 : dow - 1));
-
-    const weeklyLeads = migratedLeads.filter(l => new Date(l.created_at) >= weekStart);
-    if (weeklyLeads.length === 0) {
-      return { topSource: '—', topSourceAvgScore: 0, topSourceCount: 0, weeklyLeads: 0 };
-    }
-
-    const bySource = new Map<string, number[]>();
-    for (const lead of weeklyLeads) {
-      const src = lead.source || 'Unknown';
-      const score = lead.ai_score ?? lead.score;
-      if (!bySource.has(src)) bySource.set(src, []);
-      bySource.get(src)!.push(score);
-    }
-
-    let topSource = '—';
-    let topAvg = -1;
-    let topCount = 0;
-    for (const [src, scores] of bySource.entries()) {
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-      if (avg > topAvg) { topSource = src; topAvg = avg; topCount = scores.length; }
-    }
-
-    return {
-      topSource,
-      topSourceAvgScore: Math.round(topAvg < 0 ? 0 : topAvg),
-      topSourceCount: topCount,
-      weeklyLeads: weeklyLeads.length,
-    };
-  }, [migratedLeads]);
+    const q = summary?.source_quality_week;
+    return q && q.top_source
+      ? { topSource: q.top_source, topSourceAvgScore: q.top_source_avg_score, topSourceCount: q.top_source_count, weeklyLeads: q.weekly_leads }
+      : { topSource: '—', topSourceAvgScore: 0, topSourceCount: 0, weeklyLeads: q?.weekly_leads ?? 0 };
+  }, [summary]);
 
   const sourceAnalytics = useMemo((): SourceAnalytics => {
     const now = Date.now();
@@ -415,114 +482,28 @@ export function useLeadsPageState(): LeadsPageState {
     };
   }, [migratedLeads, duplicateCandidateMap, leadSLAMap]);
 
-  const nbaQueue = useMemo((): Map<string, NBAPriority> => {
-    const overdueSet   = new Set(overdueLeads.map(l => l.id));
-    const untouchedSet = new Set(untouchedLeads.map(l => l.id));
-    const map = new Map<string, NBAPriority>();
-    for (const lead of migratedLeads) {
-      const isDuplicateRisk = duplicateCandidateMap.has(lead.id);
-      const mfs             = computeMultiFactorScore(lead);
-      const { priority }    = computeNBA(lead, {
-        isDuplicateRisk,
-        isOverdue:   overdueSet.has(lead.id),
-        isUntouched: untouchedSet.has(lead.id),
-        slaResult:   leadSLAMap.get(lead.id),
-        mfs,
-      });
-      map.set(lead.id, priority);
-    }
-    return map;
-  }, [migratedLeads, overdueLeads, untouchedLeads, duplicateCandidateMap, leadSLAMap]);
+  // The next-best-action queue is a step 5 slice B item ("Coming soon"): it
+  // ranks leads against each other and reads duplicate risk, which needs every
+  // lead. Row CTAs fall back to their rule hierarchy.
+  const nbaQueue = useMemo((): Map<string, NBAPriority> => new Map(), []);
 
-  const filteredLeads = useMemo(() => {
-    let base = migratedLeads.filter(lead => {
-      const statusGroup = STATUS_GROUPS[filterState.status];
-      const matchesStatus =
-        filterState.status === 'all'       ? true :
-        statusGroup                         ? statusGroup.includes(lead.status) :
-                                              lead.status === filterState.status;
-      const matchesSource = filterState.source === 'all' ||
-        (lead.source || '').toLowerCase().includes(filterState.source.toLowerCase());
-      const score = getLeadScore(lead);
-      const matchesScore =
-        filterState.score === 'all' ||
-        (filterState.score === '80-100'   && score >= 80) ||
-        (filterState.score === '60-79'    && score >= 60 && score < 80) ||
-        (filterState.score === 'below-60' && score < 60);
-      const name = getLeadName(lead).toLowerCase();
-      const matchesSearch =
-        searchQuery === '' ||
-        name.includes(searchQuery.toLowerCase()) ||
-        (lead.company || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (lead.email   || '').toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStatus && matchesSource && matchesScore && matchesSearch;
-    });
+  // Filtering, sorting and paging happen on the SERVER now (utils/leadListQuery
+  // in the backend); these are the rows it returned, in its order.
+  const filteredLeads = migratedLeads;
+  const sortedLeads   = migratedLeads;
+  const paginatedLeads = migratedLeads;
+  void untouchedLeads; void readyToConvertLeads; void slaBreachedLeads;
 
-    if (activeInsight === 'overdue') {
-      const overdueIds = new Set(overdueLeads.map(l => l.id));
-      base = base.filter(l => overdueIds.has(l.id));
-    } else if (activeInsight === 'duplicateRisk') {
-      const dupIds = new Set(duplicateRiskLeads.map(l => l.id));
-      base = base.filter(l => dupIds.has(l.id));
-    } else if (activeInsight === 'untouched') {
-      const untouchedIds = new Set(untouchedLeads.map(l => l.id));
-      base = base.filter(l => untouchedIds.has(l.id));
-    } else if (activeInsight === 'readyToConvert') {
-      const rtcIds = new Set(readyToConvertLeads.map(l => l.id));
-      base = base.filter(l => rtcIds.has(l.id));
-    } else if (activeInsight === 'slaBreach') {
-      const slaIds = new Set(slaBreachedLeads.map(l => l.id));
-      base = base.filter(l => slaIds.has(l.id));
-    } else if (activeInsight === 'nbaAction') {
-      base = base.filter(l => {
-        const p = nbaQueue.get(l.id);
-        return p === 'urgent' || p === 'high';
-      });
-    }
-
-    base = applyAdvancedFilter(base, advancedFilter, duplicateEmailDomainSet, leadSLAMap, duplicateCandidateMap);
-
-    return base;
-  }, [migratedLeads, filterState, searchQuery, activeInsight, overdueLeads, duplicateRiskLeads, untouchedLeads, readyToConvertLeads, slaBreachedLeads, nbaQueue, advancedFilter, duplicateEmailDomainSet, leadSLAMap, duplicateCandidateMap]);
-
-  const sortedLeads = useMemo(
-    () => sortLeads(filteredLeads, sortBy, duplicateEmailDomainSet, leadSLAMap),
-    [filteredLeads, sortBy, duplicateEmailDomainSet, leadSLAMap],
-  );
-
-  const paginatedLeads = useMemo(
-    () => sortedLeads.slice(0, displayedCount),
-    [sortedLeads, displayedCount],
-  );
-
-  const kpiMetrics = useMemo((): KpiMetrics => {
-    const today = new Date().toDateString();
-    const weekStart = new Date();
-    weekStart.setHours(0, 0, 0, 0);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-
-    let urgentNbaCount = 0;
-    let highNbaCount   = 0;
-    for (const priority of nbaQueue.values()) {
-      if (priority === 'urgent') urgentNbaCount++;
-      else if (priority === 'high') highNbaCount++;
-    }
-
-    return {
-      total:    migratedLeads.length,
-      newToday: migratedLeads.filter(l => new Date(l.created_at).toDateString() === today).length,
-      hot:      migratedLeads.filter(l => getLeadScore(l) >= 80).length,
-      importedThisWeek: migratedLeads.filter(l => {
-        const src = (l.source || '').toLowerCase();
-        return (
-          new Date(l.created_at) >= weekStart &&
-          (src.includes('lead gen') || src.includes('hrms') || src.includes('apollo'))
-        );
-      }).length,
-      urgentNbaCount,
-      highNbaCount,
-    };
-  }, [migratedLeads, nbaQueue]);
+  // Over ALL matching leads, from GET /leads/summary. (The NBA counts are
+  // "Coming soon"; the page renders that card accordingly.)
+  const kpiMetrics = useMemo((): KpiMetrics => ({
+    total:            summary?.total ?? 0,
+    newToday:         summary?.new_today ?? 0,
+    hot:              summary?.hot ?? 0,
+    importedThisWeek: summary?.imported_this_week ?? 0,
+    urgentNbaCount:   0,
+    highNbaCount:     0,
+  }), [summary]);
 
   // ── Trend deltas (7d vs prior 7d, derived — not memoized) ────────────────
 
@@ -530,14 +511,7 @@ export function useLeadsPageState(): LeadsPageState {
   const _7dAgo  = new Date(_now7.getTime() - 7  * 86_400_000);
   const _14dAgo = new Date(_now7.getTime() - 14 * 86_400_000);
 
-  const newUnworkedDelta = (() => {
-    const thisWk = newUnworkedLeads.filter(l => new Date(l.created_at) >= _7dAgo).length;
-    const lastWk = newUnworkedLeads.filter(l => {
-      const d = new Date(l.created_at);
-      return d >= _14dAgo && d < _7dAgo;
-    }).length;
-    return thisWk - lastWk;
-  })();
+  const newUnworkedDelta = summary ? summary.new_unworked_this_week - summary.new_unworked_last_week : 0;
 
   const readyToConvertDelta = (() => {
     const thisWk = readyToConvertLeads.filter(l => new Date(l.created_at) >= _7dAgo).length;
@@ -566,10 +540,26 @@ export function useLeadsPageState(): LeadsPageState {
 
   // ── Pagination ────────────────────────────────────────────────────────────
 
-  const loadMore = useCallback(
-    () => setDisplayedCount(prev => Math.min(prev + PAGE_SIZE, sortedLeads.length)),
-    [sortedLeads.length],
-  );
+  const loadMore = useCallback(() => {
+    if (listUnavailableReason || serverRows.length >= listTotal) return;
+    const seq = reqSeq.current;
+    const offset = serverRows.length;
+    setListLoading(true);
+    fetchLeadsPage({ ...serverQuery, limit: PAGE_SIZE, offset })
+      .then(page => {
+        if (seq !== reqSeq.current) return;          // the query changed meanwhile
+        setServerRows(prev => {
+          const have = new Set(prev.map(l => l.id));
+          const next = [...prev, ...page.leads.filter(l => !have.has(l.id))];
+          loadedCountRef.current = next.length;
+          return next;
+        });
+        setListTotal(page.total);
+      })
+      .catch(e => { if (seq === reqSeq.current) setListError(e instanceof Error ? e.message : 'Could not load more leads.'); })
+      .finally(() => { if (seq === reqSeq.current) setListLoading(false); });
+  }, [listUnavailableReason, serverRows.length, listTotal, serverQuery]);
+  void setDisplayedCount;
 
   // ── Selection ─────────────────────────────────────────────────────────────
 
@@ -811,6 +801,12 @@ export function useLeadsPageState(): LeadsPageState {
     sortedLeads,
     paginatedLeads,
     kpiMetrics,
+    listTotal,
+    listLoading,
+    listError,
+    listUnavailableReason,
+    serverQuery,
+    summary,
     overdueLeads,
     untouchedLeads,
     readyToConvertLeads,

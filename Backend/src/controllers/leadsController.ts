@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { resolveActorName } from '../utils/actorName';
+import { buildLeadListQuery, FilterError } from '../utils/leadListQuery';
 import { foreignIdsInTenant, userIdForName, userNameForId } from '../utils/tenantScope';
 import { PRIVILEGED_ROLES } from '../utils/roles';
 import {
@@ -72,36 +73,117 @@ function actorId(req: AuthRequest): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/**
+ * GET /api/v1/leads — SERVER-SIDE pagination with a real total (step 5 slice A).
+ *
+ * Response: { data, count (rows in this page), total (all matching), limit, offset }.
+ * Filters, search, sort and the advanced filter are translated to SQL by
+ * utils/leadListQuery, so the database pages over EVERY lead. The Leads page
+ * used to receive the API's default 50 rows (it sent no limit) and filter /
+ * sort / page those in the browser with no total — anything past row 50 was
+ * invisible, silently.
+ *
+ * Order always ends in the id, so pages are stable: no lead is skipped or
+ * repeated between pages of the same query.
+ */
 export const getLeads = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    // `owner_id` is accepted as an alias for the live `assigned_to` column;
-    // leadsApi.ts sends that param name.
-    const { stage, owner_id, assigned_to, search, limit = 50, offset = 0 } = req.query;
-    const owner = assigned_to ?? owner_id;
-
-    let query = `SELECT * FROM leads WHERE tenant_id = $1`;
-    const params: any[] = [tenantId];
-    let i = 2;
-
-    if (stage) { query += ` AND stage = $${i++}`;       params.push(stage); }
-    if (owner) { query += ` AND assigned_to = $${i++}`; params.push(owner); }
-    if (search) {
-      query += ` AND (first_name ILIKE $${i} OR last_name ILIKE $${i} OR email ILIKE $${i} OR company ILIKE $${i})`;
-      params.push(`%${search}%`);
-      i++;
+    const q = req.query as Record<string, string | undefined>;
+    // Legacy params kept: `stage` (exact DB stage), `owner_id` / `assigned_to`
+    // (owner NAME). New params go through the builder.
+    let built;
+    try {
+      built = buildLeadListQuery(tenantId, {
+        status: q.status, source: q.source, score_band: q.score_band, search: q.search,
+        assigned_to_user_id: q.assigned_to_user_id, insight: q.insight, filter: q.filter,
+        sort: q.sort, stages: q.stages,
+      });
+    } catch (e) {
+      if (e instanceof FilterError) { res.status(400).json({ success: false, message: e.message }); return; }
+      throw e;
     }
+    let where = built.where;
+    const params = [...built.params];
+    if (q.stage) { params.push(q.stage); where += ` AND l.stage = $${params.length}`; }
+    const ownerName = q.assigned_to ?? q.owner_id;
+    if (ownerName) { params.push(ownerName); where += ` AND l.assigned_to = $${params.length}`; }
 
     // Coerce and cap pagination — these came straight off the query string, so
     // `?limit=abc` was a 500 and `?limit=999999` an unbounded scan.
-    const safeLimit = Math.min(Math.max(parseInt(String(limit), 10) || 50, 1), 500);
-    const safeOffset = Math.max(parseInt(String(offset), 10) || 0, 0);
+    const safeLimit = Math.min(Math.max(parseInt(String(q.limit ?? 50), 10) || 50, 1), 500);
+    const safeOffset = Math.max(parseInt(String(q.offset ?? 0), 10) || 0, 0);
 
-    query += ` ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`;
-    params.push(safeLimit, safeOffset);
+    const total = await pool.query(`SELECT COUNT(*)::int AS n FROM leads l WHERE ${where}`, params);
+    const page = await pool.query(
+      `SELECT l.* FROM leads l WHERE ${where}
+        ORDER BY ${built.orderBy}
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, safeLimit, safeOffset],
+    );
+    res.json({
+      success: true, data: page.rows, count: page.rowCount,
+      total: total.rows[0].n, limit: safeLimit, offset: safeOffset,
+    });
+  } catch (error) { next(error); }
+};
 
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+/**
+ * GET /api/v1/leads/summary — the Leads page's KPI figures, computed over ALL
+ * matching leads in SQL (step 5 slice A). They used to be computed in the
+ * browser over the ≤50 rows it had loaded. Accepts assigned_to_user_id (the
+ * "own leads" display filter) so the figures match the list the user sees.
+ * Week boundaries follow the page's own definitions (imported: week starting
+ * Sunday; source quality: week starting Monday), in the database's time zone.
+ */
+export const getLeadSummary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    let built;
+    try {
+      built = buildLeadListQuery(tenantId, { assigned_to_user_id: req.query.assigned_to_user_id as string | undefined });
+    } catch (e) {
+      if (e instanceof FilterError) { res.status(400).json({ success: false, message: e.message }); return; }
+      throw e;
+    }
+    const r = await pool.query(
+      `SELECT
+         COUNT(*)::int AS total,
+         COUNT(*) FILTER (WHERE l.created_at::date = CURRENT_DATE)::int AS new_today,
+         COUNT(*) FILTER (WHERE coalesce(l.score, 0) >= 80)::int AS hot,
+         COUNT(*) FILTER (WHERE l.created_at >= date_trunc('week', CURRENT_DATE + 1) - interval '1 day'
+                           AND (l.source ILIKE '%lead gen%' OR l.source ILIKE '%hrms%' OR l.source ILIKE '%apollo%'))::int AS imported_this_week,
+         COUNT(*) FILTER (WHERE l.stage IN ('new', 'assigned') AND l.last_contact IS NULL)::int AS new_unworked,
+         COUNT(*) FILTER (WHERE l.stage IN ('new', 'assigned') AND l.last_contact IS NULL
+                           AND l.created_at >= NOW() - interval '7 days')::int AS new_unworked_this_week,
+         COUNT(*) FILTER (WHERE l.stage IN ('new', 'assigned') AND l.last_contact IS NULL
+                           AND l.created_at >= NOW() - interval '14 days' AND l.created_at < NOW() - interval '7 days')::int AS new_unworked_last_week,
+         COUNT(*) FILTER (WHERE l.last_contact IS NULL OR l.last_contact < CURRENT_DATE - 30)::int AS untouched,
+         COUNT(*) FILTER (WHERE l.stage IN ('qualified', 'sales_accepted'))::int AS ready_to_convert
+       FROM leads l WHERE ${built.where}`,
+      built.params,
+    );
+    const week = await pool.query(
+      `SELECT coalesce(l.source, 'Unknown') AS source, COUNT(*)::int AS n, AVG(coalesce(l.score, 0)) AS avg
+         FROM leads l
+        WHERE ${built.where} AND l.created_at >= date_trunc('week', CURRENT_DATE)
+        GROUP BY 1 ORDER BY avg DESC, n DESC`,
+      built.params,
+    );
+    const weeklyLeads = week.rows.reduce((t, x) => t + x.n, 0);
+    const top = week.rows[0];
+    res.json({
+      success: true,
+      data: {
+        ...r.rows[0],
+        source_quality_week: {
+          top_source: top ? top.source : null,
+          top_source_avg_score: top ? Math.round(Number(top.avg)) : 0,
+          top_source_count: top ? top.n : 0,
+          weekly_leads: weeklyLeads,
+        },
+      },
+    });
   } catch (error) { next(error); }
 };
 

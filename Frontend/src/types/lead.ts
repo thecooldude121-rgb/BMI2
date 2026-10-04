@@ -119,6 +119,8 @@ export interface Lead {
   converted_to_deal_id?: string;
   /** Migration 059. The company the lead was converted into, if any. */
   converted_to_company_id?: string;
+  /** Migration 060: the owner as a real user id (dual-written with the name). */
+  assigned_to_user_id?: number | null;
   converted_by?: string;
   first_contact_date?: string;
   last_contact_date?: string;

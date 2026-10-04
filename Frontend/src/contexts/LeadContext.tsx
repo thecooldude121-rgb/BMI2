@@ -51,6 +51,8 @@ interface LeadContextType {
   getLead: (id: string) => Promise<Lead | null>;
   createLead: (lead: Partial<Lead>) => Promise<Lead | null>;
   updateLead: (id: string, updates: Partial<Lead>) => Promise<boolean>;
+  /** Increments after every successful lead write (see the state's comment). */
+  writeVersion: number;
   /**
    * POST /leads/:id/stage-transition with an override / reason. THROWS
    * LeadStageError carrying the server's unmet criteria and can_override, for
@@ -149,6 +151,11 @@ interface LeadProviderProps {
 export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const { user } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
+  // Bumped after every SUCCESSFUL lead write. The paginated Leads list (step 5)
+  // holds its own server pages rather than `leads`, so it watches this to
+  // refetch instead of showing a stale row after a move, edit, convert or delete.
+  const [writeVersion, setWriteVersion] = useState(0);
+  const bumpWrites = () => setWriteVersion(v => v + 1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastWriteError, setLastWriteError] = useState<string | null>(null);
@@ -235,7 +242,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const createLead = async (lead: Partial<Lead>): Promise<Lead | null> => {
     const payload = { ...lead, owner_id: lead.owner_id || user?.id };
     const created = await guardWrite('createLead', () => createLeadViaAPI(payload), null);
-    if (created) setLeads(prev => [created, ...prev]);
+    if (created) { setLeads(prev => [created, ...prev]); bumpWrites(); }
     return created;
   };
 
@@ -247,6 +254,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     try {
       await updateLeadViaAPI(id, updates);
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+      bumpWrites();
       lastWriteErrorRef.current = null;
       setLastWriteError(null);
       return true;
@@ -265,12 +273,13 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     const lead = await transitionLeadStageViaAPI(id, toStage, opts);
     // Merge the SERVER's row, not what was asked for.
     setLeads(prev => prev.map(l => l.id === id ? { ...l, status: lead.status } : l));
+    bumpWrites();
     return lead;
   };
 
   const deleteLead = async (id: string): Promise<boolean> => {
     const ok = await guardWrite('deleteLead', () => deleteLeadViaAPI(id), false);
-    if (ok) setLeads(prev => prev.filter(l => l.id !== id));
+    if (ok) { setLeads(prev => prev.filter(l => l.id !== id)); bumpWrites(); }
     return ok;
   };
 
@@ -280,7 +289,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
       async () => { await Promise.all(ids.map(id => deleteLeadViaAPI(id))); return true; },
       false,
     );
-    if (ok) setLeads(prev => prev.filter(l => !ids.includes(l.id)));
+    if (ok) { setLeads(prev => prev.filter(l => !ids.includes(l.id))); bumpWrites(); }
     return ok;
   };
 
@@ -474,6 +483,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     const result = await convertLeadViaAPI(leadId, request);
     // Merge the SERVER's lead row — stage and converted_* come from it.
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, ...result.lead } : l));
+    bumpWrites();
     return result;
   };
   const detectDuplicates = async (_leadId: string): Promise<any[]> => [];
@@ -519,6 +529,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     getLead,
     createLead,
     updateLead,
+    writeVersion,
     transitionLead,
     deleteLead,
     bulkDeleteLeads,

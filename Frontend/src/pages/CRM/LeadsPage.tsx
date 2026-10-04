@@ -4,7 +4,7 @@ import { Plus, Upload, Search, ChevronDown, CheckCircle, UserPlus, Link as LinkI
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
-import { useLeadsPageState } from '../../hooks/useLeadsPageState';
+import { useLeadsPageState, migrateLegacyStatus, SERVER_SORTS } from '../../hooks/useLeadsPageState';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SORT_OPTIONS } from '../../utils/leadSorting';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
@@ -36,6 +36,7 @@ import type { AdvancedFilter, FilterGroup } from '../../types/leadFilter';
 import type { Lead } from '../../types/lead';
 import type { ModalId } from '../../hooks/useLeadsPageState';
 import { LeadStageError } from '../../utils/leadsApi';
+import { useKanbanLanes } from '../../hooks/useKanbanLanes';
 import { toCsv } from '../../utils/csv';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ const KANBAN_SWIM_LANES: Array<{
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { leads: contextLeads, loading, updateLead, transitionLead, deleteLead, updateView: ctxUpdateView, lastWriteErrorRef } = useLeads();
+  const { updateLead, transitionLead, deleteLead, updateView: ctxUpdateView, lastWriteErrorRef, writeVersion } = useLeads();
   const actions = useLeadActions(updateLead);
 
   const { can } = usePermissions();
@@ -167,7 +168,7 @@ const LeadsPage: React.FC = () => {
     viewMode, setViewMode,
     searchQuery, setSearchQuery,
     sortBy, setSortBy, sortLabel, sortExplanation,
-    displayedCount, loadMore,
+    loadMore,
     filterState, setFilterStatus, setFilterSource, setFilterScore,
     selectedLeadIds, toggleLeadSelection, selectAllLeads, setSelection, clearSelection, isSelected,
     activeLead,
@@ -175,10 +176,10 @@ const LeadsPage: React.FC = () => {
     toast, showToast, clearToast,
     sortedLeads,
     paginatedLeads,
-    kpiMetrics,
+    listTotal, listLoading, listError, listUnavailableReason, serverQuery, summary,
     // Insight selectors
-    overdueLeads, duplicateRiskLeads, duplicateCandidateMap, untouchedLeads,
-    slaBreachedLeads, slaBreachCounts, leadSLAMap, newUnworkedLeads, nbaQueue, sourceQualityThisWeek,
+    overdueLeads, duplicateCandidateMap, untouchedLeads,
+    leadSLAMap, nbaQueue, sourceQualityThisWeek,
     sourceAnalytics,
     newUnworkedDelta,
     canViewAllLeads,
@@ -193,6 +194,24 @@ const LeadsPage: React.FC = () => {
     saveCurrentAsView, updateActiveView, renameView, pinView, reorderViews, deleteView,
   } = useLeadsPageState();
 
+  // ── Server-side Kanban lanes + the rows this page actually holds (step 5) ──
+  const kanban = useKanbanLanes(KANBAN_SWIM_LANES, serverQuery, viewMode === 'kanban' && !listUnavailableReason, writeVersion);
+  const kanbanLaneLeads = React.useMemo(() => Object.fromEntries(
+    Object.entries(kanban.lanes).map(([id, lane]) => [id, lane.leads.map(migrateLegacyStatus)]),
+  ) as Record<string, Lead[]>, [kanban.lanes]);
+  /**
+   * Every lead the page has loaded (list pages + Kanban lanes). Lookups that used
+   * LeadContext's own list — capped at the API's default 50 — now use this, so a
+   * lead past row 50 can be opened, dragged, selected and exported.
+   */
+  const pageLeads = React.useMemo(() => {
+    const m = new Map<string, Lead>();
+    for (const l of sortedLeads) m.set(l.id, l);
+    for (const rows of Object.values(kanbanLaneLeads)) for (const l of rows) if (!m.has(l.id)) m.set(l.id, l);
+    return [...m.values()];
+  }, [sortedLeads, kanbanLaneLeads]);
+  const initialLoading = listLoading && sortedLeads.length === 0;
+
   // ── Source quality drawer ─────────────────────────────────────────────────
   const [showSourceQualityDrawer, setShowSourceQualityDrawer] = useState(false);
 
@@ -201,20 +220,17 @@ const LeadsPage: React.FC = () => {
 
   // ── Quick drawer ──────────────────────────────────────────────────────────
   const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
-  const drawerLead = drawerLeadId ? contextLeads.find(l => l.id === drawerLeadId) ?? null : null;
+  const drawerLead = drawerLeadId ? pageLeads.find(l => l.id === drawerLeadId) ?? null : null;
   const drawerIdx  = drawerLeadId ? sortedLeads.findIndex(l => l.id === drawerLeadId) : -1;
 
   // ── Kanban workflow state ─────────────────────────────────────────────────
   const [pendingDropLeadId, setPendingDropLeadId] = useState<string | null>(null);
   const [kanbanModal,       setKanbanModal]       = useState<'qualify' | 'outcome' | null>(null);
   const pendingLead = pendingDropLeadId
-    ? (contextLeads.find(l => l.id === pendingDropLeadId) ?? null)
+    ? (pageLeads.find(l => l.id === pendingDropLeadId) ?? null)
     : null;
 
   // ── KPI helpers ───────────────────────────────────────────────────────────
-  const uniqueDomainsCount = new Set(
-    duplicateRiskLeads.map(l => l.email?.split('@')[1]).filter(Boolean)
-  ).size;
 
   const overdueIdSet = React.useMemo(
     () => new Set(overdueLeads.map(l => l.id)),
@@ -269,8 +285,8 @@ const LeadsPage: React.FC = () => {
     selectedLeadIds.length === sortedLeads.length && sortedLeads.length > 0;
 
   const selectedLeads = React.useMemo(
-    () => contextLeads.filter(l => selectedLeadIds.includes(l.id)),
-    [contextLeads, selectedLeadIds],
+    () => pageLeads.filter(l => selectedLeadIds.includes(l.id)),
+    [pageLeads, selectedLeadIds],
   );
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -313,7 +329,7 @@ const LeadsPage: React.FC = () => {
    * lead) and a silent snap-back reads as a glitch, not a rule.
    */
   const moveLead = async (id: string, status: Lead['status'], successMsg?: string) => {
-    const target = contextLeads.find(l => l.id === id);
+    const target = pageLeads.find(l => l.id === id);
     const ok = target ? await actions.changeStatus(target, status) : await updateLead(id, { status });
     if (ok) { if (successMsg) showToast(successMsg, 'success'); }
     else showToast(lastWriteErrorRef.current || 'The server refused the move.', 'error');
@@ -779,54 +795,33 @@ const LeadsPage: React.FC = () => {
           {/* 1 — Overdue Follow-ups */}
           <KpiCard
             title="Overdue Follow-ups"
-            value={overdueLeads.length}
-            subtitle={
-              overdueLeads.length > 0
-                ? `Oldest: ${overdueLeads.slice(0, 3).map(l =>
-                    l.full_name || [l.first_name, l.last_name].filter(Boolean).join(' ') || '—'
-                  ).join(', ')}`
-                : 'All follow-ups on track'
-            }
-            warning={overdueLeads.length > 0 && overdueLeads.length <= 10}
-            danger={overdueLeads.length > 10}
-            neutral={overdueLeads.length === 0}
+            value="—"
+            comingSoon="Follow-up dates are not stored yet, so nothing can be overdue — this used to read “All follow-ups on track”."
             icon={<Clock size={18} />}
-            onClick={() => setActiveInsight(activeInsight === 'overdue' ? null : 'overdue')}
-            isActive={activeInsight === 'overdue'}
           />
 
           {/* 2 — SLA Breached */}
           <KpiCard
             title="SLA Breached"
-            value={slaBreachedLeads.length}
-            subtitle={
-              slaBreachedLeads.length > 0
-                ? `${slaBreachCounts.firstResponse} first-response · ${slaBreachCounts.followUp} follow-up · ${slaBreachCounts.stale} stale`
-                : 'No SLA breaches across all tracks'
-            }
-            warning={slaBreachedLeads.length > 0 && slaBreachedLeads.length <= 5}
-            danger={slaBreachedLeads.length > 5}
-            neutral={slaBreachedLeads.length === 0}
+            value="—"
+            comingSoon="Counting SLA breaches needs every lead; it is moving to the server. Each row still shows its own SLA."
             icon={<AlertTriangle size={18} />}
-            badge="Multi-track SLA"
-            onClick={() => setActiveInsight(activeInsight === 'slaBreach' ? null : 'slaBreach')}
-            isActive={activeInsight === 'slaBreach'}
           />
 
           {/* 3 — New Unworked */}
           <KpiCard
             title="New Unworked"
-            value={newUnworkedLeads.length}
+            value={(summary?.new_unworked ?? 0)}
             subtitle={
-              newUnworkedLeads.length > 0
-                ? `${newUnworkedLeads.length} leads with no contact logged`
+              (summary?.new_unworked ?? 0) > 0
+                ? `${(summary?.new_unworked ?? 0)} leads with no contact logged`
                 : 'All new leads have been touched'
             }
             delta={newUnworkedDelta}
             deltaLabel="vs last week"
-            warning={newUnworkedLeads.length > 5 && newUnworkedLeads.length <= 20}
-            danger={newUnworkedLeads.length > 20}
-            neutral={newUnworkedLeads.length === 0}
+            warning={(summary?.new_unworked ?? 0) > 5 && (summary?.new_unworked ?? 0) <= 20}
+            danger={(summary?.new_unworked ?? 0) > 20}
+            neutral={(summary?.new_unworked ?? 0) === 0}
             icon={<UserX size={18} />}
             onClick={() => setActiveInsight(activeInsight === 'untouched' ? null : 'untouched')}
             isActive={activeInsight === 'untouched'}
@@ -835,36 +830,17 @@ const LeadsPage: React.FC = () => {
           {/* 4 — Action Required (NBA) */}
           <KpiCard
             title="Action Required"
-            value={kpiMetrics.urgentNbaCount + kpiMetrics.highNbaCount}
-            subtitle={
-              kpiMetrics.urgentNbaCount + kpiMetrics.highNbaCount > 0
-                ? `${kpiMetrics.urgentNbaCount} urgent · ${kpiMetrics.highNbaCount} high priority`
-                : 'No urgent actions pending'
-            }
-            danger={kpiMetrics.urgentNbaCount > 0}
-            warning={kpiMetrics.urgentNbaCount === 0 && kpiMetrics.highNbaCount > 0}
-            neutral={kpiMetrics.urgentNbaCount + kpiMetrics.highNbaCount === 0}
-            badge="NBA"
+            value="—"
+            comingSoon="The next-best-action queue ranks every lead against the others; it is moving to the server."
             icon={<TrendingUp size={18} />}
-            onClick={() => setActiveInsight(activeInsight === 'nbaAction' ? null : 'nbaAction')}
-            isActive={activeInsight === 'nbaAction'}
           />
 
           {/* 5 — Duplicate Risk */}
           <KpiCard
             title="Duplicate Risk"
-            value={duplicateRiskLeads.length}
-            subtitle={
-              duplicateRiskLeads.length > 0
-                ? `Across ${uniqueDomainsCount} domain${uniqueDomainsCount !== 1 ? 's' : ''}`
-                : 'No duplicates detected'
-            }
-            warning={duplicateRiskLeads.length > 0 && duplicateRiskLeads.length <= 10}
-            danger={duplicateRiskLeads.length > 10}
-            neutral={duplicateRiskLeads.length === 0}
+            value="—"
+            comingSoon="Duplicate detection compares every lead with every other; it is moving to the server."
             icon={<Copy size={18} />}
-            onClick={() => setActiveInsight(activeInsight === 'duplicateRisk' ? null : 'duplicateRisk')}
-            isActive={activeInsight === 'duplicateRisk'}
           />
 
           {/* 6 — Top Source This Week */}
@@ -890,11 +866,15 @@ const LeadsPage: React.FC = () => {
                 sourceQualityThisWeek.topSource !== '—'
               }
             />
+            {/* The breakdown scores sources on duplicate and SLA rates, which need
+                every lead — "Coming soon" until they move to the server (step 5 B). */}
             <button
-              onClick={() => setShowSourceQualityDrawer(true)}
-              className="text-right text-xs text-blue-500 hover:text-blue-700 font-medium px-1 transition-colors"
+              type="button"
+              disabled
+              title="Coming soon"
+              className="text-right text-xs text-gray-400 font-medium px-1 cursor-not-allowed"
             >
-              View source breakdown →
+              Source breakdown — coming soon
             </button>
           </div>
 
@@ -1120,6 +1100,7 @@ const LeadsPage: React.FC = () => {
                             {groupLabels[group]}
                           </div>
                           {options.map(option => (
+                            SERVER_SORTS.has(option.mode) ? (
                             <button
                               key={option.mode}
                               onClick={() => { setSortBy(option.mode); closeModal(); }}
@@ -1129,6 +1110,19 @@ const LeadsPage: React.FC = () => {
                             >
                               {option.label}
                             </button>
+                            ) : (
+                            // Ranks on scores computed per lead in the browser (or SLA /
+                            // duplicate risk) — "Coming soon" until the server computes them.
+                            <button
+                              key={option.mode}
+                              type="button"
+                              disabled
+                              title="Coming soon"
+                              className="w-full text-left px-4 py-2 text-sm text-gray-400 cursor-not-allowed"
+                            >
+                              {option.label} <span className="text-[10px] uppercase">· coming soon</span>
+                            </button>
+                            )
                           ))}
                         </div>
                       );
@@ -1179,10 +1173,19 @@ const LeadsPage: React.FC = () => {
         </div>
       )}
 
+      {/* ── Why the list is empty, when it is not "no matches" (step 5) ─────── */}
+      {(listUnavailableReason || listError) && (
+        <div className="px-8 pt-6">
+          <div role="alert" className={`rounded-lg border px-4 py-3 text-sm ${listError ? 'border-red-200 bg-red-50 text-red-800' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
+            {listUnavailableReason ?? `The server could not apply these filters: ${listError}`}
+          </div>
+        </div>
+      )}
+
       {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <div className="px-8 py-6">
-          {loading ? (
+          {initialLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
             </div>
@@ -1257,12 +1260,14 @@ const LeadsPage: React.FC = () => {
 
               {/* Pagination */}
               <div className="mt-6 text-center">
-                <div className="text-sm text-gray-600 mb-4">
-                  Showing {Math.min(displayedCount, sortedLeads.length)} of {sortedLeads.length} leads
+                {/* The TOTAL is the server's count over every matching lead —
+                    it used to be the length of a client array capped at 50. */}
+                <div className="text-sm text-gray-600 mb-4" data-testid="leads-showing">
+                  Showing {sortedLeads.length.toLocaleString()} of {listTotal.toLocaleString()} leads
                 </div>
-                {displayedCount < sortedLeads.length && (
-                  <Button onClick={loadMore} size="lg">
-                    Load More…
+                {sortedLeads.length < listTotal && (
+                  <Button onClick={loadMore} size="lg" disabled={listLoading}>
+                    {listLoading ? 'Loading…' : 'Load More…'}
                   </Button>
                 )}
               </div>
@@ -1274,7 +1279,7 @@ const LeadsPage: React.FC = () => {
       {/* ── GRID VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'grid' && (
         <div className="px-8 py-6">
-          {loading ? (
+          {initialLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
             </div>
@@ -1290,12 +1295,14 @@ const LeadsPage: React.FC = () => {
                 </div>
               )}
               <div className="mt-6 text-center">
-                <div className="text-sm text-gray-600 mb-4">
-                  Showing {Math.min(displayedCount, sortedLeads.length)} of {sortedLeads.length} leads
+                {/* The TOTAL is the server's count over every matching lead —
+                    it used to be the length of a client array capped at 50. */}
+                <div className="text-sm text-gray-600 mb-4" data-testid="leads-showing">
+                  Showing {sortedLeads.length.toLocaleString()} of {listTotal.toLocaleString()} leads
                 </div>
-                {displayedCount < sortedLeads.length && (
-                  <Button onClick={loadMore} size="lg">
-                    Load More…
+                {sortedLeads.length < listTotal && (
+                  <Button onClick={loadMore} size="lg" disabled={listLoading}>
+                    {listLoading ? 'Loading…' : 'Load More…'}
                   </Button>
                 )}
               </div>
@@ -1307,7 +1314,7 @@ const LeadsPage: React.FC = () => {
       {/* ── KANBAN VIEW ───────────────────────────────────────────────────── */}
       {viewMode === 'kanban' && (
         <div className="px-8 py-6">
-          {loading ? (
+          {initialLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
             </div>
@@ -1315,13 +1322,15 @@ const LeadsPage: React.FC = () => {
             <DragDropContext onDragEnd={handleDragEnd}>
               <div className="grid grid-cols-7 gap-3">
                 {KANBAN_SWIM_LANES.map(lane => {
-                  const laneLeads = sortedLeads.filter(l => lane.statuses.includes(l.status));
+                  const laneLeads = kanbanLaneLeads[lane.id] ?? [];
+                  const laneData  = kanban.lanes[lane.id];
+                  const laneTotal = laneData?.total ?? 0;
                   return (
                     <div key={lane.id} className="flex flex-col min-w-0">
                       <div className={`flex items-center justify-between px-2.5 py-2 rounded-t-lg border ${lane.headerColor}`}>
                         <span className="text-xs font-semibold truncate">{lane.label}</span>
                         <div className="flex items-center gap-1 ml-1 shrink-0">
-                          {WIP_LIMITS[lane.id] != null && laneLeads.length > WIP_LIMITS[lane.id] && (
+                          {WIP_LIMITS[lane.id] != null && laneTotal > WIP_LIMITS[lane.id] && (
                             <span
                               className="text-[9px] font-bold bg-amber-400 text-white px-1 py-0.5 rounded leading-none"
                               title={`WIP limit exceeded (limit: ${WIP_LIMITS[lane.id]})`}
@@ -1329,8 +1338,8 @@ const LeadsPage: React.FC = () => {
                               WIP
                             </span>
                           )}
-                          <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full">
-                            {laneLeads.length}
+                          <span className="text-xs font-bold bg-white bg-opacity-70 px-1.5 py-0.5 rounded-full" title={`${laneTotal} leads in this lane`}>
+                            {laneTotal}
                           </span>
                         </div>
                       </div>
@@ -1345,6 +1354,19 @@ const LeadsPage: React.FC = () => {
                           >
                             {laneLeads.map((lead, index) => renderKanbanCard(lead, index))}
                             {provided.placeholder}
+                            {laneData?.error && (
+                              <p role="alert" className="text-[11px] text-red-600 text-center py-2">{laneData.error}</p>
+                            )}
+                            {laneLeads.length < laneTotal && (
+                              <button
+                                type="button"
+                                onClick={() => kanban.loadMoreLane(lane.id)}
+                                disabled={laneData?.loading}
+                                className="w-full mt-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 py-1.5"
+                              >
+                                {laneData?.loading ? 'Loading…' : `Showing ${laneLeads.length} of ${laneTotal} — load more`}
+                              </button>
+                            )}
                             {laneLeads.length === 0 && !snapshot.isDraggingOver && (
                               <p className="text-xs text-gray-400 text-center py-6">
                                 {canViewAllLeads ? 'Drop here' : 'None assigned to you'}
@@ -1367,7 +1389,7 @@ const LeadsPage: React.FC = () => {
         <BulkActionBar
           selectedIds={selectedLeadIds}
           selectedLeads={selectedLeads}
-          totalFiltered={sortedLeads.length}
+          totalFiltered={listTotal}
           isPageFullySelected={isPageFullySelected}
           areAllFiltered={areAllFiltered}
           onSelectAllFiltered={selectAllLeads}
@@ -1463,7 +1485,7 @@ const LeadsPage: React.FC = () => {
         <MergeReviewModal
           lead={activeLead}
           candidateId={duplicateCandidateMap.get(activeLead.id)?.[0]?.leadId ?? ''}
-          allLeads={contextLeads}
+          allLeads={pageLeads}
           candidates={duplicateCandidateMap.get(activeLead.id) ?? []}
           isOpen
           onClose={closeModal}
@@ -1474,7 +1496,8 @@ const LeadsPage: React.FC = () => {
       <AdvancedFilterDrawer
         open={isModalOpen('advancedFilters')}
         advancedFilter={advancedFilter}
-        leads={contextLeads}
+        leads={pageLeads}
+        serverQuery={serverQuery}
         onChange={setAdvancedFilter}
         onClose={closeModal}
       />

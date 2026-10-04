@@ -13,6 +13,7 @@
  * so the rest of the frontend never sees undefined required fields.
  */
 
+import type { AdvancedFilter } from '../types/leadFilter';
 import type {
   Lead, LeadFilters,
   LeadActivity, LeadNote, LeadTask, LeadEmail, LeadCall, LeadMeeting,
@@ -93,6 +94,7 @@ export function mapRowToLead(row: any): Lead {
     // override could qualify anything. Set by logged calls / emails / completed
     // activities since step 5.
     ...(row.last_contact ? { last_contact_date: String(row.last_contact).slice(0, 10) } : {}),
+    assigned_to_user_id: row.assigned_to_user_id ?? null,
     // Migration 059 — what a converted lead became. Server-written only.
     ...(row.converted_at ? { converted_at: String(row.converted_at) } : {}),
     ...(row.converted_contact_id ? { converted_to_contact_id: String(row.converted_contact_id) } : {}),
@@ -133,6 +135,68 @@ export async function fetchLeadsFromAPI(filters?: LeadFilters): Promise<Lead[]> 
   if (!res.ok) throw new Error(`Failed to load leads (HTTP ${res.status})`);
   const json = await res.json();
   return (json.success ? json.data : []).map(mapRowToLead);
+}
+
+// ── Server-side pagination (step 5 slice A) ──────────────────────────────────
+
+/**
+ * One page of the lead list, filtered / sorted / counted by the SERVER.
+ * Every field maps to a GET /leads query param handled by
+ * Backend/src/utils/leadListQuery.ts; anything it does not support comes back
+ * as a 400 with the reason (never silently ignored).
+ */
+export interface LeadListQuery {
+  status?: string;               // UI status or chip group key
+  source?: string;
+  score_band?: string;
+  search?: string;
+  assigned_to_user_id?: string;  // the "own leads" display filter
+  insight?: 'untouched' | 'ready_to_convert' | 'new_unworked';
+  filter?: AdvancedFilter;
+  sort?: string;
+  stages?: string[];             // Kanban lane statuses
+  limit: number;
+  offset: number;
+}
+
+export interface LeadPage { leads: Lead[]; total: number }
+
+export async function fetchLeadsPage(q: LeadListQuery): Promise<LeadPage> {
+  const params = new URLSearchParams();
+  const set = (k: string, v: string | undefined) => { if (v !== undefined && v !== '' && v !== 'all') params.set(k, v); };
+  set('status', q.status); set('source', q.source); set('score_band', q.score_band);
+  set('search', q.search?.trim()); set('assigned_to_user_id', q.assigned_to_user_id);
+  set('insight', q.insight); set('sort', q.sort);
+  if (q.stages?.length) params.set('stages', q.stages.join(','));
+  if (q.filter && q.filter.groups.some(g => g.conditions.length > 0)) params.set('filter', JSON.stringify(q.filter));
+  params.set('limit', String(q.limit));
+  params.set('offset', String(q.offset));
+  const res = await fetch(`${API_BASE}/leads?${params}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load leads (HTTP ${res.status})`);
+  return { leads: (json.data ?? []).map(mapRowToLead), total: Number(json.total ?? 0) };
+}
+
+/** KPI figures over ALL matching leads (GET /leads/summary). */
+export interface LeadSummary {
+  total: number;
+  new_today: number;
+  hot: number;
+  imported_this_week: number;
+  new_unworked: number;
+  new_unworked_this_week: number;
+  new_unworked_last_week: number;
+  untouched: number;
+  ready_to_convert: number;
+  source_quality_week: { top_source: string | null; top_source_avg_score: number; top_source_count: number; weekly_leads: number };
+}
+
+export async function fetchLeadSummary(assignedToUserId?: string): Promise<LeadSummary> {
+  const qs = assignedToUserId ? `?assigned_to_user_id=${encodeURIComponent(assignedToUserId)}` : '';
+  const res = await fetch(`${API_BASE}/leads/summary${qs}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load lead summary (HTTP ${res.status})`);
+  return json.data as LeadSummary;
 }
 
 export async function fetchLeadByIdFromAPI(id: string): Promise<Lead | null> {
