@@ -85,12 +85,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => { setMobileNavOpen(false); }, [pathname]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar />
+    // Figma shell: a full-width top bar, then the sidebar beside the page.
+    <div className="flex h-screen flex-col overflow-hidden bg-surface-canvas">
+      <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
       <MobileNavDrawer open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-      <div className="flex flex-col flex-1 min-w-0">
-        <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
-        <main className="flex-1 overflow-y-auto px-4 pb-4 lg:px-6 lg:pb-6">
+      <div className="flex min-h-0 flex-1">
+        <Sidebar />
+        <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-4 lg:px-6 lg:pb-6">
           {/* Inside Layout on purpose: a page-level error must not take the
               sidebar and top bar down with it — the user needs to navigate away. */}
           <RouteShell>{children}</RouteShell>

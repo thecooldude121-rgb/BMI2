@@ -63,9 +63,10 @@ export default {
         // Warm parchment surfaces, from the frames.
         surface: {
           canvas: '#f5f1e8', // app background
-          subtle: '#faf7f0', // sidebar / secondary panels
+          subtle: '#faf7f0', // secondary panels
           panel:  '#fffefb', // cards
           sunken: '#f0ece3', // inset / hover
+          sidebar: '#efe9de', // the app sidebar (Figma Settings frames)
         },
         // Hairline borders and dividers.
         line: {

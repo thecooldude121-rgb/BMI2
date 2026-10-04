@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, UserPlus, Users, Building, DollarSign,
-  Activity, FileText, BarChart3, Calendar,
-  Plug, Settings, ChevronDown, ChevronRight,
-  Building2, Phone, Video, CheckSquare, PanelLeftClose,
-  PanelLeftOpen, Bookmark, Clock, PauseCircle
+  LayoutDashboard, UserPlus, Briefcase, Building2, Users, ListChecks,
+  CalendarDays, Sparkles, UsersRound, Blocks, FileBarChart, Settings,
+  LineChart, CheckSquare, Calendar, FileText,
 } from 'lucide-react';
 
 interface NavItem {
   name: string;
-  href?: string;
+  href: string;
   icon: React.ElementType;
-  children?: { name: string; href: string; icon: React.ElementType }[];
+  /** A pill after the label — e.g. "Preview" on a page that is not built. */
+  badge?: string;
 }
 
 /**
@@ -24,277 +23,132 @@ interface NavItem {
  * disagree, and the failure is silent — a destination added here and forgotten
  * there is simply missing on phones, with no type error and no failing test.
  * `MobileNavDrawer` therefore renders `<SidebarNav />`, not its own markup.
+ *
+ * FIGMA ("BMI CRM V1", Settings frames 75:39868), decided 2026-10-05:
+ * the first group is the Settings frame's list, in its order. The frames are
+ * not consistent — the Forecast, Tasks, Calendar and Documents frames each add
+ * their own page — so those four sit in a "More" group rather than losing
+ * their only link (Venkat's call). Dropped from the nav with this change:
+ *   - Pinned Views ("My Open Deals", "Closing This Week", "Stalled"): links to
+ *     /crm/deals?owner=me / ?closeDate=thisWeek / ?stalled=true — and NOTHING
+ *     reads those parameters, so each opened the unfiltered Deals list while
+ *     claiming to be a filter.
+ *   - Calls and Analytics: still routed (/crm/calls, /analytics), no longer in
+ *     the sidebar, as decided.
+ *
+ * Icons are Lucide, as the frames use. lucide-react 0.344 predates two of
+ * them, so `Briefcase` stands in for BriefcaseBusiness and `FileBarChart` for
+ * FileChartColumn — the closest glyphs in the installed version.
  */
 export const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     items: [
-      { name: 'Dashboard', href: '/crm/dashboard', icon: LayoutDashboard },
+      { name: 'Dashboard',    href: '/crm/dashboard',  icon: LayoutDashboard },
+      { name: 'Leads',        href: '/crm/leads',      icon: UserPlus },
+      { name: 'Deals',        href: '/crm/deals',      icon: Briefcase },
+      // Was once '/accounts', a placeholder telling the user to "navigate to
+      // CRM → Accounts". The real accounts list is CRMModule's /crm/accounts.
+      { name: 'Accounts',     href: '/crm/accounts',   icon: Building2 },
+      { name: 'Contacts',     href: '/crm/contacts',   icon: Users },
+      // The superset view, routed and API-backed. It was once reachable from no
+      // navigation at all, which made manual activity logging undiscoverable.
+      { name: 'Activities',   href: '/crm/activities', icon: ListChecks },
+      { name: 'Meetings',     href: '/crm/meetings',   icon: CalendarDays },
+      // Not built (Phase 2). The page says so; the badge says so before the click.
+      { name: 'AI Copilot',   href: '/crm/ai-copilot', icon: Sparkles, badge: 'Preview' },
+      { name: 'Team',         href: '/team',           icon: UsersRound },
+      { name: 'Integrations', href: '/integrations',   icon: Blocks },
+      { name: 'Reports',      href: '/crm/reports',    icon: FileBarChart },
+      /*
+       * POINTS AT /crm/settings, NOT /settings. This link used to go to the
+       * latter — the dead Supabase tree — so the Settings screens that are
+       * actually wired were unreachable from the main nav. CLAUDE.md lesson 5;
+       * pinned by settingsNavigation.test.tsx.
+       */
+      { name: 'Settings',     href: '/crm/settings',   icon: Settings },
     ],
   },
   {
-    label: 'CRM',
+    label: 'More',
     items: [
-      { name: 'Leads',     href: '/crm/leads',     icon: UserPlus },
-      { name: 'Contacts',  href: '/crm/contacts',  icon: Users },
-      // Was '/accounts', which rendered a placeholder telling the user to
-      // "navigate to CRM → Accounts" — a sidebar entry that does not exist.
-      // The real accounts list is CRMModule's /crm/accounts.
-      { name: 'Accounts',  href: '/crm/accounts',  icon: Building },
-      { name: 'Deals',     href: '/crm/deals',     icon: DollarSign },
-      {
-        name: 'Pinned Views', icon: Bookmark,
-        children: [
-          { name: 'My Open Deals',       href: '/crm/deals?owner=me',           icon: DollarSign },
-          { name: 'Closing This Week',   href: '/crm/deals?closeDate=thisWeek', icon: Clock },
-          { name: 'Stalled',             href: '/crm/deals?stalled=true',       icon: PauseCircle },
-        ],
-      },
-      { name: 'Forecast',  href: '/crm/forecast',  icon: BarChart3 },
-      {
-        name: 'Activities', icon: Activity,
-        children: [
-          // The superset view, listed first. It was routed and API-backed but
-          // reachable from NO navigation at all, which made the manual
-          // activity-logging surface undiscoverable — a page nobody can find is
-          // not a built feature. A second, fabricated feed used to sit at
-          // /crm/activities/all; it was deleted rather than linked.
-          { name: 'All Activities', href: '/crm/activities', icon: Activity },
-          { name: 'Tasks',    href: '/crm/tasks',    icon: CheckSquare },
-          { name: 'Meetings', href: '/crm/meetings', icon: Video },
-          { name: 'Calls',    href: '/crm/calls',    icon: Phone },
-        ],
-      },
+      { name: 'Forecast',  href: '/crm/forecast',  icon: LineChart },
+      { name: 'Tasks',     href: '/crm/tasks',     icon: CheckSquare },
+      { name: 'Calendar',  href: '/calendar',      icon: Calendar },
       { name: 'Documents', href: '/crm/documents', icon: FileText },
-      { name: 'Reports',   href: '/crm/reports',   icon: BarChart3 },
-    ],
-  },
-  {
-    label: 'Modules',
-    items: [
-      { name: 'Analytics',       href: '/analytics',                    icon: BarChart3 },
-      { name: 'Calendar',        href: '/calendar',                     icon: Calendar },
-      { name: 'Team',            href: '/team',                         icon: Users },
-      { name: 'Integrations',    href: '/integrations',                 icon: Plug },
     ],
   },
 ];
 
 /**
- * The scrolling nav list plus the pinned Settings row — everything below the
- * logo. Shared verbatim by the desktop sidebar and the mobile drawer.
+ * The nav rows. Shared verbatim by the desktop sidebar and the mobile drawer.
  *
  * `onNavigate` fires on every destination click. The desktop sidebar passes
  * nothing; the drawer passes its close handler, because a drawer that stays
  * open over the page it just navigated to is a drawer the user has to dismiss
  * before they can see what they asked for.
  */
-export const SidebarNav: React.FC<{
-  collapsed?: boolean;
-  onNavigate?: () => void;
-}> = ({ collapsed = false, onNavigate }) => {
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Activities']);
-
-  const toggleExpand = (name: string) => {
-    setExpandedItems(prev =>
-      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
-    );
-  };
-
-  return (
-    <>
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-4">
-        {navGroups.map((group, gi) => (
-          <div key={gi}>
-            {/* Group label — only when expanded */}
-            {!collapsed && group.label && (
-              <p className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                {group.label}
-              </p>
-            )}
-            {/* Divider line in collapsed mode between groups */}
-            {collapsed && gi > 0 && (
-              <div className="mx-3 mb-2 border-t border-gray-700" />
-            )}
-
-            <ul className="space-y-0.5">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const isItemExpanded = expandedItems.includes(item.name);
-
-                /* ── Expandable item (e.g. Activities) ── */
-                if (item.children) {
-                  if (collapsed) {
-                    // In collapsed mode just show the parent icon, no children
-                    return (
-                      <li key={item.name}>
-                        <button
-                          title={item.name}
-                          onClick={() => toggleExpand(item.name)}
-                          className="w-full flex items-center justify-center py-2.5 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                        >
-                          <Icon className="h-4 w-4" />
-                        </button>
-                      </li>
-                    );
-                  }
-
-                  return (
-                    <li key={item.name}>
-                      <button
-                        onClick={() => toggleExpand(item.name)}
-                        aria-expanded={isItemExpanded}
-                        className="w-full flex items-center justify-between px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                      >
-                        <span className="flex items-center gap-3">
-                          <Icon className="h-4 w-4 shrink-0" />
-                          <span className="whitespace-nowrap">{item.name}</span>
-                        </span>
-                        {isItemExpanded
-                          ? <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                          : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-                      </button>
-                      {isItemExpanded && (
-                        <ul className="bg-gray-800/50 py-1">
-                          {item.children.map((child) => {
-                            const ChildIcon = child.icon;
-                            return (
-                              <li key={child.name}>
-                                <NavLink
-                                  to={child.href}
-                                  onClick={onNavigate}
-                                  className={({ isActive }) =>
-                                    `flex items-center gap-3 pl-10 pr-4 py-2 text-sm transition-colors ${
-                                      isActive
-                                        ? 'text-white bg-brand-600/20 border-l-2 border-blue-500'
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-                                    }`
-                                  }
-                                >
-                                  <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="whitespace-nowrap">{child.name}</span>
-                                </NavLink>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  );
+export const SidebarNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => (
+  <nav aria-label="Main" className="flex flex-col gap-4">
+    {navGroups.map((group, gi) => (
+      <div key={gi}>
+        {group.label && (
+          <p className="px-2.5 pb-1.5 text-xs font-semibold uppercase leading-[18px] text-ink-muted">
+            {group.label}
+          </p>
+        )}
+        <ul className="flex flex-col gap-1">
+          {group.items.map(({ name, href, icon: Icon, badge }) => (
+            <li key={name}>
+              <NavLink
+                to={href}
+                end={href === '/crm/dashboard'}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  `flex h-[38px] items-center gap-2.5 rounded-card px-2.5 text-sm leading-[22px] transition-colors ${
+                    isActive
+                      ? 'bg-brand-100 font-semibold text-brand-600'
+                      : 'text-ink hover:bg-black/5'
+                  }`
                 }
-
-                /* ── Regular nav item ── */
-                return (
-                  <li key={item.name}>
-                    <NavLink
-                      to={item.href!}
-                      end={item.href === '/crm/dashboard'}
-                      onClick={onNavigate}
-                      title={collapsed ? item.name : undefined}
-                      className={({ isActive }) =>
-                        `flex items-center py-2 text-sm transition-colors ${
-                          collapsed ? 'justify-center px-0' : 'gap-3 px-4'
-                        } ${
-                          isActive
-                            ? 'text-white bg-brand-600 border-l-2 border-blue-400'
-                            : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                        }`
-                      }
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && (
-                        <span className="whitespace-nowrap">{item.name}</span>
-                      )}
-                    </NavLink>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </nav>
-
-      {/*
-        * Settings pinned at bottom.
-        *
-        * POINTS AT /crm/settings, NOT /settings. This link used to go to the
-        * latter — the dead Supabase tree — so the three Settings screens that
-        * are actually wired (workspace preferences, the team roster, your
-        * profile and password) were unreachable from the main nav, and the page
-        * a user landed on was the one with no backend. That is CLAUDE.md's
-        * lesson 5 in its original form: the fix was verified at one route while
-        * the nav pointed at another.
-        */}
-      <div className="border-t border-gray-700 py-2 shrink-0">
-        <NavLink
-          to="/crm/settings"
-          onClick={onNavigate}
-          title={collapsed ? 'Settings' : undefined}
-          className={({ isActive }) =>
-            `flex items-center py-2.5 text-sm transition-colors ${
-              collapsed ? 'justify-center px-0' : 'gap-3 px-4'
-            } ${
-              isActive
-                ? 'text-white bg-brand-600'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-            }`
-          }
-        >
-          <Settings className="h-4 w-4 shrink-0" />
-          {!collapsed && <span className="whitespace-nowrap">Settings</span>}
-        </NavLink>
+              >
+                <Icon className="h-[17px] w-[17px] shrink-0" aria-hidden="true" />
+                <span className="flex-1 truncate">{name}</span>
+                {/* The space keeps the accessible name "AI Copilot Preview",
+                    not "AI CopilotPreview"; flex layout ignores it visually. */}
+                {badge && ' '}
+                {badge && (
+                  <span className="shrink-0 rounded-full bg-brand-50 px-2 py-[3px] text-xs font-semibold leading-[18px] text-brand-600">
+                    {badge}
+                  </span>
+                )}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
       </div>
-    </>
-  );
-};
+    ))}
+  </nav>
+);
 
 /**
- * The desktop sidebar. `hidden lg:flex` — below 1024px it does not render at
- * all, which is why `MobileNavDrawer` exists.
+ * The desktop sidebar, below the full-width top bar (Figma). `hidden lg:flex`
+ * — below 1024px it does not render at all, which is why `MobileNavDrawer`
+ * exists.
+ *
+ * Three things the Figma sidebar draws are deliberately NOT rendered, because
+ * nothing real backs them:
+ *   - the workspace caption ("NORTHSTAR · INDIA & MEA") — the session carries
+ *     only a workspace id, and a mockup's workspace name is not ours;
+ *   - the "Data integrity" card ("…states are labelled at source") — a claim
+ *     about every screen, and not yet true of every screen (CLAUDE.md lists
+ *     surfaces still showing unexplained scores);
+ *   - "Workspace connected" — a health indicator with no health check behind it.
+ * The old collapse toggle is gone too: the Figma sidebar has none.
  */
-const Sidebar: React.FC = () => {
-  const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
-
-  return (
-    <aside
-      className={`relative hidden lg:flex flex-col min-h-screen bg-gray-900 text-gray-300 shrink-0 transition-all duration-300 ease-in-out ${
-        collapsed ? 'w-14' : 'w-56'
-      }`}
-    >
-      {/* Logo + Toggle button row */}
-      <div className={`flex items-center border-b border-gray-700 h-14 shrink-0 ${collapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
-        {/* Logo — hidden when collapsed */}
-        {!collapsed && (
-          <div
-            className="flex items-center gap-2 cursor-pointer overflow-hidden"
-            onClick={() => navigate('/crm/dashboard')}
-          >
-            <div className="flex items-center justify-center w-7 h-7 bg-brand-600 rounded-lg shrink-0">
-              <Building2 className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-sm font-bold text-white tracking-tight whitespace-nowrap">
-              BMI Platform
-            </span>
-          </div>
-        )}
-
-        {/* Collapse / Expand toggle */}
-        <button
-          onClick={() => setCollapsed(prev => !prev)}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shrink-0"
-        >
-          {collapsed
-            ? <PanelLeftOpen className="h-4 w-4" />
-            : <PanelLeftClose className="h-4 w-4" />
-          }
-        </button>
-      </div>
-
-      <SidebarNav collapsed={collapsed} />
-    </aside>
-  );
-};
+const Sidebar: React.FC = () => (
+  <aside className="hidden lg:flex w-[216px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-sidebar px-3 py-[18px]">
+    <SidebarNav />
+  </aside>
+);
 
 export default Sidebar;

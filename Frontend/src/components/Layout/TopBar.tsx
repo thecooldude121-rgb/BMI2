@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Search, Bell, Mail, Settings, LogOut, ChevronDown, Plus,
+  Search, Bell, Inbox, Settings, LogOut, ChevronDown, Plus,
   DollarSign, Users, UserPlus, Building2, CheckSquare,
   X, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
+// The section label beside the brand (Figma shows one word, e.g. "Settings").
+// `parent` is kept for callers and tests; the bar renders only `label`.
 const getBreadcrumb = (pathname: string): { parent?: string; label: string } => {
   if (pathname.startsWith('/crm/deals'))         return { parent: 'CRM', label: 'Deals' };
   if (pathname.startsWith('/crm/forecast'))       return { parent: 'CRM', label: 'Forecast' };
@@ -18,13 +20,17 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   if (pathname.startsWith('/crm/meetings'))      return { parent: 'CRM', label: 'Meetings' };
   if (pathname.startsWith('/crm/calls'))         return { parent: 'CRM', label: 'Calls' };
   if (pathname.startsWith('/crm/reports'))       return { parent: 'CRM', label: 'Reports' };
+  if (pathname.startsWith('/crm/documents'))     return { parent: 'CRM', label: 'Documents' };
+  if (pathname.startsWith('/crm/ai-copilot'))    return { parent: 'CRM', label: 'AI Copilot' };
   // Before the generic /crm line, or Settings would read as plain "CRM".
   if (pathname.startsWith('/crm/settings'))      return { parent: 'CRM', label: 'Settings' };
+  if (pathname.startsWith('/crm/dashboard'))     return { label: 'Dashboard' };
   if (pathname.startsWith('/crm'))               return { label: 'CRM' };
   if (pathname.startsWith('/analytics'))         return { label: 'Analytics' };
   if (pathname.startsWith('/calendar'))          return { label: 'Calendar' };
   if (pathname.startsWith('/sequences'))         return { label: 'Sequences' };
   if (pathname.startsWith('/integrations'))      return { label: 'Integrations' };
+  if (pathname.startsWith('/team'))              return { label: 'Team' };
   if (pathname.startsWith('/settings'))          return { label: 'Settings' };
   if (pathname.startsWith('/dashboard'))         return { label: 'Dashboard' };
   return { label: 'BMI Platform' };
@@ -63,7 +69,34 @@ export const NEW_MENU_ITEMS = [
  * with a real notifications source.
  */
 
+/** Up to two initials from a display name; '?' when there is none. */
+export const initialsOf = (name?: string | null): string => {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+};
+
+/** Figma's 36px square tool button (Inbox, Notifications). */
+const toolButton =
+  'flex h-9 w-9 items-center justify-center rounded-card border border-line text-ink transition-colors';
+
 /**
+ * The full-width top bar (Figma "Top bar", 75:39846): brand and current
+ * section on the left; search, + New, inbox, notifications and the profile on
+ * the right.
+ *
+ * Three controls here used to look live and do nothing. They keep their Figma
+ * place and say "coming soon" instead (CLAUDE.md, Honest Feedback):
+ *   - search accepted typing and searched nothing — now disabled, and the
+ *     frame's "Ctrl K" pill (a shortcut that does not exist) reads "Soon";
+ *   - the mail button had no handler and wore a green "unread" dot — now a
+ *     disabled Inbox, no dot;
+ *   - the avatar fell back to a STOCK PHOTO of a stranger for any user without
+ *     one — now the user's initials.
+ * "+ New" is not in the frame; it is kept because it is real (every item is a
+ * routed create surface — see NEW_MENU_ITEMS) and removing it would take away
+ * working functionality for a pixel match.
+ *
  * `onOpenMobileNav` is supplied by Layout below the `lg` breakpoint, where the
  * sidebar does not render. It is optional so TopBar still mounts standalone in
  * tests and in any future shell that has no drawer.
@@ -89,74 +122,87 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-
   return (
-    <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between gap-2 px-4 lg:px-6 shrink-0 z-40 sticky top-0">
-      {/* Breadcrumb — left */}
-      <div className="flex items-center gap-1.5 min-w-0">
-        {/*
-          * Below `lg` the sidebar is `hidden`, so this button is the ONLY way to
-          * reach any other page. It is inside the breadcrumb group rather than
-          * the actions group so it stays pinned to the left edge and can never
-          * be pushed off-screen by the actions, which is exactly what happened
-          * to the mail button and the profile menu before.
-          */}
-        {onOpenMobileNav && (
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-line bg-surface-panel px-4 lg:px-6">
+      {/* Brand and section — left */}
+      <div className="flex min-w-0 items-center gap-[18px]">
+        <div className="flex min-w-0 items-center gap-2.5 lg:w-[192px]">
+          {/*
+            * Below `lg` the sidebar is `hidden`, so this button is the ONLY way to
+            * reach any other page. It sits in the left group so it stays pinned to
+            * the left edge and can never be pushed off-screen by the actions,
+            * which is exactly what happened to the mail button and the profile
+            * menu before.
+            */}
+          {onOpenMobileNav && (
+            <button
+              type="button"
+              onClick={onOpenMobileNav}
+              aria-label="Open navigation menu"
+              className="lg:hidden -ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-card text-ink hover:bg-black/5 transition-colors"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
           <button
             type="button"
-            onClick={onOpenMobileNav}
-            aria-label="Open navigation menu"
-            className="lg:hidden -ml-1 mr-1 flex items-center justify-center h-9 w-9 shrink-0 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+            onClick={() => navigate('/crm/dashboard')}
+            className="flex min-w-0 items-center gap-2.5 rounded-card"
+            aria-label="BMI Platform — go to dashboard"
           >
-            <Menu className="h-5 w-5" />
+            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-card bg-brand-600 text-sm font-bold text-white">
+              B
+            </span>
+            <span className="hidden truncate text-base font-bold leading-6 text-ink sm:inline">BMI Platform</span>
           </button>
-        )}
-        {crumb.parent && (
-          <>
-            <span className="text-sm text-gray-400 font-medium">{crumb.parent}</span>
-            <span className="text-gray-300">›</span>
-          </>
-        )}
-        <span className="text-sm font-semibold text-gray-800 truncate">{crumb.label}</span>
+        </div>
+        <span className="hidden truncate text-sm font-semibold leading-[22px] text-ink-muted md:inline" data-testid="topbar-section">
+          {crumb.label}
+        </span>
       </div>
 
-      {/* Actions — right */}
-      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+      {/* Global tools — right */}
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
 
-        {/* Search. Hidden below `md`: at 390px the full actions row measured
-            482px inside a 390px shell whose parent is `overflow-hidden`, and
-            this input was 234px of that — the single biggest contributor to
-            the mail button and profile menu being clipped out of reach. */}
-        <div className="relative w-64 hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        {/* Search — not built. Hidden below `lg`: the 320px Figma box does not
+            fit beside the other tools on narrower screens, and at 390px an
+            overflowing actions row once clipped the profile menu out of reach. */}
+        <div className="relative hidden h-9 w-[320px] items-center gap-2 rounded-card border border-line bg-gray-50 px-3 lg:flex">
+          <Search className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
           <input
             type="text"
-            placeholder="Search deals, contacts…"
-            aria-label="Global search"
-            className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 focus:bg-white transition-colors"
+            disabled
+            placeholder="Search deals, accounts, people…"
+            aria-label="Global search (coming soon)"
+            title="Search is coming soon"
+            className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
           />
+          <span className="shrink-0 rounded-full bg-surface-sunken px-2 py-[3px] text-xs font-semibold leading-[18px] text-ink-muted">
+            Soon
+          </span>
         </div>
 
-        {/* + New button (8.1) */}
+        {/* + New */}
         <div className="relative" ref={newMenuRef}>
           <button
             onClick={() => setShowNewMenu(v => !v)}
             aria-label="Create new record"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-full transition-colors shadow-sm"
+            aria-expanded={showNewMenu}
+            className="flex h-9 items-center gap-1.5 rounded-card bg-brand-600 px-3 text-sm font-medium text-white transition-colors hover:bg-brand-700"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">New</span>
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showNewMenu ? 'rotate-180' : ''}`} />
           </button>
           {showNewMenu && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+            <div className="absolute right-0 z-50 mt-2 w-48 rounded-card border border-line bg-surface-panel py-2 shadow-lg">
               {NEW_MENU_ITEMS.map(({ label, icon: Icon, href }) => (
                 <button
                   key={label}
                   onClick={() => { navigate(href); setShowNewMenu(false); }}
-                  className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                  className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-ink transition-colors hover:bg-brand-50 hover:text-brand-700"
                 >
-                  <Icon className="h-4 w-4 text-gray-400" />
+                  <Icon className="h-4 w-4 text-ink-muted" />
                   {label}
                 </button>
               ))}
@@ -164,67 +210,79 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
           )}
         </div>
 
-        {/* Notifications bell (8.2) */}
+        {/* Inbox — not built: no handler, no data. Disabled rather than dead. */}
+        <button
+          type="button"
+          disabled
+          aria-label="Inbox (coming soon)"
+          title="Inbox is coming soon"
+          className={`${toolButton} hidden cursor-not-allowed opacity-60 sm:flex`}
+        >
+          <Inbox className="h-[18px] w-[18px]" />
+        </button>
+
+        {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => { setShowNotifications(v => !v); }}
             aria-label="Notifications"
-            className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className={`${toolButton} hover:bg-black/5`}
           >
-            <Bell className="h-5 w-5" />
+            <Bell className="h-[18px] w-[18px]" />
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <span className="text-sm font-semibold text-gray-900">Notifications</span>
-                <button onClick={() => setShowNotifications(false)} aria-label="Close notifications" className="p-1 text-gray-400 hover:text-gray-600 rounded">
+            <div className="absolute right-0 z-50 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-line bg-surface-panel shadow-xl">
+              <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                <span className="text-sm font-semibold text-ink">Notifications</span>
+                <button onClick={() => setShowNotifications(false)} aria-label="Close notifications" className="rounded p-1 text-ink-muted hover:text-ink">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
               <div className="px-4 py-8 text-center">
-                <Bell className="h-6 w-6 text-gray-300 mx-auto mb-2" aria-hidden="true" />
-                <p className="text-sm font-medium text-gray-700">Notifications are not available yet</p>
-                <p className="text-xs text-gray-500 mt-1">Nothing generates notifications in this CRM yet, so there is nothing to show.</p>
+                <Bell className="mx-auto mb-2 h-6 w-6 text-ink-muted" aria-hidden="true" />
+                <p className="text-sm font-medium text-ink">Notifications are not available yet</p>
+                <p className="mt-1 text-xs text-ink-muted">Nothing generates notifications in this CRM yet, so there is nothing to show.</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Mail */}
-        <button aria-label="Open mail" className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-          <Mail className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-green-500 rounded-full"></span>
-        </button>
-
         {/* Profile */}
         <div className="relative">
           <button
             onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="Account menu"
+            aria-expanded={showProfileMenu}
+            className="flex items-center gap-3 rounded-card py-1 pl-1 pr-1 transition-colors hover:bg-black/5 sm:pr-2"
           >
-            <img
-              src={user?.avatar || 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'}
-              alt={user?.name}
-              className="h-7 w-7 rounded-full object-cover"
-            />
-            <div className="text-left hidden sm:block">
-              <p className="text-xs font-semibold text-gray-800 leading-tight">{user?.name}</p>
+            {user?.avatar ? (
+              <img src={user.avatar} alt="" className="h-[34px] w-[34px] rounded-full object-cover" />
+            ) : (
+              <span
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700"
+                aria-hidden="true"
+                data-testid="topbar-initials"
+              >
+                {initialsOf(user?.name)}
+              </span>
+            )}
+            <div className="hidden flex-col items-start gap-px text-left sm:flex">
+              <p className="text-sm font-semibold leading-tight text-ink">{user?.name}</p>
               {/* 'Unknown' is AuthContext's fail-closed role. Spelled out here
                   so the caption reads as a real statement rather than a
                   one-word mystery under someone's name. */}
-              <p className="text-[10px] text-gray-500 leading-tight">
+              <p className="text-xs leading-[18px] text-ink-muted">
                 {user?.role === 'Unknown' ? 'Unknown role' : user?.role}
               </p>
             </div>
-            <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
           </button>
 
           {showProfileMenu && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
-              <div className="px-4 py-2 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+            <div className="absolute right-0 z-50 mt-2 w-48 rounded-card border border-line bg-surface-panel py-1 shadow-lg">
+              <div className="border-b border-line px-4 py-2">
+                <p className="text-sm font-medium text-ink">{user?.name}</p>
+                <p className="truncate text-xs text-ink-muted">{user?.email}</p>
               </div>
               {/*
                 * This item is labelled "Profile Settings" and used to navigate to
@@ -233,14 +291,14 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
                 */}
               <button
                 onClick={() => { navigate('/crm/settings'); setShowProfileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex w-full items-center gap-3 px-4 py-2 text-sm text-ink transition-colors hover:bg-black/5"
               >
-                <Settings className="h-4 w-4 text-gray-400" />
+                <Settings className="h-4 w-4 text-ink-muted" />
                 Profile Settings
               </button>
               <button
                 onClick={() => { logout(); setShowProfileMenu(false); navigate('/login'); }}
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-gray-100"
+                className="flex w-full items-center gap-3 border-t border-line px-4 py-2 text-sm text-red-700 transition-colors hover:bg-red-50"
               >
                 <LogOut className="h-4 w-4" />
                 Sign out

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, X, LogOut } from 'lucide-react';
+import { X, LogOut } from 'lucide-react';
 import { SidebarNav } from './Sidebar';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -83,18 +83,18 @@ const MobileNavDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
         role="dialog"
         aria-modal="true"
         aria-label="Main navigation"
-        className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-gray-900 text-gray-300 flex flex-col shadow-2xl"
+        className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-surface-sidebar text-ink flex flex-col shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-gray-700 h-14 px-4 shrink-0">
+        <div className="flex items-center justify-between border-b border-line bg-surface-panel h-16 px-4 shrink-0">
           <button
             type="button"
             onClick={() => { navigate('/crm/dashboard'); onClose(); }}
-            className="flex items-center gap-2 overflow-hidden"
+            className="flex items-center gap-2.5 overflow-hidden rounded-card"
           >
-            <div className="flex items-center justify-center w-7 h-7 bg-brand-600 rounded-lg shrink-0">
-              <Building2 className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-sm font-bold text-white tracking-tight whitespace-nowrap">
+            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-card bg-brand-600 text-sm font-bold text-white">
+              B
+            </span>
+            <span className="text-base font-bold text-ink whitespace-nowrap">
               BMI Platform
             </span>
           </button>
@@ -104,19 +104,21 @@ const MobileNavDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
             type="button"
             onClick={onClose}
             aria-label="Close navigation menu"
-            className="flex items-center justify-center w-8 h-8 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors shrink-0"
+            className="flex items-center justify-center w-8 h-8 rounded-card text-ink-muted hover:text-ink hover:bg-black/5 transition-colors shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <SidebarNav onNavigate={onClose} />
+        <div className="flex-1 overflow-y-auto px-3 py-[18px]">
+          <SidebarNav onNavigate={onClose} />
+        </div>
 
-        <div className="border-t border-gray-700 py-2 shrink-0">
+        <div className="border-t border-line px-3 py-2 shrink-0">
           <button
             type="button"
             onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-gray-800 transition-colors"
+            className="w-full flex items-center gap-2.5 h-[38px] px-2.5 rounded-card text-sm text-red-700 hover:bg-red-50 transition-colors"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             <span className="whitespace-nowrap">Sign out</span>

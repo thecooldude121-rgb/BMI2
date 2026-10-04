@@ -53,36 +53,22 @@ describe('MobileNavDrawer', () => {
     expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it('surfaces EVERY top-level destination the sidebar has', async () => {
-    const user = userEvent.setup();
+  it('surfaces EVERY top-level destination the sidebar has', () => {
     renderDrawer();
 
-    // Collapsible groups are closed except Activities, so expand the rest
-    // first — "reachable" means reachable by a user, not present in the DOM.
-    for (const group of navGroups) {
-      for (const item of group.items) {
-        if (!item.children) continue;
-        const toggle = screen.getByRole('button', { name: new RegExp(`^${item.name}`, 'i') });
-        if (toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle);
-      }
-    }
-
-    const expected: string[] = [];
-    for (const group of navGroups) {
-      for (const item of group.items) {
-        if (item.children) expected.push(...item.children.map(c => c.name));
-        else expected.push(item.name);
-      }
-    }
+    // The nav is flat (Figma) — no collapsible groups to open first, so every
+    // row is reachable the moment the drawer is.
+    const expected = navGroups.flatMap(g => g.items.map(i => ({ name: i.name, badge: i.badge })));
 
     const dialog = screen.getByRole('dialog');
-    for (const name of expected) {
+    for (const { name, badge } of expected) {
+      // A badge ("Preview") is part of the link's accessible name, on purpose.
       expect(
-        within(dialog).getByRole('link', { name: new RegExp(`^${name}$`, 'i') }),
+        within(dialog).getByRole('link', { name: new RegExp(`^${name}${badge ? ` ${badge}` : ''}$`, 'i') }),
         `"${name}" is in the sidebar but not reachable from the mobile drawer`,
       ).toBeInTheDocument();
     }
-    // Settings is pinned below the groups rather than inside one.
+    // Settings is a row in the first group (Figma); still the wired module.
     expect(within(dialog).getByRole('link', { name: /^settings$/i })).toHaveAttribute('href', '/crm/settings');
   });
 
