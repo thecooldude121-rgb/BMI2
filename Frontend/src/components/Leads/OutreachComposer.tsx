@@ -130,12 +130,25 @@ interface Props {
   initialChannel?: ActivityType;
   onSubmit:        (activity: LeadActivity, followUp?: OutreachFollowUp) => void;
   onClose:         () => void;
+  /** The parent's save is in flight: the submit button is disabled and says so. */
+  submitting?:     boolean;
+  /** The server's refusal, shown in place so the user's input stays on screen. */
+  error?:          string | null;
+  /**
+   * Off by default. `leads.next_follow_up_date` has NO column — the server drops
+   * it — so offering "Set follow-up" promised a reminder nothing would keep.
+   * Turn this on only once a follow-up is actually stored.
+   */
+  followUpAvailable?: boolean;
 }
 
 const leadName = (lead: Lead) =>
   lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
 
-const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onSubmit, onClose }) => {
+const OutreachComposer: React.FC<Props> = ({
+  lead, initialChannel = 'email', onSubmit, onClose,
+  submitting = false, error = null, followUpAvailable = false,
+}) => {
   const [activeChannel, setActiveChannel] = useState<Channel>(initialChannel as Channel);
   const [form, setForm] = useState<ComposerFormData>(INITIAL_FORM);
   const [followUpEnabled,   setFollowUpEnabled]   = useState(false);
@@ -558,7 +571,8 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {renderForm()}
 
-          {/* ── Follow-up strip ──────────────────────────────────────────── */}
+          {/* ── Follow-up strip (only when follow-ups are stored — see props) ── */}
+          {followUpAvailable && (
           <div className={`mt-5 p-3 rounded-xl border-2 transition-all duration-300 ${
             followUpHighlight
               ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200'
@@ -596,6 +610,14 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
               </div>
             )}
           </div>
+          )}
+
+          {error && (
+            <div role="alert" className="mt-4 rounded-card bg-danger-100 p-3 text-sm text-danger-700">
+              <p className="font-semibold">Not saved</p>
+              <p className="text-xs mt-0.5">{error}</p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -604,9 +626,9 @@ const OutreachComposer: React.FC<Props> = ({ lead, initialChannel = 'email', onS
             className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
             Cancel
           </button>
-          <button onClick={handleSubmit} disabled={!isValid()}
+          <button onClick={handleSubmit} disabled={!isValid() || submitting} aria-busy={submitting || undefined}
             className={`flex-1 px-4 py-2 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${CHANNEL_ACCENT[activeChannel]}`}>
-            Log & Save
+            {submitting ? 'Saving…' : 'Log & Save'}
           </button>
         </div>
       </div>

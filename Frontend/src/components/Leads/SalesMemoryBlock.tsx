@@ -18,18 +18,18 @@ export default function SalesMemoryBlock({ lead, recentActivities }: Props) {
   const lastUpdated = lead.last_activity_date ?? lead.last_contact_date ?? lead.updated_at;
 
   return (
-    <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-lg shadow-sm border border-slate-200 p-5">
+    <div className="rounded-card border border-line bg-surface-panel p-4">
       <div className="flex items-center gap-2 mb-3">
-        <Brain className="h-4 w-4 text-slate-600 shrink-0" />
-        <h3 className="text-sm font-bold text-slate-800">Sales Memory</h3>
-        <span className="text-[10px] text-slate-400 ml-auto font-normal">Auto-generated</span>
+        <Brain className="h-4 w-4 text-ink-muted shrink-0" />
+        <h3 className="text-sm font-bold text-ink">Sales Memory</h3>
+        <span className="text-xs text-ink-muted ml-auto font-normal" title="A fixed template over this lead's stored fields and logged activities — not AI">From stored data</span>
       </div>
 
-      <p className="text-sm text-slate-700 leading-relaxed">{summary}</p>
+      <p className="text-sm text-ink leading-relaxed">{summary}</p>
 
-      <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-slate-200/60">
-        <Clock className="h-3 w-3 text-slate-400" />
-        <span className="text-[11px] text-slate-400">
+      <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-line">
+        <Clock className="h-3 w-3 text-ink-muted" />
+        <span className="text-xs text-ink-muted">
           Based on data from {fmtDate(lastUpdated) ?? 'today'}
         </span>
       </div>

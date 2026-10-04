@@ -43,7 +43,8 @@ import SLAConfigPage from './SLAConfigPage';
 const CRMModule = () => {
   return (
     <AccountsProvider>
-      <div className="min-h-full bg-gray-50">
+      {/* No background of its own: the Figma canvas (Layout) shows through. */}
+      <div className="min-h-full">
         {/*
           * The /gamification and /gamification/leaderboard routes were removed
           * with the feature (Venkat, 2026-09-15). No redirect is left behind:

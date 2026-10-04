@@ -1,1201 +1,620 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import {
+  Mail, Phone, CalendarDays, MoreHorizontal, ChevronDown, TrendingDown, X, Trash2,
+  Check, AlertTriangle, StickyNote, Upload, Users, CheckCircle2, CircleDot, ListChecks,
+} from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Edit3, Trash2, Phone, Mail, Calendar, TrendingUp, Activity, MessageSquare, FileText, User, Building, Target, Zap, MoreHorizontal, Linkedin, Globe, Users, TrendingDown, Plus, Upload, AlertCircle, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, Bell, X } from 'lucide-react';
-import CRMNavigation from '../../components/CRM/CRMNavigation';
+import Badge from '../../components/ui/Badge';
+import Alert from '../../components/ui/Alert';
+import Card, { SectionHeading } from '../../components/ui/Card';
+import EmptyState from '../../components/ui/EmptyState';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPanel';
 import LeadConversionWizard from '../../components/Leads/LeadConversionWizard';
-import { useLeads } from '../../contexts/LeadContext';
-import { usePermissions } from '../../hooks/usePermissions';
-import { fetchLeadByIdFromAPI } from '../../utils/leadsApi';
-import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
-import { computeConversionReadiness } from '../../utils/conversionReadiness';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
 import OutreachComposer from '../../components/Leads/OutreachComposer';
-import type { OutreachFollowUp } from '../../components/Leads/OutreachComposer';
-import type { TerminalAction } from '../../utils/leadReasons';
-import type { Lead, LeadActivity, ActivityType } from '../../types/lead';
-import { buildTimeline, auditEventsToTimelineEvents } from '../../utils/leadTimeline';
-import { getAuditEventsForLead } from '../../utils/auditLog';
-import { useLeadActions } from '../../hooks/useLeadActions';
-import ActivityTimeline from '../../components/Leads/ActivityTimeline';
 import SalesMemoryBlock from '../../components/Leads/SalesMemoryBlock';
 import MergeReviewModal from '../../components/Leads/MergeReviewModal';
 import SourcePlaybookCard from '../../components/Leads/SourcePlaybookCard';
+import { useLeads } from '../../contexts/LeadContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useLeadActions } from '../../hooks/useLeadActions';
+import { usePermissions } from '../../hooks/usePermissions';
+import {
+  fetchLeadByIdFromAPI, fetchActivitiesFromAPI, fetchNotesFromAPI, fetchLeadStageHistory,
+  createActivityViaAPI, createNoteViaAPI,
+} from '../../utils/leadsApi';
+import type { LeadStageHistoryRow } from '../../utils/leadsApi';
+import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
+import { computeConversionReadiness } from '../../utils/conversionReadiness';
 import { findDuplicates } from '../../utils/leadDuplicates';
+import { buildServerTimeline, stageLabel } from '../../utils/leadServerTimeline';
+import type { Lead, LeadActivity, LeadNote, ActivityType } from '../../types/lead';
+import type { TerminalAction } from '../../utils/leadReasons';
 
-// ── Display helpers ───────────────────────────────────────────────────────────
+/**
+ * LEAD DETAIL — rebuilt to Figma "Lead detail page" (61:408), phase 3,
+ * 2026-10-05. Everything on screen is one of: a stored field, a row the server
+ * returned, a deterministic rule shown WITH its reasons, or a labelled
+ * "Coming soon". What changed beyond the look, because it was not honest:
+ *
+ *   - "Send email / Log call / Schedule meeting / Add note" NEVER SAVED. The
+ *     composer's activity went into React state with a "Call logged" toast and
+ *     was gone on reload. They now POST /leads/:id/activities (notes:
+ *     /leads/:id/notes); the toast fires only on a 2xx, and a refusal keeps the
+ *     composer open with the user's input and the server's message.
+ *   - The timeline is server rows only (stage history + activities) — it used
+ *     to mix in that React state and a localStorage audit trail. Each source
+ *     loads separately; a failed source says so instead of reading as empty.
+ *   - "Re-enrich Data" (a setTimeout, then "Lead data re-enriched") and "Set
+ *     Reminder" ("Reminder set", nothing stored) are gone; file upload is a
+ *     labelled "Coming soon". The follow-up date is no longer offered — there
+ *     is no column for it, so the server dropped it.
+ *   - Disqualify / lost / delete now check the write: they used to toast or
+ *     navigate whatever the server said.
+ *   - The bare score with a star rating and "High Potential", the canned
+ *     "Contact this lead today" recommendations and the "Next steps" card are
+ *     gone (Evidence-Based AI: no score or suggestion without its reasons).
+ *     "Stored score" is shown as the frame shows it — the stored value, no
+ *     verdict — and the rule-based breakdown keeps its factors.
+ *   - Fields with NO column (mobile, department, website, location, company
+ *     size, revenue, LinkedIn) always rendered "—"; they are not shown, and the
+ *     card says what is not stored.
+ */
 
 const leadDisplayName = (lead: Lead) =>
   lead.full_name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return 'Never';
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
+const fmtDateTime = (s?: string | null) =>
+  s ? new Date(s).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+const fmtDate = (s?: string | null) =>
+  s ? new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+// The stage-transition endpoint is the only path for a stage change; `converted`
+// is reached through conversion (the server answers 409 USE_CONVERSION), so it
+// is not offered here.
+const STATUS_OPTIONS = [
+  'new', 'assigned', 'enriching', 'attempting_contact', 'engaged', 'qualified',
+  'sales_accepted', 'nurture', 'disqualified', 'lost',
+] as const;
+const LIFECYCLE_ORDER: string[] = [...STATUS_OPTIONS.slice(0, 7), 'nurture', 'disqualified', 'converted', 'lost'];
+const TERMINAL = new Set(['converted', 'lost', 'disqualified']);
+
+const ACTIVITY_LABEL: Record<string, string> = {
+  email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
+  meeting: 'Meeting saved', note: 'Note saved', task: 'Task saved',
 };
 
-const leadLocation = (lead: Lead) =>
-  [lead.city, lead.state, lead.country].filter(Boolean).join(', ') || '—';
+type Source<T> = { status: 'loading' | 'ok' | 'error'; rows: T[]; error?: string };
+const loadingSource = <T,>(): Source<T> => ({ status: 'loading', rows: [] });
 
-const leadAnnualRevenue = (lead: Lead) =>
-  lead.annual_revenue ? `$${lead.annual_revenue.toLocaleString()} (estimated)` : '—';
+/** A label / value row in the information cards (Figma: 12px muted label, 14px value). */
+const InfoRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="grid grid-cols-[140px_1fr] gap-3 py-2">
+    <dt className="text-xs leading-5 text-ink-muted">{label}</dt>
+    <dd className="text-sm leading-5 text-ink break-words">{children}</dd>
+  </div>
+);
 
-// ── Component ─────────────────────────────────────────────────────────────────
+const TIMELINE_ICON: Record<string, React.ReactNode> = {
+  created: <CircleDot className="h-3.5 w-3.5" />,
+  stage: <Check className="h-3.5 w-3.5" />,
+  call: <Phone className="h-3.5 w-3.5" />,
+  email: <Mail className="h-3.5 w-3.5" />,
+  meeting: <CalendarDays className="h-3.5 w-3.5" />,
+  note: <StickyNote className="h-3.5 w-3.5" />,
+};
 
 const LeadDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { updateLead, deleteLead, leads: allLeads, lastWriteErrorRef } = useLeads();
   const actions = useLeadActions(updateLead);
+  const { showToast } = useToast();
   const { can } = usePermissions();
-  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
 
   const [lead, setLead] = useState<Lead | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
-  const [enriching, setEnriching] = useState(false);
+  const [leadState, setLeadState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading');
+  const [leadError, setLeadError] = useState<string | null>(null);
+  const [history, setHistory] = useState<Source<LeadStageHistoryRow>>(loadingSource);
+  const [activities, setActivities] = useState<Source<LeadActivity>>(loadingSource);
+  const [notes, setNotes] = useState<Source<LeadNote>>(loadingSource);
 
-  // Modal states
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showConvertModal, setShowConvertModal] = useState(false);
-  const [showMergeModal, setShowMergeModal]     = useState(false);
-  const [terminalModalAction, setTerminalModalAction] = useState<TerminalAction | null>(null);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
-  const [showFileUpload, setShowFileUpload] = useState(false);
-  const [showReminderForm, setShowReminderForm] = useState(false);
-  // Unified outreach composer
-  const [showOutreachComposer, setShowOutreachComposer] = useState(false);
-  const [outreachInitialChannel, setOutreachInitialChannel] = useState<ActivityType>('email');
-  // Local activity timeline (prepended on each composer submit; TODO: persist via addActivity API)
-  const [activities, setActivities] = useState<LeadActivity[]>([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [terminalModalAction, setTerminalModalAction] = useState<TerminalAction | null>(null);
+  const [composerChannel, setComposerChannel] = useState<ActivityType | null>(null);
+  const [composerSaving, setComposerSaving] = useState(false);
+  const [composerError, setComposerError] = useState<string | null>(null);
 
-  // Fetch real lead on mount
-  useEffect(() => {
+  // ── Loading ────────────────────────────────────────────────────────────────
+  const loadLead = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
-    fetchLeadByIdFromAPI(id).then(data => {
-      setLead(data);
-      setLoading(false);
-    });
+    try {
+      const data = await fetchLeadByIdFromAPI(id);
+      if (data) { setLead(data); setLeadState('ok'); } else { setLeadState('missing'); }
+    } catch (e) {
+      setLeadError(e instanceof Error ? e.message : 'The lead could not be loaded.');
+      setLeadState('error');
+    }
   }, [id]);
 
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 3000);
-  }, []);
+  const loadSource = useCallback(<T,>(fetcher: (leadId: string) => Promise<T[]>, set: (s: Source<T>) => void) => {
+    if (!id) return;
+    fetcher(id)
+      .then(rows => set({ status: 'ok', rows }))
+      .catch(e => set({ status: 'error', rows: [], error: e instanceof Error ? e.message : 'Could not load.' }));
+  }, [id]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  const loadRelated = useCallback(() => {
+    loadSource(fetchLeadStageHistory, setHistory);
+    loadSource(fetchActivitiesFromAPI, setActivities);
+    loadSource(fetchNotesFromAPI, setNotes);
+  }, [loadSource]);
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      new:               'bg-blue-500 text-white',
-      assigned:          'bg-indigo-500 text-white',
-      enriching:         'bg-cyan-500 text-white',
-      attempting_contact: 'bg-orange-500 text-white',
-      engaged:           'bg-emerald-500 text-white',
-      qualified:         'bg-green-500 text-white',
-      sales_accepted:    'bg-teal-500 text-white',
-      nurture:           'bg-purple-500 text-white',
-      disqualified:      'bg-gray-400 text-white',
-      converted:         'bg-teal-600 text-white',
-      lost:              'bg-red-500 text-white',
-    };
-    return colors[status] || 'bg-gray-500 text-white';
-  };
+  useEffect(() => {
+    setLeadState('loading');
+    void loadLead();
+    loadRelated();
+  }, [loadLead, loadRelated]);
 
-  const getStarRating = (score: number) =>
-    '⭐'.repeat(Math.min(5, Math.round((score / 100) * 5)));
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
-
-  const handleDelete = async () => {
-    if (lead) await deleteLead(lead.id);
-    navigate('/crm/leads');
-    setShowDeleteModal(false);
-  };
-
-  // Lifecycle order — used for forward/backward detection
-  const LIFECYCLE_ORDER = [
-    'new', 'assigned', 'enriching', 'attempting_contact',
-    'engaged', 'qualified', 'sales_accepted',
-    'nurture', 'disqualified', 'converted', 'lost',
-  ];
-  const EARLY_STAGES = new Set(['new', 'assigned', 'enriching', 'attempting_contact']);
-
-  // The full lead lifecycle, restored. This was temporarily narrowed to
-  // new/qualified/lost because eight of eleven options returned HTTP 400 —
-  // leads_stage_check and VALID_STAGES only allowed the six-value pipeline
-  // vocabulary. Migration 025 widened both, so the menu offers the real lifecycle
-  // again. Kept as a named const rather than an inline array so this list and the
-  // backend's VALID_STAGES can be diffed against each other.
-  const STATUS_OPTIONS = [
-    'new', 'assigned', 'enriching', 'attempting_contact',
-    'engaged', 'qualified', 'sales_accepted',
-    'nurture', 'disqualified', 'converted', 'lost',
-  ] as const;
-
+  // ── Writes — every success message waits for the server ───────────────────
   const applyStatusChange = async (newStatus: string) => {
     if (!lead) return;
-    // The write decides what is shown. This used to update local state and fire a
-    // "Status updated" toast regardless of the result, so picking a status the
-    // backend rejects (most of this dropdown — see below) left the badge showing a
-    // value Postgres never accepted, under a success toast. That is the exact
-    // pattern CLAUDE.md records from the account address form.
-    //
-    // Since step 5 the move goes through POST /leads/:id/stage-transition, which
-    // can refuse it (e.g. the qualification gate: 409 naming the unmet criteria);
-    // the server's message is what the toast shows. (The vocabulary mismatch an
-    // earlier note described was closed by migration 025.)
-    const accepted = await actions.changeStatus(lead, newStatus as Lead['status']);
-    setShowStatusDropdown(false);
+    setShowStatusMenu(false);
     setPendingStatus(null);
+    const accepted = await actions.changeStatus(lead, newStatus as Lead['status']);
     if (!accepted) {
-      showToast(lastWriteErrorRef.current ?? 'Status change was rejected — nothing was saved.');
+      showToast(lastWriteErrorRef.current ?? 'Status change was refused — nothing was saved.', 'error');
       return;
     }
-    setLead(prev => prev ? { ...prev, status: newStatus as Lead['status'] } : null);
-    showToast(`Status updated to ${newStatus}`);
+    showToast(`Lifecycle updated to ${stageLabel(newStatus)}`, 'success');
+    void loadLead();
+    loadSource(fetchLeadStageHistory, setHistory);
   };
 
   const handleStatusChange = (newStatus: string) => {
     if (!lead) return;
-
+    setShowStatusMenu(false);
     if (newStatus === 'disqualified' || newStatus === 'lost') {
-      setShowStatusDropdown(false);
       setTerminalModalAction(newStatus as TerminalAction);
       return;
     }
-
-    const currentIdx = LIFECYCLE_ORDER.indexOf(lead.status);
-    const targetIdx  = LIFECYCLE_ORDER.indexOf(newStatus);
-
-    // Hard block: early stage → converted (must pass through qualified first)
-    if (EARLY_STAGES.has(lead.status) && newStatus === 'converted') {
-      showToast('Cannot convert directly from this stage — must reach Qualified first.');
-      setShowStatusDropdown(false);
-      return;
-    }
-
-    // Soft warnings
-    const isBackward = currentIdx > -1 && targetIdx > -1 && targetIdx < currentIdx;
-    const skipsEngaged =
-      ['new', 'assigned', 'enriching', 'attempting_contact'].includes(lead.status) &&
-      newStatus === 'qualified';
-    const salesAcceptedWithoutQual =
-      newStatus === 'sales_accepted' && !lead.is_qualified;
-
-    if (isBackward || skipsEngaged || salesAcceptedWithoutQual) {
-      setPendingStatus(newStatus);
-      setShowStatusDropdown(false);
-      return;
-    }
-
+    const cur = LIFECYCLE_ORDER.indexOf(lead.status);
+    const next = LIFECYCLE_ORDER.indexOf(newStatus);
+    const backward = cur > -1 && next > -1 && next < cur;
+    const skips = ['new', 'assigned', 'enriching', 'attempting_contact'].includes(lead.status) && newStatus === 'qualified';
+    if (backward || skips) { setPendingStatus(newStatus); return; }
     void applyStatusChange(newStatus);
   };
 
-  const openOutreach = (channel: ActivityType) => {
-    setOutreachInitialChannel(channel);
-    setShowOutreachComposer(true);
-  };
-
-  const handleOutreachSubmit = (activity: LeadActivity, followUp?: OutreachFollowUp) => {
-    setActivities(prev => [activity, ...prev]);
-    if (followUp?.date && lead) {
-      void updateLead(lead.id, { next_follow_up_date: followUp.date });
-      setLead(prev => prev ? { ...prev, next_follow_up_date: followUp.date } : null);
-    }
-    const labels: Record<string, string> = {
-      email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
-      meeting: 'Meeting logged', note: 'Note saved', task: 'Task created',
-    };
-    showToast(labels[activity.type] ?? 'Activity logged');
-    setShowOutreachComposer(false);
-  };
-
-  const handleConvert = () => setShowConvertModal(true);
-
-  const handleTerminalConfirm = async (reason: string, notes: string) => {
+  const handleTerminalConfirm = async (reason: string, notesText: string) => {
     if (!lead || !terminalModalAction) return;
     const status = terminalModalAction;
-    const notesOrUndefined = notes || undefined;
-    if (status === 'disqualified') {
-      await actions.disqualify(lead, reason, notesOrUndefined);
-      setLead(prev => prev ? { ...prev, status, disqualified_reason: reason, disqualified_reason_notes: notesOrUndefined } as Lead : null);
-    } else {
-      await actions.markLost(lead, reason, notesOrUndefined);
-      setLead(prev => prev ? { ...prev, status, lost_reason: reason, lost_reason_notes: notesOrUndefined } as Lead : null);
+    const ok = status === 'disqualified'
+      ? await actions.disqualify(lead, reason, notesText || undefined)
+      : await actions.markLost(lead, reason, notesText || undefined);
+    if (!ok) {
+      showToast(lastWriteErrorRef.current ?? `Could not mark this lead ${status} — nothing was saved.`, 'error');
+      return;
     }
-    showToast(`Lead marked as ${status}`);
     setTerminalModalAction(null);
+    showToast(`Lead marked ${status}`, 'success');
+    void loadLead();
+    loadSource(fetchLeadStageHistory, setHistory);
   };
 
-  // PHASE 0: this never read the file input — it only toasted success.
-  const handleFileUpload = () => {
-    showToast('Attaching files to a lead is not available yet — nothing was uploaded');
-    setShowFileUpload(false);
+  const handleDelete = async () => {
+    if (!lead) return;
+    const ok = await deleteLead(lead.id);
+    setShowDeleteModal(false);
+    if (!ok) {
+      showToast(lastWriteErrorRef.current ?? 'The lead was not deleted.', 'error');
+      return;
+    }
+    showToast('Lead deleted', 'success');
+    navigate('/crm/leads');
   };
 
-  const handleReEnrich = async () => {
-    setEnriching(true);
-    setTimeout(() => {
-      setEnriching(false);
-      showToast('Lead data re-enriched');
-    }, 2000);
+  const handleComposerSubmit = async (activity: LeadActivity) => {
+    if (!lead) return;
+    setComposerSaving(true);
+    setComposerError(null);
+    try {
+      if (activity.type === 'note') {
+        await createNoteViaAPI(lead.id, { content: activity.description ?? '' });
+        loadSource(fetchNotesFromAPI, setNotes);
+      } else {
+        await createActivityViaAPI(lead.id, {
+          type: activity.type, direction: activity.direction, status: activity.status,
+          subject: activity.subject, description: activity.description, outcome: activity.outcome,
+          duration_minutes: activity.duration_minutes, scheduled_at: activity.scheduled_at,
+          completed_at: activity.completed_at,
+        });
+        loadSource(fetchActivitiesFromAPI, setActivities);
+        // A completed call / email / meeting sets last_contact on the server.
+        void loadLead();
+      }
+      setComposerChannel(null);
+      showToast(ACTIVITY_LABEL[activity.type] ?? 'Activity saved', 'success');
+    } catch (e) {
+      setComposerError(e instanceof Error ? e.message : 'The server did not save this.');
+    } finally {
+      setComposerSaving(false);
+    }
   };
 
-  const handleSetReminder = () => {
-    showToast('Reminder set');
-    setShowReminderForm(false);
-  };
+  const openComposer = (channel: ActivityType) => { setComposerError(null); setComposerChannel(channel); };
 
-  // ── Loading & not found ───────────────────────────────────────────────────
-
-  if (loading) {
+  // ── Loading / missing / failed ─────────────────────────────────────────────
+  if (leadState === 'loading') {
+    return <div className="py-16 text-center text-sm text-ink-muted" role="status">Loading lead…</div>;
+  }
+  if (leadState === 'error') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+      <div className="mx-auto max-w-xl py-12">
+        <EmptyState tone="error" title="This lead could not load" reason={leadError ?? 'The server did not answer.'}
+          action={<Button variant="secondary" onClick={() => { setLeadState('loading'); void loadLead(); loadRelated(); }}>Retry</Button>} />
+      </div>
+    );
+  }
+  if (leadState === 'missing' || !lead) {
+    return (
+      <div className="mx-auto max-w-xl py-12">
+        <EmptyState title="Lead not found" reason="It does not exist in this workspace, or it was deleted."
+          action={<Button onClick={() => navigate('/crm/leads')}>Back to Leads</Button>} />
       </div>
     );
   }
 
-  if (!lead) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Lead Not Found</h2>
-          <p className="text-gray-600 mb-4">The lead you're looking for doesn't exist or was deleted.</p>
-          <Button
-            onClick={() => navigate('/crm/leads')}
-          >
-            Back to Leads
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Derived display values
+  // ── Derived ────────────────────────────────────────────────────────────────
   const displayName = leadDisplayName(lead);
-  const score = lead.ai_score ?? lead.score;
-  const enrichmentData = lead.enrichment_data || {};
-  const techStack: string[] = enrichmentData.techStack || [];
-  const recentNews: { title: string; date: string }[] = enrichmentData.recentNews || [];
-  const scoreBreakdown: { factor: string; points: number; description: string }[] =
-    enrichmentData.scoreBreakdown || [];
-  const similarDeals: { company: string; status: string; value: string }[] =
-    enrichmentData.similarDeals || [];
-  const recommendedActions: { priority: string; action: string; reason: string; bestTime?: string }[] =
-    (lead.ai_recommendations as any[]) || [];
-
-  // Duplicate detection (person-level, scans entire lead pool)
-  const duplicateCandidates = lead ? findDuplicates(lead, allLeads ?? []) : [];
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  const mfs = computeMultiFactorScore(lead);
+  const readiness = computeConversionReadiness(lead, mfs);
+  const isActive = !TERMINAL.has(lead.status);
+  const isConvertible = ['ready_for_deal', 'ready_for_account_contact', 'ready_for_contact'].includes(readiness.state);
+  // Positive matches only, among the leads loaded in this browser — a match is
+  // real; the ABSENCE of one proves nothing until duplicate detection runs
+  // over every lead on the server (step 5 slice B).
+  const duplicateCandidates = findDuplicates(lead, allLeads ?? []);
+  const timeline = buildServerTimeline(lead, history.rows, activities.rows);
+  const failedSources = [
+    history.status === 'error' ? 'Stage history' : null,
+    activities.status === 'error' ? 'Activities' : null,
+  ].filter(Boolean) as string[];
+  const timelineLoading = history.status === 'loading' || activities.status === 'loading';
+  const contactLine = [lead.email, lead.phone].filter(Boolean).join(' · ');
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <CRMNavigation />
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-4 pt-6 pb-8 lg:px-1">
+      {/* Breadcrumb */}
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs">
+        <Link to="/crm/leads" className="font-semibold text-brand-600 hover:text-brand-700">Leads</Link>
+        <span className="text-ink-muted" aria-hidden="true">/</span>
+        <span className="text-ink-muted" aria-current="page">{displayName}</span>
+      </nav>
 
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-[60] bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2">
-          <CheckCircle className="h-4 w-4 text-green-400 flex-shrink-0" />
-          <span className="text-sm">{toast}</span>
-          <button onClick={() => setToast(null)} className="ml-1">
-            <X className="h-4 w-4 opacity-60 hover:opacity-100" />
-          </button>
-        </div>
-      )}
-
-      {/* Status transition soft warning */}
-      {pendingStatus && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-base font-bold text-gray-900 mb-2">Confirm status change</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {pendingStatus === 'sales_accepted' && !lead?.is_qualified
-                ? 'This lead is not formally qualified yet. Moving to Sales Accepted anyway?'
-                : LIFECYCLE_ORDER.indexOf(pendingStatus) < LIFECYCLE_ORDER.indexOf(lead?.status ?? '')
-                  ? `Moving backwards to "${pendingStatus.replace(/_/g, ' ')}" — confirm this is intentional.`
-                  : `Skipping lifecycle steps to "${pendingStatus.replace(/_/g, ' ')}" — confirm this is intentional.`}
+      {/* Header */}
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-[32px] font-bold leading-10 text-ink">{displayName}</h1>
+            <Badge tone="brand" data-testid="lead-status">{stageLabel(lead.status)}</Badge>
+            <Badge tone="neutral" title="The score stored on this lead record. See Score breakdown for the factors.">
+              Stored score {lead.score ?? 0}
+            </Badge>
+          </div>
+          {(lead.position || lead.company) && (
+            <p className="text-lg font-semibold leading-7 text-ink-heading">
+              {[lead.position, lead.company].filter(Boolean).join(' · ')}
             </p>
-            <div className="flex gap-3">
-              <Button
-                onClick={() => void applyStatusChange(pendingStatus)}
-                fullWidth className="font-semibold"
-              >
-                Proceed anyway
+          )}
+          {contactLine && <p className="text-sm leading-[22px] text-ink-muted">{contactLine}</p>}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {isActive ? (
+            <div className="relative">
+              <Button variant="secondary" onClick={() => setShowStatusMenu(v => !v)} aria-expanded={showStatusMenu}
+                trailingIcon={<ChevronDown className="h-3.5 w-3.5" />}>
+                Lifecycle: {stageLabel(lead.status)}
               </Button>
-              <button
-                onClick={() => setPendingStatus(null)}
-                className="flex-1 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
+              {showStatusMenu && (
+                <ul role="menu" className="absolute right-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-card border border-line bg-surface-panel py-1 shadow-lg">
+                  {STATUS_OPTIONS.filter(s => s !== lead.status).map(s => (
+                    <li key={s}>
+                      <button role="menuitem" onClick={() => handleStatusChange(s)}
+                        className="w-full px-3 py-2 text-left text-sm text-ink hover:bg-black/5">
+                        {stageLabel(s)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
+          ) : null}
+          <Button variant="secondary" onClick={() => navigate(`/crm/leads/${id}/edit`)}>Edit</Button>
+          <div className="relative">
+            <Button variant="secondary" iconOnly aria-label="More options" leadingIcon={<MoreHorizontal className="h-4 w-4" />}
+              onClick={() => setShowOverflowMenu(v => !v)} />
+            {showOverflowMenu && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-card border border-line bg-surface-panel py-1 shadow-lg"
+                onMouseLeave={() => setShowOverflowMenu(false)}>
+                {isActive && (
+                  <>
+                    <button onClick={() => { setTerminalModalAction('lost'); setShowOverflowMenu(false); }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-ink hover:bg-black/5">
+                      <TrendingDown className="h-4 w-4 text-ink-muted" /> Mark as lost
+                    </button>
+                    <button onClick={() => { setTerminalModalAction('disqualified'); setShowOverflowMenu(false); }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-ink hover:bg-black/5">
+                      <X className="h-4 w-4 text-ink-muted" /> Mark as disqualified
+                    </button>
+                    {can('leads.delete') && <div className="my-1 border-t border-line" />}
+                  </>
+                )}
+                {/* Hidden for roles that cannot delete — a courtesy; the server's
+                    403 is the control, and a refusal is reported if it happens. */}
+                {can('leads.delete') && (
+                  <button onClick={() => { setShowDeleteModal(true); setShowOverflowMenu(false); }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-danger-700 hover:bg-danger-50">
+                    <Trash2 className="h-4 w-4" /> Delete lead
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
+      </header>
+
+      {/* Quick actions */}
+      {isActive && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => openComposer('email')} leadingIcon={<Mail className="h-3.5 w-3.5" />}>Log email</Button>
+          <Button variant="secondary" onClick={() => openComposer('call')} leadingIcon={<Phone className="h-3.5 w-3.5" />}>Log call</Button>
+          <Button variant="secondary" onClick={() => openComposer('meeting')} leadingIcon={<CalendarDays className="h-3.5 w-3.5" />}>Log meeting</Button>
+          <Button variant="secondary" onClick={() => setShowConvertModal(true)} leadingIcon={<Users className="h-3.5 w-3.5" />}>Convert</Button>
+        </div>
       )}
 
-      {/* Delete confirmation */}
+      {/* What this lead became (migration 059, server-written) */}
+      {lead.status === 'converted' && (
+        <Alert tone="success" title={`Converted${lead.converted_at ? ` on ${fmtDate(lead.converted_at)}` : ''}`}>
+          <span data-testid="converted-panel" className="flex flex-wrap gap-4">
+            {lead.converted_to_contact_id && <Link className="underline" to={`/crm/contacts/${lead.converted_to_contact_id}`}>Contact {lead.converted_to_contact_id}</Link>}
+            {lead.converted_to_company_id && <Link className="underline" to={`/crm/accounts/${lead.converted_to_company_id}`}>Account {lead.converted_to_company_id}</Link>}
+            {lead.converted_to_deal_id && <Link className="underline" to={`/crm/deals/${lead.converted_to_deal_id}`}>Deal {lead.converted_to_deal_id}</Link>}
+            {!lead.converted_to_contact_id && !lead.converted_to_company_id && !lead.converted_to_deal_id && (
+              <span>The records it was converted into have since been deleted.</span>
+            )}
+          </span>
+        </Alert>
+      )}
+
+      {/* Possible duplicates */}
+      {duplicateCandidates.length > 0 && (
+        <Alert tone="warning"
+          title={duplicateCandidates.length === 1 ? 'Possible duplicate found' : `${duplicateCandidates.length} possible duplicates found`}
+          action={<Button variant="secondary" onClick={() => setShowMergeModal(true)}>Review</Button>}>
+          {duplicateCandidates.slice(0, 3).map(c => {
+            const other = (allLeads ?? []).find(l => l.id === c.leadId);
+            if (!other) return null;
+            return <p key={c.leadId}><strong>{leadDisplayName(other)}</strong>{other.company ? ` · ${other.company}` : ''} — {c.signals[0]?.reason}</p>;
+          })}
+          <p>Checked against the leads loaded in this browser, not every lead in the workspace.</p>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        {/* ── Lead record ── */}
+        <div className="flex min-w-0 flex-col gap-4">
+          {isActive && (
+            <Card padding="md" className="flex flex-col gap-3" data-testid="readiness-card">
+              <SectionHeading title="Conversion readiness"
+                description="Based on this lead's stored fields — a rule, not an AI score." />
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <ul className="flex flex-col gap-1.5">
+                  {readiness.checklist.map((item, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-ink">
+                      {item.met
+                        ? <Check className="h-4 w-4 text-success-700" aria-label="met" />
+                        : <AlertTriangle className="h-4 w-4 text-warning-700" aria-label="not met" />}
+                      {item.label}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex max-w-[280px] flex-col items-start gap-2">
+                  <Badge tone={isConvertible ? 'success' : 'warning'}>{readiness.label}</Badge>
+                  {readiness.reasons.map((r, i) => <p key={i} className="text-xs leading-[18px] text-ink-muted">{r}</p>)}
+                  {isConvertible && <Button onClick={() => setShowConvertModal(true)}>Convert lead</Button>}
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Card padding="md">
+              <SectionHeading title="Basic information" />
+              <dl className="mt-2">
+                <InfoRow label="Lead owner">{lead.owner_name || 'Unassigned'}</InfoRow>
+                <InfoRow label="Lifecycle status">{stageLabel(lead.status)}</InfoRow>
+                <InfoRow label="Source">{lead.source || '—'}</InfoRow>
+                <InfoRow label="Email">{lead.email || '—'}</InfoRow>
+                <InfoRow label="Phone">{lead.phone || '—'}</InfoRow>
+                <InfoRow label="Last contacted">{lead.last_contact_date ? fmtDate(lead.last_contact_date) : 'No contact logged'}</InfoRow>
+                <InfoRow label="Created">{fmtDateTime(lead.created_at)}</InfoRow>
+                <InfoRow label="Last updated">{fmtDateTime(lead.updated_at)}</InfoRow>
+              </dl>
+              {lead.tags.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {lead.tags.map(t => <Badge key={t} tone="brand">{t}</Badge>)}
+                </div>
+              )}
+            </Card>
+            <Card padding="md">
+              <SectionHeading title="Company information" />
+              <dl className="mt-2">
+                <InfoRow label="Company">{lead.company || '—'}</InfoRow>
+                <InfoRow label="Industry">{lead.industry || '—'}</InfoRow>
+                <InfoRow label="Title">{lead.position || '—'}</InfoRow>
+              </dl>
+              <p className="mt-2 text-xs leading-[18px] text-ink-muted">
+                Employees, website, region and revenue are not stored for leads yet.
+              </p>
+            </Card>
+          </div>
+
+          <Card padding="md" className="flex flex-col gap-3">
+            <SectionHeading title="Activity timeline" description="Server-recorded stage changes and logged activities." />
+            {timelineLoading && <p className="text-sm text-ink-muted" role="status">Loading timeline…</p>}
+            {!timelineLoading && timeline.length > 0 && (
+              <ol className="flex flex-col gap-4" data-testid="lead-timeline">
+                {timeline.map(item => (
+                  <li key={item.id} className="flex gap-3">
+                    <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                      item.override ? 'bg-warning-100 text-warning-700' : 'bg-brand-50 text-brand-600'}`} aria-hidden="true">
+                      {TIMELINE_ICON[item.activityType ?? item.kind] ?? <ListChecks className="h-3.5 w-3.5" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-sm font-semibold text-ink">{item.title}</p>
+                        <time className="text-xs text-ink-muted" dateTime={item.at}>{fmtDateTime(item.at)}</time>
+                      </div>
+                      {item.detail && <p className="mt-0.5 text-xs leading-[18px] text-ink-muted">{item.detail}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {!timelineLoading && timeline.length === 0 && failedSources.length === 0 && (
+              <EmptyState title="Nothing recorded yet" reason="No stage changes or activities have been logged for this lead."
+                action={isActive ? <Button variant="secondary" onClick={() => openComposer('call')}>Log a call</Button> : undefined} />
+            )}
+            {failedSources.length > 0 && (
+              <Alert tone="danger" title={`${failedSources.join(' and ')} could not be loaded`}
+                action={<Button variant="secondary" onClick={loadRelated}>Retry</Button>}>
+                Anything shown above is real; this is not an empty timeline.
+              </Alert>
+            )}
+          </Card>
+
+          <Card padding="md" className="flex flex-col gap-3">
+            <SectionHeading title="Notes & files"
+              description={notes.status === 'ok' ? `${notes.rows.length} note${notes.rows.length === 1 ? '' : 's'}` : undefined}
+              actions={isActive ? <Button variant="secondary" onClick={() => openComposer('note')}>Add note</Button> : undefined} />
+            {notes.status === 'loading' && <p className="text-sm text-ink-muted" role="status">Loading notes…</p>}
+            {notes.status === 'error' && (
+              <Alert tone="danger" title="Notes could not be loaded"
+                action={<Button variant="secondary" onClick={() => loadSource(fetchNotesFromAPI, setNotes)}>Retry</Button>}>
+                {notes.error}
+              </Alert>
+            )}
+            {notes.status === 'ok' && notes.rows.length > 0 && (
+              <ul className="flex flex-col gap-3" data-testid="lead-notes">
+                {notes.rows.map(n => (
+                  <li key={n.id} className="text-sm text-ink">
+                    <p className="whitespace-pre-wrap">{n.content}</p>
+                    <p className="mt-0.5 text-xs text-ink-muted">{fmtDateTime(n.created_at)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {notes.status === 'ok' && notes.rows.length === 0 && (
+              <p className="text-sm text-ink-muted">No notes yet.</p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" disabled leadingIcon={<Upload className="h-3.5 w-3.5" />}
+                title="File upload for leads is coming soon">Upload file</Button>
+              <Badge tone="neutral">Coming soon</Badge>
+            </div>
+          </Card>
+        </div>
+
+        {/* ── Intelligence rail ── */}
+        <aside className="flex min-w-0 flex-col gap-4" aria-label="Lead guidance">
+          <SourcePlaybookCard lead={lead} />
+          <SalesMemoryBlock lead={lead} recentActivities={activities.rows.slice(0, 5)} />
+          <Card padding="md">
+            <SectionHeading title="Score breakdown" description="Rule-based factors from this lead's stored fields." />
+            <div className="mt-3"><LeadScoreBreakdownPanel multiFactorScore={mfs} lead={lead} /></div>
+          </Card>
+          <Card padding="md" className="flex flex-col gap-2" data-coming-soon="true">
+            <div className="flex items-start justify-between gap-2">
+              <SectionHeading title="Recommended action" />
+              <Badge tone="neutral">Coming soon</Badge>
+            </div>
+            <p className="text-xs leading-[18px] text-ink-muted">
+              Suggested next actions, each with the reasons behind it, arrive with the AI phase. Nothing is recommended until those reasons can be shown.
+            </p>
+          </Card>
+          <Card padding="md" className="flex flex-col gap-2">
+            <SectionHeading title="Lifecycle workflow" />
+            <p className="text-xs leading-[18px] text-ink-muted">
+              New → Assigned → Attempting contact → Engaged → Qualified → Sales accepted → Converted; or Nurture, Disqualified, Lost.
+            </p>
+            <p className="text-sm leading-5 text-ink">
+              Qualifying needs an email or phone, a company and a recorded contact; a manager can override with a reason. Disqualified and lost need a reason. Conversion is only from Qualified or Sales accepted.
+            </p>
+            {lead.last_contact_date
+              ? <p className="flex items-center gap-1.5 text-xs text-success-700"><CheckCircle2 className="h-3.5 w-3.5" /> Contact recorded {fmtDate(lead.last_contact_date)}</p>
+              : <p className="text-xs text-ink-muted">No contact recorded yet — logging a completed call, email or meeting records one.</p>}
+          </Card>
+        </aside>
+      </div>
+
+      {/* ── Modals ── */}
+      <ConfirmationModal
+        isOpen={pendingStatus !== null}
+        title="Confirm lifecycle change"
+        message={pendingStatus
+          ? LIFECYCLE_ORDER.indexOf(pendingStatus) < LIFECYCLE_ORDER.indexOf(lead.status)
+            ? `Move back to "${stageLabel(pendingStatus)}"? Confirm this is intentional.`
+            : `Skip ahead to "${stageLabel(pendingStatus)}"? Confirm this is intentional.`
+          : ''}
+        confirmLabel="Proceed"
+        type="warning"
+        onConfirm={() => pendingStatus && void applyStatusChange(pendingStatus)}
+        onCancel={() => setPendingStatus(null)}
+      />
       <ConfirmationModal
         isOpen={showDeleteModal}
-        title="Delete Lead"
-        message={`Are you sure you want to delete ${displayName}? This action cannot be undone.`}
+        title="Delete lead"
+        message={`Delete ${displayName}? This cannot be undone.`}
         confirmLabel="Delete"
         type="danger"
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
         onCancel={() => setShowDeleteModal(false)}
       />
-
-      {/* Breadcrumb */}
-      <div className="bg-white border-b border-gray-200 px-8 py-3">
-        <div className="flex items-center space-x-2 text-sm text-gray-600">
-          <button onClick={() => navigate('/crm/leads')} className="hover:text-blue-600">
-            Leads
-          </button>
-          <span>&gt;</span>
-          <span className="text-gray-900 font-medium">{displayName}</span>
-        </div>
-      </div>
-
-      {/* Header Section */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => navigate(`/crm/leads/${id}/edit`)}
-                className="flex items-center px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
-              >
-                <Edit3 className="h-4 w-4 mr-1.5" />
-                Edit
-              </button>
-              {/* ⋯ overflow: terminal actions + delete */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowOverflowMenu(v => !v)}
-                  className="flex items-center px-2.5 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-                {showOverflowMenu && (
-                  <div
-                    className="absolute right-0 top-full mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-30"
-                    onMouseLeave={() => setShowOverflowMenu(false)}
-                  >
-                    <button
-                      onClick={() => { setTerminalModalAction('lost'); setShowOverflowMenu(false); }}
-                      className="w-full text-left px-4 py-2 text-sm text-amber-700 hover:bg-amber-50 flex items-center gap-2"
-                    >
-                      <TrendingDown className="h-4 w-4" />
-                      Mark as lost
-                    </button>
-                    <button
-                      onClick={() => { setTerminalModalAction('disqualified'); setShowOverflowMenu(false); }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <X className="h-4 w-4" />
-                      Mark as disqualified
-                    </button>
-                    {can('leads.delete') && (
-                      <>
-                        <div className="my-1 border-t border-gray-100" />
-                        <button
-                          onClick={() => { setShowDeleteModal(true); setShowOverflowMenu(false); }}
-                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete lead
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <p className="text-gray-600 text-lg">{lead.position || '—'} at {lead.company || '—'}</p>
-          <div className="flex items-center space-x-4 mt-3">
-            <div className="flex items-center space-x-2 relative">
-              <span className="text-sm font-medium text-gray-700">Status:</span>
-              <button
-                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-bold ${getStatusColor(lead.status)} cursor-pointer hover:opacity-90`}
-              >
-                {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)} ▼
-              </button>
-              {showStatusDropdown && (
-                <div className="absolute top-full left-20 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
-                  {/* Restricted to the statuses the API actually accepts. This listed
-                      the full frontend lead vocabulary — assigned, enriching,
-                      attempting_contact, engaged, sales_accepted, nurture,
-                      disqualified, converted — while the backend validates against
-                      VALID_STAGES (new, contacted, qualified, proposal, won, lost).
-                      Eight of eleven options therefore returned HTTP 400 and changed
-                      nothing, which was silent until the error-swallowing sweep.
-
-                      Deliberately NOT fixed by widening the API vocabulary: that is a
-                      schema decision (a migration plus the stage CHECK constraint) and
-                      is recorded in HANDOFF as a decision the owner owes. Narrowing the
-                      menu is the honest interim — an option that cannot work should not
-                      be offered, the same rule as a dead view toggle. */}
-                  {STATUS_OPTIONS.map(status => (
-                    <button
-                      key={status}
-                      onClick={() => handleStatusChange(status)}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
-                    >
-                      {status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium text-gray-700">Score:</span>
-              <span className="text-xl font-bold text-green-800">{score}/100</span>
-              <span className="text-lg">{getStarRating(score)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions Bar */}
-        <div className="flex items-center flex-wrap gap-2 pt-4 border-t border-gray-200">
-          {/* Primary */}
-          <Button
-            onClick={() => openOutreach('email')}
-          >
-            <Mail className="h-4 w-4 mr-2" />
-            Send email
-          </Button>
-          {/* Secondary */}
-          <button
-            onClick={() => openOutreach('call')}
-            className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
-          >
-            <Phone className="h-4 w-4 mr-2" />
-            Log call
-          </button>
-          <button
-            onClick={() => openOutreach('meeting')}
-            className="flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Schedule meeting
-          </button>
-          {/* Tertiary: convert — disabled+tooltip when role can't convert. Hidden once
-              converted: a lead converts once, and the server would refuse. */}
-          {lead.status !== 'converted' && (
-          <button
-            onClick={() => can('leads.convert') && setShowConvertModal(true)}
-            disabled={!can('leads.convert')}
-            title={!can('leads.convert') ? 'Not available for your role — contact your manager' : undefined}
-            className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              can('leads.convert')
-                ? 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                : 'border-gray-200 text-gray-300 cursor-not-allowed'
-            }`}
-          >
-            <Users className="h-4 w-4 mr-2" />
-            Convert
-          </button>
-          )}
-        </div>
-      </div>
-
-      {/* What this lead became — from the server's converted_* columns (migration
-          059). Each link is a real record created or linked by POST /leads/:id/convert. */}
-      {lead.status === 'converted' && (
-        <div className="mx-8 mt-6 rounded-xl border border-green-200 bg-green-50 px-5 py-4" data-testid="converted-panel">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-600" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-green-900">
-              Converted{lead.converted_at ? ` on ${new Date(lead.converted_at).toLocaleDateString()}` : ''}
-            </h2>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-4 text-sm">
-            {lead.converted_to_contact_id && (
-              <button onClick={() => navigate(`/crm/contacts/${lead.converted_to_contact_id}`)} className="text-green-800 underline hover:text-green-900">
-                Contact {lead.converted_to_contact_id}
-              </button>
-            )}
-            {lead.converted_to_company_id && (
-              <button onClick={() => navigate(`/crm/accounts/${lead.converted_to_company_id}`)} className="text-green-800 underline hover:text-green-900">
-                Account {lead.converted_to_company_id}
-              </button>
-            )}
-            {lead.converted_to_deal_id && (
-              <button onClick={() => navigate(`/crm/deals/${lead.converted_to_deal_id}`)} className="text-green-800 underline hover:text-green-900">
-                Deal {lead.converted_to_deal_id}
-              </button>
-            )}
-            {!lead.converted_to_contact_id && !lead.converted_to_company_id && !lead.converted_to_deal_id && (
-              <span className="text-green-800">The records it was converted into have since been deleted.</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Conversion Readiness Card */}
-      {(() => {
-        const mfs      = computeMultiFactorScore(lead);
-        const rdns     = computeConversionReadiness(lead, mfs);
-        const isActive = !['converted', 'lost', 'disqualified'].includes(lead.status);
-        if (!isActive) return null;
-
-        const STATE_STYLE: Record<string, { card: string; chip: string }> = {
-          ready_for_deal:            { card: 'border-green-200  bg-green-50',  chip: 'bg-green-100  text-green-700  border-green-200'  },
-          ready_for_account_contact: { card: 'border-teal-200   bg-teal-50',   chip: 'bg-teal-100   text-teal-700   border-teal-200'   },
-          ready_for_contact:         { card: 'border-blue-200   bg-blue-50',   chip: 'bg-blue-100   text-blue-700   border-blue-200'   },
-          needs_qualification:       { card: 'border-amber-200  bg-amber-50',  chip: 'bg-amber-100  text-amber-700  border-amber-200'  },
-          needs_enrichment:          { card: 'border-orange-200 bg-orange-50', chip: 'bg-orange-100 text-orange-700 border-orange-200' },
-          not_ready:                 { card: 'border-gray-200   bg-gray-50',   chip: 'bg-gray-100   text-gray-500   border-gray-200'   },
-        };
-        const style = STATE_STYLE[rdns.state] ?? STATE_STYLE.not_ready;
-        const isConvertible = ['ready_for_deal', 'ready_for_account_contact', 'ready_for_contact'].includes(rdns.state);
-
-        return (
-          <div className={`mx-8 mt-6 rounded-xl border-2 p-5 ${style.card}`}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                    Conversion Readiness
-                  </p>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${style.chip}`}>
-                    {rdns.label}
-                  </span>
-                </div>
-
-                {/* Checklist — 2-column grid */}
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
-                  {rdns.checklist.map((item, i) => (
-                    <div key={i} className="flex items-center gap-1.5 text-xs">
-                      <span className={item.met ? 'text-green-500' : 'text-gray-300'}>
-                        {item.met ? '✓' : '✗'}
-                      </span>
-                      <span className={item.met ? 'text-gray-700' : 'text-gray-400'}>{item.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Reasons / blockers */}
-                {rdns.reasons.length > 0 && (
-                  <div className="space-y-0.5">
-                    {rdns.reasons.map((r, i) => (
-                      <p key={i} className="text-xs text-gray-600 italic">{r}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {isConvertible && (
-                <button
-                  onClick={handleConvert}
-                  className="shrink-0 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
-                >
-                  Convert →
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Conversion Wizard */}
       {showConvertModal && (
         <LeadConversionWizard
           lead={lead}
-          readiness={computeConversionReadiness(lead, computeMultiFactorScore(lead))}
+          readiness={readiness}
           isOpen={showConvertModal}
           onClose={() => setShowConvertModal(false)}
           onConverted={(res) => {
             // Fires only after the SERVER created/linked the records.
-            const targetType = res.deal ? 'both' : 'contact';
-            actions.convert(lead, targetType, res.deal?.id ?? res.contact.id);
+            actions.convert(lead, res.deal ? 'both' : 'contact', res.deal?.id ?? res.contact.id);
             setLead(res.lead);
+            loadSource(fetchLeadStageHistory, setHistory);
           }}
         />
       )}
-
-      {/* Two Column Layout */}
-      <div className="px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-          {/* LEFT COLUMN */}
-          <div className="lg:col-span-2 space-y-6">
-
-            {/* Duplicate detection banner */}
-            {duplicateCandidates.length > 0 && (
-              <div className={`rounded-lg border px-4 py-3 ${
-                duplicateCandidates[0].risk === 'high'
-                  ? 'bg-red-50 border-red-200'
-                  : duplicateCandidates[0].risk === 'medium'
-                    ? 'bg-amber-50 border-amber-200'
-                    : 'bg-gray-50 border-gray-200'
-              }`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-2 min-w-0">
-                    <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
-                      duplicateCandidates[0].risk === 'high' ? 'text-red-500'
-                      : duplicateCandidates[0].risk === 'medium' ? 'text-amber-500'
-                      : 'text-gray-400'
-                    }`} />
-                    <div className="min-w-0">
-                      <p className={`text-sm font-medium ${
-                        duplicateCandidates[0].risk === 'high' ? 'text-red-800'
-                        : duplicateCandidates[0].risk === 'medium' ? 'text-amber-800'
-                        : 'text-gray-700'
-                      }`}>
-                        {duplicateCandidates.length === 1 ? 'Similar lead found' : `${duplicateCandidates.length} similar leads found`}
-                        {' · '}
-                        <span className="font-normal capitalize">{duplicateCandidates[0].risk} confidence</span>
-                      </p>
-                      <div className="mt-1 space-y-0.5">
-                        {duplicateCandidates.slice(0, 3).map(c => {
-                          const cl = (allLeads ?? []).find(l => l.id === c.leadId);
-                          if (!cl) return null;
-                          const name = cl.full_name || [cl.first_name, cl.last_name].filter(Boolean).join(' ') || cl.email || c.leadId;
-                          return (
-                            <p key={c.leadId} className="text-xs text-gray-600">
-                              <span className="font-medium">{name}</span>
-                              {cl.company && ` · ${cl.company}`}
-                              {' — '}
-                              {c.signals[0]?.reason}
-                            </p>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowMergeModal(true)}
-                    className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 whitespace-nowrap transition-colors"
-                  >
-                    Review &amp; Merge
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Basic Information */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <User className="h-5 w-5 text-blue-600" />
-                <span>Basic information</span>
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Name</p>
-                  <p className="text-base text-gray-900">{displayName}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Email</p>
-                  <p className="text-base text-gray-900">{lead.email || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Phone</p>
-                  <p className="text-base text-gray-900">{lead.phone || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Mobile</p>
-                  <p className="text-base text-gray-900">{lead.mobile || '—'}</p>
-                </div>
-                {lead.linkedin_url && (
-                  <div className="col-span-2">
-                    <p className="text-sm font-medium text-gray-500 mb-1">LinkedIn</p>
-                    <a
-                      href={lead.linkedin_url.startsWith('http') ? lead.linkedin_url : `https://${lead.linkedin_url}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-base text-blue-600 hover:underline flex items-center space-x-1"
-                    >
-                      <Linkedin className="h-4 w-4" />
-                      <span>{lead.linkedin_url}</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mb-6 pt-6 border-t border-gray-200">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Company</p>
-                  <p className="text-base font-semibold text-gray-900">{lead.company || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Title</p>
-                  <p className="text-base text-gray-900">{lead.position || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Department</p>
-                  <p className="text-base text-gray-900">{lead.department || '—'}</p>
-                </div>
-              </div>
-
-              <div className="pt-6 border-t border-gray-200">
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-500">Source:</span>
-                    <span className="text-sm text-gray-900">
-                      🎯 {lead.source || '—'}{lead.source_detail ? ` (${lead.source_detail})` : ''}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-500">Added:</span>
-                    <span className="text-sm text-gray-900">
-                      {formatDate(lead.created_at)} by {lead.created_by || 'System'}
-                    </span>
-                  </div>
-                  {lead.enriched_at && (
-                    <div className="flex items-center space-x-2 bg-purple-50 px-3 py-2 rounded-lg mt-2">
-                      <Zap className="h-4 w-4 text-purple-600" />
-                      <span className="text-sm font-medium text-purple-900">
-                        🤖 AI Enriched — last updated {formatDate(lead.enriched_at)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-4">
-                <div className="flex flex-wrap gap-2">
-                  {lead.tags.map((tag, index) => (
-                    <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                      {tag}
-                    </span>
-                  ))}
-                  <button className="px-3 py-1 border-2 border-dashed border-gray-300 rounded-full text-sm font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600">
-                    + Add Tag
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Company Information */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <Building className="h-5 w-5 text-blue-600" />
-                <span>Company information</span>
-                {lead.enriched_at && (
-                  <span className="text-sm font-normal text-purple-600">(🤖 AI Enriched)</span>
-                )}
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Company</p>
-                  <p className="text-base font-semibold text-gray-900">{lead.company || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Industry</p>
-                  <p className="text-base text-gray-900">{lead.industry || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Company Size</p>
-                  <p className="text-base text-gray-900">{lead.company_size || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Annual Revenue</p>
-                  <p className="text-base text-gray-900">{leadAnnualRevenue(lead)}</p>
-                </div>
-                {lead.website && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Website</p>
-                    <a
-                      href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-base text-blue-600 hover:underline flex items-center space-x-1"
-                    >
-                      <Globe className="h-4 w-4" />
-                      <span>{lead.website}</span>
-                    </a>
-                  </div>
-                )}
-                <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Location</p>
-                  <p className="text-base text-gray-900">{leadLocation(lead)}</p>
-                </div>
-                {enrichmentData.founded && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Founded</p>
-                    <p className="text-base text-gray-900">{enrichmentData.founded}</p>
-                  </div>
-                )}
-              </div>
-
-              {techStack.length > 0 && (
-                <div className="pt-6 border-t border-gray-200">
-                  <p className="text-sm font-medium text-gray-700 mb-3">Tech Stack:</p>
-                  <ul className="space-y-2">
-                    {techStack.map((tech, index) => (
-                      <li key={index} className="flex items-start space-x-2">
-                        <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                        <span className="text-sm text-gray-900">{tech}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {recentNews.length > 0 && (
-                <div className="pt-6 border-t border-gray-200">
-                  <p className="text-sm font-medium text-gray-700 mb-3">Recent News:</p>
-                  <ul className="space-y-2">
-                    {recentNews.map((news, index) => (
-                      <li key={index} className="flex items-start space-x-2">
-                        <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5" />
-                        <div>
-                          <p className="text-sm text-gray-900">{news.title}</p>
-                          <p className="text-xs text-gray-500">({news.date})</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <button
-                onClick={() => navigate('/crm/accounts')}
-                className="mt-6 w-full px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
-              >
-                View Full Company Profile
-              </button>
-            </div>
-
-            {/* Activity Timeline */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <Activity className="h-5 w-5 text-blue-600" />
-                <span>Activity timeline</span>
-              </h3>
-
-              <ActivityTimeline
-                events={[
-                  ...buildTimeline(lead, activities),
-                  ...auditEventsToTimelineEvents(getAuditEventsForLead(lead.id)),
-                ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())}
-                onLogActivity={() => openOutreach('call')}
-              />
-            </div>
-
-            {/* Notes & Files */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                <span>Notes & files</span>
-              </h3>
-
-              <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600 mb-4">No notes or files yet.</p>
-                <div className="flex items-center justify-center space-x-3">
-                  <Button
-                    onClick={() => openOutreach('note')}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Note</span>
-                  </Button>
-                  <button
-                    onClick={() => setShowFileUpload(true)}
-                    className="px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center space-x-2"
-                  >
-                    <Upload className="h-4 w-4" />
-                    <span>Upload File</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN */}
-          <div className="space-y-6">
-
-            <SourcePlaybookCard lead={lead} />
-
-            <SalesMemoryBlock lead={lead} recentActivities={activities.slice(0, 5)} />
-
-            {/* AI Insights */}
-            <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg shadow-sm border-2 border-purple-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <Zap className="h-5 w-5 text-purple-600" />
-                <span>AI insights</span>
-              </h3>
-
-              <div className="text-center mb-6">
-                <div className="text-5xl font-bold text-green-800 mb-2">{score}/100</div>
-                <div className="text-2xl mb-2">{getStarRating(score)}</div>
-                <p className="text-sm font-semibold text-gray-700">
-                  Rating: {score >= 80 ? 'High Potential' : score >= 60 ? 'Medium Potential' : 'Low Potential'}
-                </p>
-              </div>
-
-              {scoreBreakdown.length > 0 && (
-                <div className="border-t-2 border-purple-300 pt-4 mb-4">
-                  <p className="text-sm font-bold text-gray-900 mb-4">━━━ Why This Score? ━━━━━━━━━━━━━━</p>
-                  {scoreBreakdown.map((item, index) => (
-                    <div key={index} className="mb-4 bg-white rounded-lg p-3 border border-gray-200">
-                      <div className="flex items-start space-x-2">
-                        <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">{item.factor}</p>
-                          <p className="text-xs text-gray-600 mt-1">{item.description}</p>
-                          <p className="text-xs font-semibold text-green-700 mt-1">
-                            Score impact: +{item.points} points
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {similarDeals.length > 0 && (
-                <div className="border-t-2 border-purple-300 pt-4">
-                  <p className="text-sm font-bold text-gray-900 mb-4">━━━ Similar to Successful Deals ━━━</p>
-                  {similarDeals.map((deal, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm mb-2">
-                      <span className="text-gray-900">• {deal.company}</span>
-                      <span className="text-xs text-gray-600">({deal.status}, {deal.value})</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {scoreBreakdown.length === 0 && similarDeals.length === 0 && (
-                <div className="border-t-2 border-purple-300 pt-4 text-center text-sm text-gray-500">
-                  No AI analysis available yet for this lead.
-                </div>
-              )}
-            </div>
-
-            {/* Multi-factor score breakdown */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
-                <span>Score Breakdown</span>
-              </h3>
-              <LeadScoreBreakdownPanel
-                multiFactorScore={computeMultiFactorScore(lead)}
-                lead={lead}
-              />
-            </div>
-
-            {/* AI Recommended Actions */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <Target className="h-5 w-5 text-orange-600" />
-                <span>AI recommended actions</span>
-              </h3>
-
-              {recommendedActions.length > 0 ? (
-                <>
-                  <div className="mb-4">
-                    <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-bold">
-                      Priority: HIGH
-                    </span>
-                  </div>
-                  <div className="space-y-4">
-                    {recommendedActions.map((action, index) => (
-                      <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                        <div className="flex items-start space-x-2 mb-2">
-                          <span className="font-bold text-gray-900">{index + 1}.</span>
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-gray-900">{action.action}</p>
-                            <p className="text-xs text-gray-600 mt-1">Reason: {action.reason}</p>
-                            {action.bestTime && (
-                              <p className="text-xs text-gray-600 mt-1">Best time: {action.bestTime}</p>
-                            )}
-                            {index === 0 && (
-                              <div className="mt-3">
-                                <Button
-                                  onClick={() => openOutreach('email')}
-                                  size="sm" fullWidth className="rounded"
-                                >
-                                  Compose Email
-                                </Button>
-                              </div>
-                            )}
-                            {index === 1 && lead.linkedin_url && (
-                              <Button
-                                onClick={() => window.open(
-                                  lead.linkedin_url!.startsWith('http') ? lead.linkedin_url! : `https://${lead.linkedin_url}`,
-                                  '_blank'
-                                )}
-                                size="sm" fullWidth className="mt-2 rounded"
-                              >
-                                Send via LinkedIn →
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-4">
-                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-start space-x-2">
-                        <span className="font-bold text-gray-900">1.</span>
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-gray-900">Contact This Lead Today</p>
-                          <p className="text-xs text-gray-600 mt-1">Reason: New lead — reach out within 24 hours for best response rate</p>
-                          <div className="mt-3 flex space-x-2">
-                            <Button
-                              onClick={() => openOutreach('email')}
-                              size="sm" fullWidth className="rounded"
-                            >
-                              Send Email
-                            </Button>
-                            <button
-                              onClick={() => openOutreach('call')}
-                              className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-xs font-medium hover:bg-gray-50"
-                            >
-                              Log Call
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-start space-x-2">
-                        <span className="font-bold text-gray-900">2.</span>
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-gray-900">Schedule Discovery Call</p>
-                          <p className="text-xs text-gray-600 mt-1">Log a meeting or schedule with the prospect</p>
-                          <div className="mt-3">
-                            <button
-                              onClick={() => openOutreach('meeting')}
-                              className="w-full px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700"
-                            >
-                              Schedule Meeting
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => navigate(`/crm/ai-copilot?query=Help me with the lead ${displayName} at ${lead.company || 'their company'}`)}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 flex items-center justify-center gap-2 text-sm font-medium transition-all"
-                >
-                  <Zap className="h-4 w-4" />
-                  Get More AI Strategy for This Lead
-                </button>
-                <p className="text-xs text-gray-500 text-center mt-2">
-                  Ask AI Copilot for personalized strategy and talking points
-                </p>
-              </div>
-            </div>
-
-            {/* Integrations */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <ExternalLink className="h-5 w-5 text-blue-600" />
-                <span>Integrations</span>
-              </h3>
-
-              <p className="text-sm font-medium text-gray-700 mb-3">Data Sources:</p>
-              <div className="space-y-2 mb-4">
-                {lead.source && (
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <span className="text-sm text-gray-900">{lead.source}</span>
-                  </div>
-                )}
-                {lead.enriched_at && (
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <span className="text-sm text-gray-900">AI Enrichment (completed {formatDate(lead.enriched_at)})</span>
-                  </div>
-                )}
-              </div>
-
-              {lead.enriched_at && (
-                <div className="text-xs text-gray-600 mb-3">
-                  Last enriched: {formatDate(lead.enriched_at)}
-                </div>
-              )}
-
-              <button
-                onClick={handleReEnrich}
-                disabled={enriching}
-                className={`w-full px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium flex items-center justify-center space-x-2 ${enriching ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <RefreshCw className={`h-4 w-4 ${enriching ? 'animate-spin' : ''}`} />
-                <span>{enriching ? 'Enriching…' : 'Re-enrich Data'}</span>
-              </button>
-            </div>
-
-            {/* Next Steps */}
-            <div className="bg-orange-50 rounded-lg shadow-sm border-2 border-orange-200 p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-                <span>Next steps</span>
-              </h3>
-
-              <div className="mb-4">
-                <p className="text-sm font-semibold text-gray-900 mb-3">
-                  {lead.next_follow_up_date
-                    ? `Next follow-up: ${formatDate(lead.next_follow_up_date)}`
-                    : 'No follow-up scheduled.'}
-                </p>
-                <p className="text-sm text-gray-700 mb-2">Recommended:</p>
-                <ul className="space-y-1 text-sm text-gray-700">
-                  <li>• Contact within 24 hours</li>
-                  <li>• Convert to Contact after qualification</li>
-                </ul>
-              </div>
-
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setShowReminderForm(true)}
-                  className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-white text-sm font-medium flex items-center justify-center space-x-2"
-                >
-                  <Bell className="h-4 w-4" />
-                  <span>Set Reminder</span>
-                </button>
-                <button
-                  onClick={handleConvert}
-                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-medium"
-                >
-                  Convert Now
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── MODALS ─────────────────────────────────────────────────────────── */}
-
-      {/* Unified Outreach Composer */}
-      {showOutreachComposer && (
+      {composerChannel && (
         <OutreachComposer
           lead={lead}
-          initialChannel={outreachInitialChannel}
-          onSubmit={handleOutreachSubmit}
-          onClose={() => setShowOutreachComposer(false)}
+          initialChannel={composerChannel}
+          submitting={composerSaving}
+          error={composerError}
+          onSubmit={(activity) => void handleComposerSubmit(activity)}
+          onClose={() => { setComposerChannel(null); setComposerError(null); }}
         />
       )}
-
-      {/* Merge Review Modal */}
-      {showMergeModal && lead && duplicateCandidates.length > 0 && (
+      {showMergeModal && duplicateCandidates.length > 0 && (
         <MergeReviewModal
           lead={lead}
           candidateId={duplicateCandidates[0].leadId}
@@ -1205,70 +624,14 @@ const LeadDetailPage: React.FC = () => {
           onClose={() => setShowMergeModal(false)}
         />
       )}
-
-      {/* Mark as Disqualified / Lost */}
       <TerminalStatusModal
         open={terminalModalAction !== null}
         action={terminalModalAction ?? 'lost'}
         count={1}
-        leadName={lead ? leadDisplayName(lead) : undefined}
+        leadName={displayName}
         onConfirm={handleTerminalConfirm}
         onClose={() => setTerminalModalAction(null)}
       />
-
-      {/* File Upload */}
-      {showFileUpload && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Upload File</h3>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <Upload className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600 mb-2">Drag and drop your file here</p>
-              <p className="text-sm text-gray-500 mb-4">or</p>
-              <input type="file" id="fileInput" className="hidden" />
-              <label htmlFor="fileInput" className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 cursor-pointer inline-block">
-                Choose File
-              </label>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <Button onClick={handleFileUpload} fullWidth>Upload</Button>
-              <button onClick={() => setShowFileUpload(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reminder Form */}
-      {showReminderForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Set Reminder</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Type</label>
-                <select aria-label="Reminder Type" className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  <option>Follow up call</option>
-                  <option>Send email</option>
-                  <option>Check status</option>
-                  <option>Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reminder Date & Time</label>
-                <input aria-label="Reminder Date & Time" type="datetime-local" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea aria-label="Notes" rows={3} placeholder="Reminder notes…" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-            </div>
-            <div className="flex space-x-3 mt-6">
-              <Button onClick={handleSetReminder} fullWidth>Set Reminder</Button>
-              <button onClick={() => setShowReminderForm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

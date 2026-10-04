@@ -95,6 +95,7 @@ export function mapRowToLead(row: any): Lead {
     // activities since step 5.
     ...(row.last_contact ? { last_contact_date: String(row.last_contact).slice(0, 10) } : {}),
     assigned_to_user_id: row.assigned_to_user_id ?? null,
+    ...(row.assigned_to ? { owner_name: String(row.assigned_to) } : {}),
     // Migration 059 — what a converted lead became. Server-written only.
     ...(row.converted_at ? { converted_at: String(row.converted_at) } : {}),
     ...(row.converted_contact_id ? { converted_to_contact_id: String(row.converted_contact_id) } : {}),
@@ -383,6 +384,27 @@ export async function deleteLeadViaAPI(id: string): Promise<boolean> {
 }
 
 // ── Activities ────────────────────────────────────────────────────────────────
+
+/** One row of GET /leads/:id/stage-history (migration 058) — server-recorded moves. */
+export interface LeadStageHistoryRow {
+  id: string;
+  lead_id: number | string;
+  from_stage: string | null;   // NULL on the creation row
+  to_stage: string;
+  qualification_override: boolean;
+  unmet_criteria: string[] | null;
+  reason: string | null;
+  changed_by_user_id: number | null;
+  changed_by_name: string | null;
+  changed_at: string;
+}
+
+export async function fetchLeadStageHistory(leadId: string): Promise<LeadStageHistoryRow[]> {
+  const res = await fetch(`${API_BASE}/leads/${leadId}/stage-history`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error(await errorMessage(res, 'fetchLeadStageHistory'));
+  const json = await res.json();
+  return json.success ? json.data : [];
+}
 
 export async function fetchActivitiesFromAPI(leadId: string): Promise<LeadActivity[]> {
   const res = await fetch(`${API_BASE}/leads/${leadId}/activities`, { headers: getAuthHeaders() });

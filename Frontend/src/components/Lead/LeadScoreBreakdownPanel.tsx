@@ -223,7 +223,10 @@ const LeadScoreBreakdownPanel: React.FC<LeadScoreBreakdownPanelProps> = ({
   const totalScore  = mfs?.overallScore ?? breakdown?.totalScore ?? 0;
   const trend       = breakdown?.trend        ?? 'stable';
   const changeAmt   = breakdown?.changeAmount ?? 0;
-  const lastUpdated = breakdown?.lastUpdated  ?? new Date().toISOString();
+  // Only a STORED time. This fell back to `new Date()`, so with no stored
+  // breakdown — every lead today — the panel claimed the score had been
+  // updated at the moment you opened the page.
+  const lastUpdated = breakdown?.lastUpdated ?? null;
 
   // Explainability — only when we have both mfs and lead
   const expl = mfs && lead ? explainScore(lead, mfs) : null;
@@ -236,16 +239,18 @@ const LeadScoreBreakdownPanel: React.FC<LeadScoreBreakdownPanelProps> = ({
   return (
     <div className="space-y-6">
       {/* ── Header: overall score ────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-6 text-white">
+      <div className="rounded-card border border-line bg-surface-subtle p-4 text-ink">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold mb-1">Lead Score</h2>
-            <p className="text-blue-100 text-sm">
-              Last updated: {new Date(lastUpdated).toLocaleString()}
-            </p>
+            <h3 className="text-sm font-semibold mb-1">Lead score · rule-based</h3>
+            {lastUpdated && (
+              <p className="text-ink-muted text-xs">
+                Last updated: {new Date(lastUpdated).toLocaleString()}
+              </p>
+            )}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {mfs && (
-                <span className="text-xs px-2 py-0.5 bg-white/20 rounded-full font-medium">
+                <span className="text-xs px-2 py-0.5 bg-brand-50 text-brand-600 rounded-full font-semibold">
                   {mfs.overallBandLabel} · Multi-factor
                 </span>
               )}
@@ -257,13 +262,13 @@ const LeadScoreBreakdownPanel: React.FC<LeadScoreBreakdownPanelProps> = ({
             </div>
           </div>
           <div className="text-right">
-            <p className="text-5xl font-bold">{totalScore}</p>
-            <p className="text-sm mt-1">/ 100 points</p>
+            <p className="text-4xl font-bold text-ink-heading">{totalScore}</p>
+            <p className="text-xs mt-1 text-ink-muted">/ 100 points</p>
           </div>
         </div>
         {breakdown && (
-          <div className="mt-4 pt-4 border-t border-blue-500 flex items-center justify-between">
-            <span className="text-sm text-blue-100">Change from last week</span>
+          <div className="mt-4 pt-4 border-t border-line flex items-center justify-between">
+            <span className="text-sm text-ink-muted">Change from last week</span>
             <div className={`flex items-center gap-1 ${trendCls(trend)}`}>
               {trendIcon(trend)}
               <span className="font-semibold">

@@ -121,6 +121,8 @@ export interface Lead {
   converted_to_company_id?: string;
   /** Migration 060: the owner as a real user id (dual-written with the name). */
   assigned_to_user_id?: number | null;
+  /** The stored owner NAME (leads.assigned_to, free text). Display only. */
+  owner_name?: string;
   converted_by?: string;
   first_contact_date?: string;
   last_contact_date?: string;

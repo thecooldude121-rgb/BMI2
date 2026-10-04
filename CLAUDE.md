@@ -1139,6 +1139,39 @@ old constraint, which fails the shared-name test.
   `deleteDocuments` also removes the stored blob via `deleteFile(storage_key)`, so a raw SQL
   delete would orphan the file in the store.
 
+- **Backlog agreed 2026-10-05 (Venkat), not blocking the Figma rollout:**
+  - **A real "workspace connected" signal.** `GET /health` today reports the API process and
+    the migration state captured AT BOOT; it never touches the database per request. Add a
+    `SELECT 1` to it and a frontend poll, then the sidebar indicator Figma draws can be shown.
+    Until then it stays suppressed (Phase 1).
+  - **Extend the step-4 owner cleanup to `tasks`.** Every live task shows "John Smith" — the
+    seed name step 4 cleared from leads and deals. Same process: dependency trace, backup,
+    guarded scoped UPDATE, re-count.
+  - **TRACKED: the `DataContext` 500-record cap.** The dashboard and other non-Leads screens
+    still load at most 500 rows client-side. Broader than step 5 slice A (which fixed the Leads
+    list only); its own item.
+
+- **Figma phase 3 — Lead detail (2026-10-05). The page's write actions had NEVER saved.**
+  "Send email / Log call / Schedule meeting / Add note" built an activity in React state and
+  toasted "Call logged"; nothing reached the server and it vanished on reload, while
+  `POST /leads/:id/activities` and `/notes` existed and were tested. Now wired; success waits
+  for the 2xx; a refusal keeps the composer open with the server's message. The timeline is
+  server rows only (stage history + activities), each source failing visibly on its own. Also
+  removed: "Re-enrich" (a `setTimeout` then "re-enriched"), "Set Reminder" (nothing stored),
+  the follow-up date (no column), the starred score with a "potential" verdict, canned
+  "contact within 24 hours" advice, and a score panel "Last updated" that showed the current
+  time. Pinned by `LeadDetailPage.test.tsx` (+ a real-composer payload test).
+  **Found, NOT fixed, each its own decision:**
+  - `POST /leads/:id/enrich` returns a hardcoded `confidence: 0.7` and writes an "AI enrichment
+    triggered" note while enriching nothing. No UI calls it any more.
+  - `computeMultiFactorScore` reads fields with NO column (`company_size` and others), so those
+    factors are unsatisfiable for every lead — the rule-based score is systematically low.
+  - DB stages `won` / `proposal` are treated as active (lifecycle menu, Convert shown) — the
+    open vocabulary decision already tracked under step 5.
+  - `OutreachComposer` is also used by the Leads list, whose logging is likely fake the same
+    way; fixed with the Leads list slice. The list's drawer "open full record" button is
+    icon-only with no accessible name.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
