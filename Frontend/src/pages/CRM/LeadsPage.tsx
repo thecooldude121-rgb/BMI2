@@ -4,15 +4,18 @@ import { Plus, Upload, Search, ChevronDown, CheckCircle, UserPlus, Link as LinkI
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useLeads } from '../../contexts/LeadContext';
-import { useLeadsPageState, migrateLegacyStatus, SERVER_SORTS } from '../../hooks/useLeadsPageState';
+import { useLeadsPageState, migrateLegacyStatus, SERVER_SORTS, PAGE_SIZE } from '../../hooks/useLeadsPageState';
 import { usePermissions } from '../../hooks/usePermissions';
 import { SORT_OPTIONS } from '../../utils/leadSorting';
-import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { Button } from '../../components/ui/Button';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import SavedViewsBar from '../../components/Leads/SavedViewsBar';
 import SavedViewModal from '../../components/Leads/SavedViewModal';
 import KpiCard from '../../components/Leads/KpiCard';
+import LeadsPager from '../../components/Leads/LeadsPager';
+import EmptyState from '../../components/ui/EmptyState';
+import Alert from '../../components/ui/Alert';
+import { selectClass } from '../../components/ui/Field';
 import LeadTableRow from '../../components/Leads/LeadTableRow';
 import FilterChipBar from '../../components/Leads/FilterChipBar';
 import AdvancedFilterDrawer from '../../components/Leads/AdvancedFilterDrawer';
@@ -28,6 +31,7 @@ import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
 import LeadQuickDrawer from '../../components/Leads/LeadQuickDrawer';
 import OutreachComposer from '../../components/Leads/OutreachComposer';
 import { useLeadActions } from '../../hooks/useLeadActions';
+import { useLogLeadActivity, LOGGED_LABEL } from '../../hooks/useLogLeadActivity';
 import { HEALTHY_SLA_RESULT } from '../../utils/leadSla';
 import type { TerminalAction } from '../../utils/leadReasons';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
@@ -159,8 +163,9 @@ const KANBAN_SWIM_LANES: Array<{
 
 const LeadsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { updateLead, transitionLead, deleteLead, updateView: ctxUpdateView, lastWriteErrorRef, writeVersion } = useLeads();
+  const { updateLead, transitionLead, deleteLead, updateView: ctxUpdateView, lastWriteErrorRef, writeVersion, notifyWrite } = useLeads();
   const actions = useLeadActions(updateLead);
+  const logActivity = useLogLeadActivity();
 
   const { can } = usePermissions();
 
@@ -168,7 +173,7 @@ const LeadsPage: React.FC = () => {
     viewMode, setViewMode,
     searchQuery, setSearchQuery,
     sortBy, setSortBy, sortLabel, sortExplanation,
-    loadMore,
+    page, pageCount, setPage,
     filterState, setFilterStatus, setFilterSource, setFilterScore,
     selectedLeadIds, toggleLeadSelection, selectAllLeads, setSelection, clearSelection, isSelected,
     activeLead,
@@ -293,12 +298,14 @@ const LeadsPage: React.FC = () => {
 
   // ── Single-lead modal actions (triggered from row ⋯ menu) ─────────────────
 
-  const handleSingleDelete = () => {
-    if (activeLead) {
-      deleteLead(activeLead.id);
-      closeModal();
-      showToast('Lead deleted', 'success');
-    }
+  // Awaits the server. It used to fire the delete and toast "Lead deleted"
+  // whatever came back — a sales user's 403 read as a success.
+  const handleSingleDelete = async () => {
+    if (!activeLead) return;
+    const ok = await deleteLead(activeLead.id);
+    closeModal();
+    if (ok) showToast('Lead deleted', 'success');
+    else showToast(lastWriteErrorRef.current || 'The lead was not deleted.', 'error');
   };
 
   const handleSingleArchive = () => {
@@ -341,12 +348,11 @@ const LeadsPage: React.FC = () => {
     void runBulk(ids, id => updateLead(id, { status }), `moved to ${status}`);
   };
 
-  const handleBulkSetFollowUp = (date: string, _type: FollowUpType) => {
-    // _type is UI-only; only date is persisted to next_follow_up_date
-    const n = selectedLeadIds.length;
-    selectedLeadIds.forEach(id => updateLead(id, { next_follow_up_date: date }));
-    showToast(`Follow-up set for ${n} lead${n !== 1 ? 's' : ''}`, 'success');
-    clearSelection();
+  // COMING SOON. leads.next_follow_up_date has no column — this wrote it,
+  // the server dropped it, and the toast said "Follow-up set for N leads".
+  // BulkActionBar disables the control; this never writes.
+  const handleBulkSetFollowUp = (_date: string, _type: FollowUpType) => {
+    showToast('Follow-up dates are not stored yet — nothing was set.', 'info');
   };
 
   const handleBulkExport = () => {
@@ -392,23 +398,30 @@ const LeadsPage: React.FC = () => {
       void runBulk(ids, id => updateLead(id, { status, ...extra } as Partial<Lead>), `marked ${status}`);
       setBulkTerminalAction(null);
     } else if (activeLead) {
+      // Checks the write: it used to toast "Lead marked as …" either way.
       const isSingleDisqualify = isModalOpen('terminalDisqualify');
       const notesOrUndefined = notes || undefined;
-      if (isSingleDisqualify) {
-        void actions.disqualify(activeLead, reason, notesOrUndefined);
-      } else {
-        void actions.markLost(activeLead, reason, notesOrUndefined);
-      }
-      showToast(`Lead marked as ${isSingleDisqualify ? 'disqualified' : 'lost'}`, 'success');
-      closeModal();
+      const lead = activeLead;
+      void (async () => {
+        const ok = isSingleDisqualify
+          ? await actions.disqualify(lead, reason, notesOrUndefined)
+          : await actions.markLost(lead, reason, notesOrUndefined);
+        if (ok) {
+          showToast(`Lead marked as ${isSingleDisqualify ? 'disqualified' : 'lost'}`, 'success');
+          closeModal();
+        } else {
+          showToast(lastWriteErrorRef.current || 'The server refused this — nothing was saved.', 'error');
+        }
+      })();
     }
   };
 
+  // Awaits every delete and reports what the server did (runBulk). It used to
+  // fire them all and toast "N leads deleted" whatever came back.
   const handleBulkDelete = () => {
-    const n = selectedLeadIds.length;
-    selectedLeadIds.forEach(id => deleteLead(id));
-    showToast(`${n} lead${n !== 1 ? 's' : ''} deleted`, 'success');
+    const ids = [...selectedLeadIds];
     clearSelection();
+    void runBulk(ids, id => deleteLead(id), 'deleted');
   };
 
   const handleDragEnd = (result: DropResult) => {
@@ -641,7 +654,7 @@ const LeadsPage: React.FC = () => {
         <div className="px-3 pb-3 mt-auto">
           <button
             disabled={cta.blocked}
-            title={cta.blocked ? 'Requires Senior SDR or above' : undefined}
+            title={cta.blocked ? 'Not available for your role' : undefined}
             className={`w-full py-1.5 text-xs font-semibold rounded-lg transition-colors ${
               cta.blocked
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
@@ -671,8 +684,7 @@ const LeadsPage: React.FC = () => {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <CRMNavigation />
+    <div className="mx-auto flex max-w-[1240px] flex-col gap-4 pt-6 pb-8">
 
       {/* Toast */}
       {toast && (
@@ -713,84 +725,56 @@ const LeadsPage: React.FC = () => {
         }}
       />
 
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
-              <span>🎯</span>
-              <span>Leads</span>
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">Manage and qualify incoming leads</p>
+      {/* Header (Figma "Leads header" 61:65) */}
+      <header className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-[32px] font-bold leading-10 text-ink">Leads</h1>
+            <p className="text-sm leading-[22px] text-ink-muted">Manage and qualify incoming leads.</p>
           </div>
-          <div className="flex items-center space-x-3">
-            {/* Split-button: Quick Add (primary) + dropdown for Full Form / Import CSV */}
-            <div ref={addMenuRef} className="relative">
-              <div className="flex items-center rounded-lg overflow-hidden shadow-sm">
-                <Button
-                  onClick={() => setQuickAddOpen(true)}
-                  size="lg"
-                  leadingIcon={<Plus className="h-4 w-4" />}
-                  // Left half of a split control, so the inner edge stays square.
-                  // Button honours className, which keeps a one-off a one-off
-                  // instead of forcing a new variant into the primitive.
-                  className="rounded-r-none font-semibold"
-                >
-                  Quick Add
-                </Button>
-                <button
-                  onClick={() => setAddMenuOpen(o => !o)}
-                  aria-label="More lead creation options"
-                  aria-expanded={addMenuOpen}
-                  aria-haspopup="menu"
-                  className="px-2 py-2.5 bg-blue-700 text-white hover:bg-blue-800 transition-colors border-l border-blue-500"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" onClick={() => navigate('/crm/leads/integrations')} leadingIcon={<LinkIcon className="h-3.5 w-3.5" />}>Integrations</Button>
+            <Button variant="secondary" onClick={() => navigate('/crm/leads/import')} leadingIcon={<Upload className="h-3.5 w-3.5" />}>Import</Button>
+            {/* Split button: Quick Add + a menu for Full Form / Import CSV */}
+            <div ref={addMenuRef} className="relative flex">
+              <Button onClick={() => setQuickAddOpen(true)} leadingIcon={<Plus className="h-3.5 w-3.5" />} className="rounded-r-none">
+                Quick Add
+              </Button>
+              <Button
+                iconOnly
+                aria-label="More lead creation options"
+                aria-expanded={addMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setAddMenuOpen(o => !o)}
+                leadingIcon={<ChevronDown className="h-3.5 w-3.5" />}
+                className="rounded-l-none border-l border-l-brand-700"
+              />
               {addMenuOpen && (
-                <div role="menu" className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-30 py-1">
-                  <button
-                    role="menuitem"
-                    onClick={() => { setAddMenuOpen(false); navigate('/crm/leads/new'); }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <UserPlus className="h-4 w-4 text-gray-400" />
-                    Full Form
+                <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-44 rounded-card border border-line bg-surface-panel py-1 shadow-lg">
+                  <button role="menuitem" onClick={() => { setAddMenuOpen(false); navigate('/crm/leads/new'); }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-ink hover:bg-black/5">
+                    <UserPlus className="h-4 w-4 text-ink-muted" /> Full Form
                   </button>
-                  <div className="my-1 border-t border-gray-100" />
-                  <button
-                    role="menuitem"
-                    onClick={() => { setAddMenuOpen(false); navigate('/crm/leads/import'); }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <Upload className="h-4 w-4 text-gray-400" />
-                    Import CSV
+                  <button role="menuitem" onClick={() => { setAddMenuOpen(false); navigate('/crm/leads/import'); }}
+                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-ink hover:bg-black/5">
+                    <Upload className="h-4 w-4 text-ink-muted" /> Import CSV
                   </button>
                 </div>
               )}
             </div>
-            <button
-              onClick={() => navigate('/crm/leads/integrations')}
-              className="flex items-center px-5 py-2.5 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-semibold text-gray-700"
-            >
-              <LinkIcon className="h-4 w-4 mr-2" />
-              Integrations
-            </button>
-            <button
-              onClick={() => navigate('/crm/leads/import')}
-              className="flex items-center px-5 py-2.5 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-semibold text-gray-700"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </button>
           </div>
         </div>
-      </div>
+        {/* Quick Add options row (Figma) — the same two real routes, one click away */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-brand-50 px-2 py-[3px] text-xs font-semibold text-brand-600">Quick Add options</span>
+          <Button variant="secondary" size="sm" onClick={() => navigate('/crm/leads/new')}>Full Form</Button>
+          <Button variant="secondary" size="sm" onClick={() => navigate('/crm/leads/import')}>Import CSV</Button>
+        </div>
+      </header>
 
       {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
           {/* 1 — Overdue Follow-ups */}
           <KpiCard
@@ -872,7 +856,7 @@ const LeadsPage: React.FC = () => {
               type="button"
               disabled
               title="Coming soon"
-              className="text-right text-xs text-gray-400 font-medium px-1 cursor-not-allowed"
+              className="text-right text-xs text-ink-muted font-medium px-1 cursor-not-allowed"
             >
               Source breakdown — coming soon
             </button>
@@ -882,7 +866,7 @@ const LeadsPage: React.FC = () => {
       </div>
 
       {/* ── Saved Views Bar ───────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-8 py-3">
+      <div className="rounded-card border border-line bg-surface-panel px-3 py-2">
         <SavedViewsBar
           savedViews={savedViews}
           activeViewId={activeViewId}
@@ -897,9 +881,9 @@ const LeadsPage: React.FC = () => {
         />
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
-        <div className="space-y-4">
+      {/* Filter & Search panel (Figma 61:126 controls) */}
+      <div className="rounded-card border border-line bg-surface-panel p-3">
+        <div className="space-y-3">
           {/* Active view pill + save controls */}
           {activeViewId && (
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -935,157 +919,78 @@ const LeadsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Status filter with simplified/detailed toggle */}
-          <div className="flex items-start gap-4 flex-wrap">
-            <div className="flex items-center gap-2 shrink-0 pt-0.5">
-              <span className="text-sm font-medium text-gray-700">Status:</span>
-              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden text-xs">
-                <button
-                  onClick={() => setStatusViewMode('simplified')}
-                  className={`px-2.5 py-1 font-medium transition-colors ${
-                    statusViewMode === 'simplified' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Simple
-                </button>
-                <button
-                  onClick={() => setStatusViewMode('detailed')}
-                  className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
-                    statusViewMode === 'detailed' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Detailed
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {statusViewMode === 'simplified' ? (
-                [
-                  { value: 'all',            label: 'All'         },
-                  { value: '__incoming__',   label: 'New'         },
-                  { value: '__in_progress__', label: 'In Progress' },
-                  { value: '__qualified__',  label: 'Qualified'   },
-                  { value: '__nurturing__',  label: 'Nurturing'   },
-                  { value: '__closed__',     label: 'Closed'      },
-                ].map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setFilterStatus(value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      filterState.status === value ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))
-              ) : (
-                [
-                  'all', 'new', 'assigned', 'enriching', 'attempting_contact',
-                  'engaged', 'qualified', 'sales_accepted', 'nurture',
-                  'disqualified', 'converted', 'lost',
-                ].map(status => (
-                  <button
-                    key={status}
-                    onClick={() => setFilterStatus(status)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      filterState.status === status ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {status === 'all' ? 'All' : getStatusLabel(status)}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Source filter */}
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium text-gray-700">Source:</span>
-            <div className="flex items-center space-x-2">
-              {['all', 'Lead Gen', 'HRMS', 'Manual', 'Website'].map(source => (
-                <button
-                  key={source}
-                  onClick={() => setFilterSource(source === 'all' ? 'all' : source)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterState.source === (source === 'all' ? 'all' : source)
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {source}
+          {/* Status (Simple / Detailed vocabulary), source and score — the same
+              filter values the chip rows sent, as the frame's dropdowns. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-ctrl bg-surface-sunken p-0.5 text-xs" role="group" aria-label="Status vocabulary">
+              {(['simplified', 'detailed'] as const).map(m => (
+                <button key={m} type="button" onClick={() => setStatusViewMode(m)} aria-pressed={statusViewMode === m}
+                  className={`rounded-ctrl px-2.5 py-1 font-semibold transition-colors ${
+                    statusViewMode === m ? 'bg-surface-panel text-brand-600 shadow-sm' : 'text-ink-secondary hover:text-ink'}`}>
+                  {m === 'simplified' ? 'Simple' : 'Detailed'}
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Score filter */}
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium text-gray-700">Score:</span>
-            <div className="flex items-center space-x-2">
+            <select aria-label="Status" value={filterState.status} onChange={e => setFilterStatus(e.target.value)} className={`${selectClass()} w-auto`}>
+              {(statusViewMode === 'simplified'
+                ? [
+                    { value: 'all', label: 'All' }, { value: '__incoming__', label: 'New' },
+                    { value: '__in_progress__', label: 'In Progress' }, { value: '__qualified__', label: 'Qualified' },
+                    { value: '__nurturing__', label: 'Nurturing' }, { value: '__closed__', label: 'Closed' },
+                  ]
+                : ['all', 'new', 'assigned', 'enriching', 'attempting_contact', 'engaged', 'qualified',
+                   'sales_accepted', 'nurture', 'disqualified', 'converted', 'lost']
+                    .map(v => ({ value: v, label: v === 'all' ? 'All' : getStatusLabel(v) }))
+              ).map(o => <option key={o.value} value={o.value}>Status: {o.label}</option>)}
+            </select>
+            <select aria-label="Source" value={filterState.source} onChange={e => setFilterSource(e.target.value)} className={`${selectClass()} w-auto`}>
+              {['all', 'Lead Gen', 'HRMS', 'Manual', 'Website'].map(src => (
+                <option key={src} value={src}>Source: {src === 'all' ? 'All' : src}</option>
+              ))}
+            </select>
+            <select aria-label="Score" value={filterState.score} onChange={e => setFilterScore(e.target.value)} className={`${selectClass()} w-auto`}>
               {[
-                { value: 'all',      label: 'All' },
-                { value: '80-100',   label: '80-100' },
-                { value: '60-79',    label: '60-79' },
-                { value: 'below-60', label: 'Below 60' },
-              ].map(score => (
-                <button
-                  key={score.value}
-                  onClick={() => setFilterScore(score.value)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterState.score === score.value ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {score.label}
-                </button>
-              ))}
-            </div>
+                { value: 'all', label: 'Any' }, { value: '80-100', label: '80–100' },
+                { value: '60-79', label: '60–79' }, { value: 'below-60', label: 'Below 60' },
+              ].map(o => <option key={o.value} value={o.value}>Score: {o.label}</option>)}
+            </select>
+            <Button
+              variant="secondary"
+              onClick={() => openModal('advancedFilters')}
+              leadingIcon={<SlidersHorizontal className="h-3.5 w-3.5" />}
+              className={hasActiveAdvancedFilter ? 'border-brand-600 text-brand-700' : ''}
+            >
+              Advanced filters
+              {hasActiveAdvancedFilter && (
+                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">
+                  {advancedFilter.groups.reduce((s, g) => s + g.conditions.length, 0)}
+                </span>
+              )}
+            </Button>
           </div>
 
           {/* Search + sort + view toggle */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-            <div className="flex items-center space-x-4 flex-1">
-              <span className="text-sm font-medium text-gray-700">Search:</span>
-              <div className="relative flex-1 max-w-md">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search by name, company, email..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" aria-hidden="true" />
+              <input
+                type="text"
+                aria-label="Search leads"
+                placeholder="Search name, company or email"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="h-9 w-full rounded-ctrl border border-line bg-surface-panel pl-8 pr-3 text-sm text-ink placeholder:text-ink-muted focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+              />
             </div>
-            <div className="flex items-center space-x-4">
-              {/* Advanced filters button */}
-              <button
-                onClick={() => openModal('advancedFilters')}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${
-                  hasActiveAdvancedFilter
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-300 hover:bg-gray-50 text-gray-700'
-                }`}
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Filters
-                {hasActiveAdvancedFilter && (
-                  <span className="ml-1 bg-brand-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {advancedFilter.groups.reduce((s, g) => s + g.conditions.length, 0)}
-                  </span>
-                )}
-              </button>
-
+            <div className="flex items-center gap-2">
               {/* Sort dropdown */}
               <div className="relative">
-                <button
-                  onClick={() => isModalOpen('sortDropdown') ? closeModal() : openModal('sortDropdown')}
-                  className="flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
-                >
-                  <span>Sort: {sortLabel}</span>
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </button>
+                <Button variant="secondary" onClick={() => isModalOpen('sortDropdown') ? closeModal() : openModal('sortDropdown')}
+                  aria-expanded={isModalOpen('sortDropdown')} trailingIcon={<ChevronDown className="h-3.5 w-3.5" />}>
+                  Sort: {sortLabel}
+                </Button>
                 {isModalOpen('sortDropdown') && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+                  <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-card border border-line bg-surface-panel py-1 shadow-lg">
                     {(['smart', 'score', 'time', 'pipeline'] as const).map(group => {
                       const groupLabels: Record<string, string> = {
                         smart:    'Smart Rankings',
@@ -1096,7 +1001,7 @@ const LeadsPage: React.FC = () => {
                       const options = SORT_OPTIONS.filter(o => o.group === group);
                       return (
                         <div key={group}>
-                          <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                          <div className="px-3 pt-2 pb-1 text-xs font-semibold uppercase text-ink-secondary">
                             {groupLabels[group]}
                           </div>
                           {options.map(option => (
@@ -1104,8 +1009,8 @@ const LeadsPage: React.FC = () => {
                             <button
                               key={option.mode}
                               onClick={() => { setSortBy(option.mode); closeModal(); }}
-                              className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${
-                                sortBy === option.mode ? 'font-semibold text-blue-600 bg-blue-50' : ''
+                              className={`w-full px-4 py-2 text-left text-sm text-ink hover:bg-black/5 ${
+                                sortBy === option.mode ? 'bg-brand-50 font-semibold text-brand-600' : ''
                               }`}
                             >
                               {option.label}
@@ -1118,9 +1023,9 @@ const LeadsPage: React.FC = () => {
                               type="button"
                               disabled
                               title="Coming soon"
-                              className="w-full text-left px-4 py-2 text-sm text-gray-400 cursor-not-allowed"
+                              className="w-full cursor-not-allowed px-4 py-2 text-left text-sm text-ink-muted"
                             >
-                              {option.label} <span className="text-[10px] uppercase">· coming soon</span>
+                              {option.label} <span className="text-xs">· coming soon</span>
                             </button>
                             )
                           ))}
@@ -1131,22 +1036,15 @@ const LeadsPage: React.FC = () => {
                 )}
               </div>
 
-              {/* View mode toggle */}
-              <div className="flex items-center space-x-2 border border-gray-300 rounded-lg p-1 bg-gray-50">
-                {(['list', 'grid', 'kanban'] as const).map(mode => {
-                  const labels: Record<typeof mode, string> = { list: '📋 List', grid: '🔲 Grid', kanban: '📊 Kanban' };
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => setViewMode(mode)}
-                      className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                        viewMode === mode ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-600 hover:bg-white'
-                      }`}
-                    >
-                      {labels[mode]}
-                    </button>
-                  );
-                })}
+              {/* View mode toggle — each one gates the render below */}
+              <div className="flex items-center rounded-ctrl bg-surface-sunken p-0.5 text-xs" role="group" aria-label="View">
+                {(['list', 'grid', 'kanban'] as const).map(mode => (
+                  <button key={mode} type="button" onClick={() => setViewMode(mode)} aria-pressed={viewMode === mode}
+                    className={`rounded-ctrl px-2.5 py-1.5 font-semibold capitalize transition-colors ${
+                      viewMode === mode ? 'bg-surface-panel text-brand-600 shadow-sm' : 'text-ink-secondary hover:text-ink'}`}>
+                    {mode}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -1155,7 +1053,7 @@ const LeadsPage: React.FC = () => {
 
       {/* ── Advanced filter chips ─────────────────────────────────────────── */}
       {hasActiveAdvancedFilter && (
-        <div className="bg-white border-b border-gray-200 px-8 py-2">
+        <div className="rounded-card border border-line bg-surface-panel px-3 py-2">
           <FilterChipBar
             advancedFilter={advancedFilter}
             onRemoveCondition={handleRemoveCondition}
@@ -1168,32 +1066,26 @@ const LeadsPage: React.FC = () => {
 
       {/* ── Sort explainability ───────────────────────────────────────────── */}
       {sortExplanation && (
-        <div className="px-8 pt-3">
-          <p className="text-xs text-gray-400 italic">Sorted by: {sortExplanation}</p>
-        </div>
+        <p className="text-xs text-ink-muted">Sorted by: {sortExplanation}</p>
       )}
 
       {/* ── Why the list is empty, when it is not "no matches" (step 5) ─────── */}
       {(listUnavailableReason || listError) && (
-        <div className="px-8 pt-6">
-          <div role="alert" className={`rounded-lg border px-4 py-3 text-sm ${listError ? 'border-red-200 bg-red-50 text-red-800' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
-            {listUnavailableReason ?? `The server could not apply these filters: ${listError}`}
-          </div>
-        </div>
+        listError
+          ? <Alert tone="danger" title="The server could not apply these filters">{listError}</Alert>
+          : <Alert tone="info" title="This list is not available">{listUnavailableReason}</Alert>
       )}
 
       {/* ── LIST VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
-        <div className="px-8 py-6">
+        <div>
           {initialLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-            </div>
+            <p className="py-16 text-center text-sm text-ink-muted" role="status">Loading leads…</p>
           ) : (
             <>
-              <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+              <div className="overflow-x-auto rounded-card border border-line bg-surface-panel">
                 <table className="min-w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
+                  <thead className="border-b border-line bg-surface-sunken">
                     <tr>
                       <th className="w-12 px-4 py-3">
                         <input
@@ -1215,14 +1107,14 @@ const LeadsPage: React.FC = () => {
                           className="h-4 w-4 text-blue-600 rounded border-gray-300"
                         />
                       </th>
-                      <th className="w-72 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Identity</th>
-                      <th className="w-48 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qualification</th>
-                      <th className="w-44 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Engagement</th>
-                      <th className="w-56 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Urgency</th>
-                      <th className="w-44 px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="w-72 px-4 py-2.5 text-left text-xs font-semibold uppercase text-ink-secondary">Identity</th>
+                      <th className="w-48 px-4 py-2.5 text-left text-xs font-semibold uppercase text-ink-secondary">Qualification</th>
+                      <th className="w-44 px-4 py-2.5 text-left text-xs font-semibold uppercase text-ink-secondary">Engagement</th>
+                      <th className="w-56 px-4 py-2.5 text-left text-xs font-semibold uppercase text-ink-secondary">Urgency</th>
+                      <th className="w-44 px-4 py-2.5 text-right text-xs font-semibold uppercase text-ink-secondary">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-line">
                     {paginatedLeads.map(lead => (
                       <LeadTableRow
                         key={lead.id}
@@ -1250,26 +1142,15 @@ const LeadsPage: React.FC = () => {
                   </tbody>
                 </table>
 
-                {sortedLeads.length === 0 && (
-                  <div className="py-16 text-center text-gray-500">
-                    <p className="text-lg font-medium">No leads found</p>
-                    <p className="text-sm mt-1">Try adjusting your filters or add a new lead.</p>
+                {sortedLeads.length === 0 && !listError && !listUnavailableReason && (
+                  <div className="p-4">
+                    <EmptyState title="No leads match" reason="Nothing in this workspace matches these filters. Clear a filter, or add a lead."
+                      action={<Button onClick={() => setQuickAddOpen(true)} leadingIcon={<Plus className="h-3.5 w-3.5" />}>Quick Add</Button>} />
                   </div>
                 )}
-              </div>
-
-              {/* Pagination */}
-              <div className="mt-6 text-center">
-                {/* The TOTAL is the server's count over every matching lead —
-                    it used to be the length of a client array capped at 50. */}
-                <div className="text-sm text-gray-600 mb-4" data-testid="leads-showing">
-                  Showing {sortedLeads.length.toLocaleString()} of {listTotal.toLocaleString()} leads
-                </div>
-                {sortedLeads.length < listTotal && (
-                  <Button onClick={loadMore} size="lg" disabled={listLoading}>
-                    {listLoading ? 'Loading…' : 'Load More…'}
-                  </Button>
-                )}
+                {/* Numbered pages over the SERVER's total (step 5 slice A). */}
+                <LeadsPager page={page} pageCount={pageCount} total={listTotal} pageSize={PAGE_SIZE}
+                  shown={sortedLeads.length} loading={listLoading} onPage={setPage} />
               </div>
             </>
           )}
@@ -1278,33 +1159,20 @@ const LeadsPage: React.FC = () => {
 
       {/* ── GRID VIEW ─────────────────────────────────────────────────────── */}
       {viewMode === 'grid' && (
-        <div className="px-8 py-6">
+        <div>
           {initialLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-            </div>
+            <p className="py-16 text-center text-sm text-ink-muted" role="status">Loading leads…</p>
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {paginatedLeads.map(renderGridCard)}
               </div>
-              {sortedLeads.length === 0 && (
-                <div className="py-16 text-center text-gray-500">
-                  <p className="text-lg font-medium">No leads found</p>
-                  <p className="text-sm mt-1">Try adjusting your filters or add a new lead.</p>
-                </div>
+              {sortedLeads.length === 0 && !listError && !listUnavailableReason && (
+                <EmptyState title="No leads match" reason="Nothing in this workspace matches these filters. Clear a filter, or add a lead." />
               )}
-              <div className="mt-6 text-center">
-                {/* The TOTAL is the server's count over every matching lead —
-                    it used to be the length of a client array capped at 50. */}
-                <div className="text-sm text-gray-600 mb-4" data-testid="leads-showing">
-                  Showing {sortedLeads.length.toLocaleString()} of {listTotal.toLocaleString()} leads
-                </div>
-                {sortedLeads.length < listTotal && (
-                  <Button onClick={loadMore} size="lg" disabled={listLoading}>
-                    {listLoading ? 'Loading…' : 'Load More…'}
-                  </Button>
-                )}
+              <div className="mt-4 rounded-card border border-line bg-surface-panel">
+                <LeadsPager page={page} pageCount={pageCount} total={listTotal} pageSize={PAGE_SIZE}
+                  shown={sortedLeads.length} loading={listLoading} onPage={setPage} />
               </div>
             </>
           )}
@@ -1313,11 +1181,9 @@ const LeadsPage: React.FC = () => {
 
       {/* ── KANBAN VIEW ───────────────────────────────────────────────────── */}
       {viewMode === 'kanban' && (
-        <div className="px-8 py-6">
+        <div className="overflow-x-auto">
           {initialLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
-            </div>
+            <p className="py-16 text-center text-sm text-ink-muted" role="status">Loading leads…</p>
           ) : (
             <DragDropContext onDragEnd={handleDragEnd}>
               <div className="grid grid-cols-7 gap-3">
@@ -1412,18 +1278,21 @@ const LeadsPage: React.FC = () => {
       {isModalOpen('contactLead') && activeLead && (
         <OutreachComposer
           lead={activeLead}
-          onSubmit={(activity, followUp) => {
-            if (followUp?.date) {
-              void updateLead(activeLead.id, { next_follow_up_date: followUp.date });
-            }
-            const labels: Record<string, string> = {
-              email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
-              meeting: 'Meeting logged', note: 'Note saved', task: 'Task created',
-            };
-            showToast(labels[activity.type] ?? 'Activity logged', 'success');
-            closeModal();
+          submitting={logActivity.saving}
+          error={logActivity.error}
+          onSubmit={(activity) => {
+            // Saved for real now (it toasted "Call logged" over nothing). Success
+            // only after the server confirms; a refusal keeps the composer open.
+            const lead = activeLead;
+            void logActivity.save(lead.id, activity).then(ok => {
+              if (!ok) return;
+              showToast(LOGGED_LABEL[activity.type] ?? 'Activity saved', 'success');
+              closeModal();
+              // A completed call / email / meeting moves last contact; refetch.
+              if (activity.type !== 'note') notifyWrite();
+            });
           }}
-          onClose={closeModal}
+          onClose={() => { logActivity.reset(); closeModal(); }}
         />
       )}
 

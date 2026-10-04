@@ -23,8 +23,8 @@ import { useLeadActions } from '../../hooks/useLeadActions';
 import { usePermissions } from '../../hooks/usePermissions';
 import {
   fetchLeadByIdFromAPI, fetchActivitiesFromAPI, fetchNotesFromAPI, fetchLeadStageHistory,
-  createActivityViaAPI, createNoteViaAPI,
 } from '../../utils/leadsApi';
+import { useLogLeadActivity, LOGGED_LABEL } from '../../hooks/useLogLeadActivity';
 import type { LeadStageHistoryRow } from '../../utils/leadsApi';
 import { computeMultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 import { computeConversionReadiness } from '../../utils/conversionReadiness';
@@ -81,11 +81,6 @@ const STATUS_OPTIONS = [
 const LIFECYCLE_ORDER: string[] = [...STATUS_OPTIONS.slice(0, 7), 'nurture', 'disqualified', 'converted', 'lost'];
 const TERMINAL = new Set(['converted', 'lost', 'disqualified']);
 
-const ACTIVITY_LABEL: Record<string, string> = {
-  email: 'Email logged', call: 'Call logged', whatsapp: 'WhatsApp logged',
-  meeting: 'Meeting saved', note: 'Note saved', task: 'Task saved',
-};
-
 type Source<T> = { status: 'loading' | 'ok' | 'error'; rows: T[]; error?: string };
 const loadingSource = <T,>(): Source<T> => ({ status: 'loading', rows: [] });
 
@@ -129,8 +124,7 @@ const LeadDetailPage: React.FC = () => {
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [terminalModalAction, setTerminalModalAction] = useState<TerminalAction | null>(null);
   const [composerChannel, setComposerChannel] = useState<ActivityType | null>(null);
-  const [composerSaving, setComposerSaving] = useState(false);
-  const [composerError, setComposerError] = useState<string | null>(null);
+  const logActivity = useLogLeadActivity();
 
   // ── Loading ────────────────────────────────────────────────────────────────
   const loadLead = useCallback(async () => {
@@ -223,33 +217,19 @@ const LeadDetailPage: React.FC = () => {
 
   const handleComposerSubmit = async (activity: LeadActivity) => {
     if (!lead) return;
-    setComposerSaving(true);
-    setComposerError(null);
-    try {
-      if (activity.type === 'note') {
-        await createNoteViaAPI(lead.id, { content: activity.description ?? '' });
-        loadSource(fetchNotesFromAPI, setNotes);
-      } else {
-        await createActivityViaAPI(lead.id, {
-          type: activity.type, direction: activity.direction, status: activity.status,
-          subject: activity.subject, description: activity.description, outcome: activity.outcome,
-          duration_minutes: activity.duration_minutes, scheduled_at: activity.scheduled_at,
-          completed_at: activity.completed_at,
-        });
-        loadSource(fetchActivitiesFromAPI, setActivities);
-        // A completed call / email / meeting sets last_contact on the server.
-        void loadLead();
-      }
-      setComposerChannel(null);
-      showToast(ACTIVITY_LABEL[activity.type] ?? 'Activity saved', 'success');
-    } catch (e) {
-      setComposerError(e instanceof Error ? e.message : 'The server did not save this.');
-    } finally {
-      setComposerSaving(false);
+    if (!(await logActivity.save(lead.id, activity))) return;   // composer stays open with the error
+    if (activity.type === 'note') {
+      loadSource(fetchNotesFromAPI, setNotes);
+    } else {
+      loadSource(fetchActivitiesFromAPI, setActivities);
+      // A completed call / email / meeting sets last_contact on the server.
+      void loadLead();
     }
+    setComposerChannel(null);
+    showToast(LOGGED_LABEL[activity.type] ?? 'Activity saved', 'success');
   };
 
-  const openComposer = (channel: ActivityType) => { setComposerError(null); setComposerChannel(channel); };
+  const openComposer = (channel: ActivityType) => { logActivity.reset(); setComposerChannel(channel); };
 
   // ── Loading / missing / failed ─────────────────────────────────────────────
   if (leadState === 'loading') {
@@ -608,10 +588,10 @@ const LeadDetailPage: React.FC = () => {
         <OutreachComposer
           lead={lead}
           initialChannel={composerChannel}
-          submitting={composerSaving}
-          error={composerError}
+          submitting={logActivity.saving}
+          error={logActivity.error}
           onSubmit={(activity) => void handleComposerSubmit(activity)}
-          onClose={() => { setComposerChannel(null); setComposerError(null); }}
+          onClose={() => { setComposerChannel(null); logActivity.reset(); }}
         />
       )}
       {showMergeModal && duplicateCandidates.length > 0 && (

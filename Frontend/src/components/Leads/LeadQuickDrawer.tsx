@@ -265,6 +265,7 @@ export default function LeadQuickDrawer({
               onClick={onPrevLead}
               disabled={!hasPrev}
               title="Previous lead (↑)"
+              aria-label="Previous lead"
               className="p-0.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronUp size={14} />
@@ -273,6 +274,7 @@ export default function LeadQuickDrawer({
               onClick={onNextLead}
               disabled={!hasNext}
               title="Next lead (↓)"
+              aria-label="Next lead"
               className="p-0.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronDown size={14} />
@@ -300,6 +302,7 @@ export default function LeadQuickDrawer({
           <button
             onClick={() => onGoTo(`/crm/leads/${lead.id}`)}
             title="Open full details (Enter)"
+              aria-label="Open full lead record"
             className="p-1.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors shrink-0"
           >
             <ExternalLink size={15} />
@@ -309,6 +312,7 @@ export default function LeadQuickDrawer({
           <button
             onClick={onClose}
             title="Close (Esc)"
+              aria-label="Close lead preview"
             className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
           >
             <X size={15} />

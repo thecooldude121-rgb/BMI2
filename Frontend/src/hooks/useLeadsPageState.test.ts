@@ -139,7 +139,7 @@ describe('useLeadsPageState — initial state', () => {
     const { result } = renderHook(() => useLeadsPageState());
     expect(result.current.sortBy).toBe('newest');
     await waitFor(() => expect(mockFetchLeadsPage).toHaveBeenCalled());
-    expect(lastQuery()).toMatchObject({ sort: 'newest', limit: 20, offset: 0 });
+    expect(lastQuery()).toMatchObject({ sort: 'newest', limit: 25, offset: 0 });
   });
 
   it('starts with no selection and no active modal', () => {
@@ -286,26 +286,40 @@ describe('useLeadsPageState — toast', () => {
   });
 });
 
-describe('useLeadsPageState — pagination', () => {
-  it('loadMore asks the server for the NEXT page and appends it', async () => {
-    const page1 = Array.from({ length: 20 }, (_, i) => ({ ...BASE_LEAD, id: `p1-${i}` }));
-    const page2 = Array.from({ length: 20 }, (_, i) => ({ ...BASE_LEAD, id: `p2-${i}` }));
-    mockFetchLeadsPage.mockResolvedValueOnce({ leads: page1, total: 45 }).mockResolvedValueOnce({ leads: page2, total: 45 });
+describe('useLeadsPageState — numbered pages (Figma: "Showing 1–25 of N")', () => {
+  it('asks the server for 25 rows at the page\'s offset and REPLACES the rows (not appends)', async () => {
+    const page1 = Array.from({ length: 25 }, (_, i) => ({ ...BASE_LEAD, id: `p1-${i}` }));
+    const page3 = Array.from({ length: 10 }, (_, i) => ({ ...BASE_LEAD, id: `p3-${i}` }));
+    mockFetchLeadsPage.mockResolvedValueOnce({ leads: page1, total: 60 }).mockResolvedValueOnce({ leads: page3, total: 60 });
     const { result } = renderHook(() => useLeadsPageState());
-    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(20));
-    act(() => { result.current.loadMore(); });
-    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(40));
-    expect(lastQuery()).toMatchObject({ limit: 20, offset: 20 });
-    expect(result.current.listTotal).toBe(45);
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(25));
+    expect(result.current.pageCount).toBe(3);
+    act(() => { result.current.setPage(3); });
+    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(10));
+    expect(lastQuery()).toMatchObject({ limit: 25, offset: 50 });
+    expect(result.current.sortedLeads[0].id).toBe('p3-0');
+    expect(result.current.page).toBe(3);
   });
 
-  it('loadMore does nothing once every lead is loaded', async () => {
-    mockFetchLeadsPage.mockResolvedValue({ leads: TEST_LEADS, total: 3 });
+  it('clamps setPage to the real range', async () => {
+    mockFetchLeadsPage.mockResolvedValue({ leads: TEST_LEADS, total: 30 });
     const { result } = renderHook(() => useLeadsPageState());
-    await waitFor(() => expect(result.current.sortedLeads).toHaveLength(3));
-    const calls = mockFetchLeadsPage.mock.calls.length;
-    act(() => { result.current.loadMore(); });
-    expect(mockFetchLeadsPage.mock.calls.length).toBe(calls);
+    await waitFor(() => expect(result.current.listTotal).toBe(30));
+    act(() => { result.current.setPage(99); });
+    expect(result.current.page).toBe(2);
+    act(() => { result.current.setPage(0); });
+    expect(result.current.page).toBe(1);
+  });
+
+  it('a filter change goes back to page 1', async () => {
+    mockFetchLeadsPage.mockResolvedValue({ leads: TEST_LEADS, total: 80 });
+    const { result } = renderHook(() => useLeadsPageState());
+    await waitFor(() => expect(result.current.listTotal).toBe(80));
+    act(() => { result.current.setPage(3); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ offset: 50 }));
+    act(() => { result.current.setFilterStatus('__qualified__'); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ status: '__qualified__', offset: 0 }));
+    expect(result.current.page).toBe(1);
   });
 });
 

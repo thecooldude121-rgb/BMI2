@@ -156,7 +156,10 @@ export interface LeadsPageState {
   setFilterSource:     (s: string) => void;
   setFilterScore:      (s: string) => void;
   resetFilters:        () => void;
-  loadMore:            () => void;
+  /** 1-based page of the server's ordered result; numbered, not accumulated. */
+  page:                number;
+  pageCount:           number;
+  setPage:             (page: number) => void;
   toggleLeadSelection: (id: string) => void;
   selectAllLeads:      () => void;
   setSelection:        (ids: string[]) => void;
@@ -215,7 +218,8 @@ export const COMING_SOON_INSIGHT_REASON: Record<string, string> = {
   slaBreach:     'SLA breach filtering is coming soon — it is moving to the server.',
   nbaAction:     'The action-required queue is coming soon — it is moving to the server.',
 };
-const PAGE_SIZE = 20;
+/** Figma "Showing 1–25 of N · 25 rows per page" (decided 2026-10-05). */
+export const PAGE_SIZE = 25;
 
 /**
  * Display-side status migration: legacy DB stages shown in the 12-state model
@@ -319,7 +323,7 @@ export function useLeadsPageState(): LeadsPageState {
   const [listLoading, setListLoading] = useState(false);
   const [listError,   setListError]   = useState<string | null>(null);
   const reqSeq = useRef(0);
-  const loadedCountRef = useRef(PAGE_SIZE);
+  const [page, setPageState] = useState(1);
   const queryKey = JSON.stringify(serverQuery);
   const lastQueryKey = useRef(queryKey);
 
@@ -328,11 +332,16 @@ export function useLeadsPageState(): LeadsPageState {
       setServerRows([]); setListTotal(0); setListError(null); setListLoading(false);
       return;
     }
-    // A new query starts at page 1; a refetch after a write keeps what was loaded.
-    if (lastQueryKey.current !== queryKey) { loadedCountRef.current = PAGE_SIZE; lastQueryKey.current = queryKey; }
+    // A new query starts at page 1; a refetch after a write keeps the page.
+    let effectivePage = page;
+    if (lastQueryKey.current !== queryKey) {
+      lastQueryKey.current = queryKey;
+      if (page !== 1) { setPageState(1); return; }   // re-runs with page 1
+      effectivePage = 1;
+    }
     const seq = ++reqSeq.current;
     setListLoading(true);
-    fetchLeadsPage({ ...serverQuery, limit: Math.max(PAGE_SIZE, loadedCountRef.current), offset: 0 })
+    fetchLeadsPage({ ...serverQuery, limit: PAGE_SIZE, offset: (effectivePage - 1) * PAGE_SIZE })
       .then(page => {
         if (seq !== reqSeq.current) return;          // a newer request superseded this one
         setServerRows(page.leads); setListTotal(page.total); setListError(null);
@@ -344,7 +353,7 @@ export function useLeadsPageState(): LeadsPageState {
       })
       .finally(() => { if (seq === reqSeq.current) setListLoading(false); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryKey, writeVersion, listUnavailableReason]);
+  }, [queryKey, writeVersion, listUnavailableReason, page]);
 
   const [summary, setSummary] = useState<LeadSummary | null>(null);
   useEffect(() => {
@@ -540,25 +549,15 @@ export function useLeadsPageState(): LeadsPageState {
 
   // ── Pagination ────────────────────────────────────────────────────────────
 
-  const loadMore = useCallback(() => {
-    if (listUnavailableReason || serverRows.length >= listTotal) return;
-    const seq = reqSeq.current;
-    const offset = serverRows.length;
-    setListLoading(true);
-    fetchLeadsPage({ ...serverQuery, limit: PAGE_SIZE, offset })
-      .then(page => {
-        if (seq !== reqSeq.current) return;          // the query changed meanwhile
-        setServerRows(prev => {
-          const have = new Set(prev.map(l => l.id));
-          const next = [...prev, ...page.leads.filter(l => !have.has(l.id))];
-          loadedCountRef.current = next.length;
-          return next;
-        });
-        setListTotal(page.total);
-      })
-      .catch(e => { if (seq === reqSeq.current) setListError(e instanceof Error ? e.message : 'Could not load more leads.'); })
-      .finally(() => { if (seq === reqSeq.current) setListLoading(false); });
-  }, [listUnavailableReason, serverRows.length, listTotal, serverQuery]);
+  const pageCount = Math.max(1, Math.ceil(listTotal / PAGE_SIZE));
+  const setPage = useCallback((p: number) => {
+    setPageState(Math.min(Math.max(1, Math.floor(p)), Math.max(1, Math.ceil(listTotal / PAGE_SIZE))));
+  }, [listTotal]);
+  // A write can shrink the total under the current page (deleting the last row
+  // of the last page): step back rather than show an empty page past the end.
+  useEffect(() => {
+    if (!listLoading && listTotal > 0 && page > pageCount) setPageState(pageCount);
+  }, [listLoading, listTotal, page, pageCount]);
   void setDisplayedCount;
 
   // ── Selection ─────────────────────────────────────────────────────────────
@@ -835,7 +834,7 @@ export function useLeadsPageState(): LeadsPageState {
     setFilterSource,
     setFilterScore,
     resetFilters,
-    loadMore,
+    page, pageCount, setPage,
     toggleLeadSelection,
     selectAllLeads,
     setSelection,

@@ -54,6 +54,12 @@ interface LeadContextType {
   /** Increments after every successful lead write (see the state's comment). */
   writeVersion: number;
   /**
+   * Bump writeVersion after a write made OUTSIDE this context (e.g. logging an
+   * activity, which moves the lead's last contact on the server), so pages
+   * that refetch on writeVersion pick it up.
+   */
+  notifyWrite: () => void;
+  /**
    * POST /leads/:id/stage-transition with an override / reason. THROWS
    * LeadStageError carrying the server's unmet criteria and can_override, for
    * callers (the qualify modal) that must render the refusal, not just a flag.
@@ -530,6 +536,7 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
     createLead,
     updateLead,
     writeVersion,
+    notifyWrite: bumpWrites,
     transitionLead,
     deleteLead,
     bulkDeleteLeads,

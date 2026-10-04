@@ -243,17 +243,21 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
             )}
           </div>
 
-          {/* ── Follow-up date + type ──────────────────────────────────── */}
+          {/* ── Follow-up date + type — COMING SOON ─────────────────────────
+              leads.next_follow_up_date has no column: the server dropped the
+              date and this bar still said "Follow-up set for N leads". The
+              control stays visible (layout) but cannot be opened. */}
           <div className="relative" ref={followUpRef}>
             <button
-              onClick={() => { setFollowUpOpen(v => !v); setStatusOpen(false); setMoreOpen(false); }}
-              aria-label="Set follow-up date and type"
-              aria-haspopup="dialog"
-              aria-expanded={followUpOpen}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              type="button"
+              disabled
+              aria-disabled="true"
+              aria-label="Set follow-up (coming soon)"
+              title="Follow-up dates are not stored yet — coming soon"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-400 cursor-not-allowed"
             >
               <CalendarDays className="h-3.5 w-3.5" />
-              Follow-up <ChevronDown className="h-3.5 w-3.5" />
+              Follow-up · coming soon
             </button>
             {followUpOpen && (
               <div

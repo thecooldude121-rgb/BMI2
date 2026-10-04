@@ -1,4 +1,5 @@
 import React from 'react';
+import Badge from '../ui/Badge';
 
 export interface KpiCardProps {
   title:       string;
@@ -30,36 +31,32 @@ const KpiCard: React.FC<KpiCardProps> = ({
 }) => {
   if (comingSoon) {
     return (
-      <div className="relative bg-white rounded-lg border border-dashed border-gray-200 p-5" data-coming-soon="true">
-        <span className="absolute top-3 right-3 text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 font-medium">
-          Coming soon
-        </span>
-        <div className="flex items-center space-x-2 mb-3">
-          {icon && <span className="flex-shrink-0 text-gray-300">{icon}</span>}
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide leading-none">{title}</span>
+      // Figma KPI card, in its "Coming soon" state (decided 2026-10-05).
+      <div className="relative rounded-card border border-line bg-surface-panel p-4" data-coming-soon="true">
+        <Badge tone="neutral" className="absolute right-3 top-3">Coming soon</Badge>
+        <div className="mb-2 flex items-center gap-2">
+          {icon && <span className="flex-shrink-0 text-ink-muted" aria-hidden="true">{icon}</span>}
+          <span className="text-xs font-semibold leading-[18px] text-ink">{title}</span>
         </div>
-        <div className="text-3xl font-bold leading-none text-gray-300" aria-label={`${title}: not available yet`}>—</div>
-        <p className="text-xs text-gray-400 mt-1.5 leading-snug">{comingSoon}</p>
+        <div className="text-2xl font-bold leading-8 text-ink-muted" aria-label={`${title}: not available yet`}>—</div>
+        <p className="mt-1 text-xs leading-[18px] text-ink-muted">{comingSoon}</p>
       </div>
     );
   }
   // ── Colour tokens ──────────────────────────────────────────────────────────
+  // Figma value colours: red / amber for a warning figure, ink otherwise.
   const valueColor =
-    danger  ? 'text-red-600'    :
-    warning ? 'text-amber-600'  :
-    neutral ? 'text-gray-700'   :
-              'text-gray-900';
+    danger  ? 'text-danger-700'  :
+    warning ? 'text-warning-700' :
+    neutral ? 'text-ink'         :
+              'text-ink-heading';
 
-  const borderClass =
-    isActive ? 'ring-2 ring-blue-500 border-transparent' :
-    danger   ? 'border-red-200'   :
-    warning  ? 'border-amber-200' :
-               'border-gray-200';
+  const borderClass = isActive ? 'border-transparent ring-2 ring-brand-600' : 'border-line';
 
   const iconColor =
-    danger  ? 'text-red-500'   :
-    warning ? 'text-amber-500' :
-              'text-gray-400';
+    danger  ? 'text-danger-700'  :
+    warning ? 'text-warning-700' :
+              'text-ink-muted';
 
   // ── Delta indicator ────────────────────────────────────────────────────────
   const showDelta = delta !== undefined && delta !== 0;
@@ -72,43 +69,41 @@ const KpiCard: React.FC<KpiCardProps> = ({
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
       onClick={onClick}
       className={`
-        relative bg-white rounded-lg border p-5 shadow-sm transition-shadow duration-150
+        relative rounded-card border bg-surface-panel p-4 transition-shadow duration-150
         ${borderClass}
         ${onClick ? 'cursor-pointer hover:shadow-md' : ''}
       `}
     >
       {/* Badge */}
       {badge && (
-        <span className="absolute top-3 right-3 text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5 font-medium">
-          {badge}
-        </span>
+        <Badge tone="neutral" className="absolute right-3 top-3">{badge}</Badge>
       )}
 
       {/* Icon + Title row */}
-      <div className="flex items-center space-x-2 mb-3">
+      <div className="mb-2 flex items-center gap-2">
         {icon && (
           <span className={`flex-shrink-0 ${iconColor}`}>
             {icon}
           </span>
         )}
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide leading-none">
+        <span className="text-xs font-semibold leading-[18px] text-ink">
           {title}
         </span>
       </div>
 
       {/* Primary value */}
-      <div className={`text-3xl font-bold leading-none truncate ${valueColor}`}>
+      <div className={`truncate text-2xl font-bold leading-8 ${valueColor}`}>
         {value}
       </div>
 
       {/* Subtitle */}
       {subtitle && (
-        <p className="text-xs text-gray-400 mt-1.5 leading-snug">{subtitle}</p>
+        <p className="mt-1 text-xs leading-[18px] text-ink-muted">{subtitle}</p>
       )}
 
       {/* Delta */}
       {showDelta && (
-        <p className={`text-xs font-medium mt-1.5 ${deltaPositive ? 'text-green-600' : 'text-red-500'}`}>
+        <p className={`mt-1 text-xs font-medium ${deltaPositive ? 'text-success-700' : 'text-danger-700'}`}>
           {deltaPositive ? '↑' : '↓'}{' '}
           {deltaPositive ? '+' : ''}{delta}
           {deltaLabel ? ` ${deltaLabel}` : ''}
