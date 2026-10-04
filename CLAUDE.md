@@ -652,6 +652,23 @@ since the start and never actually loaded). Sizes 12/14/16/20/24/32 with line he
   a spec for real loading / empty / error states, not sections to render.
 - **Role wording follows the ratified rules** (admin / manager / sales; everyone may
   convert), not the frames' "Senior SDR" style labels.
+- **SCOPE UPDATE (Venkat, 2026-10-05, later the same day): "match Figma exactly" means REAL
+  FUNCTIONALITY behind everything a frame shows, not only the visual match.** It refines,
+  and does not cancel, the "Coming soon" rule above: a feature still shows "Coming soon"
+  until it is real, and becomes real one reviewable slice at a time. Settled with it:
+  - **"Recommended action" (AI Copilot / P4) stays "Coming soon"** — not pulled forward.
+  - **"Inbox" becomes a real INTERNAL notifications / activity feed** (mentions, assignments,
+    system notices from data already in the CRM). Not email; no OAuth or mail provider.
+  - **"Re-enrich" stays blocked** pending a vendor decision.
+  - **Build order after the Leads list slice** (one slice each): (1) real columns for the
+    missing lead/account fields + the rule-based score formula fixed against them; (2) real
+    "workspace connected" (SELECT 1 in /health + poll); (3) real "last updated" on the score
+    panel; (4) step-5 pagination for the dashboard and every other DataContext 500-cap screen;
+    (5) the internal notifications feed; (6) real mergeLeads (keep the reason, move
+    activities); (7) real exportLeads; (8) owner pickers on the real user list; (9) the
+    Tasks "John Smith" seed cleanup. **Scope first, then build:** (10) Search, (11) a minimal
+    reminder / follow-up date, (12) file upload storage, (13) real signals for the workspace
+    caption and the "Data integrity" card.
 - **Leads uses numbered pages** ("Showing 1–25 of N · Previous / Next") over the server
   pagination from step 5 slice A.
 - Rollout order: tokens -> app shell -> shared components -> screens (Login/Invite, Leads,
@@ -1138,6 +1155,54 @@ old constraint, which fails the shared-name test.
   — a test upload, not a business document. **Delete it through the documents API, not SQL:**
   `deleteDocuments` also removes the stored blob via `deleteFile(storage_key)`, so a raw SQL
   delete would orphan the file in the store.
+
+- **Backlog agreed 2026-10-05 (Venkat), not blocking the Figma rollout:**
+  - **A real "workspace connected" signal.** `GET /health` today reports the API process and
+    the migration state captured AT BOOT; it never touches the database per request. Add a
+    `SELECT 1` to it and a frontend poll, then the sidebar indicator Figma draws can be shown.
+    Until then it stays suppressed (Phase 1).
+  - **Extend the step-4 owner cleanup to `tasks`.** Every live task shows "John Smith" — the
+    seed name step 4 cleared from leads and deals. Same process: dependency trace, backup,
+    guarded scoped UPDATE, re-count.
+  - **TRACKED: the `DataContext` 500-record cap.** The dashboard and other non-Leads screens
+    still load at most 500 rows client-side. Broader than step 5 slice A (which fixed the Leads
+    list only); its own item.
+
+- **Figma phase 3 — Lead detail (2026-10-05). The page's write actions had NEVER saved.**
+  "Send email / Log call / Schedule meeting / Add note" built an activity in React state and
+  toasted "Call logged"; nothing reached the server and it vanished on reload, while
+  `POST /leads/:id/activities` and `/notes` existed and were tested. Now wired; success waits
+  for the 2xx; a refusal keeps the composer open with the server's message. The timeline is
+  server rows only (stage history + activities), each source failing visibly on its own. Also
+  removed: "Re-enrich" (a `setTimeout` then "re-enriched"), "Set Reminder" (nothing stored),
+  the follow-up date (no column), the starred score with a "potential" verdict, canned
+  "contact within 24 hours" advice, and a score panel "Last updated" that showed the current
+  time. Pinned by `LeadDetailPage.test.tsx` (+ a real-composer payload test).
+  **Found, NOT fixed, each its own decision:**
+  - `POST /leads/:id/enrich` returns a hardcoded `confidence: 0.7` and writes an "AI enrichment
+    triggered" note while enriching nothing. No UI calls it any more.
+  - `computeMultiFactorScore` reads fields with NO column (`company_size` and others), so those
+    factors are unsatisfiable for every lead — the rule-based score is systematically low.
+  - DB stages `won` / `proposal` are treated as active (lifecycle menu, Convert shown) — the
+    open vocabulary decision already tracked under step 5.
+  - `OutreachComposer` is also used by the Leads list, whose logging is likely fake the same
+    way; fixed with the Leads list slice. The list's drawer "open full record" button is
+    icon-only with no accessible name.
+
+- **Figma phase 3 — Leads list, slice 3B-1 (2026-10-05).** Same defect as Lead detail: the
+  list's composer toasted "Call logged" over nothing. Both pages now save through ONE hook,
+  `hooks/useLogLeadActivity` (note -> /notes, else -> /activities; true only on a 2xx), and the
+  list refreshes via `LeadContext.notifyWrite` because a logged call moves last contact. Also
+  fixed: single delete and bulk delete awaited and reported per result (both toasted success
+  regardless); single disqualify / lost checks the write; bulk "Set follow-up" is a disabled
+  "coming soon" (it wrote a column that does not exist and said "Follow-up set for N"); the
+  grid CTA no longer says "Requires Senior SDR or above". Numbered pages replace "Load More":
+  25 rows (Figma), `page` / `pageCount` / `setPage` on `useLeadsPageState`, page 1 on a filter
+  change, clamped after a write shrinks the total; `components/Leads/LeadsPager`. Status /
+  source / score are dropdowns sending the chips' exact values. Pinned by `LeadsPage.test.tsx`
+  and `LeadsPager.test.tsx`. **Slice 3B-2 is next:** the Figma table rows, the inline bulk bar,
+  saved views, the docked "selected lead" panel replacing the overlay drawer, and Grid/Kanban
+  cards.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

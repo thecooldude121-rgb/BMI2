@@ -70,7 +70,7 @@ export default function SourcePlaybookCard({ lead }: Props) {
     .map(([dim, v]) => biasLabel(dim, v as number));
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-4">
+    <div className="rounded-card border border-line bg-surface-panel p-4 space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
