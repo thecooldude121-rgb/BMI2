@@ -611,7 +611,20 @@ since the start and never actually loaded). Sizes 12/14/16/20/24/32 with line he
 
 **Product decisions taken with the Figma adoption (2026-10-05):**
 - **Sidebar nav** is the Settings frame's full list: Dashboard, Leads, Deals, Accounts,
-  Contacts, Activities, Meetings, AI Copilot (Preview), Team, Integrations, Reports, Settings.
+  Contacts, Activities, Meetings, AI Copilot (Preview), Team, Integrations, Reports, Settings
+  — **followed by a "More" group: Forecast, Tasks, Calendar, Documents** (Venkat, 2026-10-05).
+  The frames disagree with each other (the Forecast/Tasks/Calendar/Documents frames each add
+  their own page), and the strict list would have left those routed pages with no link.
+  Calls (`/crm/calls`) and Analytics (`/analytics`) stay routed but are off the nav. The
+  "Pinned Views" links were dropped: nothing read their `?owner=me` / `?closeDate=` /
+  `?stalled=` parameters, so each opened the unfiltered Deals list while claiming to filter.
+- **Shell chrome the frames draw that is deliberately NOT rendered** (Phase 1, 2026-10-05):
+  the sidebar's workspace caption (the session carries only an id), the "Data integrity"
+  card (a claim about every screen that is not yet true of every screen), "Workspace
+  connected" (no health check behind it). Top-bar search and Inbox render in place but
+  disabled and labelled, since neither does anything; a user with no avatar gets initials
+  (the old fallback was a stock photo of a stranger). The real "+ New" menu stays though
+  the frame lacks it. `components/Layout/figmaShell.test.tsx` pins all of this.
 - **Unbuilt or out-of-scope features drawn in Figma keep their LAYOUT and are marked
   "Coming soon"** — AI priorities with confidence scores, Copilot, AI Workbench, health
   watch, SLA / duplicate / overdue counts. Never fill them with the mockup's numbers.
