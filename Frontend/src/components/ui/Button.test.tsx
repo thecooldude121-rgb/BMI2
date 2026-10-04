@@ -92,8 +92,8 @@ describe('Button', () => {
     it('applies the variant and size tokens', () => {
       render(<Button variant="danger" size="lg">Delete</Button>);
       const cls = screen.getByRole('button').className;
-      expect(cls).toContain('bg-danger-600');
-      expect(cls).toContain('px-6');
+      expect(cls).toContain('bg-danger-700');
+      expect(cls).toContain('min-h-[38px]');
     });
 
     it('fullWidth replaces the flex-1 idiom', () => {

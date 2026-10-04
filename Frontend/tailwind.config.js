@@ -59,6 +59,13 @@ export default {
           DEFAULT: '#111827',
           heading: '#312e81',
           muted:   '#756e63',
+          // NOT a Figma value — an accessibility stand-in, pending the designer.
+          // Figma's #756E63 fails WCAG AA for small text on the tinted surfaces
+          // (4.17:1 on the sidebar, 4.27 on sunken, 4.47 on canvas). This
+          // slightly darker warm grey passes on all of them (4.83 / 4.95 / 5.18)
+          // and is used ONLY for small muted text sitting on those surfaces;
+          // on panels and inputs `ink-muted` passes and stays.
+          secondary: '#6b645a',
         },
         // Warm parchment surfaces, from the frames.
         surface: {
@@ -67,6 +74,7 @@ export default {
           panel:  '#fffefb', // cards
           sunken: '#f0ece3', // inset / hover
           sidebar: '#efe9de', // the app sidebar (Figma Settings frames)
+          readonly: '#e7e2d8', // read-only form fields (Figma Settings "Role")
         },
         // Hairline borders and dividers.
         line: {

@@ -34,25 +34,35 @@ import React from 'react';
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'link';
 type Size = 'sm' | 'md' | 'lg' | 'xl';
 
-/** Resting + hover + focus ring per variant. Semantic tokens, never raw hues. */
+/**
+ * Resting + hover + focus ring per variant. Semantic tokens, never raw hues.
+ * FIGMA (2026-10-05, Leads header 61:70): primary is indigo on white; the
+ * secondary "action button" is the panel surface with a hairline border and
+ * ink text; no drop shadows. Danger uses the frames' red (#B91C1C, 6.5:1 with
+ * white). Every variant passes AA for its label.
+ */
 const VARIANT: Record<Variant, string> = {
-  primary:   'bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-600 shadow-sm',
-  secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus-visible:ring-brand-600',
-  danger:    'bg-danger-600 text-white hover:bg-danger-700 focus-visible:ring-danger-600 shadow-sm',
-  ghost:     'bg-transparent text-gray-700 hover:bg-gray-100 focus-visible:ring-brand-600',
+  primary:   'border border-transparent bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-600',
+  secondary: 'border border-line bg-surface-panel text-ink hover:bg-surface-subtle focus-visible:ring-brand-600',
+  danger:    'border border-transparent bg-danger-700 text-white hover:bg-danger-800 focus-visible:ring-danger-700',
+  ghost:     'border border-transparent bg-transparent text-ink hover:bg-black/5 focus-visible:ring-brand-600',
   link:      'bg-transparent text-brand-600 hover:text-brand-700 hover:underline focus-visible:ring-brand-600',
 };
 
-/** The four sizes actually present in the tree, by measured frequency. */
+/**
+ * Four sizes. `md` is Figma's 34px action button (14px label, 12px side
+ * padding). MIN-heights, not fixed heights, so a wrapped label grows the
+ * button instead of being clipped.
+ */
 const SIZE: Record<Size, string> = {
-  sm: 'px-3 py-1 text-xs gap-1.5',
-  md: 'px-4 py-2 text-sm gap-2',    // 300 uses — the default
-  lg: 'px-6 py-2 text-sm gap-2',    // 64
-  xl: 'px-6 py-3 text-base gap-2',  // 33
+  sm: 'min-h-[28px] px-2.5 py-1 text-xs gap-1.5',
+  md: 'min-h-[34px] px-3 py-1.5 text-sm gap-1.5',    // the default
+  lg: 'min-h-[38px] px-4 py-2 text-sm gap-2',
+  xl: 'min-h-[44px] px-5 py-2.5 text-base gap-2',
 };
 
 const ICON_ONLY: Record<Size, string> = {
-  sm: 'p-1', md: 'p-2', lg: 'p-2.5', xl: 'p-3',
+  sm: 'h-7 w-7', md: 'h-[34px] w-[34px]', lg: 'h-[38px] w-[38px]', xl: 'h-11 w-11',
 };
 
 interface BaseProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
