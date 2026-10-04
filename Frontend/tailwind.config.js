@@ -20,6 +20,17 @@
  * Semantic names, not raw hues: components reference `brand` / `danger` /
  * `success`, so a rebrand is this file rather than a codemod. `blue-600` still
  * works everywhere, so this is purely additive — nothing breaks by adding it.
+ *
+ * FIGMA IS THE SOURCE OF TRUTH (decided by Venkat, 2026-10-05). File
+ * "BMI CRM V1" — https://www.figma.com/design/y5X2pNrQTbxyF08YWmVh0u.
+ * The file defines no Figma variables, so these values were EXTRACTED from the
+ * frames by frequency (Dashboard + Leads, confirmed on Tasks and Settings):
+ *   primary #4F46E5 (hover #4338CA), headings #312E81, body #111827,
+ *   muted #756E63, border #DED8CC, surfaces #F5F1E8 / #FAF7F0 / #FFFEFB /
+ *   #F0ECE3, amber #B45309, green #047857, red #B91C1C, Inter, radius 6/8px.
+ * `brand` moved from blue (#2563EB) to that indigo; everything using
+ * `brand-*` follows automatically. The new names below (ink / surface / line /
+ * card radius) are what the redesigned shell and screens use.
  */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
@@ -29,17 +40,36 @@ export default {
       colors: {
         // Primary interactive colour. 600 is the resting state and 700 the
         // hover, matching the ~500 existing bg-blue-600/hover:bg-blue-700 pairs.
+        // Figma primary: indigo. 600 resting, 700 hover, 900 = heading ink.
         brand: {
-          50:  '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb', // default
-          700: '#1d4ed8', // hover
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50:  '#eef2ff',
+          100: '#e7e7ff', // Figma's selected-nav / chip tint
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5', // default
+          700: '#4338ca', // hover
+          800: '#3730a3',
+          900: '#312e81',
+        },
+        // Text. `ink` body, `ink-heading` page and card titles, `ink-muted`
+        // secondary copy (the warm grey the frames use everywhere).
+        ink: {
+          DEFAULT: '#111827',
+          heading: '#312e81',
+          muted:   '#756e63',
+        },
+        // Warm parchment surfaces, from the frames.
+        surface: {
+          canvas: '#f5f1e8', // app background
+          subtle: '#faf7f0', // sidebar / secondary panels
+          panel:  '#fffefb', // cards
+          sunken: '#f0ece3', // inset / hover
+        },
+        // Hairline borders and dividers.
+        line: {
+          DEFAULT: '#ded8cc',
         },
         // Destructive. Reserved — see stageColors.ts.
         danger: {
@@ -65,8 +95,15 @@ export default {
         'ctrl-y-lg': '0.75rem', // py-3
       },
       borderRadius: {
-        // rounded-lg appears 431 times on buttons alone — it is the house radius.
-        ctrl: '0.5rem',
+        // Figma: controls 6px, cards 8px. (`ctrl` was 8px before the Figma
+        // adoption; Button is its only user.)
+        ctrl: '0.375rem',
+        card: '0.5rem',
+      },
+      fontFamily: {
+        // Inter, per Figma (and CLAUDE.md since the start) — it was specified
+        // but never loaded, so the app rendered in the system font.
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
       },
       ringWidth: { AA: '2px' },
     },

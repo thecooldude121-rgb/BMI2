@@ -572,15 +572,61 @@ scope as of 2026-09-15 (notes/tasks/activities only — see above); Lead Generat
 are not "not in this phase" at all — they are other products, and nothing about them is
 ever built here.
 
-## Design system (apply consistently — do not invent new patterns)
-**Colors:**
-- Primary: `#6366F1` (buttons/links), `#4F46E5` (active)
-- Neutral: `#FFFFFF` (bg), `#374151` (body text), `#111827` (headings)
-- Semantic: success `#22C55E`, warning `#F59E0B`, error `#EF4444`, info `#3B82F6`
+## Design system — FIGMA IS THE SOURCE OF TRUTH (decided by Venkat, 2026-10-05)
 
-**Typography:** Inter. H1 32px/700, H2 24px/600, H3 20px/600, Body 14px/400, Caption 12px/500.
+**File:** "BMI CRM V1" — https://www.figma.com/design/y5X2pNrQTbxyF08YWmVh0u (page `0:1`,
+44 frames, all 1512 wide). Where the built UI and the Figma frame disagree, Figma wins on
+LOOK; this file still wins on BEHAVIOUR (no fabricated data, real roles, tenant scoping).
+The palette below REPLACES the earlier one in this section (primary `#6366F1`, neutral
+white background, `#374151` body text, Tailwind's default semantic hues) — that palette was
+never what the product looked like either; `brand` had been a blue `#2563EB` scale.
+
+**The file defines no Figma variables** (`get_variable_defs` returns nothing), so the values
+below were EXTRACTED from the frames by frequency, not read from a token export. If the
+designer later adds variables, re-derive from those and treat any disagreement as a question.
+
+**Tokens** (`Frontend/tailwind.config.js` — use the token names, never the hex):
+- Primary `brand-600` `#4F46E5`, hover `brand-700` `#4338CA`, selected tint `brand-100`
+  `#E7E7FF` / `brand-50` `#EEF2FF`. Headings `ink-heading` `#312E81`.
+- Text `ink` `#111827`; secondary `ink-muted` `#756E63`.
+- Surfaces (warm parchment): `surface-canvas` `#F5F1E8` (app background), `surface-subtle`
+  `#FAF7F0`, `surface-panel` `#FFFEFB` (cards), `surface-sunken` `#F0ECE3`. Borders `line`
+  `#DED8CC`.
+- Semantic, as the frames use them: warning `#B45309` on `#FEF3C7`, success `#047857`,
+  danger `#B91C1C`.
+- Radius: controls 6px (`rounded-ctrl`), cards 8px (`rounded-card`), pills full.
+- **CONTRAST CAVEAT, measured not assumed:** `ink-muted` is 4.47:1 on `surface-canvas` and
+  4.27:1 on `surface-sunken`; warning amber is 4.45:1 / 4.26:1 — all just UNDER WCAG AA's
+  4.5:1 for body text. Both pass on `surface-panel` (5.0 / 4.98) and `surface-subtle`. So put
+  small muted or amber text on panels, not directly on the canvas, until the designer decides
+  whether to darken them. That is the designer's call, not a silent hex change in code.
+
+**Typography:** Inter (loaded from Google Fonts in `index.html` — it was specified here
+since the start and never actually loaded). Sizes 12/14/16/20/24/32 with line heights
+18/20/22/24/28/32. Weights 400/500/600/700.
+
+**Icons:** Lucide, as the frames use.
 
 **Spacing scale:** 4, 8, 12, 16, 20, 24, 32, 40, 48, 64px.
+
+**Product decisions taken with the Figma adoption (2026-10-05):**
+- **Sidebar nav** is the Settings frame's full list: Dashboard, Leads, Deals, Accounts,
+  Contacts, Activities, Meetings, AI Copilot (Preview), Team, Integrations, Reports, Settings.
+- **Unbuilt or out-of-scope features drawn in Figma keep their LAYOUT and are marked
+  "Coming soon"** — AI priorities with confidence scores, Copilot, AI Workbench, health
+  watch, SLA / duplicate / overdue counts. Never fill them with the mockup's numbers.
+- **Mockup content is not data.** Names like Maya Chen / Vertex Systems and every ₹ figure
+  in the frames are illustrations; each becomes a real value or an honest empty state.
+- **State-showcase sections in the frames** ("Bucket empty states", "Request states" …) are
+  a spec for real loading / empty / error states, not sections to render.
+- **Role wording follows the ratified rules** (admin / manager / sales; everyone may
+  convert), not the frames' "Senior SDR" style labels.
+- **Leads uses numbered pages** ("Showing 1–25 of N · Previous / Next") over the server
+  pagination from step 5 slice A.
+- Rollout order: tokens -> app shell -> shared components -> screens (Login/Invite, Leads,
+  Contacts, Accounts, Deals, Activities/Tasks/Calendar/Meetings, Settings,
+  Forecast/Reports/Documents/Team/Integrations, Dashboard last), each slice gated and
+  compared side by side with its frame.
 
 **Core components (shadcn/ui base):** AppShell, Sidebar, TopBar, PageHeader, DataTable,
 KanbanBoard / KanbanCard, Timeline, StatCard, Badge, Avatar, Modal, Drawer, Toast,
