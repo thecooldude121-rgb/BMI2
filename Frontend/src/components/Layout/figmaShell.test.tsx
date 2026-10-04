@@ -28,7 +28,8 @@ describe('Sidebar — the Figma Settings-frame list plus "More"', () => {
       'AI Copilot', 'Team', 'Integrations', 'Reports', 'Settings',
       'Forecast', 'Tasks', 'Calendar', 'Documents',
     ]);
-    expect(screen.getByText('More')).toBeInTheDocument();
+    // AA: Figma's muted grey is 4.17:1 on the sidebar; ink-secondary passes.
+    expect(screen.getByText('More')).toHaveClass('text-ink-secondary');
   });
 
   it('marks AI Copilot "Preview" — it is not built, and says so before the click', () => {
@@ -73,6 +74,8 @@ describe('TopBar — unbuilt controls are labelled, not live', () => {
     const search = screen.getByRole('textbox', { name: /global search \(coming soon\)/i });
     expect(search).toBeDisabled();
     expect(screen.queryByText(/ctrl k/i)).toBeNull();
+    // The "Soon" pill is the shared neutral Badge (AA-passing text colour).
+    expect(screen.getByText('Soon')).toHaveAttribute('data-tone', 'neutral');
   });
 
   it('the inbox is disabled and carries no "unread" dot (it had no handler)', () => {

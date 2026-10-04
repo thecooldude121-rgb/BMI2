@@ -1,6 +1,19 @@
 import React from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
 
+/**
+ * A yes/no confirmation. Same props as before; rebuilt on `Modal` and `Button`
+ * (Figma phase 2, 2026-10-05) because the hand-rolled version was not a dialog
+ * at all to assistive tech: no role, no accessible name, Escape did nothing,
+ * focus stayed on the page behind it, and its close "X" was an unlabelled
+ * button. Its warning confirm button was also white on yellow-600 — about
+ * 2.9:1, under AA.
+ *
+ * `danger` confirms with the danger button; `warning` and `info` with primary.
+ * Escape, the backdrop and the close button all mean Cancel.
+ */
 interface ConfirmationModalProps {
   isOpen: boolean;
   title: string;
@@ -12,6 +25,12 @@ interface ConfirmationModalProps {
   type?: 'warning' | 'danger' | 'info';
 }
 
+const ICON: Record<NonNullable<ConfirmationModalProps['type']>, React.ReactNode> = {
+  danger:  <AlertTriangle className="h-5 w-5 text-danger-700" aria-hidden="true" />,
+  warning: <AlertTriangle className="h-5 w-5 text-warning-700" aria-hidden="true" />,
+  info:    <Info className="h-5 w-5 text-brand-600" aria-hidden="true" />,
+};
+
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   isOpen,
   title,
@@ -20,67 +39,27 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   cancelLabel = 'Cancel',
   onConfirm,
   onCancel,
-  type = 'warning'
-}) => {
-  if (!isOpen) return null;
-
-  const getColors = () => {
-    switch (type) {
-      case 'danger':
-        return {
-          button: 'bg-red-600 hover:bg-red-700 text-white',
-          icon: 'text-red-600'
-        };
-      case 'warning':
-        return {
-          button: 'bg-yellow-600 hover:bg-yellow-700 text-white',
-          icon: 'text-yellow-600'
-        };
-      case 'info':
-        return {
-          button: 'bg-brand-600 hover:bg-brand-700 text-white',
-          icon: 'text-blue-600'
-        };
+  type = 'warning',
+}) => (
+  <Modal
+    isOpen={isOpen}
+    onClose={onCancel}
+    title={title}
+    size="sm"
+    footer={
+      <>
+        <Button variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
+        <Button variant={type === 'danger' ? 'danger' : 'primary'} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </>
     }
-  };
-
-  const colors = getColors();
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div className="p-6">
-          <div className="flex items-start space-x-3">
-            <AlertTriangle className={`h-6 w-6 ${colors.icon} mt-0.5`} />
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-              <p className="text-sm text-gray-600">{message}</p>
-            </div>
-            <button
-              onClick={onCancel}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-        <div className="border-t border-gray-200 p-4 flex justify-end space-x-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg ${colors.button}`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
+  >
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 shrink-0">{ICON[type]}</span>
+      <p className="text-sm leading-[22px] text-ink">{message}</p>
     </div>
-  );
-};
+  </Modal>
+);
 
 export default ConfirmationModal;

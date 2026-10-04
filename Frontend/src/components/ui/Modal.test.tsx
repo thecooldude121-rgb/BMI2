@@ -66,8 +66,8 @@ describe('Modal', () => {
 
   it('closes on a backdrop click', async () => {
     const onClose = vi.fn();
-    const { container } = open({ onClose });
-    await userEvent.click(container.firstChild as Element);
+    open({ onClose });
+    await userEvent.click(screen.getByRole('dialog').parentElement as Element);
     expect(onClose).toHaveBeenCalledOnce();
   });
 
@@ -75,8 +75,8 @@ describe('Modal', () => {
     // Selecting text in a form and releasing past the panel edge must not
     // discard the dialog.
     const onClose = vi.fn();
-    const { container } = open({ onClose });
-    const backdrop = container.firstChild as Element;
+    open({ onClose });
+    const backdrop = screen.getByRole('dialog').parentElement as Element;
     await userEvent.pointer([
       { target: screen.getByRole('dialog'), keys: '[MouseLeft>]' },
       { target: backdrop, keys: '[/MouseLeft]' },
@@ -86,9 +86,9 @@ describe('Modal', () => {
 
   it('ignores Escape and the backdrop when not dismissible', async () => {
     const onClose = vi.fn();
-    const { container } = open({ onClose, dismissible: false });
+    open({ onClose, dismissible: false });
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(container.firstChild as Element);
+    await userEvent.click(screen.getByRole('dialog').parentElement as Element);
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /^Close/ })).not.toBeInTheDocument();
   });

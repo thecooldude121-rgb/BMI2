@@ -6,6 +6,7 @@ import {
   X, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import Badge from '../ui/Badge';
 
 // The section label beside the brand (Figma shows one word, e.g. "Settings").
 // `parent` is kept for callers and tests; the bar renders only `label`.
@@ -177,9 +178,7 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
             title="Search is coming soon"
             className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
           />
-          <span className="shrink-0 rounded-full bg-surface-sunken px-2 py-[3px] text-xs font-semibold leading-[18px] text-ink-muted">
-            Soon
-          </span>
+          <Badge tone="neutral" className="shrink-0">Soon</Badge>
         </div>
 
         {/* + New */}

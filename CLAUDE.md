@@ -601,6 +601,24 @@ designer later adds variables, re-derive from those and treat any disagreement a
   small muted or amber text on panels, not directly on the canvas, until the designer decides
   whether to darken them. That is the designer's call, not a silent hex change in code.
 
+- **`ink-secondary` `#6B645A` is NOT a Figma value** (Phase 2, 2026-10-05): an AA stand-in
+  for small muted text on the sidebar / sunken / canvas surfaces, where Figma's `#756E63`
+  measures 4.17-4.47:1. It passes there (4.83-5.18). Phase 1 shipped the sidebar "More"
+  label and the top bar's "Soon" pill in the failing grey; both now use it. Swap it for
+  whatever the designer decides. Read-only field values use `ink` on `surface-readonly`
+  rather than the frame's muted-at-75%-opacity (3.9:1 or lower).
+
+**Shared components (Phase 2) — use these, do not hand-roll:** `ui/Button` (34px Figma
+action button; primary / secondary / danger / ghost / link), `ui/Badge` (status pill, five
+AA-checked tones), `ui/Alert` (success / danger / warning / info; danger is `role="alert"`;
+success only after a 2xx), `ui/Card` + `SectionHeading`, `ui/Field` (+ `inputClass` /
+`selectClass` / `textareaClass`; binds label, help, error, aria-invalid), `ui/EmptyState`
+(`reason` required; `tone="error"` for a failed load, never an empty list), `ui/Modal`,
+`common/ConfirmationModal` (now built on Modal), `common/NotAvailable`,
+`common/PreviewBanner`, `Layout/PageHeader`. Pinned by `ui/primitives.test.tsx`.
+The frames' "Save changes" button is a macOS system component (Code Connect), not the house
+style; buttons follow the Leads header instead.
+
 **Typography:** Inter (loaded from Google Fonts in `index.html` — it was specified here
 since the start and never actually loaded). Sizes 12/14/16/20/24/32 with line heights
 18/20/22/24/28/32. Weights 400/500/600/700.

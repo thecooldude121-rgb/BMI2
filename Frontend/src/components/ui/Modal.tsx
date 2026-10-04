@@ -1,4 +1,5 @@
 import React, { useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useModalA11y } from '../../hooks/useModalA11y';
 
@@ -19,6 +20,12 @@ import { useModalA11y } from '../../hooks/useModalA11y';
  *   - backdrop click to close, without the bug where a drag that starts inside
  *     the panel and ends on the backdrop closes the dialog
  *   - the panel chrome the majority of existing modals already draw by hand
+ *   - a PORTAL to document.body, so the page that opens it cannot disturb it.
+ *     Found in the Figma phase-2 browser check: TasksPage renders its delete
+ *     confirmation inside a `space-y-6` wrapper, whose `> * + *` margin gave the
+ *     "fixed inset-0" backdrop a 24px margin-top — a band of undimmed top bar
+ *     above every dialog opened there. Any page wrapper (spacing, a transform,
+ *     a stacking context) can do the same; rendering outside the page cannot.
  *
  * The title is a required prop rather than an optional one because a dialog
  * with no accessible name announces as just "dialog", which is worse than the
@@ -101,7 +108,7 @@ export const Modal: React.FC<ModalProps> = ({
     pressStartedOnBackdrop.current = false;
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onMouseDown={handleBackdropMouseDown}
@@ -113,20 +120,20 @@ export const Modal: React.FC<ModalProps> = ({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
-        className={`flex max-h-[90vh] w-full ${SIZES[size]} flex-col rounded-xl bg-white shadow-xl ${className}`}
+        className={`flex max-h-[90vh] w-full ${SIZES[size]} flex-col rounded-xl border border-line bg-surface-panel shadow-xl ${className}`}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-6 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-4">
           <div className="min-w-0">
             <h2
               id={titleId}
               className={
-                titleHidden ? 'sr-only' : 'truncate text-lg font-semibold text-gray-900'
+                titleHidden ? 'sr-only' : 'truncate text-xl font-semibold leading-7 text-ink'
               }
             >
               {title}
             </h2>
             {description && (
-              <p id={descId} className="mt-1 text-sm text-gray-500">
+              <p id={descId} className="mt-1 text-sm text-ink-muted">
                 {description}
               </p>
             )}
@@ -136,7 +143,7 @@ export const Modal: React.FC<ModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label={`Close ${title}`}
-              className="-m-1 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              className="-m-1 rounded-ctrl p-1 text-ink-muted transition-colors hover:bg-black/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
               <X className="h-5 w-5" />
             </button>
@@ -148,11 +155,12 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-end gap-2 border-t border-line px-6 py-4">
             {footer}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

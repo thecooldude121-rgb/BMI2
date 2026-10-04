@@ -31,15 +31,16 @@ interface NotAvailableProps {
 }
 
 export const NotAvailable: React.FC<NotAvailableProps> = ({ feature, detail, className = '' }) => (
+  // Figma "Supporting state" styling (subtle surface, hairline border).
   <div
-    className={`rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 ${className}`}
+    className={`rounded-card border border-line bg-surface-subtle p-4 ${className}`}
     data-not-available={feature}
   >
     <div className="flex items-start gap-3">
-      <Construction className="h-5 w-5 flex-shrink-0 text-gray-400 mt-0.5" aria-hidden="true" />
+      <Construction className="mt-0.5 h-5 w-5 flex-shrink-0 text-ink-muted" aria-hidden="true" />
       <div>
-        <p className="font-medium text-gray-900">{feature} is not available yet</p>
-        {detail && <p className="mt-1 text-sm text-gray-600">{detail}</p>}
+        <p className="text-sm font-semibold leading-5 text-ink">{feature} is not available yet</p>
+        {detail && <p className="mt-1 text-xs leading-[18px] text-ink-muted">{detail}</p>}
       </div>
     </div>
   </div>
@@ -51,7 +52,7 @@ export const NotAvailableBadge: React.FC<{ label?: string; className?: string }>
   className = '',
 }) => (
   <span
-    className={`inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 ${className}`}
+    className={`inline-flex items-center rounded-full bg-surface-sunken px-2 py-[3px] text-xs font-semibold leading-[18px] text-ink-secondary ${className}`}
   >
     {label}
   </span>

@@ -27,20 +27,23 @@ export const PreviewBanner: React.FC<{
   /** Optional: what the reader should look at instead. */
   insteadTry?: React.ReactNode;
 }> = ({ detail, insteadTry }) => (
+  // Figma warning-alert styling. The dashed border is kept on purpose: it is
+  // what distinguishes "this panel's figures are not real" from an ordinary
+  // warning at a glance.
   <div
-    className="mb-6 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 px-5 py-3.5"
+    className="mb-6 rounded-card border border-dashed border-warning-700/40 bg-warning-100 p-3"
     role="note"
     data-preview="sample-content"
   >
-    <div className="flex flex-wrap items-center gap-3">
-      <AlertTriangle className="h-4 w-4 text-amber-700 flex-shrink-0" aria-hidden="true" />
-      <span className="rounded-full bg-amber-700 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+    <div className="flex flex-wrap items-center gap-2.5">
+      <AlertTriangle className="h-4 w-4 flex-shrink-0 text-warning-700" aria-hidden="true" />
+      <span className="rounded-full bg-warning-700 px-2 py-[3px] text-xs font-semibold uppercase leading-[18px] text-white">
         Preview · sample content
       </span>
     </div>
-    <p className="mt-2 text-[12px] leading-relaxed text-amber-900">{detail}</p>
+    <p className="mt-2 text-xs leading-[18px] text-warning-800">{detail}</p>
     {insteadTry && (
-      <p className="mt-1.5 text-[12px] leading-relaxed text-amber-800">{insteadTry}</p>
+      <p className="mt-1 text-xs leading-[18px] text-warning-800">{insteadTry}</p>
     )}
   </div>
 );

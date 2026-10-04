@@ -92,7 +92,9 @@ export const SidebarNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
     {navGroups.map((group, gi) => (
       <div key={gi}>
         {group.label && (
-          <p className="px-2.5 pb-1.5 text-xs font-semibold uppercase leading-[18px] text-ink-muted">
+          // ink-secondary, not ink-muted: Figma's muted grey is 4.17:1 on the
+          // sidebar, under AA for 12px text (see tailwind.config.js).
+          <p className="px-2.5 pb-1.5 text-xs font-semibold uppercase leading-[18px] text-ink-secondary">
             {group.label}
           </p>
         )}
