@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Mail, Phone, CalendarDays, MoreHorizontal, ChevronDown, TrendingDown, X, Trash2,
-  Check, AlertTriangle, StickyNote, Upload, Users, CheckCircle2, CircleDot, ListChecks,
+  Check, AlertTriangle, StickyNote, Users, CheckCircle2, CircleDot, ListChecks,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
@@ -19,6 +19,7 @@ import SalesMemoryBlock from '../../components/Leads/SalesMemoryBlock';
 import MergeReviewModal from '../../components/Leads/MergeReviewModal';
 import SourcePlaybookCard from '../../components/Leads/SourcePlaybookCard';
 import LeadFollowUpCard from '../../components/Leads/LeadFollowUpCard';
+import LeadFilesSection from '../../components/Leads/LeadFilesSection';
 import { followUpStatus } from '../../utils/leadFollowUp';
 import { useLeads } from '../../contexts/LeadContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -545,10 +546,9 @@ const LeadDetailPage: React.FC = () => {
             {notes.status === 'ok' && notes.rows.length === 0 && (
               <p className="text-sm text-ink-muted">No notes yet.</p>
             )}
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" disabled leadingIcon={<Upload className="h-3.5 w-3.5" />}
-                title="File upload for leads is coming soon">Upload file</Button>
-              <Badge tone="neutral">Coming soon</Badge>
+            {/* Real since Group B item 12: files are Documents linked to this lead. */}
+            <div className="border-t border-line pt-3">
+              <LeadFilesSection leadId={lead.id} ownerName={user?.name} onUploaded={name => showToast(`${name} uploaded`, 'success')} />
             </div>
           </Card>
         </div>

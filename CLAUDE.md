@@ -1292,6 +1292,18 @@ old constraint, which fails the shared-name test.
   - The composer's default "tomorrow" used `toISOString()` (a UTC date) and returned TODAY between
     midnight and 05:30 IST; it now uses the local calendar.
 
+- **DONE — Group B item 12: lead files through the existing Documents system (2026-10-05).**
+  v1 scope as approved: local disk, no S3/R2. No backend change was needed —
+  `documentsController` already accepted `module='lead'`, proved the record id belongs to the
+  caller's workspace, capped uploads at 25 MB and streamed bytes only through the authenticated
+  `/documents/:id/content`. `components/Leads/LeadFilesSection` (list, upload with progress,
+  download) replaces the disabled Upload on Lead detail and the panel's "Files · coming soon".
+  Uploads are filed under category 'Other'. Deleting stays in the Documents library (admin /
+  manager). `LeadFilesSection.test.tsx` (4). E2E against `bmi_crm_iso_test` with
+  `FILE_STORAGE_PATH` pointed at a scratch folder so no test blob could land in the live
+  `storage/` tree; uploaded, listed, downloaded byte-identical, panel shows it, row linked
+  (`module=lead`); cleaned and re-counted.
+
 - **TRACKED BUG (found 2026-10-05, NOT fixed) — every DATE column reaches the client one day
   early.** node-pg parses a DATE into a JavaScript Date at the server's LOCAL midnight; from an
   IST server `2026-05-28` serialises as `"2026-05-27T18:30:00.000Z"`. Measured, not inferred, and

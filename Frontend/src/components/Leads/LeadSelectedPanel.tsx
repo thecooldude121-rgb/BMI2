@@ -12,6 +12,7 @@ import Badge from '../ui/Badge';
 import Alert from '../ui/Alert';
 import Card, { SectionHeading } from '../ui/Card';
 import EmptyState from '../ui/EmptyState';
+import LeadFilesSection from './LeadFilesSection';
 
 /**
  * The docked "Selected lead" panel beside the Leads list — Figma "Lead quick
@@ -26,7 +27,7 @@ import EmptyState from '../ui/EmptyState';
  *              genuinely unavailable.
  *   Activity — stage history + activities, fetched for this lead.
  *   Related  — the records a conversion created (migration 059).
- *   Files    — coming soon (Group B, file upload).
+ *   Files    — the lead's Documents (Group B item 12).
  */
 
 type Tab = 'overview' | 'activity' | 'related' | 'files';
@@ -253,8 +254,8 @@ const LeadSelectedPanel: React.FC<LeadSelectedPanelProps> = ({
       )}
 
       {tab === 'files' && (
-        <div role="tabpanel" data-coming-soon="true">
-          <EmptyState title="Files · coming soon" reason="Attaching files to a lead uses the Documents system; it is the next file-upload slice." />
+        <div role="tabpanel">
+          <LeadFilesSection leadId={lead.id} />
         </div>
       )}
 

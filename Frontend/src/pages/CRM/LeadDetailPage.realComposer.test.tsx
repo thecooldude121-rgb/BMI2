@@ -25,6 +25,7 @@ vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ showToast: vi
 vi.mock('../../contexts/LeadContext', () => ({
   useLeads: () => ({ updateLead: vi.fn(), deleteLead: vi.fn(), leads: [], lastWriteErrorRef: { current: null } }),
 }));
+vi.mock('../../services/documentsService', () => ({ documentsService: { loadDocuments: vi.fn(async () => ({ data: [], count: 0 })) } }));
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 5, name: 'David Kumar' } }) }));
 vi.mock('../../hooks/usePermissions', () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock('../../components/Leads/LeadConversionWizard', () => ({ default: () => null }));
