@@ -28,6 +28,7 @@ import {
 import { useLeadActions } from '../../hooks/useLeadActions';
 import { useLeads } from '../../contexts/LeadContext';
 import Badge from '../ui/Badge';
+import { followUpStatus } from '../../utils/leadFollowUp';
 import { Button } from '../ui/Button';
 
 /**
@@ -244,6 +245,7 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
   const { label: statusLabel, cls: statusCls } = statusBadge(lead.status);
   const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '—';
   const recency = lead.last_contact_date ? (formatRelativeDate(lead.last_contact_date) || lead.last_contact_date) : null;
+  const followUp = followUpStatus(lead.next_follow_up_date);
 
   // ── Row classes (Figma "Lead row" 61:185) ─────────────────────────────────
   const rowCls = [
@@ -342,9 +344,12 @@ const LeadTableRow: React.FC<LeadTableRowProps> = ({
         </div>
       </td>
 
-      {/* ── Urgency: the per-lead SLA (computed from this lead alone) ─────── */}
+      {/* ── Urgency: the per-lead SLA + the next follow-up (a real task) ──── */}
       <td className="w-56 px-4 py-2.5 align-top">
-        <SLABadge result={slaResult} />
+        <div className="flex flex-col items-start gap-1">
+          <SLABadge result={slaResult} />
+          {followUp && <Badge tone={followUp.tone}>{followUp.label}</Badge>}
+        </div>
       </td>
 
       {/* ── Actions: Open (Figma) + the rule-based actions in ⋯ ──────────── */}

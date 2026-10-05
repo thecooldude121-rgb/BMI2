@@ -166,6 +166,26 @@ describe('LeadsPage — docked panel and honest toasts (slice 3B-2)', () => {
   });
 });
 
+describe('LeadsPage — follow-ups are real (Group B item 11)', () => {
+  it('the Overdue Follow-ups KPI shows the server count and filters to it on click', async () => {
+    const setActiveInsight = vi.fn();
+    state.current = baseState({ summary: { overdue_follow_ups: 3, new_unworked: 0, source_quality_week: {} }, setActiveInsight });
+    renderPage();
+    const card = screen.getByText('Overdue Follow-ups').closest('[role="button"]') as HTMLElement;
+    expect(card).toHaveTextContent('3');
+    expect(card).toHaveTextContent('3 leads past a follow-up date');
+    expect(card).not.toHaveAttribute('data-coming-soon');
+    await userEvent.click(card);
+    expect(setActiveInsight).toHaveBeenCalledWith('overdue');
+  });
+
+  it('a row shows its lead\'s overdue follow-up', () => {
+    state.current = baseState({ sortedLeads: [{ ...LEAD, next_follow_up_date: '2000-01-01', next_follow_up_task_id: 'T1' }], paginatedLeads: [{ ...LEAD, next_follow_up_date: '2000-01-01' }] });
+    renderPage();
+    expect(screen.getByText(/Follow-up overdue · 1 Jan 2000/)).toBeInTheDocument();
+  });
+});
+
 describe('LeadsPage — failures and empties are told apart', () => {
   it('a server error is an alert, not "No leads match"', () => {
     state.current = baseState({ sortedLeads: [], paginatedLeads: [], listTotal: 0, listError: '500 Internal Server Error' });

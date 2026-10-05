@@ -6,6 +6,7 @@ import { fetchActivitiesFromAPI, fetchLeadStageHistory } from '../../utils/leads
 import type { LeadStageHistoryRow } from '../../utils/leadsApi';
 import type { LeadActivity } from '../../types/lead';
 import { buildServerTimeline, stageLabel } from '../../utils/leadServerTimeline';
+import { followUpStatus } from '../../utils/leadFollowUp';
 import { Button } from '../ui/Button';
 import Badge from '../ui/Badge';
 import Alert from '../ui/Alert';
@@ -159,6 +160,7 @@ const LeadSelectedPanel: React.FC<LeadSelectedPanelProps> = ({
               <Row label="Owner">{lead.owner_name || 'Unassigned'}</Row>
               <Row label="Stored score">{lead.score ?? 0} · stored CRM value, not an AI score</Row>
               <Row label="Last contact">{lead.last_contact_date || 'No contact logged'}</Row>
+              <Row label="Follow-up">{followUpStatus(lead.next_follow_up_date)?.label ?? 'None set'}</Row>
             </div>
           </Card>
 

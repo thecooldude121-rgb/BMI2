@@ -14,11 +14,15 @@ import LeadScoreBreakdownPanel from '../../components/Lead/LeadScoreBreakdownPan
 import LeadConversionWizard from '../../components/Leads/LeadConversionWizard';
 import TerminalStatusModal from '../../components/Leads/TerminalStatusModal';
 import OutreachComposer from '../../components/Leads/OutreachComposer';
+import type { OutreachFollowUp } from '../../components/Leads/OutreachComposer';
 import SalesMemoryBlock from '../../components/Leads/SalesMemoryBlock';
 import MergeReviewModal from '../../components/Leads/MergeReviewModal';
 import SourcePlaybookCard from '../../components/Leads/SourcePlaybookCard';
+import LeadFollowUpCard from '../../components/Leads/LeadFollowUpCard';
+import { followUpStatus } from '../../utils/leadFollowUp';
 import { useLeads } from '../../contexts/LeadContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useLeadActions } from '../../hooks/useLeadActions';
 import { usePermissions } from '../../hooks/usePermissions';
 import {
@@ -107,6 +111,7 @@ const LeadDetailPage: React.FC = () => {
   const { updateLead, deleteLead, leads: allLeads, lastWriteErrorRef } = useLeads();
   const actions = useLeadActions(updateLead);
   const { showToast } = useToast();
+  const { user } = useAuth();
   const { can } = usePermissions();
 
   const [lead, setLead] = useState<Lead | null>(null);
@@ -215,9 +220,14 @@ const LeadDetailPage: React.FC = () => {
     navigate('/crm/leads');
   };
 
-  const handleComposerSubmit = async (activity: LeadActivity) => {
+  const handleComposerSubmit = async (activity: LeadActivity, followUp?: OutreachFollowUp) => {
     if (!lead) return;
-    if (!(await logActivity.save(lead.id, activity))) return;   // composer stays open with the error
+    const fu = followUp?.date
+      ? { date: followUp.date, type: followUp.type, title: `Follow up (${followUp.type}) with ${leadDisplayName(lead)}`, assignedTo: user?.name }
+      : undefined;
+    if (!(await logActivity.save(lead.id, activity, fu))) return;   // composer stays open with the error
+    const fuError = logActivity.followUpErrorRef.current;
+    if (fu) void loadLead();
     if (activity.type === 'note') {
       loadSource(fetchNotesFromAPI, setNotes);
     } else {
@@ -226,7 +236,8 @@ const LeadDetailPage: React.FC = () => {
       void loadLead();
     }
     setComposerChannel(null);
-    showToast(LOGGED_LABEL[activity.type] ?? 'Activity saved', 'success');
+    if (fuError) showToast(`${LOGGED_LABEL[activity.type] ?? 'Activity saved'} — but the follow-up was not set: ${fuError}`, 'error');
+    else showToast(`${LOGGED_LABEL[activity.type] ?? 'Activity saved'}${fu ? ' · follow-up set' : ''}`, 'success');
   };
 
   const openComposer = (channel: ActivityType) => { logActivity.reset(); setComposerChannel(channel); };
@@ -444,6 +455,9 @@ const LeadDetailPage: React.FC = () => {
                 <InfoRow label="Email">{lead.email || '—'}</InfoRow>
                 <InfoRow label="Phone">{lead.phone || notRecorded}</InfoRow>
                 <InfoRow label="Mobile">{lead.mobile || notRecorded}</InfoRow>
+                <InfoRow label="Follow-up">
+                  {(() => { const f = followUpStatus(lead.next_follow_up_date); return f ? <Badge tone={f.tone}>{f.label}</Badge> : notRecorded; })()}
+                </InfoRow>
                 <InfoRow label="Last contacted">{lead.last_contact_date ? fmtDate(lead.last_contact_date) : 'No contact logged'}</InfoRow>
                 <InfoRow label="Created">{fmtDateTime(lead.created_at)}</InfoRow>
                 <InfoRow label="Last updated">{fmtDateTime(lead.updated_at)}</InfoRow>
@@ -541,6 +555,14 @@ const LeadDetailPage: React.FC = () => {
 
         {/* ── Intelligence rail ── */}
         <aside className="flex min-w-0 flex-col gap-4" aria-label="Lead guidance">
+          {isActive && (
+            <LeadFollowUpCard
+              key={`${lead.next_follow_up_task_id ?? 'none'}-${lead.next_follow_up_date ?? ''}`}
+              lead={lead}
+              assignedTo={user?.name}
+              onChanged={msg => { showToast(msg, 'success'); void loadLead(); }}
+            />
+          )}
           <SourcePlaybookCard lead={lead} />
           <SalesMemoryBlock lead={lead} recentActivities={activities.rows.slice(0, 5)} />
           <Card padding="md">
@@ -614,7 +636,8 @@ const LeadDetailPage: React.FC = () => {
           initialChannel={composerChannel}
           submitting={logActivity.saving}
           error={logActivity.error}
-          onSubmit={(activity) => void handleComposerSubmit(activity)}
+          followUpAvailable
+          onSubmit={(activity, followUp) => void handleComposerSubmit(activity, followUp)}
           onClose={() => { setComposerChannel(null); logActivity.reset(); }}
         />
       )}

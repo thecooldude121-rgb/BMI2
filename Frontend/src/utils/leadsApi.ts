@@ -98,6 +98,10 @@ export function mapRowToLead(row: any): Lead {
     ...(row.last_contact ? { last_contact_date: String(row.last_contact).slice(0, 10) } : {}),
     assigned_to_user_id: row.assigned_to_user_id ?? null,
     ...(row.assigned_to ? { owner_name: String(row.assigned_to) } : {}),
+    // Group B item 11: the earliest OPEN follow-up task — served as plain
+    // 'YYYY-MM-DD' text (never a shifted timestamp), absent when there is none.
+    ...(row.next_follow_up_date ? { next_follow_up_date: String(row.next_follow_up_date) } : {}),
+    ...(row.next_follow_up_task_id ? { next_follow_up_task_id: String(row.next_follow_up_task_id) } : {}),
     // Migration 063 profile fields — absent when not recorded.
     ...Object.fromEntries(
       (['mobile', 'website', 'linkedin_url', 'city', 'country', 'company_size', 'department', 'source_detail',
@@ -161,7 +165,7 @@ export interface LeadListQuery {
   score_band?: string;
   search?: string;
   assigned_to_user_id?: string;  // the "own leads" display filter
-  insight?: 'untouched' | 'ready_to_convert' | 'new_unworked';
+  insight?: 'untouched' | 'ready_to_convert' | 'new_unworked' | 'overdue';
   filter?: AdvancedFilter;
   sort?: string;
   stages?: string[];             // Kanban lane statuses
@@ -198,6 +202,8 @@ export interface LeadSummary {
   new_unworked_last_week: number;
   untouched: number;
   ready_to_convert: number;
+  /** Leads with an open follow-up task due before today (Group B item 11). */
+  overdue_follow_ups: number;
   source_quality_week: { top_source: string | null; top_source_avg_score: number; top_source_count: number; weekly_leads: number };
 }
 

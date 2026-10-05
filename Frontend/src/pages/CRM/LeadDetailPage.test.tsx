@@ -30,6 +30,7 @@ const ctx = vi.hoisted(() => ({
   lastWriteErrorRef: { current: null as string | null },
 }));
 vi.mock('../../contexts/LeadContext', () => ({ useLeads: () => ctx }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 5, name: 'David Kumar' } }) }));
 vi.mock('../../hooks/usePermissions', () => ({ usePermissions: () => ({ can: () => true }) }));
 
 // The composer is stubbed: these tests are about what the PAGE does with a

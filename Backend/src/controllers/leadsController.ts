@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { profileFieldsError, normalizeProfileFields } from '../utils/leadProfileFields';
+import { FOLLOW_UP_JOIN, FOLLOW_UP_COLUMNS, OVERDUE_FOLLOW_UP } from '../utils/leadFollowUp';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
@@ -117,7 +118,7 @@ export const getLeads = async (req: AuthRequest, res: Response, next: NextFuncti
 
     const total = await pool.query(`SELECT COUNT(*)::int AS n FROM leads l WHERE ${where}`, params);
     const page = await pool.query(
-      `SELECT l.* FROM leads l WHERE ${where}
+      `SELECT l.*, ${FOLLOW_UP_COLUMNS} FROM leads l ${FOLLOW_UP_JOIN} WHERE ${where}
         ORDER BY ${built.orderBy}
         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, safeLimit, safeOffset],
@@ -160,7 +161,8 @@ export const getLeadSummary = async (req: AuthRequest, res: Response, next: Next
          COUNT(*) FILTER (WHERE l.stage IN ('new', 'assigned') AND l.last_contact IS NULL
                            AND l.created_at >= NOW() - interval '14 days' AND l.created_at < NOW() - interval '7 days')::int AS new_unworked_last_week,
          COUNT(*) FILTER (WHERE l.last_contact IS NULL OR l.last_contact < CURRENT_DATE - 30)::int AS untouched,
-         COUNT(*) FILTER (WHERE l.stage IN ('qualified', 'sales_accepted'))::int AS ready_to_convert
+         COUNT(*) FILTER (WHERE l.stage IN ('qualified', 'sales_accepted'))::int AS ready_to_convert,
+         COUNT(*) FILTER (WHERE ${OVERDUE_FOLLOW_UP})::int AS overdue_follow_ups
        FROM leads l WHERE ${built.where}`,
       built.params,
     );
@@ -191,7 +193,9 @@ export const getLeadSummary = async (req: AuthRequest, res: Response, next: Next
 export const getLeadById = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const result = await pool.query('SELECT * FROM leads WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+    const result = await pool.query(
+      `SELECT l.*, ${FOLLOW_UP_COLUMNS} FROM leads l ${FOLLOW_UP_JOIN} WHERE l.id = $1 AND l.tenant_id = $2`,
+      [req.params.id, tenantId]);
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
   } catch (error) { next(error); }

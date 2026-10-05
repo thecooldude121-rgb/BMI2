@@ -338,7 +338,15 @@ describe('useLeadsPageState — KPI figures and insights', () => {
     await waitFor(() => expect(lastQuery()).toMatchObject({ insight: 'new_unworked' }));
   });
 
-  it.each(['overdue', 'duplicateRisk', 'slaBreach', 'nbaAction'] as const)(
+  it('the overdue insight is REAL now (Group B item 11): it asks the server for insight=overdue', async () => {
+    const { result } = renderHook(() => useLeadsPageState());
+    await waitFor(() => expect(mockFetchLeadsPage).toHaveBeenCalled());
+    act(() => { result.current.setActiveInsight('overdue'); });
+    await waitFor(() => expect(lastQuery()).toMatchObject({ insight: 'overdue' }));
+    expect(result.current.listUnavailableReason).toBeNull();
+  });
+
+  it.each(['duplicateRisk', 'slaBreach', 'nbaAction'] as const)(
     'the %s insight is Coming soon — not fetched, and never a silently unfiltered list', async (insight) => {
       const { result } = renderHook(() => useLeadsPageState());
       await waitFor(() => expect(mockFetchLeadsPage).toHaveBeenCalled());

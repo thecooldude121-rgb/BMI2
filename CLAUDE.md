@@ -1272,6 +1272,39 @@ old constraint, which fails the shared-name test.
   tenant match, and a test proves it, but the database still accepts a contact pointing at
   another workspace's account. A composite FK migration is the real fix (not done here).
 
+- **DONE — Group B item 11: lead follow-up reminders (2026-10-05).** v1 scope as approved: a
+  follow-up IS a `tasks` row (type 'follow-up', related_to_type 'lead', DATE due, no time of day,
+  no notification delivery). No migration — the table already had the type, statuses and an index
+  on the related record. `utils/leadFollowUp.ts` (backend) holds ONE join and ONE overdue
+  predicate, both tenant-matched; GET /leads and /leads/:id serve `next_follow_up_date` (the
+  earliest OPEN follow-up, as plain 'YYYY-MM-DD' text) and `next_follow_up_task_id`; the summary
+  serves `overdue_follow_ups`; `insight=overdue` lists exactly those leads. Writes go through the
+  tasks API (which already proves the lead is in the workspace). The UI: a follow-up card on Lead
+  detail (set / reschedule / mark done), a Follow-up row, badges on the list rows and the docked
+  panel, the **Overdue Follow-ups KPI is real and clickable** (it was "Coming soon"), the bulk
+  bar's Set follow-up makes one task per lead (it was "coming soon"), and the composer's "Set
+  follow-up" is back — it creates the task AFTER the activity saves, and a failure is reported as
+  "logged, but the follow-up was not set". `roundTrip.leadFollowUp.test.ts` (7),
+  `components/Leads/leadFollowUp.test.tsx` (9). E2E through the real UI against
+  `bmi_crm_iso_test`, Postgres-confirmed, seed removed and re-counted.
+  - "Overdue" uses the database's CURRENT_DATE (Asia/Kolkata on live); the badges use the
+    browser's local date. They can disagree for a few hours across midnight in another time zone.
+  - The composer's default "tomorrow" used `toISOString()` (a UTC date) and returned TODAY between
+    midnight and 05:30 IST; it now uses the local calendar.
+
+- **TRACKED BUG (found 2026-10-05, NOT fixed) — every DATE column reaches the client one day
+  early.** node-pg parses a DATE into a JavaScript Date at the server's LOCAL midnight; from an
+  IST server `2026-05-28` serialises as `"2026-05-27T18:30:00.000Z"`. Measured, not inferred, and
+  a mutation in `roundTrip.leadFollowUp` (returning the raw DATE) fails five tests on exactly this.
+  Affected today: anything that slices that string (`mapRowToLead` does, for `last_contact`, so
+  "Last contacted" can read a day early) and any browser WEST of the server rendering it with
+  `new Date()`. Columns: `leads.last_contact`, `tasks.due_date`, `deals.expected_close_date`,
+  quotas periods, and any other DATE. Companion: `recordLeadContact` stores
+  `toISOString().slice(0,10)` — a UTC date — so a call logged between 00:00 and 05:30 IST records
+  the previous day. **The fix is one line (`types.setTypeParser(1082, v => v)` in config/database)
+  plus auditing every consumer for the format change — its own reviewed slice, not a side effect.**
+  New code returns dates with `to_char(..., 'YYYY-MM-DD')` in the meantime.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
