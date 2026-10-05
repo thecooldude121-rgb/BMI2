@@ -1260,6 +1260,18 @@ old constraint, which fails the shared-name test.
   - **Found for item 4:** `DataContext` maps lead value from `r.estimated_value`, a field raw API
     rows never carry (`value`), so every dashboard lead value is 0.
 
+- **DONE — Group B item 10: global search (2026-10-05).** `GET /api/v1/search?q=`
+  (`searchController`) over leads, contacts, accounts and deals — v1 scope as approved;
+  meetings and tasks are not searched. Workspace-scoped, parameterised, LIKE wildcards escaped,
+  2-100 characters, 5 per type plus `has_more` (no invented totals), test-flagged deals hidden.
+  `components/Layout/GlobalSearch` replaces the disabled top-bar box: Ctrl/⌘+K, an ARIA combobox,
+  and a failed search says so instead of "No matches". `roundTrip.search.test.ts` (10),
+  `GlobalSearch.test.tsx` (6). Plain ILIKE today; pg_trgm GIN indexes are the 10k-row upgrade.
+  **Found:** `contacts.company_id` is a GLOBAL foreign key (no tenant component) — the defect
+  step 4 fixed for `deals.company_id` with a composite reference. Search's join carries the
+  tenant match, and a test proves it, but the database still accepts a contact pointing at
+  another workspace's account. A composite FK migration is the real fix (not done here).
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two

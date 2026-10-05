@@ -17,6 +17,7 @@ import forecastRoutes from './forecast';
 import targetsRoutes from './targets';
 import moduleLinksRoutes from './moduleLinks';
 import serviceCredentialsRoutes from './serviceCredentials';
+import searchRoutes from './search';
 
 const router = Router();
 
@@ -38,5 +39,6 @@ router.use('/forecast', forecastRoutes);
 router.use('/targets', targetsRoutes);
 router.use('/module-links', moduleLinksRoutes);
 router.use('/service-credentials', serviceCredentialsRoutes);
+router.use('/search', searchRoutes);
 
 export default router;

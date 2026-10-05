@@ -69,13 +69,11 @@ describe('Sidebar — the Figma Settings-frame list plus "More"', () => {
 });
 
 describe('TopBar — unbuilt controls are labelled, not live', () => {
-  it('global search is disabled and says it is coming soon (it searched nothing)', () => {
+  it('global search is a real search box now (Group B item 10), not a disabled one', () => {
     renderAt(<TopBar />);
-    const search = screen.getByRole('textbox', { name: /global search \(coming soon\)/i });
-    expect(search).toBeDisabled();
-    expect(screen.queryByText(/ctrl k/i)).toBeNull();
-    // The "Soon" pill is the shared neutral Badge (AA-passing text colour).
-    expect(screen.getByText('Soon')).toHaveAttribute('data-tone', 'neutral');
+    const search = screen.getByRole('combobox', { name: /search leads, contacts, accounts and deals/i });
+    expect(search).toBeEnabled();
+    expect(screen.getByText('Ctrl K')).toHaveAttribute('data-tone', 'neutral');
   });
 
   it('the inbox is disabled and carries no "unread" dot (it had no handler)', () => {
