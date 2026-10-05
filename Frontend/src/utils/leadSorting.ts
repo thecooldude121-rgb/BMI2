@@ -2,6 +2,7 @@
 import type { Lead } from '../types/lead';
 import { computeLeadSLA, getSLAConfig } from './leadSla';
 import type { LeadSLAResult } from './leadSla';
+import { dayOrInstant, calendarDaysUntil } from './dates';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -109,12 +110,13 @@ export const SORT_OPTIONS: SortMeta[] = [
 
 function daysSince(dateStr: string | null | undefined): number {
   if (!dateStr) return 9999;
-  return (Date.now() - new Date(dateStr).getTime()) / 86_400_000;
+  return (Date.now() - dayOrInstant(dateStr).getTime()) / 86_400_000;
 }
 
+// A follow-up is due on a calendar DAY: whole days until it, 0 = due today.
 function daysUntil(dateStr: string | null | undefined): number {
   if (!dateStr) return 9999;
-  return (new Date(dateStr).getTime() - Date.now()) / 86_400_000;
+  return calendarDaysUntil(dateStr) ?? (new Date(dateStr).getTime() - Date.now()) / 86_400_000;
 }
 
 function overdueBonus(lead: Lead): number {

@@ -37,6 +37,7 @@ import { findDuplicates } from '../../utils/leadDuplicates';
 import { buildServerTimeline, stageLabel } from '../../utils/leadServerTimeline';
 import type { Lead, LeadActivity, LeadNote, ActivityType } from '../../types/lead';
 import type { TerminalAction } from '../../utils/leadReasons';
+import { dayOrInstant } from '../../utils/dates';
 
 /**
  * LEAD DETAIL — rebuilt to Figma "Lead detail page" (61:408), phase 3,
@@ -74,7 +75,7 @@ const leadDisplayName = (lead: Lead) =>
 const fmtDateTime = (s?: string | null) =>
   s ? new Date(s).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const fmtDate = (s?: string | null) =>
-  s ? new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  s ? dayOrInstant(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 // The stage-transition endpoint is the only path for a stage change; `converted`
 // is reached through conversion (the server answers 409 USE_CONVERSION), so it

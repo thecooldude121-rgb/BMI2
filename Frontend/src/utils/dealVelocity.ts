@@ -58,6 +58,7 @@ export interface DealForVelocity {
  * honest; rating it from a midpoint that means nothing is not.
  */
 import type { StageMeta } from './pipelinesApi';
+import { dayOrInstant } from './dates';
 
 // ── Main function ─────────────────────────────────────────────────────────────
 
@@ -77,7 +78,7 @@ export function getDealVelocity(
   if (!deal.createdAt || !deal.closeDate) return null;
 
   const created  = new Date(deal.createdAt);
-  const closeDate = new Date(deal.closeDate);
+  const closeDate = dayOrInstant(String(deal.closeDate)); // a close DAY, local
   const today    = new Date();
 
   // Guard: invalid dates

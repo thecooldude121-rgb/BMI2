@@ -10,6 +10,7 @@ import type {
   EnrichmentStatus,
   QualificationChecklistItem,
 } from '../types/leadDomain';
+import { dayOrInstant } from './dates';
 
 // ── Private mapping helpers ───────────────────────────────────────────────────
 // All functions are pure with no side effects.
@@ -226,7 +227,7 @@ export function toLeadDomain(lead: Lead): LeadDomain {
     // Timestamps
     createdAt:       new Date(lead.created_at),
     updatedAt:       new Date(lead.updated_at ?? lead.created_at),
-    lastContactedAt: lead.last_contact_date ? new Date(lead.last_contact_date) : null,
+    lastContactedAt: lead.last_contact_date ? dayOrInstant(lead.last_contact_date) : null,
     nextActionType:  mapNextActionType(lead.status),
     nextActionDue:   null,
   };

@@ -1,4 +1,5 @@
 import { Lead } from '../types/lead';
+import { dayOrInstant, calendarDaysUntil } from './dates';
 
 export interface ScoreFactor {
   name: string;
@@ -92,7 +93,7 @@ export class LeadScoringEngine {
     const lastTouch = lead.last_activity_date ?? lead.last_contact_date;
 
     if (lastTouch) {
-      const daysSince = Math.floor((Date.now() - new Date(lastTouch).getTime()) / (1000 * 60 * 60 * 24));
+      const daysSince = Math.floor((Date.now() - dayOrInstant(lastTouch).getTime()) / (1000 * 60 * 60 * 24));
 
       if (daysSince <= 1) points = 15;
       else if (daysSince <= 3) points = 12;
@@ -332,7 +333,13 @@ export class LeadScoringEngine {
   }
 
   private static formatTimeAgo(dateString: string): string {
-    const date = new Date(dateString);
+    // A calendar day has no hours: "today" / "N days ago", never "5 hours ago".
+    const until = calendarDaysUntil(dateString);
+    if (until !== null && /^\d{4}-\d{2}-\d{2}$/.test(dateString) && until > -30) {
+      if (until >= 0) return 'today';
+      return `${-until} day${until < -1 ? 's' : ''} ago`;
+    }
+    const date = dayOrInstant(dateString);
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
 
     let interval = Math.floor(seconds / 31536000);

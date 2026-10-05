@@ -1270,7 +1270,7 @@ old constraint, which fails the shared-name test.
   **Found:** `contacts.company_id` is a GLOBAL foreign key (no tenant component) — the defect
   step 4 fixed for `deals.company_id` with a composite reference. Search's join carries the
   tenant match, and a test proves it, but the database still accepts a contact pointing at
-  another workspace's account. A composite FK migration is the real fix (not done here).
+  another workspace's account. **CLOSED 2026-10-06 by migration 064** — see below.
 
 - **DONE — Group B item 11: lead follow-up reminders (2026-10-05).** v1 scope as approved: a
   follow-up IS a `tasks` row (type 'follow-up', related_to_type 'lead', DATE due, no time of day,
@@ -1313,18 +1313,62 @@ old constraint, which fails the shared-name test.
   `roundTrip.dataHealth.test.ts` (3). Live check matched SQL line for line. "Workspace connected"
   stays hidden until Group A item 2 gives it a real health check.
 
-- **TRACKED BUG (found 2026-10-05, NOT fixed) — every DATE column reaches the client one day
-  early.** node-pg parses a DATE into a JavaScript Date at the server's LOCAL midnight; from an
-  IST server `2026-05-28` serialises as `"2026-05-27T18:30:00.000Z"`. Measured, not inferred, and
-  a mutation in `roundTrip.leadFollowUp` (returning the raw DATE) fails five tests on exactly this.
-  Affected today: anything that slices that string (`mapRowToLead` does, for `last_contact`, so
-  "Last contacted" can read a day early) and any browser WEST of the server rendering it with
-  `new Date()`. Columns: `leads.last_contact`, `tasks.due_date`, `deals.expected_close_date`,
-  quotas periods, and any other DATE. Companion: `recordLeadContact` stores
-  `toISOString().slice(0,10)` — a UTC date — so a call logged between 00:00 and 05:30 IST records
-  the previous day. **The fix is one line (`types.setTypeParser(1082, v => v)` in config/database)
-  plus auditing every consumer for the format change — its own reviewed slice, not a side effect.**
-  New code returns dates with `to_char(..., 'YYYY-MM-DD')` in the meantime.
+- **FIXED (2026-10-06, data-correctness slice) — DATE columns reached the client one day
+  early.** Found 2026-10-05: node-pg parsed a DATE into a JS Date at the server's LOCAL midnight,
+  so from an IST server `2026-05-28` serialised as `"2026-05-27T18:30:00.000Z"`.
+  - **Backend:** `config/database.ts` registers `types.setTypeParser(types.builtins.DATE, v => v)`,
+    so every DATE (14 columns; `employees.hire_date` is HRMS's) reaches every client as the plain
+    `'YYYY-MM-DD'` Postgres stores. `recordLeadContact` no longer stores the UTC date
+    (`toISOString().slice(0,10)`): the day is computed in SQL in the WORKSPACE's time zone
+    (`tenants.settings.timezone`), falling back to the database's zone (Asia/Kolkata live) — a
+    call at 00:30 IST now records that day. `roundTrip.dateOnly.test.ts` (5) pins both;
+    removing the parser fails 3, restoring the UTC slice fails 2.
+    `roundTrip.leadTransitions` had encoded the bug in its own `today()` (UTC slice) and failed
+    after IST midnight; it now asks Postgres for `CURRENT_DATE`.
+  - **Frontend — the rule:** a DATE value is a calendar DAY. Never `new Date('YYYY-MM-DD')` (the
+    spec reads it as UTC midnight: 05:30 the same day in IST, the PREVIOUS evening in New York),
+    never `toISOString()` for "today". Use `utils/dates.ts`: `localDay()` (today, local),
+    `parseLocalDay` (local midnight), `calendarDaysUntil` (whole calendar days, DST-safe),
+    `endOfLocalDay` (a due DAY is overdue only after it ends; bare dates only), `dayOrInstant`
+    (for `last_activity_date ?? last_contact_date ?? created_at`-style mixed fields). Compare
+    'YYYY-MM-DD' strings directly where possible. `leadFollowUp.localToday` is now an alias of
+    `localDay` — one helper.
+  - **Every screen that reads a DATE was audited** (two sweeps: deals, and everything else),
+    and ~30 sites fixed. The class that mattered most was "due TODAY shown as OVERDUE": task
+    overview + dashboard overdue counts, lead NBA "Follow up now", the lead SLA follow-up clock,
+    lead priority sort, the lead timeline summary, deal list "overdue"/"this week" presets, the
+    dashboard and report "closing this week", stalled-deal "close date passed", the deal form's
+    past-close-date check. Then displays that showed YESTERDAY west of UTC (lead detail, sales
+    memory, merge review, task overview, team member deals), "today" taken from UTC
+    (`CreateTaskModal`, deal health drivers, inspection signals, a list filter fallback), and
+    day-difference maths (`formatRelativeDate` returned "" for today before noon; `daysFromNow`
+    used `Math.ceil`, off by one across a DST change — now `Math.round`).
+    `utils/dateOnly.timezones.test.ts` runs the helpers and the NBA/SLA rules under five zones
+    (Kolkata, Dubai, New York, Kiritimati, UTC) at hours inside the old error window, plus the
+    DST case; mutation-tested.
+  - **Two defects found on the way, fixed:** the deal page stored `closeDate` only as a display
+    string ("16 Jul 2026"), so the Details panel's `<input type=date>` was always blank and
+    "Duplicate deal" re-parsed the string through `toISOString` (a day early in IST). The page
+    now keeps `closeDateIso` beside it. And `handleSaveCloseDate` set the new date BEFORE the
+    server answered, and left it on failure — it now updates only after a 2xx.
+  - **And one stale stub made real:** `useLeadsPageState.overdueLeads` was hardcoded `[]`
+    ("no next_follow_up_date column exists") after Group B item 11 made the field real, so the
+    per-row overdue signal on the Leads list could never fire. It is now computed per loaded
+    row from that lead's own follow-up; the KPI COUNT still comes from the server summary.
+  - **Not changed, deliberately:** sorts and two-sided comparisons that parse both sides the
+    same way (consistent, so correct), `aiEngine.ts` (dead), and the dead Settings tree.
+    `ActivitiesPage` groups TIMESTAMPS by a UTC day key — not a DATE column, a later cleanup.
+
+- **DONE (migration 064, 2026-10-06) — `contacts.company_id` is a COMPOSITE reference**
+  `(company_id, tenant_id) -> companies(id, tenant_id)` with column-listed
+  `ON DELETE SET NULL (company_id)` — exactly what 060 did for `deals.company_id`, so the
+  DATABASE refuses a contact pointing at another workspace's account (a CSV importer, a backfill,
+  a hand-typed UPDATE), not only `contactsController`. Verified first on both databases: 0
+  cross-workspace links, 0 orphans, 0 contacts without a tenant; the migration re-checks and
+  RAISEs rather than clearing anything. `roundTrip.contactCompanyScope.test.ts` asserts 23503 on a
+  cross-workspace insert and update and that deleting an account clears only `company_id`;
+  `tenantIsolation`'s setup now asserts the refusal instead of planting the bad row, and the search
+  test that planted one is replaced by a comment (the row can no longer exist).
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

@@ -3,6 +3,7 @@ import { X, AlertTriangle, ChevronLeft, ChevronRight, Merge } from 'lucide-react
 import type { Lead } from '../../types/lead';
 import type { DuplicateCandidate } from '../../utils/leadDuplicates';
 import { TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
+import { dayOrInstant } from '../../utils/dates';
 
 // TODO: replace stub merge with real API call that records audit log + enables rollback
 
@@ -34,7 +35,7 @@ function displayValue(lead: Lead, key: keyof Lead): string {
     return TEAM_MEMBERS.find(m => m.id === String(v))?.label ?? String(v);
   }
   if (key === 'created_at' || key === 'last_contact_date') {
-    const d = new Date(v as string);
+    const d = dayOrInstant(String(v));
     return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   }
   return String(v);

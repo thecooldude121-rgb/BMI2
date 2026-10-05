@@ -1,5 +1,6 @@
 import type { Lead, LeadActivity, LeadLifecycleStage } from '../types/lead';
 import type { AuditEvent } from './auditLog';
+import { dayOrInstant, calendarDaysUntil } from './dates';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -78,11 +79,12 @@ function fmtReason(s: string): string {
 }
 
 function daysAgoNum(ts: string): number {
-  return Math.floor((Date.now() - new Date(ts).getTime()) / 86_400_000);
+  return Math.floor((Date.now() - dayOrInstant(ts).getTime()) / 86_400_000);
 }
 
+// Whole calendar days to a due DAY (0 = due today, never "overdue" until it ends).
 function daysFromNowNum(ts: string): number {
-  return Math.floor((new Date(ts).getTime() - Date.now()) / 86_400_000);
+  return calendarDaysUntil(ts) ?? Math.floor((new Date(ts).getTime() - Date.now()) / 86_400_000);
 }
 
 function leadName(lead: Lead): string {

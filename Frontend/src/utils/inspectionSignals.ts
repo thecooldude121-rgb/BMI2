@@ -14,6 +14,7 @@
 
 import type { DealCard } from '../components/Deal/DealKanbanCard';
 import { daysFromNow } from './dateUtils';
+import { localDay } from './dates';
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
@@ -71,9 +72,9 @@ export interface InspectionBadge {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Returns today's date as YYYY-MM-DD for due-date comparisons. */
+/** Today as YYYY-MM-DD in the LOCAL calendar, for due-date comparisons (toISOString is UTC). */
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  return localDay();
 }
 
 // ── Main computation ──────────────────────────────────────────────────────────

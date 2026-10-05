@@ -1,6 +1,7 @@
 import { DashboardDeal, dealValue } from '../../hooks/useDashboardData';
 import { StageLookup } from '../../utils/pipelinesApi';
 import { groupDealsByOwner, UNASSIGNED_LABEL } from '../../utils/dealOwnership';
+import { calendarDaysUntil, dayOrInstant } from '../../utils/dates';
 
 /**
  * THE REPORTS, AS DATA.
@@ -404,11 +405,10 @@ export const REPORTS: ReportDef[] = [
         return { unavailable: 'No deals are marked high priority.' };
       }
       const open = high.filter(x => d.outcome(x) === 'open');
-      const weekAway = new Date(); weekAway.setDate(weekAway.getDate() + 7);
+      // Calendar days (0 = closes today): a DATE is not an instant.
       const soon = open.filter(x => {
-        if (!x.expected_close_date) return false;
-        const t = new Date(x.expected_close_date).getTime();
-        return Number.isFinite(t) && t >= Date.now() && t <= weekAway.getTime();
+        const days = calendarDaysUntil(x.expected_close_date);
+        return days !== null && days >= 0 && days <= 7;
       });
       const undated = open.filter(x => !x.expected_close_date).length;
       const rows: ReportRow[] = [
@@ -452,7 +452,8 @@ export function dealsForReport(
     const { from, to } = opts.bounds;
     working = working.filter(d => {
       if (!d.expected_close_date) return false;
-      const t = new Date(d.expected_close_date).getTime();
+      // Local midnight of the close DAY — the bounds are local too.
+      const t = dayOrInstant(d.expected_close_date).getTime();
       // An unparseable date counts as missing, never as in-range.
       return Number.isFinite(t) && t >= from.getTime() && t <= to.getTime();
     });

@@ -4,6 +4,7 @@ import { BarChart3, TrendingUp, Users, DollarSign, Target, Filter, Download } fr
 import { useData } from '../../contexts/DataContext';
 import { useStageLookup } from '../../hooks/useStageLookup';
 import { isWonWith } from '../../utils/pipelinesApi';
+import { calendarDaysUntil } from '../../utils/dates';
 
 const Analytics: React.FC = () => {
   const { leads, deals, tasks, employees } = useData();
@@ -178,10 +179,9 @@ const Analytics: React.FC = () => {
                 <span className="text-sm text-gray-600">Expected Close (Next 30 days)</span>
                 <span className="text-lg font-bold text-green-600">
                   ${deals.filter(d => {
-                    const closeDate = new Date(d.expectedCloseDate);
-                    const today = new Date();
-                    const nextMonth = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-                    return closeDate <= nextMonth && !d.stage.startsWith('closed');
+                    // Calendar days to the close DAY (UTC-midnight parsing moved the boundary).
+                    const days = calendarDaysUntil(d.expectedCloseDate);
+                    return days !== null && days <= 30 && !d.stage.startsWith('closed');
                   }).reduce((sum, d) => sum + d.value * (d.probability / 100), 0).toLocaleString()}
                 </span>
               </div>

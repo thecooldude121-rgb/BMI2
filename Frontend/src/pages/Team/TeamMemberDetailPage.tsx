@@ -14,6 +14,7 @@ import { ScheduleMeetingModal } from '../../components/Team/ScheduleMeetingModal
 import { CreateTaskModal } from '../../components/Team/CreateTaskModal';
 import { AddNoteModal } from '../../components/Team/AddNoteModal';
 import { ShareDocumentModal } from '../../components/Team/ShareDocumentModal';
+import { dayOrInstant } from '../../utils/dates';
 
 type Role = 'CEO' | 'VP' | 'Manager' | 'Rep' | 'Admin' | 'Analyst' | 'Support';
 
@@ -1084,7 +1085,7 @@ export default function TeamMemberDetailPage() {
                       {/* No close date is a real state — 8 live deals have none. */}
                       <td className="px-4 py-3 text-right text-sm text-slate-600">
                         {deal.expected_close_date
-                          ? new Date(deal.expected_close_date).toLocaleDateString()
+                          ? dayOrInstant(String(deal.expected_close_date)).toLocaleDateString()
                           : <span className="text-slate-400 italic">No close date</span>}
                       </td>
                     </tr>

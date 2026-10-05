@@ -91,7 +91,8 @@ export const daysFromNow = (input: string | Date | null | undefined): number | n
   if (!d) return null;
   const todayMs = new Date().setHours(0, 0, 0, 0);
   const targetMs = new Date(d).setHours(0, 0, 0, 0);
-  const diff = Math.ceil((targetMs - todayMs) / (1000 * 60 * 60 * 24));
+  // round, not ceil: across a DST change a calendar day is 23 or 25 hours.
+  const diff = Math.round((targetMs - todayMs) / (1000 * 60 * 60 * 24));
   return isNaN(diff) ? null : diff;
 };
 
@@ -236,9 +237,11 @@ export const parseDateMs = (input: string | Date | null | undefined): number => 
  */
 export const formatRelativeDate = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '';
-  const d = parseDate(dateStr);
-  if (!d) return '';
-  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  // Calendar days, not elapsed ms from the parse anchor (local noon): before
+  // noon that made today "" and yesterday "Today".
+  const until = daysFromNow(dateStr);
+  if (until === null) return '';
+  const days = -until;
   if (days < 0)   return '';               // future date — caller handles separately
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';

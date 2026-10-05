@@ -8,6 +8,7 @@
  */
 
 import type { StageMeta } from './pipelinesApi';
+import { daysFromNow } from './dateUtils';
 
 export type NBAUrgency = 'high' | 'medium' | 'low';
 
@@ -40,8 +41,9 @@ function daysAgo(dateStr: string): number {
   return daysBetween(new Date(dateStr), new Date());
 }
 
+// Calendar days (0 = today) — new Date('YYYY-MM-DD') is UTC midnight.
 function daysUntil(dateStr: string): number {
-  return Math.round((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
+  return daysFromNow(dateStr) ?? Math.round((new Date(dateStr).getTime() - Date.now()) / 86_400_000);
 }
 
 /*

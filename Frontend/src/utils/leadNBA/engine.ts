@@ -7,6 +7,7 @@ import { computeConversionReadiness } from '../conversionReadiness';
 import { getPlaybook } from '../leadSourcePlaybook';
 // import type only — erased at runtime, breaking the circular dep with leadActions.ts
 import type { ActionId, ActionVariant, LeadAction } from '../leadActions';
+import { dayOrInstant, calendarDaysUntil } from '../dates';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,12 +39,12 @@ export function computeNBA(lead: Lead, opts: NBAOpts = {}): NBAResult {
   const now = new Date();
 
   const isOverdue = opts.isOverdue ?? (
-    !!lead.next_follow_up_date && new Date(lead.next_follow_up_date) < now
+    !!lead.next_follow_up_date && (calendarDaysUntil(lead.next_follow_up_date, now) ?? 0) < 0
   );
 
   const cutoff30d = new Date(now.getTime() - 30 * 86_400_000);
   const isUntouched = opts.isUntouched ?? (
-    !lead.last_contact_date || new Date(lead.last_contact_date) < cutoff30d
+    !lead.last_contact_date || dayOrInstant(lead.last_contact_date) < cutoff30d
   );
 
   const slaResult = opts.slaResult ?? computeLeadSLA(lead);

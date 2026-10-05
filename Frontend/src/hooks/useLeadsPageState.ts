@@ -18,6 +18,7 @@ import { usePermissions } from './usePermissions';
 import { useCurrentUser } from '../contexts/CurrentUserContext';
 import { fetchLeadsPage, fetchLeadSummary } from '../utils/leadsApi';
 import type { LeadListQuery, LeadSummary } from '../utils/leadsApi';
+import { dayOrInstant, localDay } from '../utils/dates';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -398,15 +399,19 @@ export function useLeadsPageState(): LeadsPageState {
     [migratedLeads],
   );
 
-  // No next_follow_up_date column exists, so this can only ever be empty. The
-  // card renders "Coming soon" rather than "All follow-ups on track".
-  const overdueLeads = useMemo((): Lead[] => [], []);
+  // Per-row only: a loaded lead whose earliest open follow-up (served by GET
+  // /leads since Group B item 11) is a day before today, local calendar. The
+  // KPI COUNT comes from the server summary, never from this list.
+  const overdueLeads = useMemo(() => {
+    const today = localDay();
+    return migratedLeads.filter(l => !!l.next_follow_up_date && l.next_follow_up_date.slice(0, 10) < today);
+  }, [migratedLeads]);
 
   const untouchedLeads = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 30);
     return migratedLeads.filter(
-      l => !l.last_contact_date || new Date(l.last_contact_date) < cutoff,
+      l => !l.last_contact_date || dayOrInstant(l.last_contact_date) < cutoff,
     );
   }, [migratedLeads]);
 

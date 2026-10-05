@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { CheckSquare, Calendar, AlertCircle, Link2 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
+import { localDay } from '../../utils/dates';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     if (isOpen && !dueDate) {
       const twoDaysFromNow = new Date();
       twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
-      setDueDate(twoDaysFromNow.toISOString().split('T')[0]);
+      setDueDate(localDay(twoDaysFromNow));
     }
   }, [isOpen, dueDate]);
 
@@ -77,7 +78,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     setDescription('');
     const twoDaysFromNow = new Date();
     twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
-    setDueDate(twoDaysFromNow.toISOString().split('T')[0]);
+    setDueDate(localDay(twoDaysFromNow));
     setPriority('medium');
     setRelatedTo('team');
     setSendReminder(true);
@@ -204,7 +205,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            min={new Date().toISOString().split('T')[0]}
+            min={localDay()}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>

@@ -1,3 +1,8 @@
+import { daysFromNow } from './dateUtils';
+
+/** A close DAY has passed only once it is before today (calendar), not from UTC midnight. */
+const closePassed = (closeDate?: string | null): boolean => (daysFromNow(closeDate) ?? 0) < 0;
+
 export interface StalledDealInput {
   stage?: string;
   daysSinceContact?: number;
@@ -50,7 +55,7 @@ export function isDealStalled(deal: StalledDealInput, config: StalledConfig): bo
 
   if (c.noNextStep.enabled && !deal.nextStep?.trim()) return true;
 
-  if (c.closeOverdue.enabled && deal.closeDate && new Date(deal.closeDate) < new Date()) return true;
+  if (c.closeOverdue.enabled && closePassed(deal.closeDate)) return true;
 
   if (c.dealAge.enabled && deal.createdAt) {
     const age = Math.floor((Date.now() - new Date(deal.createdAt).getTime()) / 86_400_000);
@@ -74,7 +79,7 @@ export function stalledReasons(deal: StalledDealInput, config: StalledConfig): s
   if (c.noNextStep.enabled && !deal.nextStep?.trim()) {
     reasons.push('No next step set');
   }
-  if (c.closeOverdue.enabled && deal.closeDate && new Date(deal.closeDate) < new Date()) {
+  if (c.closeOverdue.enabled && closePassed(deal.closeDate)) {
     reasons.push('Close date passed');
   }
   if (c.dealAge.enabled && deal.createdAt) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '../../components/ui/Button';
 import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
+import { localDay } from '../../utils/dates';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Building2, User, Sparkles, Mail, Phone, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Copy, Trash2, Archive, StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX, Pencil, ArrowLeftRight, UserCog, Zap, FileText, CheckSquare, ClipboardList, Workflow, Link2, ListFilter, Swords, AlertCircle, Search, TrendingUp, TrendingDown } from 'lucide-react';
 import { formatAmountUSD, formatAmountCompact, type SupportedCurrency, CURRENCY_SYMBOLS, getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency } from '../../utils/currencyUtils';
@@ -588,22 +589,27 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
       // Close Date
       if (closeDateFilter.preset !== 'all') {
-        const close = deal.closeDate ? new Date(deal.closeDate) : null;
+        // The close date is a calendar DAY: compare days, never instants
+        // (new Date('YYYY-MM-DD') is UTC midnight — a deal closing today read
+        // as overdue from 05:30 IST, and as "last month" on the 1st).
+        const ms = deal.closeDate ? parseDateMs(deal.closeDate) : Infinity;
+        if (!isFinite(ms)) return false;
+        const close = new Date(ms);
         const now = new Date();
-        if (!close) return false;
+        const days = daysFromNow(deal.closeDate) ?? 0;
+        const day = localDay(close);
         if (closeDateFilter.preset === 'thisWeek') {
-          const end = new Date(now.getTime() + 7 * 86400000);
-          if (close < now || close > end) return false;
+          if (days < 0 || days > 7) return false;
         } else if (closeDateFilter.preset === 'thisMonth') {
           if (close.getMonth() !== now.getMonth() || close.getFullYear() !== now.getFullYear()) return false;
         } else if (closeDateFilter.preset === 'thisQuarter') {
           const q = Math.floor(now.getMonth() / 3);
           if (Math.floor(close.getMonth() / 3) !== q || close.getFullYear() !== now.getFullYear()) return false;
         } else if (closeDateFilter.preset === 'overdue') {
-          if (close >= now) return false;
+          if (days >= 0) return false;
         } else if (closeDateFilter.preset === 'custom') {
-          if (closeDateFilter.from && close < new Date(closeDateFilter.from)) return false;
-          if (closeDateFilter.to && close > new Date(closeDateFilter.to)) return false;
+          if (closeDateFilter.from && day < closeDateFilter.from.slice(0, 10)) return false;
+          if (closeDateFilter.to && day > closeDateFilter.to.slice(0, 10)) return false;
         }
       }
 
@@ -937,7 +943,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           initialValue = raw.slice(0, 10);
         } else {
           const ms = parseDateMs(raw);
-          if (isFinite(ms)) initialValue = new Date(ms).toISOString().slice(0, 10);
+          if (isFinite(ms)) initialValue = localDay(new Date(ms));
         }
         break;
       }
@@ -1204,7 +1210,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     const closedWon = filteredDeals.filter(d => isWonWith(stageLookup)(d) && d.createdAt && d.closeDate);
     if (closedWon.length === 0) return null;
     const total = closedWon.reduce((sum, d) => {
-      const ms = new Date(d.closeDate).getTime() - new Date(d.createdAt!).getTime();
+      const ms = parseDateMs(d.closeDate) - new Date(d.createdAt!).getTime();
       return sum + Math.max(0, Math.round(ms / 86_400_000));
     }, 0);
     return Math.round(total / closedWon.length);
