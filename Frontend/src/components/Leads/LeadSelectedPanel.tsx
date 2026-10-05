@@ -6,11 +6,13 @@ import { fetchActivitiesFromAPI, fetchLeadStageHistory } from '../../utils/leads
 import type { LeadStageHistoryRow } from '../../utils/leadsApi';
 import type { LeadActivity } from '../../types/lead';
 import { buildServerTimeline, stageLabel } from '../../utils/leadServerTimeline';
+import { followUpStatus } from '../../utils/leadFollowUp';
 import { Button } from '../ui/Button';
 import Badge from '../ui/Badge';
 import Alert from '../ui/Alert';
 import Card, { SectionHeading } from '../ui/Card';
 import EmptyState from '../ui/EmptyState';
+import LeadFilesSection from './LeadFilesSection';
 
 /**
  * The docked "Selected lead" panel beside the Leads list — Figma "Lead quick
@@ -25,7 +27,7 @@ import EmptyState from '../ui/EmptyState';
  *              genuinely unavailable.
  *   Activity — stage history + activities, fetched for this lead.
  *   Related  — the records a conversion created (migration 059).
- *   Files    — coming soon (Group B, file upload).
+ *   Files    — the lead's Documents (Group B item 12).
  */
 
 type Tab = 'overview' | 'activity' | 'related' | 'files';
@@ -159,6 +161,7 @@ const LeadSelectedPanel: React.FC<LeadSelectedPanelProps> = ({
               <Row label="Owner">{lead.owner_name || 'Unassigned'}</Row>
               <Row label="Stored score">{lead.score ?? 0} · stored CRM value, not an AI score</Row>
               <Row label="Last contact">{lead.last_contact_date || 'No contact logged'}</Row>
+              <Row label="Follow-up">{followUpStatus(lead.next_follow_up_date)?.label ?? 'None set'}</Row>
             </div>
           </Card>
 
@@ -251,8 +254,8 @@ const LeadSelectedPanel: React.FC<LeadSelectedPanelProps> = ({
       )}
 
       {tab === 'files' && (
-        <div role="tabpanel" data-coming-soon="true">
-          <EmptyState title="Files · coming soon" reason="Attaching files to a lead uses the Documents system; it is the next file-upload slice." />
+        <div role="tabpanel">
+          <LeadFilesSection leadId={lead.id} />
         </div>
       )}
 

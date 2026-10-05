@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import SidebarWorkspaceInfo from './SidebarWorkspaceInfo';
 import {
   LayoutDashboard, UserPlus, Briefcase, Building2, Users, ListChecks,
   CalendarDays, Sparkles, UsersRound, Blocks, FileBarChart, Settings,
@@ -137,19 +138,20 @@ export const SidebarNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
  * — below 1024px it does not render at all, which is why `MobileNavDrawer`
  * exists.
  *
- * Three things the Figma sidebar draws are deliberately NOT rendered, because
- * nothing real backs them:
- *   - the workspace caption ("NORTHSTAR · INDIA & MEA") — the session carries
- *     only a workspace id, and a mockup's workspace name is not ours;
- *   - the "Data integrity" card ("…states are labelled at source") — a claim
- *     about every screen, and not yet true of every screen (CLAUDE.md lists
- *     surfaces still showing unexplained scores);
- *   - "Workspace connected" — a health indicator with no health check behind it.
+ * The workspace caption and the "Data integrity" card are REAL since Group B
+ * item 13 (SidebarWorkspaceInfo): the caption is the workspace's name from
+ * GET /workspace (no region — no field holds one), and the card shows counts
+ * from GET /workspace/data-health instead of the frame's fixed sentence.
+ * "Workspace connected" is still not rendered: it needs the real health check
+ * of Group A item 2.
  * The old collapse toggle is gone too: the Figma sidebar has none.
  */
 const Sidebar: React.FC = () => (
   <aside className="hidden lg:flex w-[216px] shrink-0 flex-col overflow-y-auto border-r border-line bg-surface-sidebar px-3 py-[18px]">
+    <SidebarWorkspaceInfo part="caption" />
     <SidebarNav />
+    <div className="min-h-4 flex-1" aria-hidden="true" />
+    <SidebarWorkspaceInfo part="card" />
   </aside>
 );
 

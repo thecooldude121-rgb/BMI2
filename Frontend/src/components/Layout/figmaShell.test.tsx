@@ -12,6 +12,11 @@ import PageHeader from './PageHeader';
  */
 
 let mockUser: Record<string, unknown> | null = { id: 5, name: 'David Kumar', role: 'Admin', email: 'd@example.test' };
+const ws = vi.hoisted(() => ({
+  fetchWorkspace: vi.fn(async () => ({ name: 'Test Workspace' })),
+  fetchDataHealth: vi.fn(async () => ({ deals: 0, deals_seed: 0, deals_without_account: 0, deals_test_hidden: 0, accounts: 0, accounts_seed: 0, leads: 0, leads_seed: 0, leads_unassigned: 0, contacts: 0, contacts_seed: 0 })),
+}));
+vi.mock('../../utils/workspaceApi', () => ws);
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: mockUser, logout: vi.fn() }),
 }));
@@ -54,11 +59,30 @@ describe('Sidebar — the Figma Settings-frame list plus "More"', () => {
     expect(screen.getByRole('link', { name: 'Leads' })).not.toHaveAttribute('aria-current');
   });
 
-  it('renders none of the mockup chrome nothing backs (workspace caption, integrity card, connection status)', () => {
+  it('the caption is the REAL workspace name and the integrity card shows REAL counts (Group B item 13)', async () => {
+    ws.fetchWorkspace.mockResolvedValue({ name: 'Default Organization' });
+    ws.fetchDataHealth.mockResolvedValue({
+      deals: 21, deals_seed: 15, deals_without_account: 3, deals_test_hidden: 3,
+      accounts: 15, accounts_seed: 15, leads: 38, leads_seed: 38, leads_unassigned: 38, contacts: 21, contacts_seed: 20,
+    });
     renderAt(<Sidebar />);
-    expect(screen.queryByText(/northstar/i)).toBeNull();
-    expect(screen.queryByText(/data integrity/i)).toBeNull();
+    expect(await screen.findByTestId('workspace-caption')).toHaveTextContent('Default Organization');
+    const card = await screen.findByTestId('data-integrity');
+    expect(await within(card).findByText('Demo data: 15 of 21 deals, 15 of 15 accounts, 38 of 38 leads, 20 of 21 contacts.')).toBeInTheDocument();
+    expect(within(card).getByText('3 of 21 deals have no account.')).toBeInTheDocument();
+    expect(within(card).getByText('38 of 38 leads have no owner.')).toBeInTheDocument();
+    expect(within(card).getByText('3 test deals hidden from views.')).toBeInTheDocument();
+    // Never the mockup's text, and never an unbacked "connected" indicator.
+    expect(screen.queryByText(/northstar|labelled at source/i)).toBeNull();
     expect(screen.queryByText(/workspace connected/i)).toBeNull();
+  });
+
+  it('a failed data check says so; a failed name lookup shows no caption rather than a guess', async () => {
+    ws.fetchWorkspace.mockRejectedValue(new Error('500'));
+    ws.fetchDataHealth.mockRejectedValue(new Error('500'));
+    renderAt(<Sidebar />);
+    expect(await screen.findByText('The data checks could not load.')).toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-caption')).toBeNull();
   });
 
   it('every destination is a real path (no blanks, no duplicates)', () => {
@@ -69,13 +93,11 @@ describe('Sidebar — the Figma Settings-frame list plus "More"', () => {
 });
 
 describe('TopBar — unbuilt controls are labelled, not live', () => {
-  it('global search is disabled and says it is coming soon (it searched nothing)', () => {
+  it('global search is a real search box now (Group B item 10), not a disabled one', () => {
     renderAt(<TopBar />);
-    const search = screen.getByRole('textbox', { name: /global search \(coming soon\)/i });
-    expect(search).toBeDisabled();
-    expect(screen.queryByText(/ctrl k/i)).toBeNull();
-    // The "Soon" pill is the shared neutral Badge (AA-passing text colour).
-    expect(screen.getByText('Soon')).toHaveAttribute('data-tone', 'neutral');
+    const search = screen.getByRole('combobox', { name: /search leads, contacts, accounts and deals/i });
+    expect(search).toBeEnabled();
+    expect(screen.getByText('Ctrl K')).toHaveAttribute('data-tone', 'neutral');
   });
 
   it('the inbox is disabled and carries no "unread" dot (it had no handler)', () => {

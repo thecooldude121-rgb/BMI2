@@ -30,6 +30,9 @@ const ctx = vi.hoisted(() => ({
   lastWriteErrorRef: { current: null as string | null },
 }));
 vi.mock('../../contexts/LeadContext', () => ({ useLeads: () => ctx }));
+const docs = vi.hoisted(() => ({ loadDocuments: vi.fn(async () => ({ data: [], count: 0 })), uploadDocument: vi.fn(), downloadDocument: vi.fn() }));
+vi.mock('../../services/documentsService', () => ({ documentsService: docs }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 5, name: 'David Kumar' } }) }));
 vi.mock('../../hooks/usePermissions', () => ({ usePermissions: () => ({ can: () => true }) }));
 
 // The composer is stubbed: these tests are about what the PAGE does with a
@@ -189,12 +192,13 @@ describe('LeadDetailPage — no fake controls, no unexplained verdicts', () => {
     expect(screen.getByText('editor route')).toBeInTheDocument();
   });
 
-  it('has no re-enrich, no reminder, no follow-up; file upload is disabled and labelled', async () => {
+  it('has no re-enrich and no fake reminder; file upload is real (Group B item 12)', async () => {
     renderPage();
     await screen.findByRole('heading', { level: 1, name: 'Amina Farsi' });
     expect(screen.queryByText(/re-enrich/i)).toBeNull();
     expect(screen.queryByText(/set reminder/i)).toBeNull();
-    expect(screen.getByRole('button', { name: /upload file/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /upload file/i })).toBeEnabled();
+    expect(docs.loadDocuments).toHaveBeenCalledWith({ entity_type: 'lead', entity_id: '42', limit: 50 });
   });
 
   it('shows the stored score as a value, without stars or a "potential" verdict', async () => {

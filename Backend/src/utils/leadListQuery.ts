@@ -25,13 +25,15 @@ export class FilterError extends Error {}
 
 type Param = string | number | string[] | null;
 
+import { OVERDUE_FOLLOW_UP } from './leadFollowUp';
+
 export interface LeadListParams {
   status?: string;          // a UI status value or a chip group key
   source?: string;
   score_band?: string;      // '80-100' | '60-79' | 'below-60'
   search?: string;
   assigned_to_user_id?: string;
-  insight?: string;         // 'untouched' | 'ready_to_convert'
+  insight?: string;         // 'untouched' | 'new_unworked' | 'ready_to_convert' | 'overdue'
   filter?: string;          // JSON AdvancedFilter
   sort?: string;
   stages?: string;          // comma list of UI statuses (Kanban lanes)
@@ -217,6 +219,10 @@ export function buildLeadListQuery(tenantId: string, q: LeadListParams): BuiltLe
       // clicking it lists those leads — it used to count one set and filter
       // to another ('untouched').
       where.push(`(l.stage IN ('new', 'assigned') AND l.last_contact IS NULL)`);
+    } else if (q.insight === 'overdue') {
+      // An open follow-up task due before today (Group B item 11) — exactly
+      // what summary.overdue_follow_ups counts.
+      where.push(OVERDUE_FOLLOW_UP);
     } else if (q.insight === 'ready_to_convert') {
       where.push(`l.stage IN ('qualified', 'sales_accepted')`);
     } else {

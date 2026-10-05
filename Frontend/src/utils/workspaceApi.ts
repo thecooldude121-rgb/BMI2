@@ -84,6 +84,19 @@ export async function fetchWorkspace(): Promise<Workspace> {
   return unwrap<Workspace>(res);
 }
 
+/** Counts behind the sidebar's "Data integrity" card (GET /workspace/data-health). */
+export interface DataHealth {
+  deals: number; deals_seed: number; deals_without_account: number; deals_test_hidden: number;
+  accounts: number; accounts_seed: number;
+  leads: number; leads_seed: number; leads_unassigned: number;
+  contacts: number; contacts_seed: number;
+}
+
+export async function fetchDataHealth(): Promise<DataHealth> {
+  const res = await fetch(`${API_BASE}/workspace/data-health`, { headers: getAuthHeaders() });
+  return unwrap<DataHealth>(res);
+}
+
 /** Requires an admin or manager. A sales user gets 403 with a real message. */
 export async function updateWorkspace(updates: WorkspaceUpdate): Promise<Workspace> {
   const res = await fetch(`${API_BASE}/workspace`, {

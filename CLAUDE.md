@@ -1241,7 +1241,8 @@ old constraint, which fails the shared-name test.
     which nothing sets, so recency was 0 for every lead). **The +1 for United States / Canada /
     United Kingdom is REPLACED by +1 for any recorded country** — dormant only because country
     was never stored, it would have marked down every India/MEA/Africa lead once it was.
-    UNRATIFIED default pending an ideal-customer-profile decision; ask before relying on it.
+    **RATIFIED 2026-10-05 (Venkat): keep the neutral point — no regional weighting.** Revisit
+    only if a real ideal-customer profile is ever defined.
   - **`LeadEnrichmentEngine` deleted** — enrichFromEmail/Domain/LinkedIn returned a fixture
     ("John Doe, VP of Sales", a San Francisco company, confidence 0.85) for any input. No
     importers. Re-enrich stays on hold.
@@ -1258,6 +1259,72 @@ old constraint, which fails the shared-name test.
     screen slice. (companies already has website, phone, size, revenue, description, address.)
   - **Found for item 4:** `DataContext` maps lead value from `r.estimated_value`, a field raw API
     rows never carry (`value`), so every dashboard lead value is 0.
+
+- **DONE — Group B item 10: global search (2026-10-05).** `GET /api/v1/search?q=`
+  (`searchController`) over leads, contacts, accounts and deals — v1 scope as approved;
+  meetings and tasks are not searched. Workspace-scoped, parameterised, LIKE wildcards escaped,
+  2-100 characters, 5 per type plus `has_more` (no invented totals), test-flagged deals hidden.
+  `components/Layout/GlobalSearch` replaces the disabled top-bar box: Ctrl/⌘+K, an ARIA combobox,
+  and a failed search says so instead of "No matches". `roundTrip.search.test.ts` (10),
+  `GlobalSearch.test.tsx` (6). Plain ILIKE today; pg_trgm GIN indexes are the 10k-row upgrade.
+  **Found:** `contacts.company_id` is a GLOBAL foreign key (no tenant component) — the defect
+  step 4 fixed for `deals.company_id` with a composite reference. Search's join carries the
+  tenant match, and a test proves it, but the database still accepts a contact pointing at
+  another workspace's account. A composite FK migration is the real fix (not done here).
+
+- **DONE — Group B item 11: lead follow-up reminders (2026-10-05).** v1 scope as approved: a
+  follow-up IS a `tasks` row (type 'follow-up', related_to_type 'lead', DATE due, no time of day,
+  no notification delivery). No migration — the table already had the type, statuses and an index
+  on the related record. `utils/leadFollowUp.ts` (backend) holds ONE join and ONE overdue
+  predicate, both tenant-matched; GET /leads and /leads/:id serve `next_follow_up_date` (the
+  earliest OPEN follow-up, as plain 'YYYY-MM-DD' text) and `next_follow_up_task_id`; the summary
+  serves `overdue_follow_ups`; `insight=overdue` lists exactly those leads. Writes go through the
+  tasks API (which already proves the lead is in the workspace). The UI: a follow-up card on Lead
+  detail (set / reschedule / mark done), a Follow-up row, badges on the list rows and the docked
+  panel, the **Overdue Follow-ups KPI is real and clickable** (it was "Coming soon"), the bulk
+  bar's Set follow-up makes one task per lead (it was "coming soon"), and the composer's "Set
+  follow-up" is back — it creates the task AFTER the activity saves, and a failure is reported as
+  "logged, but the follow-up was not set". `roundTrip.leadFollowUp.test.ts` (7),
+  `components/Leads/leadFollowUp.test.tsx` (9). E2E through the real UI against
+  `bmi_crm_iso_test`, Postgres-confirmed, seed removed and re-counted.
+  - "Overdue" uses the database's CURRENT_DATE (Asia/Kolkata on live); the badges use the
+    browser's local date. They can disagree for a few hours across midnight in another time zone.
+  - The composer's default "tomorrow" used `toISOString()` (a UTC date) and returned TODAY between
+    midnight and 05:30 IST; it now uses the local calendar.
+
+- **DONE — Group B item 12: lead files through the existing Documents system (2026-10-05).**
+  v1 scope as approved: local disk, no S3/R2. No backend change was needed —
+  `documentsController` already accepted `module='lead'`, proved the record id belongs to the
+  caller's workspace, capped uploads at 25 MB and streamed bytes only through the authenticated
+  `/documents/:id/content`. `components/Leads/LeadFilesSection` (list, upload with progress,
+  download) replaces the disabled Upload on Lead detail and the panel's "Files · coming soon".
+  Uploads are filed under category 'Other'. Deleting stays in the Documents library (admin /
+  manager). `LeadFilesSection.test.tsx` (4). E2E against `bmi_crm_iso_test` with
+  `FILE_STORAGE_PATH` pointed at a scratch folder so no test blob could land in the live
+  `storage/` tree; uploaded, listed, downloaded byte-identical, panel shows it, row linked
+  (`module=lead`); cleaned and re-counted.
+
+- **DONE — Group B item 13: workspace caption + "Data integrity" card (2026-10-05).** v1 as
+  approved. The caption is the workspace NAME from GET /workspace (no region — no field holds one).
+  The card replaced the frame's fixed sentence with counts from the new
+  `GET /workspace/data-health` (any role; workspace-scoped): demo rows (`is_seed`), test deals
+  hidden (`is_test`), deals with no account, leads with no owner — each a database count; a line
+  with nothing to report is omitted; a failed load says so. `SidebarWorkspaceInfo`,
+  `roundTrip.dataHealth.test.ts` (3). Live check matched SQL line for line. "Workspace connected"
+  stays hidden until Group A item 2 gives it a real health check.
+
+- **TRACKED BUG (found 2026-10-05, NOT fixed) — every DATE column reaches the client one day
+  early.** node-pg parses a DATE into a JavaScript Date at the server's LOCAL midnight; from an
+  IST server `2026-05-28` serialises as `"2026-05-27T18:30:00.000Z"`. Measured, not inferred, and
+  a mutation in `roundTrip.leadFollowUp` (returning the raw DATE) fails five tests on exactly this.
+  Affected today: anything that slices that string (`mapRowToLead` does, for `last_contact`, so
+  "Last contacted" can read a day early) and any browser WEST of the server rendering it with
+  `new Date()`. Columns: `leads.last_contact`, `tasks.due_date`, `deals.expected_close_date`,
+  quotas periods, and any other DATE. Companion: `recordLeadContact` stores
+  `toISOString().slice(0,10)` — a UTC date — so a call logged between 00:00 and 05:30 IST records
+  the previous day. **The fix is one line (`types.setTypeParser(1082, v => v)` in config/database)
+  plus auditing every consumer for the format change — its own reviewed slice, not a side effect.**
+  New code returns dates with `to_char(..., 'YYYY-MM-DD')` in the meantime.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

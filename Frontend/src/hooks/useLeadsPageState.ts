@@ -211,9 +211,10 @@ export const SERVER_SORTS = new Set<string>(['newest', 'oldest', 'score_high_low
 const SERVER_INSIGHTS: Partial<Record<string, LeadListQuery['insight']>> = {
   untouched:      'new_unworked',
   readyToConvert: 'ready_to_convert',
+  // Real since Group B item 11: an open follow-up task due before today.
+  overdue:        'overdue',
 };
 export const COMING_SOON_INSIGHT_REASON: Record<string, string> = {
-  overdue:       'Overdue follow-ups are coming soon — follow-up dates are not stored yet.',
   duplicateRisk: 'Duplicate risk is coming soon — it compares every lead and is moving to the server.',
   slaBreach:     'SLA breach filtering is coming soon — it is moving to the server.',
   nbaAction:     'The action-required queue is coming soon — it is moving to the server.',

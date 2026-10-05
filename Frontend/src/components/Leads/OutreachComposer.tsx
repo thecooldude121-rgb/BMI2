@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { localToday } from '../../utils/leadFollowUp';
 import { X, Mail, Phone, MessageSquare, Calendar, FileText, CheckCircle } from 'lucide-react';
 import type { Lead, LeadActivity, ActivityType } from '../../types/lead';
 
@@ -93,10 +94,12 @@ const CHANNEL_ACTIVE: Record<Channel, string> = {
   task:     'bg-orange-600 text-white',
 };
 
+// The LOCAL calendar's tomorrow. This used toISOString(), a UTC date — so
+// between midnight and 05:30 in India it returned TODAY.
 const tomorrow = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+  return localToday(d);
 };
 
 const INITIAL_FORM: ComposerFormData = {

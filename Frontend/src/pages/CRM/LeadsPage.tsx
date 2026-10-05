@@ -42,6 +42,7 @@ import type { ModalId } from '../../hooks/useLeadsPageState';
 import { LeadStageError } from '../../utils/leadsApi';
 import { useKanbanLanes } from '../../hooks/useKanbanLanes';
 import { toCsv } from '../../utils/csv';
+import { createLeadFollowUp } from '../../utils/leadFollowUp';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -325,11 +326,18 @@ const LeadsPage: React.FC = () => {
     void runBulk(ids, id => updateLead(id, { status }), `moved to ${status}`);
   };
 
-  // COMING SOON. leads.next_follow_up_date has no column — this wrote it,
-  // the server dropped it, and the toast said "Follow-up set for N leads".
-  // BulkActionBar disables the control; this never writes.
-  const handleBulkSetFollowUp = (_date: string, _type: FollowUpType) => {
-    showToast('Follow-up dates are not stored yet — nothing was set.', 'info');
+  // Real since Group B item 11: one follow-up TASK per selected lead, each
+  // awaited; runBulk reports what the server did. (It used to write a column
+  // that did not exist and say "Follow-up set for N leads".)
+  const handleBulkSetFollowUp = (date: string, type: FollowUpType) => {
+    const ids = [...selectedLeadIds];
+    clearSelection();
+    void runBulk(ids, async id => {
+      const l = pageLeads.find(x => x.id === id);
+      const name = l ? [l.first_name, l.last_name].filter(Boolean).join(' ') || 'lead' : 'lead';
+      try { await createLeadFollowUp(id, date, `Follow up (${type}) with ${name}`); return true; }
+      catch { return false; }
+    }, `given a follow-up`).then(() => notifyWrite());
   };
 
   const handleBulkExport = () => {
@@ -755,11 +763,20 @@ const LeadsPage: React.FC = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
           {/* 1 — Overdue Follow-ups */}
+          {/* Real since Group B item 11: leads with an open follow-up task due
+              before today, counted over ALL leads by GET /leads/summary; the
+              click filters to exactly those (insight=overdue). */}
           <KpiCard
             title="Overdue Follow-ups"
-            value="—"
-            comingSoon="Follow-up dates are not stored yet, so nothing can be overdue — this used to read “All follow-ups on track”."
+            value={summary?.overdue_follow_ups ?? 0}
+            subtitle={(summary?.overdue_follow_ups ?? 0) > 0
+              ? `${summary?.overdue_follow_ups} lead${summary?.overdue_follow_ups === 1 ? '' : 's'} past a follow-up date`
+              : 'No follow-up is past its date'}
+            danger={(summary?.overdue_follow_ups ?? 0) > 0}
+            neutral={(summary?.overdue_follow_ups ?? 0) === 0}
             icon={<Clock size={18} />}
+            onClick={() => setActiveInsight(activeInsight === 'overdue' ? null : 'overdue')}
+            isActive={activeInsight === 'overdue'}
           />
 
           {/* 2 — SLA Breached */}
@@ -1283,16 +1300,25 @@ const LeadsPage: React.FC = () => {
           lead={activeLead}
           submitting={logActivity.saving}
           error={logActivity.error}
-          onSubmit={(activity) => {
+          followUpAvailable
+          onSubmit={(activity, followUp) => {
             // Saved for real now (it toasted "Call logged" over nothing). Success
             // only after the server confirms; a refusal keeps the composer open.
             const lead = activeLead;
-            void logActivity.save(lead.id, activity).then(ok => {
+            const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'lead';
+            const fu = followUp?.date
+              ? { date: followUp.date, type: followUp.type, title: `Follow up (${followUp.type}) with ${name}` }
+              : undefined;
+            void logActivity.save(lead.id, activity, fu).then(ok => {
               if (!ok) return;
-              showToast(LOGGED_LABEL[activity.type] ?? 'Activity saved', 'success');
+              const fuError = logActivity.followUpErrorRef.current;
+              const label = LOGGED_LABEL[activity.type] ?? 'Activity saved';
+              if (fuError) showToast(`${label} — but the follow-up was not set: ${fuError}`, 'error');
+              else showToast(`${label}${fu ? ' · follow-up set' : ''}`, 'success');
               closeModal();
-              // A completed call / email / meeting moves last contact; refetch.
-              if (activity.type !== 'note') notifyWrite();
+              // A completed call / email / meeting moves last contact, a follow-up
+              // changes the lead's next follow-up: refetch.
+              if (activity.type !== 'note' || fu) notifyWrite();
             });
           }}
           onClose={() => { logActivity.reset(); closeModal(); }}

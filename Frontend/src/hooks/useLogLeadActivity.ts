@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { createActivityViaAPI, createNoteViaAPI } from '../utils/leadsApi';
+import { createLeadFollowUp } from '../utils/leadFollowUp';
 import type { LeadActivity } from '../types/lead';
 
 /**
@@ -19,10 +20,18 @@ import type { LeadActivity } from '../types/lead';
 export function useLogLeadActivity() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A ref, not state: the caller reads it right after `await save()`, before
+  // React has re-rendered with any new state.
+  const followUpErrorRef = useRef<string | null>(null);
 
-  const save = useCallback(async (leadId: string, activity: LeadActivity): Promise<boolean> => {
+  const save = useCallback(async (
+    leadId: string,
+    activity: LeadActivity,
+    followUp?: { date: string; type: string; title: string; assignedTo?: string },
+  ): Promise<boolean> => {
     setSaving(true);
     setError(null);
+    followUpErrorRef.current = null;
     try {
       if (activity.type === 'note') {
         await createNoteViaAPI(leadId, { content: activity.description ?? '' });
@@ -34,6 +43,16 @@ export function useLogLeadActivity() {
           completed_at: activity.completed_at,
         });
       }
+      // The follow-up is a separate write AFTER the activity saved (Group B item
+      // 11). If it fails the activity still stands — the caller says exactly
+      // that, rather than reporting the whole thing as saved or as lost.
+      if (followUp?.date) {
+        try {
+          await createLeadFollowUp(leadId, followUp.date, followUp.title, followUp.assignedTo);
+        } catch (e) {
+          followUpErrorRef.current = e instanceof Error ? e.message : 'The follow-up was not set.';
+        }
+      }
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The server did not save this.');
@@ -43,9 +62,9 @@ export function useLogLeadActivity() {
     }
   }, []);
 
-  const reset = useCallback(() => setError(null), []);
+  const reset = useCallback(() => { setError(null); followUpErrorRef.current = null; }, []);
 
-  return { save, saving, error, reset };
+  return { save, saving, error, followUpErrorRef, reset };
 }
 
 export const LOGGED_LABEL: Record<string, string> = {

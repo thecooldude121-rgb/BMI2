@@ -292,3 +292,37 @@ export async function workspaceDefaultCurrency(tenantId: string): Promise<string
   );
   return result.rows[0]?.currency ?? null;
 }
+
+/**
+ * GET /api/v1/workspace/data-health — the sidebar's "Data integrity" card
+ * (Group B item 13, approved 2026-10-05). Every figure is a COUNT over this
+ * workspace's own rows, drawn from the step-4 data-integrity work:
+ *   - demo rows (`is_seed`, migration 052) — shown, but disclosed;
+ *   - test rows (`is_test`, migration 053) — hidden from every view;
+ *   - deals with no account (`company_id` NULL, migration 060/061);
+ *   - leads with no owner (`assigned_to_user_id` NULL, migration 060).
+ * It replaced a fixed sentence ("…states are labelled at source") that claimed
+ * something about every screen; this says only what the database says.
+ * Any authenticated role (counts, no records).
+ */
+export const getDataHealth = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const r = await pool.query(
+      `SELECT
+         (SELECT count(*) FROM deals     WHERE tenant_id = $1 AND is_test = false)::int                         AS deals,
+         (SELECT count(*) FROM deals     WHERE tenant_id = $1 AND is_test = false AND is_seed = true)::int      AS deals_seed,
+         (SELECT count(*) FROM deals     WHERE tenant_id = $1 AND is_test = false AND company_id IS NULL)::int  AS deals_without_account,
+         (SELECT count(*) FROM deals     WHERE tenant_id = $1 AND is_test = true)::int                          AS deals_test_hidden,
+         (SELECT count(*) FROM companies WHERE tenant_id = $1)::int                                             AS accounts,
+         (SELECT count(*) FROM companies WHERE tenant_id = $1 AND is_seed = true)::int                          AS accounts_seed,
+         (SELECT count(*) FROM leads     WHERE tenant_id = $1)::int                                             AS leads,
+         (SELECT count(*) FROM leads     WHERE tenant_id = $1 AND is_seed = true)::int                          AS leads_seed,
+         (SELECT count(*) FROM leads     WHERE tenant_id = $1 AND assigned_to_user_id IS NULL)::int             AS leads_unassigned,
+         (SELECT count(*) FROM contacts  WHERE tenant_id = $1)::int                                             AS contacts,
+         (SELECT count(*) FROM contacts  WHERE tenant_id = $1 AND is_seed = true)::int                          AS contacts_seed`,
+      [tenantId],
+    );
+    res.json({ success: true, data: r.rows[0] });
+  } catch (error) { next(error); }
+};

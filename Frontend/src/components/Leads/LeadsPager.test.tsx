@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import LeadsPager, { pageWindow } from './LeadsPager';
 import BulkActionBar from './BulkActionBar';
 
@@ -28,16 +29,23 @@ describe('LeadsPager', () => {
   });
 });
 
-describe('BulkActionBar — follow-up is "coming soon", never a fake success', () => {
-  it('the follow-up control is disabled and labelled', () => {
+describe('BulkActionBar — follow-up creates a task per lead (Group B item 11)', () => {
+  it('the follow-up control asks for a date and hands it to the page', async () => {
+    const onSetFollowUp = vi.fn();
     render(
       <BulkActionBar
-        selectedIds={['1']} selectedLeads={[]} totalFiltered={1} isPageFullySelected areAllFiltered={false}
-        onSelectAllFiltered={vi.fn()} onClearSelection={vi.fn()} onChangeStatus={vi.fn()} onSetFollowUp={vi.fn()}
+        selectedIds={['1', '2']} selectedLeads={[]} totalFiltered={2} isPageFullySelected areAllFiltered={false}
+        onSelectAllFiltered={vi.fn()} onClearSelection={vi.fn()} onChangeStatus={vi.fn()} onSetFollowUp={onSetFollowUp}
         onExport={vi.fn()} onConvert={vi.fn()} onArchive={vi.fn()} onDisqualify={vi.fn()} onOpenTerminalModal={vi.fn()}
         onDelete={vi.fn()} onToast={vi.fn()} canConvert canDelete
       />,
     );
-    expect(screen.getByRole('button', { name: 'Set follow-up (coming soon)' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Set follow-up' }));
+    const set = screen.getByRole('button', { name: 'Set for 2 leads' });
+    expect(set).toBeDisabled();                       // no date yet
+    const date = screen.getByLabelText('Due on');
+    await userEvent.type(date, '2099-01-15');
+    await userEvent.click(set);
+    expect(onSetFollowUp).toHaveBeenCalledWith('2099-01-15', 'call');
   });
 });

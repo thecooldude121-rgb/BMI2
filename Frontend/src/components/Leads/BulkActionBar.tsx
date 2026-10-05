@@ -3,6 +3,8 @@ import { X, ChevronDown, Download, Archive, XCircle, Trash2, CalendarDays } from
 import { Button } from '../ui/Button';
 import type { Lead } from '../../types/lead';
 import ConfirmationModal from '../common/ConfirmationModal';
+import { inputClass } from '../ui/Field';
+import { localToday } from '../../utils/leadFollowUp';
 
 /**
  * The bulk bar — Figma "Bulk bar" (61:157): an inline indigo bar above the
@@ -13,8 +15,9 @@ import ConfirmationModal from '../common/ConfirmationModal';
  *     promising "Convert N leads to contacts? This marks them as Converted.",
  *     and confirming produced "not available yet". Conversion is per lead,
  *     through the wizard (POST /leads/:id/convert).
- *   - SET FOLLOW-UP is disabled "coming soon" — there is no column; it wrote one
- *     the server dropped and said "Follow-up set for N leads".
+ *   - SET FOLLOW-UP creates one follow-up TASK per selected lead (Group B item
+ *     11). Before that it wrote a column that did not exist and said "Follow-up
+ *     set for N leads".
  *   - The "More" menu's Assign owner / Tags / Enrich / Merge review queue only
  *     toasted "coming soon" on click; they are gone from the bar (the frame does
  *     not show them; each is a tracked item).
@@ -36,7 +39,7 @@ export type BulkActionBarProps = {
   onSelectAllFiltered: () => void;
   onClearSelection:    () => void;
   onChangeStatus:      (status: Lead['status']) => void;
-  /** Kept for the page's handler; the control is "coming soon" and never calls it. */
+  /** Creates one follow-up task per selected lead (the page awaits each). */
   onSetFollowUp:       (date: string, type: FollowUpType) => void;
   onExport:            () => void;
   /** Kept for the page's handler; bulk conversion is not offered. */
@@ -66,6 +69,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   selectedIds,
   onClearSelection,
   onChangeStatus,
+  onSetFollowUp,
   onExport,
   onOpenTerminalModal,
   onDelete,
@@ -76,23 +80,27 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [statusOpen,    setStatusOpen]    = useState(false);
+  const [followUpOpen,  setFollowUpOpen]  = useState(false);
+  const [followUpDate,  setFollowUpDate]  = useState('');
   const statusRef = useRef<HTMLDivElement>(null);
+  const followUpRef = useRef<HTMLDivElement>(null);
 
   // Layered Escape: confirm dialog → status menu → clear the selection.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (confirmDelete) { setConfirmDelete(false); return; }
-      if (statusOpen) { setStatusOpen(false); return; }
+      if (statusOpen || followUpOpen) { setStatusOpen(false); setFollowUpOpen(false); return; }
       onClearSelection();
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [confirmDelete, statusOpen, onClearSelection]);
+  }, [confirmDelete, statusOpen, followUpOpen, onClearSelection]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+      if (followUpRef.current && !followUpRef.current.contains(e.target as Node)) setFollowUpOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -138,11 +146,27 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
             )}
           </div>
 
-          <Button variant="secondary" disabled aria-label="Set follow-up (coming soon)"
-            title="Follow-up dates are not stored yet — coming soon"
-            leadingIcon={<CalendarDays className="h-3.5 w-3.5" />}>
-            Set follow-up · soon
-          </Button>
+          {/* Real since Group B item 11: one follow-up task per selected lead. */}
+          <div className="relative" ref={followUpRef}>
+            <Button variant="secondary" onClick={() => setFollowUpOpen(v => !v)} aria-haspopup="dialog" aria-expanded={followUpOpen}
+              leadingIcon={<CalendarDays className="h-3.5 w-3.5" />}>
+              Set follow-up
+            </Button>
+            {followUpOpen && (
+              <div role="dialog" aria-label="Set follow-up"
+                className="absolute left-0 top-full z-20 mt-1 flex w-64 flex-col gap-2 rounded-card border border-line bg-surface-panel p-3 shadow-lg">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
+                  Due on
+                  <input type="date" min={localToday()} value={followUpDate} onChange={e => setFollowUpDate(e.target.value)} className={inputClass()} />
+                </label>
+                <p className="text-xs text-ink-muted">Creates a follow-up task for each of the {count} selected lead{plural}.</p>
+                <Button size="sm" disabled={!followUpDate}
+                  onClick={() => { onSetFollowUp(followUpDate, 'call'); setFollowUpOpen(false); setFollowUpDate(''); }}>
+                  Set for {count} lead{plural}
+                </Button>
+              </div>
+            )}
+          </div>
 
           <Button variant="secondary" onClick={onExport}
             aria-label={`Export ${count} selected lead${plural} as CSV`}

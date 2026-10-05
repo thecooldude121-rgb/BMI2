@@ -13,6 +13,9 @@ vi.mock('../../contexts/LeadContext', () => ({ useLeads: () => ({ updateLead: vi
 const api = vi.hoisted(() => ({ fetchActivitiesFromAPI: vi.fn(), fetchLeadStageHistory: vi.fn() }));
 vi.mock('../../utils/leadsApi', async () => ({ ...(await vi.importActual<object>('../../utils/leadsApi')), ...api }));
 
+const docs = vi.hoisted(() => ({ loadDocuments: vi.fn(async () => ({ data: [], count: 0 })) }));
+vi.mock('../../services/documentsService', () => ({ documentsService: docs }));
+
 import LeadTableRow from './LeadTableRow';
 import BulkActionBar from './BulkActionBar';
 import LeadSelectedPanel from './LeadSelectedPanel';
@@ -141,10 +144,11 @@ describe('LeadSelectedPanel (Figma docked panel)', () => {
     expect(screen.queryByText('Nothing recorded yet')).toBeNull();
   });
 
-  it('Files is "coming soon", and Escape closes the panel', async () => {
+  it('Files lists the lead\'s documents (Group B item 12), and Escape closes the panel', async () => {
     const props = renderPanel();
     await userEvent.click(screen.getByRole('tab', { name: 'Files' }));
-    expect(screen.getByText('Files · coming soon')).toBeInTheDocument();
+    expect(await screen.findByText('No files attached yet.')).toBeInTheDocument();
+    expect(docs.loadDocuments).toHaveBeenCalledWith({ entity_type: 'lead', entity_id: '9', limit: 50 });
     await userEvent.keyboard('{Escape}');
     expect(props.onClose).toHaveBeenCalled();
   });

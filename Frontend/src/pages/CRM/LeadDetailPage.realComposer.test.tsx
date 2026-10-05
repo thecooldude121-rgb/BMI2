@@ -25,6 +25,8 @@ vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ showToast: vi
 vi.mock('../../contexts/LeadContext', () => ({
   useLeads: () => ({ updateLead: vi.fn(), deleteLead: vi.fn(), leads: [], lastWriteErrorRef: { current: null } }),
 }));
+vi.mock('../../services/documentsService', () => ({ documentsService: { loadDocuments: vi.fn(async () => ({ data: [], count: 0 })) } }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 5, name: 'David Kumar' } }) }));
 vi.mock('../../hooks/usePermissions', () => ({ usePermissions: () => ({ can: () => true }) }));
 vi.mock('../../components/Leads/LeadConversionWizard', () => ({ default: () => null }));
 vi.mock('../../components/Leads/MergeReviewModal', () => ({ default: () => null }));
@@ -49,8 +51,8 @@ describe('Lead detail × the real composer', () => {
       </MemoryRouter>,
     );
     await userEvent.click(await screen.findByRole('button', { name: /log call/i }));
-    // Follow-up dates have no column, so the composer must not offer one.
-    expect(screen.queryByText(/set follow-up/i)).toBeNull();
+    // The follow-up option is real now (a task); left unticked, no task is made.
+    expect(screen.getByRole('checkbox', { name: /set follow-up/i })).not.toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: /log & save/i }));
 
     await waitFor(() => expect(api.createActivityViaAPI).toHaveBeenCalledTimes(1));

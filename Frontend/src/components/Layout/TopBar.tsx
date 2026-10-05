@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Search, Bell, Inbox, Settings, LogOut, ChevronDown, Plus,
+  Bell, Inbox, Settings, LogOut, ChevronDown, Plus,
   DollarSign, Users, UserPlus, Building2, CheckSquare,
   X, Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import Badge from '../ui/Badge';
+import GlobalSearch from './GlobalSearch';
 
 // The section label beside the brand (Figma shows one word, e.g. "Settings").
 // `parent` is kept for callers and tests; the bar renders only `label`.
@@ -88,8 +88,9 @@ const toolButton =
  *
  * Three controls here used to look live and do nothing. They keep their Figma
  * place and say "coming soon" instead (CLAUDE.md, Honest Feedback):
- *   - search accepted typing and searched nothing — now disabled, and the
- *     frame's "Ctrl K" pill (a shortcut that does not exist) reads "Soon";
+ *   - search accepted typing and searched nothing — it was disabled, and is
+ *     REAL since Group B item 10 (GlobalSearch: leads, contacts, accounts,
+ *     deals; Ctrl/⌘+K focuses it);
  *   - the mail button had no handler and wore a green "unread" dot — now a
  *     disabled Inbox, no dot;
  *   - the avatar fell back to a STOCK PHOTO of a stranger for any user without
@@ -165,21 +166,8 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
       {/* Global tools — right */}
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
 
-        {/* Search — not built. Hidden below `lg`: the 320px Figma box does not
-            fit beside the other tools on narrower screens, and at 390px an
-            overflowing actions row once clipped the profile menu out of reach. */}
-        <div className="relative hidden h-9 w-[320px] items-center gap-2 rounded-card border border-line bg-gray-50 px-3 lg:flex">
-          <Search className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-          <input
-            type="text"
-            disabled
-            placeholder="Search deals, accounts, people…"
-            aria-label="Global search (coming soon)"
-            title="Search is coming soon"
-            className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
-          />
-          <Badge tone="neutral" className="shrink-0">Soon</Badge>
-        </div>
+        {/* Global search — real since Group B item 10 (it was a disabled box). */}
+        <GlobalSearch />
 
         {/* + New */}
         <div className="relative" ref={newMenuRef}>

@@ -130,6 +130,8 @@ export interface Lead {
   referral_contact?: string;
   /** leads.notes — the free-text note on the record (lead_notes rows are separate). */
   notes?: string;
+  /** Group B item 11: the open follow-up task behind next_follow_up_date. */
+  next_follow_up_task_id?: string;
   converted_by?: string;
   first_contact_date?: string;
   last_contact_date?: string;

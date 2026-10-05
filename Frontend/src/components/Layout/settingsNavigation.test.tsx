@@ -3,6 +3,13 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 
+// The sidebar's caption and integrity card fetch; this test is about the
+// Settings link, so they are stubbed rather than allowed to hit the network.
+vi.mock('../../utils/workspaceApi', () => ({
+  fetchWorkspace: vi.fn(async () => ({ name: 'Test Workspace' })),
+  fetchDataHealth: vi.fn(async () => ({ deals: 0, deals_seed: 0, deals_without_account: 0, deals_test_hidden: 0, accounts: 0, accounts_seed: 0, leads: 0, leads_seed: 0, leads_unassigned: 0, contacts: 0, contacts_seed: 0 })),
+}));
+
 /**
  * Where "Settings" actually goes.
  *
