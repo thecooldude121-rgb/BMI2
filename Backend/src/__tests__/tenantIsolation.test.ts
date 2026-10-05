@@ -277,7 +277,10 @@ describe("a foreign id belonging to another workspace is refused on write", () =
 describe('a pre-existing cross-workspace reference does not leak through a JOIN', () => {
   beforeAll(async () => {
     await pool.query('UPDATE deals SET lead_id = $1 WHERE id = $2', [leadB, IDS.dealA]);
-    await pool.query('UPDATE contacts SET company_id = $1 WHERE id = $2', [IDS.companyB, IDS.contactA]);
+    // Since migration 064 the DATABASE refuses this cross-workspace link, so it
+    // can no longer be planted; assert the refusal instead (23503).
+    await expect(pool.query('UPDATE contacts SET company_id = $1 WHERE id = $2', [IDS.companyB, IDS.contactA]))
+      .rejects.toMatchObject({ code: '23503' });
     await pool.query(
       `INSERT INTO activities (subject, type, tenant_id, contact_id) VALUES ('Logged in A','call',$1,$2)`,
       [WS_A, IDS.contactB],

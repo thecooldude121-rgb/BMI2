@@ -34,10 +34,18 @@ const recordLeadContact = async (
 ): Promise<void> => {
   const at = when ? new Date(String(when)) : new Date();
   if (Number.isNaN(at.getTime()) || at.getTime() > Date.now()) return;
+  // The calendar day of the touch in the WORKSPACE's time zone (Settings >
+  // General), else the database's. It used toISOString().slice(0, 10) — a UTC
+  // date — so a call logged between 00:00 and 05:30 in India was recorded as
+  // the previous day (data-correctness slice, 2026-10-06).
   await db.query(
-    `UPDATE leads SET last_contact = GREATEST(COALESCE(last_contact, $1::date), $1::date)
+    `WITH day AS (
+       SELECT ($1::timestamptz AT TIME ZONE COALESCE(
+                (SELECT NULLIF(settings->>'timezone', '') FROM tenants WHERE id = $3),
+                current_setting('TimeZone')))::date AS d)
+     UPDATE leads SET last_contact = GREATEST(COALESCE(last_contact, (SELECT d FROM day)), (SELECT d FROM day))
       WHERE id = $2 AND tenant_id = $3`,
-    [at.toISOString().slice(0, 10), leadId, tenantId],
+    [at.toISOString(), leadId, tenantId],
   );
 };
 

@@ -63,17 +63,10 @@ describe('GET /search', () => {
     expect(d.contacts.rows[0].company).toBe('Zephyr mine Systems');
   });
 
-  it('a contact pointing at ANOTHER workspace\'s account does not reveal that account\'s name', async () => {
-    // contacts.company_id is a GLOBAL foreign key (no tenant component), so this
-    // bad row can exist; the join's tenant match is what keeps it from leaking.
-    const theirs = await pool.query('SELECT id FROM companies WHERE tenant_id = $1 LIMIT 1', [other.tenantId]);
-    await pool.query(`INSERT INTO contacts (first_name, last_name, email, company_id, tenant_id) VALUES ('Xavi', 'Crosslink', 'xavi@cross.example', $1, $2)`,
-      [theirs.rows[0].id, ws.tenantId]);
-    const d = (await find('Crosslink')).body.data;
-    expect(d.contacts.rows).toHaveLength(1);
-    expect(d.contacts.rows[0].company).toBeNull();
-    expect(JSON.stringify(d)).not.toContain('theirs');
-  });
+  // A contact pointing at another workspace's account can no longer EXIST:
+  // migration 064 made contacts.company_id a composite reference (see
+  // roundTrip.contactCompanyScope). Search's join keeps its tenant match as
+  // defence in depth.
 
   it('test-flagged deals are never returned', async () => {
     const d = (await find('hidden test')).body.data;

@@ -46,7 +46,13 @@ describe('Lead stage transitions — round trip', () => {
     )).rows;
   const lastContact = async (id: number) =>
     (await pool.query('SELECT last_contact::text AS d FROM leads WHERE id = $1', [id])).rows[0].d;
-  const today = () => new Date().toISOString().slice(0, 10);
+  // The calendar day the server records a touch on: the workspace's time zone,
+  // else the database's (no workspace here sets one). This was
+  // toISOString().slice(0, 10) — the UTC date — which encoded the very bug
+  // recordLeadContact had, and disagreed with it between 00:00 and 05:30 IST.
+  let todayStr = '';
+  beforeAll(async () => { todayStr = (await pool.query(`SELECT CURRENT_DATE::text AS d`)).rows[0].d; });
+  const today = () => todayStr;
 
   // ── Ordinary moves ────────────────────────────────────────────────────────
 
