@@ -1304,6 +1304,15 @@ old constraint, which fails the shared-name test.
   `storage/` tree; uploaded, listed, downloaded byte-identical, panel shows it, row linked
   (`module=lead`); cleaned and re-counted.
 
+- **DONE — Group B item 13: workspace caption + "Data integrity" card (2026-10-05).** v1 as
+  approved. The caption is the workspace NAME from GET /workspace (no region — no field holds one).
+  The card replaced the frame's fixed sentence with counts from the new
+  `GET /workspace/data-health` (any role; workspace-scoped): demo rows (`is_seed`), test deals
+  hidden (`is_test`), deals with no account, leads with no owner — each a database count; a line
+  with nothing to report is omitted; a failed load says so. `SidebarWorkspaceInfo`,
+  `roundTrip.dataHealth.test.ts` (3). Live check matched SQL line for line. "Workspace connected"
+  stays hidden until Group A item 2 gives it a real health check.
+
 - **TRACKED BUG (found 2026-10-05, NOT fixed) — every DATE column reaches the client one day
   early.** node-pg parses a DATE into a JavaScript Date at the server's LOCAL midnight; from an
   IST server `2026-05-28` serialises as `"2026-05-27T18:30:00.000Z"`. Measured, not inferred, and
