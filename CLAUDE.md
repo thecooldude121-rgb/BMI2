@@ -1241,7 +1241,8 @@ old constraint, which fails the shared-name test.
     which nothing sets, so recency was 0 for every lead). **The +1 for United States / Canada /
     United Kingdom is REPLACED by +1 for any recorded country** — dormant only because country
     was never stored, it would have marked down every India/MEA/Africa lead once it was.
-    UNRATIFIED default pending an ideal-customer-profile decision; ask before relying on it.
+    **RATIFIED 2026-10-05 (Venkat): keep the neutral point — no regional weighting.** Revisit
+    only if a real ideal-customer profile is ever defined.
   - **`LeadEnrichmentEngine` deleted** — enrichFromEmail/Domain/LinkedIn returned a fixture
     ("John Doe, VP of Sales", a San Francisco company, confidence 0.85) for any input. No
     importers. Re-enrich stays on hold.
