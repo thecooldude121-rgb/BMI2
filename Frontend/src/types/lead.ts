@@ -73,10 +73,12 @@ export interface Lead {
   pipeline_id?: string;
   stage_id?: string;
   stage_entered_at?: string;
-  estimated_value: number;
+  /** leads.value; null = not recorded. */
+  estimated_value?: number | null;
   probability: number;
   expected_close_date?: string;
-  currency: string;
+  /** NULL until someone records one (migration 063) — never assumed. */
+  currency?: string | null;
   source: string;
   source_detail?: string;
   campaign_id?: string;
@@ -123,6 +125,11 @@ export interface Lead {
   assigned_to_user_id?: number | null;
   /** The stored owner NAME (leads.assigned_to, free text). Display only. */
   owner_name?: string;
+  /** Migration 063. NULL / absent = not recorded — never defaulted. */
+  priority?: 'low' | 'medium' | 'high';
+  referral_contact?: string;
+  /** leads.notes — the free-text note on the record (lead_notes rows are separate). */
+  notes?: string;
   converted_by?: string;
   first_contact_date?: string;
   last_contact_date?: string;

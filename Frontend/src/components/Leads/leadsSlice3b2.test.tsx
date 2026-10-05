@@ -49,14 +49,18 @@ describe('LeadTableRow (Figma "Lead row")', () => {
     expect(screen.queryByText(/no follow-up set/i)).toBeNull();
   });
 
-  it('"Open" opens the lead; Edit, Assign owner and Add tag are disabled "coming soon", never live', async () => {
+  it('"Open" opens the lead; Edit goes to the editor; Assign owner and Add tag stay "coming soon"', async () => {
     const props = renderRow();
     await userEvent.click(screen.getByRole('button', { name: 'Open Vikram Rao' }));
     expect(props.onNavigate).toHaveBeenCalledWith('9');
     await userEvent.click(screen.getByRole('button', { name: 'More actions for Vikram Rao' }));
     const menu = screen.getByRole('menu');
-    expect(within(menu).getByRole('menuitem', { name: /edit/i })).toBeDisabled();
-    for (const item of within(menu).getAllByRole('menuitem')) {
+    const edit = within(menu).getByRole('menuitem', { name: /edit/i });
+    expect(edit).toBeEnabled();
+    await userEvent.click(edit);
+    expect(props.onGoTo).toHaveBeenCalledWith('/crm/leads/9/edit');
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for Vikram Rao' }));
+    for (const item of within(screen.getByRole('menu')).getAllByRole('menuitem')) {
       if (/coming soon/i.test(item.textContent ?? '')) expect(item).toBeDisabled();
     }
     expect(props.onOpenModal).not.toHaveBeenCalledWith('editLead', expect.anything());

@@ -13,6 +13,7 @@ import ActivitiesPage from './ActivitiesPage';
 import TasksPage from './TasksPage';
 import AddLeadPage from './AddLeadPage';
 import LeadDetailPage from './LeadDetailPage';
+import LeadEditPage from './LeadEditPage';
 
 import ComprehensiveDealDetailPage from '../Deal/ComprehensiveDealDetailPage';
 import ComprehensiveDealFormPage from '../Deal/ComprehensiveDealFormPage';
@@ -59,6 +60,7 @@ const CRMModule = () => {
           <Route path="/leads/import" element={<ImportLeadsPage />} />
           <Route path="/leads/integrations" element={<IntegrationsPage />} />
           <Route path="/integrations" element={<IntegrationsHub />} />
+          <Route path="/leads/:id/edit" element={<LeadEditPage />} />
           <Route path="/leads/:id" element={<LeadDetailPage />} />
           <Route path="/contacts" element={<ContactsPage />} />
           <Route path="/contacts/new" element={<AddEditContactPage />} />

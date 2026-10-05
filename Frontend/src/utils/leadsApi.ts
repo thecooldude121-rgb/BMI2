@@ -80,9 +80,11 @@ export function mapRowToLead(row: any): Lead {
     // status maps from the DB 'stage' column; fall back to 'new' if missing
     status:         (row.stage || 'new') as Lead['status'],
     temperature:    'cold',
-    estimated_value: 0,
+    // leads.value has always existed and was hardcoded to 0 here; currency was
+    // a hardcoded 'USD'. Both are the stored values now (null = not recorded).
+    estimated_value: row.value == null ? null : Number(row.value),
     probability:    0,
-    currency:       'USD',
+    currency:       row.currency ?? null,
     email_opt_in:   true,
     sms_opt_in:     false,
     call_opt_in:    true,
@@ -96,6 +98,13 @@ export function mapRowToLead(row: any): Lead {
     ...(row.last_contact ? { last_contact_date: String(row.last_contact).slice(0, 10) } : {}),
     assigned_to_user_id: row.assigned_to_user_id ?? null,
     ...(row.assigned_to ? { owner_name: String(row.assigned_to) } : {}),
+    // Migration 063 profile fields — absent when not recorded.
+    ...Object.fromEntries(
+      (['mobile', 'website', 'linkedin_url', 'city', 'country', 'company_size', 'department', 'source_detail',
+        'priority', 'utm_source', 'utm_medium', 'utm_campaign', 'referral_contact', 'notes'] as const)
+        .filter(k => row[k] != null && row[k] !== '')
+        .map(k => [k, String(row[k])]),
+    ),
     // Migration 059 — what a converted lead became. Server-written only.
     ...(row.converted_at ? { converted_at: String(row.converted_at) } : {}),
     ...(row.converted_contact_id ? { converted_to_contact_id: String(row.converted_contact_id) } : {}),
@@ -314,6 +323,32 @@ export class LeadStageError extends Error {
 }
 
 /** POST /leads/:id/stage-transition. Throws LeadStageError on any refusal. */
+/** What the lead editor may send — the API's own field names (PUT /leads/:id). */
+export interface LeadEditPayload {
+  first_name?: string; last_name?: string | null; email?: string; phone?: string | null;
+  company?: string | null; position?: string | null; industry?: string | null; source?: string | null;
+  notes?: string | null; tags?: string[];
+  mobile?: string | null; website?: string | null; linkedin_url?: string | null; city?: string | null;
+  country?: string | null; company_size?: string | null; department?: string | null; source_detail?: string | null;
+  priority?: string | null; value?: number | null; currency?: string | null;
+  utm_source?: string | null; utm_medium?: string | null; utm_campaign?: string | null; referral_contact?: string | null;
+}
+
+/**
+ * The lead editor's save. THROWS with the server's message on any non-2xx, so
+ * the editor shows it and keeps the user's input; resolves with the saved row
+ * only after the server confirms. Never sends `stage` (stage changes go through
+ * the transition endpoint).
+ */
+export async function saveLeadViaAPI(id: string, body: LeadEditPayload): Promise<Lead> {
+  const res = await fetch(`${API_BASE}/leads/${id}`, {
+    method: 'PUT', headers: getAuthHeaders(), body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `The lead was not saved (HTTP ${res.status})`);
+  return mapRowToLead(json.data);
+}
+
 export async function transitionLeadStageViaAPI(
   id: string,
   toStage: string,

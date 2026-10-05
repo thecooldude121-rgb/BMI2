@@ -1224,6 +1224,41 @@ old constraint, which fails the shared-name test.
     now reads 200.
   Pinned by `components/Leads/leadsSlice3b2.test.tsx` and `LeadsPage.test.tsx`.
 
+- **DONE — Group A item 1 (migration 063, 2026-10-05): lead profile fields, the scoring fix,
+  and a real lead editor.**
+  - **063 adds 14 nullable lead columns with NO defaults and NO backfill:** mobile, website,
+    linkedin_url, city, country, company_size (the SAME bands as companies.size: 1-10 … 1000+),
+    department, source_detail, priority (low/medium/high), currency (^[A-Z]{3}$), utm_source /
+    medium / campaign, referral_contact; plus CHECK value >= 0. Confirmed against Figma Add lead
+    (61:701) and Lead detail (61:408). Validation is ONE module, `utils/leadProfileFields.ts`
+    (400 naming the field; blank clears to NULL, never ""), used by create and update.
+    `roundTrip.leadProfile.test.ts` (13).
+  - **`leads.value` always existed and the mapper hardcoded it to 0** (and currency to 'USD').
+    All 38 live leads carry a value; none has a currency, so the UI shows "N · currency not
+    recorded" rather than assuming ₹ or $. `PUT /leads/:id` could never write `value` at all.
+  - **Scoring (`utils/leadScoring.ts`) now reads real columns.** Company size, website and
+    LinkedIn count; Activity Recency reads `last_contact_date` (it read `last_activity_date`,
+    which nothing sets, so recency was 0 for every lead). **The +1 for United States / Canada /
+    United Kingdom is REPLACED by +1 for any recorded country** — dormant only because country
+    was never stored, it would have marked down every India/MEA/Africa lead once it was.
+    UNRATIFIED default pending an ideal-customer-profile decision; ask before relying on it.
+  - **`LeadEnrichmentEngine` deleted** — enrichFromEmail/Domain/LinkedIn returned a fixture
+    ("John Doe, VP of Sales", a San Francisco company, confidence 0.85) for any input. No
+    importers. Re-enrich stays on hold.
+  - **The lead editor: `/crm/leads/:id/edit` (`LeadEditPage`).** Sends ONLY changed fields
+    (`saveLeadViaAPI`, the API's own names), success only after a 2xx, a refusal keeps the
+    input; stage is not editable (transition endpoint only); owner is read-only until item 8.
+    Both Edit entry points (Lead detail, row menu) are live again. Verified end to end through
+    the real UI against `bmi_crm_iso_test` (a second backend on :5002, browser API calls
+    rerouted), reload-persisted and confirmed in Postgres; the seeded workspace was removed and
+    re-counted to zero.
+  - **Not done here, deliberately:** account-form fields the Figma Edit Account frame shows that
+    `companies` lacks — address line 2, founded year, account source, funding stage / total
+    funding, known technology, lifecycle, account owner, visibility. They belong to the Accounts
+    screen slice. (companies already has website, phone, size, revenue, description, address.)
+  - **Found for item 4:** `DataContext` maps lead value from `r.estimated_value`, a field raw API
+    rows never carry (`value`), so every dashboard lead value is 0.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
@@ -2265,3 +2300,14 @@ something directly, do that instead of reasoning about what should be true.**
    code is touched after writing it — lesson 14 without a `db:migrate` ever being typed.
    Finalise and validate the migration FIRST (apply it to `bmi_crm_iso_test`, and run it
    against live inside a transaction that is rolled back), then edit backend source.
+
+18. **The Vite dev server keeps the Tailwind config it STARTED with — so a token added later
+   silently renders as nothing, and a browser check on that server is checking stale CSS.**
+   Seen twice in one day: after Phase 0 (`text-ink` "does not exist", a blank page) and after
+   Phase 2, where `ink-secondary` and `surface-readonly` were added AFTER the 5173 restart. Every
+   Phase 2-3 screenshot on 5173 then rendered without them — the AA contrast fix and the
+   read-only field style looked "fine" only because nobody measured them; `vite build` and the
+   tests were green throughout. **After ANY change to `tailwind.config.js`, restart the dev
+   server before a browser check, and verify a new token by its COMPUTED style
+   (`getComputedStyle`), not by eye** — the same rule as lesson 10: a tool's success is not
+   evidence the effect happened.
