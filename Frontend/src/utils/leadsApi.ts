@@ -75,7 +75,9 @@ export function mapRowToLead(row: any): Lead {
     custom_fields:   row.custom_fields   || {},
     enrichment_data: row.enrichment_data || {},
     created_at: row.created_at || new Date().toISOString(),
-    updated_at: row.updated_at || new Date().toISOString(),
+    // Never `new Date()`: that told the score panel the record changed the
+    // moment it was opened. Creation is the latest TRUE bound when unset.
+    updated_at: row.updated_at || row.created_at || '',
     created_by: row.created_by || '',
     // status maps from the DB 'stage' column; fall back to 'new' if missing
     status:         (row.stage || 'new') as Lead['status'],

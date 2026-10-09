@@ -38,13 +38,18 @@ const recordLeadContact = async (
   // General), else the database's. It used toISOString().slice(0, 10) — a UTC
   // date — so a call logged between 00:00 and 05:30 in India was recorded as
   // the previous day (data-correctness slice, 2026-10-06).
+  // Only moves FORWARD (the same result GREATEST gave), and only then bumps
+  // updated_at: last contact is a score input, so the score panel's "inputs
+  // last changed" (Group A item 3) must move with it — and must NOT move for a
+  // touch that changed nothing.
   await db.query(
     `WITH day AS (
        SELECT ($1::timestamptz AT TIME ZONE COALESCE(
                 (SELECT NULLIF(settings->>'timezone', '') FROM tenants WHERE id = $3),
                 current_setting('TimeZone')))::date AS d)
-     UPDATE leads SET last_contact = GREATEST(COALESCE(last_contact, (SELECT d FROM day)), (SELECT d FROM day))
-      WHERE id = $2 AND tenant_id = $3`,
+     UPDATE leads SET last_contact = (SELECT d FROM day), updated_at = NOW()
+      WHERE id = $2 AND tenant_id = $3
+        AND (last_contact IS NULL OR last_contact < (SELECT d FROM day))`,
     [at.toISOString(), leadId, tenantId],
   );
 };
