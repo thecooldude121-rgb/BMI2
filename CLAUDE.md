@@ -1157,10 +1157,15 @@ old constraint, which fails the shared-name test.
   delete would orphan the file in the store.
 
 - **Backlog agreed 2026-10-05 (Venkat), not blocking the Figma rollout:**
-  - **A real "workspace connected" signal.** `GET /health` today reports the API process and
-    the migration state captured AT BOOT; it never touches the database per request. Add a
-    `SELECT 1` to it and a frontend poll, then the sidebar indicator Figma draws can be shown.
-    Until then it stays suppressed (Phase 1).
+  - **DONE (Group A item 2, 2026-10-10) — a real "workspace connected" signal.** `GET /health`
+    now round-trips to Postgres per request (`config/dbHealth.checkDatabase`: `SELECT 1`, 2 s
+    timeout, error LOGGED never returned — the route is unauthenticated) and answers 503
+    `degraded` when it fails. The sidebar's `ConnectionStatus` (under the Data integrity card,
+    as the frame draws it) polls every 30 s while the tab is visible and on focus/online:
+    "Workspace connected" ONLY on a 200 whose body says `database.ok` (a bare 200 is not
+    enough), "Database not responding" on anything else, "Cannot reach the server" on a
+    network failure, and nothing before the first answer. `roundTrip.health.test.ts` (3),
+    `ConnectionStatus.test.tsx` (7); both rules mutation-tested.
   - **Extend the step-4 owner cleanup to `tasks`.** Every live task shows "John Smith" — the
     seed name step 4 cleared from leads and deals. Same process: dependency trace, backup,
     guarded scoped UPDATE, re-count.

@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import SidebarWorkspaceInfo from './SidebarWorkspaceInfo';
+import ConnectionStatus from './ConnectionStatus';
 import {
   LayoutDashboard, UserPlus, Briefcase, Building2, Users, ListChecks,
   CalendarDays, Sparkles, UsersRound, Blocks, FileBarChart, Settings,
@@ -142,8 +143,9 @@ export const SidebarNav: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }
  * item 13 (SidebarWorkspaceInfo): the caption is the workspace's name from
  * GET /workspace (no region — no field holds one), and the card shows counts
  * from GET /workspace/data-health instead of the frame's fixed sentence.
- * "Workspace connected" is still not rendered: it needs the real health check
- * of Group A item 2.
+ * "Workspace connected" is real since Group A item 2 (ConnectionStatus): it
+ * polls GET /health, which round-trips to Postgres, and shows nothing until
+ * the first answer.
  * The old collapse toggle is gone too: the Figma sidebar has none.
  */
 const Sidebar: React.FC = () => (
@@ -152,6 +154,7 @@ const Sidebar: React.FC = () => (
     <SidebarNav />
     <div className="min-h-4 flex-1" aria-hidden="true" />
     <SidebarWorkspaceInfo part="card" />
+    <ConnectionStatus />
   </aside>
 );
 

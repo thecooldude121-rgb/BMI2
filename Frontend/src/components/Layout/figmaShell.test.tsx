@@ -17,6 +17,9 @@ const ws = vi.hoisted(() => ({
   fetchDataHealth: vi.fn(async () => ({ deals: 0, deals_seed: 0, deals_without_account: 0, deals_test_hidden: 0, accounts: 0, accounts_seed: 0, leads: 0, leads_seed: 0, leads_unassigned: 0, contacts: 0, contacts_seed: 0 })),
 }));
 vi.mock('../../utils/workspaceApi', () => ws);
+// The connection line is covered by ConnectionStatus.test; here the health
+// check never answers, so the shell must show NO connection claim at all.
+vi.mock('../../utils/healthApi', () => ({ checkConnection: () => new Promise(() => {}) }));
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: mockUser, logout: vi.fn() }),
 }));
@@ -72,7 +75,7 @@ describe('Sidebar — the Figma Settings-frame list plus "More"', () => {
     expect(within(card).getByText('3 of 21 deals have no account.')).toBeInTheDocument();
     expect(within(card).getByText('38 of 38 leads have no owner.')).toBeInTheDocument();
     expect(within(card).getByText('3 test deals hidden from views.')).toBeInTheDocument();
-    // Never the mockup's text, and never an unbacked "connected" indicator.
+    // Never the mockup's text, and no "connected" claim before /health has answered.
     expect(screen.queryByText(/northstar|labelled at source/i)).toBeNull();
     expect(screen.queryByText(/workspace connected/i)).toBeNull();
   });
