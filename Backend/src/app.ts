@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import routes from './routes';
 import { getMigrationStatus } from './config/runMigrations';
+import { checkDatabase } from './config/dbHealth';
 import { errorHandler, notFound } from './middleware/errorHandler';
 
 /**
@@ -46,14 +47,20 @@ export function createApp() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  app.get('/health', (_req, res) => {
+  app.get('/health', async (_req, res) => {
     // Report the schema state too. In development the server boots even when a
     // migration failed (see runMigrations), so "the API is up" is not by itself
     // enough to know the database is what the code expects.
     const migrations = getMigrationStatus();
-    res.status(migrations.ok ? 200 : 503).json({
-      status: migrations.ok ? 'ok' : 'degraded',
+    // And whether the database answers NOW (Group A item 2): migrations are
+    // captured at boot, so without this /health said "ok" with Postgres down.
+    // The sidebar's "Workspace connected" is shown only on this being true.
+    const database = await checkDatabase();
+    const ok = migrations.ok && database.ok;
+    res.status(ok ? 200 : 503).json({
+      status: ok ? 'ok' : 'degraded',
       migrations,
+      database,
       timestamp: new Date().toISOString(),
     });
   });
