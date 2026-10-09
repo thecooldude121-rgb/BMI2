@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import type { LeadScoreBreakdown, ScoreComponent } from '../../types/leadScoring';
 import type { Lead } from '../../types/lead';
+import { dayOrInstant } from '../../utils/dates';
 import type { MultiFactorScore } from '../../utils/leadScoring/multiFactorScore';
 
 import { explainScore } from '../../utils/leadScoring/scoreExplainer';
@@ -199,6 +200,14 @@ function SignalRow({ signal }: { signal: ActivitySignal }) {
   );
 }
 
+/** "12 Oct 2026, 14:05" in the viewer's zone; a bare calendar day is shown as that day. */
+function formatDateTimeShort(v: string): string {
+  const d = dayOrInstant(v);
+  if (isNaN(d.getTime())) return v;
+  const day = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? day : `${day}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 // ── Header trend helpers ──────────────────────────────────────────────────────
 
 function trendIcon(trend: LeadScoreBreakdown['trend']) {
@@ -227,6 +236,11 @@ const LeadScoreBreakdownPanel: React.FC<LeadScoreBreakdownPanelProps> = ({
   // breakdown — every lead today — the panel claimed the score had been
   // updated at the moment you opened the page.
   const lastUpdated = breakdown?.lastUpdated ?? null;
+  // Group A item 3. The rule-based score is RECALCULATED on every render from
+  // the lead's stored fields, so its honest "last updated" is when those
+  // inputs last changed: the record's updated_at (which logging a contact now
+  // bumps too). Shown only when the record carries one.
+  const inputsChangedAt = !lastUpdated && mfs && lead?.updated_at ? lead.updated_at : null;
 
   // Explainability — only when we have both mfs and lead
   const expl = mfs && lead ? explainScore(lead, mfs) : null;
@@ -246,6 +260,12 @@ const LeadScoreBreakdownPanel: React.FC<LeadScoreBreakdownPanelProps> = ({
             {lastUpdated && (
               <p className="text-ink-muted text-xs">
                 Last updated: {new Date(lastUpdated).toLocaleString()}
+              </p>
+            )}
+            {inputsChangedAt && (
+              <p className="text-ink-muted text-xs" data-testid="score-inputs-changed"
+                title="This score is recalculated each time the lead is opened, from its stored fields. This is when those fields last changed.">
+                Recalculated on open · inputs last changed {formatDateTimeShort(inputsChangedAt)}
               </p>
             )}
             <div className="flex items-center gap-2 mt-2 flex-wrap">

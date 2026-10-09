@@ -1413,6 +1413,27 @@ old constraint, which fails the shared-name test.
     was already in place — `exportLeads()` / `'export_url'` were removed 2026-10-03 (same day as
     `mergeLeads`), and the only lead export left (the bulk bar's) builds a real CSV client-side.
 
+- **DONE — Group A item 3: a real "last updated" on the Lead detail score panel (2026-10-10).**
+  The panel's score is NOT stored — `computeMultiFactorScore` recalculates it from the lead's
+  fields on every render — so the honest "last updated" is when its INPUTS last changed. The
+  panel now reads "Recalculated on open · inputs last changed <leads.updated_at>" and shows
+  nothing when the record has no stored time. No migration.
+  - `recordLeadContact` now bumps `updated_at` — `last_contact` is a score input — and ONLY when
+    `last_contact` actually moves forward (same final value GREATEST gave); a same-day or older
+    touch changes neither column.
+  - `mapRowToLead` fell back to `new Date()` for a missing `updated_at` (the same "updated just
+    now" fabrication the panel used to show); it falls back to `created_at`, else `''`.
+  - `roundTrip.scoreInputs.test.ts` (2), `LeadScoreBreakdownPanel.test.tsx` (3); the bump, the
+    forward-only guard and the panel's source all mutation-tested. Browser check on
+    `bmi_crm_iso_test` in Kolkata and New York, a real call logged through the composer moved the
+    line, confirmed in Postgres; seed torn down and re-counted.
+  - **FOUND, NOT FIXED — the engagement / intent factors cannot score.** `call_count`,
+    `meeting_count`, `email_sent_count`, `email_opens_count`, `email_clicks_count` and
+    `page_views_count` have NO columns; `mapRowToLead` hardcodes them to 0, so those factors read
+    "0 meetings, 0 calls" even for a lead with logged calls. Calls/meetings/emails could be
+    COUNTED from `lead_activities` (server-side, per lead); opens/clicks/page views have no source
+    at all and should be shown as not tracked rather than 0. Its own slice.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
