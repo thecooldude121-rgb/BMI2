@@ -14,6 +14,7 @@ import type { ConversionReadinessState } from './conversionReadiness';
 import { computeMultiFactorScore } from './leadScoring/multiFactorScore';
 import { computeRisk, emailDomain } from './leadDuplicates';
 import type { DuplicateRisk } from './leadDuplicates';
+import { dayOrInstant } from './dates';
 
 const READY_STATES = new Set<ConversionReadinessState>([
   'ready_for_contact',
@@ -25,11 +26,11 @@ const READY_STATES = new Set<ConversionReadinessState>([
 
 function daysSince(dateStr: string | null | undefined): number | null {
   if (!dateStr) return null;
-  return (Date.now() - new Date(dateStr).getTime()) / 86_400_000;
+  return (Date.now() - dayOrInstant(dateStr).getTime()) / 86_400_000;
 }
 
 function toDate(dateStr: string | null | undefined): Date | null {
-  return dateStr ? new Date(dateStr) : null;
+  return dateStr ? dayOrInstant(dateStr) : null;
 }
 
 // ── Field resolution ──────────────────────────────────────────────────────────

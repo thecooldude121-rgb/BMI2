@@ -1,6 +1,7 @@
 import type { Lead } from '../../types/lead';
 import type { SLAConfig } from './config';
 import { getSLAConfig } from './config';
+import { dayOrInstant, endOfLocalDay } from '../dates';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,8 @@ function computeFollowUp(lead: Lead, now: Date, cfg: SLAConfig): SLATrack {
   if (!lead.next_follow_up_date) return naTrack();
   if (!cfg.stale.activeStatuses.includes(lead.status)) return naTrack();
 
-  const followUpAt = new Date(lead.next_follow_up_date);
+  // Due on a calendar DAY: overdue only once that day has ended locally.
+  const followUpAt = endOfLocalDay(lead.next_follow_up_date) ?? new Date(lead.next_follow_up_date);
   const overdueHours = (now.getTime() - followUpAt.getTime()) / 3_600_000;
   const graceHours = cfg.followUp.graceHours;
 
@@ -100,7 +102,7 @@ function computeStale(lead: Lead, now: Date, cfg: SLAConfig): SLATrack {
   if (!cfg.stale.activeStatuses.includes(lead.status)) return naTrack();
 
   const refStr = lead.last_activity_date ?? lead.last_contact_date ?? lead.created_at;
-  const daysSince = (now.getTime() - new Date(refStr).getTime()) / 86_400_000;
+  const daysSince = (now.getTime() - dayOrInstant(refStr).getTime()) / 86_400_000;
   const limitHours = cfg.stale.breachDays * 24;
   const ageHours = daysSince * 24;
   const pct = daysSince / cfg.stale.breachDays;

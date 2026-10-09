@@ -15,6 +15,7 @@
 
 import type { DealCard } from '../components/Deal/DealKanbanCard';
 import { computeCommitteeCoverage } from './dealCommittee';
+import { localDay } from './dates';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export function explainDealHealth(
 ): DealHealthExplanation {
   const risks:     HealthDriver[] = [];
   const positives: HealthDriver[] = [];
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDay(); // local calendar day; toISOString is UTC
   const dsc   = deal.daysSinceContact;
 
   // ── 1. Activity recency ──────────────────────────────────────────────────

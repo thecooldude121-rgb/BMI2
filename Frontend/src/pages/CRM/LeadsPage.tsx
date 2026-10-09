@@ -43,6 +43,7 @@ import { LeadStageError } from '../../utils/leadsApi';
 import { useKanbanLanes } from '../../hooks/useKanbanLanes';
 import { toCsv } from '../../utils/csv';
 import { createLeadFollowUp } from '../../utils/leadFollowUp';
+import { calendarDaysUntil } from '../../utils/dates';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,9 @@ const getStatusLabel = (status: string) =>
 
 const formatRecency = (date?: string): string => {
   if (!date) return 'Never';
-  const days = Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
+  // last_contact is a calendar day: count calendar days, not elapsed ms.
+  const until = calendarDaysUntil(date);
+  const days = until !== null ? Math.max(0, -until) : Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
   if (days < 7)  return `${days}d ago`;
@@ -445,7 +448,7 @@ const LeadsPage: React.FC = () => {
     type Sig = { cls: string; icon: React.ReactNode; title: string };
     const signals: Sig[] = [];
     if (overdueIdSet.has(lead.id))
-      signals.push({ cls: 'text-warning-700', icon: <Clock size={9} />, title: 'Overdue' });
+      signals.push({ cls: 'text-warning-700', icon: <Clock size={9} />, title: 'Follow-up overdue' });
     if (slaResult?.overall === 'breached')
       signals.push({ cls: 'text-danger-700', icon: <AlertTriangle size={9} />, title: 'SLA breach' });
     if (duplicateCandidateMap.has(lead.id))

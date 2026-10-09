@@ -6,6 +6,8 @@
  * the task list. Writes go through the tasks API, which proves the lead belongs
  * to the caller's workspace. Every function THROWS the server's message.
  */
+import { localDay } from './dates';
+
 const API_BASE = 'http://localhost:5001/api/v1';
 
 function getAuthHeaders(): HeadersInit {
@@ -34,13 +36,8 @@ export const rescheduleFollowUp = (taskId: string, dueDate: string) => send(`/ta
 
 export const completeFollowUp = (taskId: string) => send(`/tasks/${taskId}`, 'PUT', { status: 'completed' });
 
-/** Today in the browser's own calendar, as 'YYYY-MM-DD' (never via toISOString, which is UTC). */
-export function localToday(now = new Date()): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+/** Today in the browser's own calendar — the one shared helper, re-exported so callers keep their import. */
+export const localToday = localDay;
 
 /** '2026-10-12' -> '12 Oct' without passing through a Date (no time-zone shift). */
 export function formatDueDate(due: string): string {

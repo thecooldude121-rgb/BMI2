@@ -9,6 +9,7 @@
  */
 
 import type { StageMeta } from './pipelinesApi';
+import { daysFromNow } from './dateUtils';
 
 export type DQSeverity = 'error' | 'warning';
 
@@ -128,7 +129,7 @@ export function getDealDataQuality(deal: DealForDQ, stageMeta?: StageMeta | null
     });
   } else if (!isClosed && hasCloseDate) {
     // Active deal whose close date has already passed
-    const daysOver = Math.ceil((Date.now() - new Date(deal.closeDate!).getTime()) / 86_400_000);
+    const daysOver = -(daysFromNow(deal.closeDate!) ?? 0); // calendar days past the close DAY
     if (daysOver > 0) {
       issues.push({
         type: 'overdue_ghost',

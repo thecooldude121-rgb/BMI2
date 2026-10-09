@@ -19,6 +19,7 @@ import LeadScoreChart from '../components/Dashboard/LeadScoreChart';
 import { useDashboardData, dealValue } from '../hooks/useDashboardData';
 import { useStageLookup } from '../hooks/useStageLookup';
 import { isWonWith, isOpenWith } from '../utils/pipelinesApi';
+import { dateOnly, localDay } from '../utils/dates';
 
 /**
  * Reads the database instead of DataContext.
@@ -40,8 +41,6 @@ const Dashboard: React.FC = () => {
     useDashboardData();
   const navigate = useNavigate();
 
-  const now = Date.now();
-
   const qualifiedLeads = leads.filter(
     (l) => l.status === 'qualified' || l.status === 'proposal',
   ).length;
@@ -58,8 +57,9 @@ const Dashboard: React.FC = () => {
 
   const overdueTasks = tasks.filter((t) => {
     if (t.status === 'completed' || !t.due_date) return false;
-    const due = new Date(t.due_date).getTime();
-    return !Number.isNaN(due) && due < now;
+    // A due DAY before today (local calendar); due today is not overdue.
+    const due = dateOnly(t.due_date);
+    return due !== null && due < localDay();
   }).length;
 
   const quickActions = [

@@ -9,6 +9,7 @@ import { sortActivitiesNewestFirst } from '../../utils/activitiesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchPipelines, type ApiPipeline } from '../../utils/pipelinesApi';
+import { calendarDaysUntil } from '../../utils/dates';
 
 /**
  * /crm/dashboard — the dashboard the sidebar actually links to.
@@ -77,12 +78,11 @@ const CRMDashboard: React.FC = () => {
 
   /** Deals whose expected close date falls in the next 7 days. A real count. */
   const closingThisWeek = useMemo(() => {
-    const now = Date.now();
-    const week = now + 7 * 86_400_000;
+    // Calendar days (0 = closes today) — a DATE compared as a UTC-midnight
+    // instant dropped today's closes from 05:30 IST.
     return openDeals.filter(d => {
-      if (!d.expected_close_date) return false;
-      const t = new Date(d.expected_close_date).getTime();
-      return Number.isFinite(t) && t >= now && t <= week;
+      const days = calendarDaysUntil(d.expected_close_date);
+      return days !== null && days >= 0 && days <= 7;
     }).length;
   }, [openDeals]);
 

@@ -10,6 +10,7 @@ import { PreviewBanner } from '../common/PreviewBanner';
 import { updateDeal, getUsers } from '../../utils/dealsApi';
 import type { RevenueSchedule } from './RevenueTimeline';
 import type { DealPayload } from '../../utils/dealsApi';
+import { formatDisplayDate } from '../../utils/dateUtils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ interface DealDetailsPanelProps {
   deal: {
     id?: string; dealName: string; amount: number; currency?: string;
     base_amount_usd?: number; stage: string; stageName: string;
-    stageNumber: number; totalStages: number; closeDate: string;
+    stageNumber: number; totalStages: number; closeDate: string; closeDateIso?: string;
     expectedCloseDate?: string; probability: number; daysInStage?: number;
     totalDealAge?: number; package?: string; contractTerm?: string;
     paymentTerms?: string; tags?: string[]; owner?: string;
@@ -415,6 +416,12 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
   const ctxValue = {
     dealId: deal.id,
     onSaved: (apiKey: string, value: any) => {
+      if (apiKey === 'expected_close_date') {
+        // Keep the stored day AND the display string in step (the input reads one, the row shows the other).
+        const display = value ? formatDisplayDate(value) : '';
+        onDealUpdated?.({ closeDateIso: value || '', closeDate: display, expectedCloseDate: display });
+        return;
+      }
       onDealUpdated?.({ [FIELD_MAP[apiKey] ?? apiKey]: value });
     },
   };
@@ -455,7 +462,7 @@ export const DealDetailsPanel: React.FC<DealDetailsPanelProps> = ({
               </EditableRow>
 
               <EditableRow label="Closing Date" apiKey="expected_close_date"
-                rawValue={deal.closeDate ?? ''} type="date">
+                rawValue={deal.closeDateIso ?? ''} type="date">
                 {deal.closeDate || <Dash />}
               </EditableRow>
 

@@ -690,7 +690,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
                   closeDate.setHours(0, 0, 0, 0);
-                  const daysAway = Math.floor((closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  const daysAway = Math.round((closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)); // round: DST days are 23/25h
                   if (isNaN(daysAway)) return null;
                   const colorClass = daysAway < 0
                     ? 'text-red-700 font-bold'

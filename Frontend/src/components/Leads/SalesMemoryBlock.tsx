@@ -2,6 +2,7 @@
 import { Brain, Clock } from 'lucide-react';
 import type { Lead, LeadActivity } from '../../types/lead';
 import { buildSalesMemory } from '../../utils/leadTimeline';
+import { dayOrInstant } from '../../utils/dates';
 
 interface Props {
   lead:              Lead;
@@ -10,7 +11,7 @@ interface Props {
 
 function fmtDate(ts?: string): string | null {
   if (!ts) return null;
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return dayOrInstant(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function SalesMemoryBlock({ lead, recentActivities }: Props) {

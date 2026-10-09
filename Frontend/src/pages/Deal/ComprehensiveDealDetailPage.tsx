@@ -225,6 +225,10 @@ const DealDetail: React.FC = () => {
           totalStages: 6,
           closeDate: formatDisplayDate(closeDateIso),
           expectedCloseDate: formatDisplayDate(closeDateIso),
+          // The stored calendar day, kept beside the display string: an
+          // <input type=date> and a copy need "YYYY-MM-DD", and re-parsing
+          // "16 Jul 2026" through toISOString moved it a day in IST.
+          closeDateIso: closeDateIso ? closeDateIso.slice(0, 10) : '',
           owner: data.assigned_to || '',
           ownerId: data.owner_id || '',
           ownerInfo: {
@@ -864,9 +868,7 @@ const DealDetail: React.FC = () => {
     if (!id) return;
     setIsDuplicating(true);
     try {
-      const closeDateIso = deal.closeDate
-        ? new Date(deal.closeDate).toISOString().split('T')[0]
-        : undefined;
+      const closeDateIso = deal.closeDateIso || undefined;
 
       const { data: newDeal } = await createDeal({
         name: newName,
@@ -935,12 +937,12 @@ const DealDetail: React.FC = () => {
 
   const handleSaveCloseDate = async (isoDate: string) => {
     if (!id) return;
-    const displayDate = new Date(isoDate).toLocaleDateString('en-US', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    });
-    setDeal((prev: any) => ({ ...prev, closeDate: displayDate }));
+    // Shown only AFTER the server confirms the save (Honest Feedback); the
+    // display uses the same formatter as the initial load.
     try {
       await updateDeal(id, { expected_close_date: isoDate });
+      const displayDate = formatDisplayDate(isoDate);
+      setDeal((prev: any) => ({ ...prev, closeDate: displayDate, expectedCloseDate: displayDate, closeDateIso: isoDate }));
       showToast('Close date updated', 'success');
     } catch {
       showToast('Failed to update close date', 'error');

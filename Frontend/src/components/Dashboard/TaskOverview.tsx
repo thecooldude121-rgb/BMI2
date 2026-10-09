@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckSquare, Clock, AlertTriangle } from 'lucide-react';
 import type { TaskRecord } from '../../utils/activitiesApi';
+import { dayOrInstant, dateOnly, localDay } from '../../utils/dates';
 
 /**
  * Takes tasks as a prop instead of calling useData().
@@ -24,24 +25,26 @@ interface TaskOverviewProps {
 /** null for a task with no due date — distinct from "not yet due". */
 const dueTime = (t: TaskRecord): number | null => {
   if (!t.due_date) return null;
-  const ms = new Date(t.due_date).getTime();
+  // due_date is a calendar day: local midnight, never new Date('YYYY-MM-DD') (UTC).
+  const ms = dayOrInstant(String(t.due_date)).getTime();
   return Number.isNaN(ms) ? null : ms;
 };
 
-const isOverdue = (t: TaskRecord, now: number): boolean => {
+/** Overdue = due on a day BEFORE today (local calendar). Due today is not overdue. */
+const isOverdue = (t: TaskRecord, today: string): boolean => {
   if (t.status === 'completed') return false;
-  const due = dueTime(t);
-  return due !== null && due < now;
+  const due = dateOnly(t.due_date);
+  return due !== null && due < today;
 };
 
 const TaskOverview: React.FC<TaskOverviewProps> = ({ tasks }) => {
-  const now = Date.now();
+  const today = localDay();
 
   const taskStats = {
     pending: tasks.filter((t) => t.status === 'pending').length,
     inProgress: tasks.filter((t) => t.status === 'in-progress').length,
     completed: tasks.filter((t) => t.status === 'completed').length,
-    overdue: tasks.filter((t) => isOverdue(t, now)).length,
+    overdue: tasks.filter((t) => isOverdue(t, today)).length,
   };
 
   const upcoming = tasks
@@ -87,7 +90,7 @@ const TaskOverview: React.FC<TaskOverviewProps> = ({ tasks }) => {
         ) : (
           <div className="space-y-3">
             {upcoming.map((task) => {
-              const overdue = isOverdue(task, now);
+              const overdue = isOverdue(task, today);
               const due = dueTime(task);
 
               return (

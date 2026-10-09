@@ -1,5 +1,7 @@
+import { dayOrInstant } from './dates';
+
 // ─── Deal Name Generator ──────────────────────────────────────────────────────
-// Pure function — no React, no side-effects, no imports from the app.
+// Pure function — no React, no side-effects; its only import is the pure dates helper.
 // Safe to import in unit tests without any mocking.
 
 export interface DealNameContext {
@@ -20,7 +22,7 @@ const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct',
  * identical across all runtimes.
  */
 export const formatMonthYear = (isoDate?: string): string => {
-  const date = isoDate ? new Date(isoDate) : new Date();
+  const date = isoDate ? dayOrInstant(isoDate) : new Date(); // a close DAY, read locally
   // new Date('') produces Invalid Date — guard against it
   const target = !isNaN(date.getTime()) ? date : new Date();
   return `${MONTH_ABBR[target.getMonth()]} ${target.getFullYear()}`;

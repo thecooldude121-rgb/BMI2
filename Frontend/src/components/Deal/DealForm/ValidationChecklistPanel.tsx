@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { daysFromNow } from '../../../utils/dateUtils';
 
 interface ValidationChecklistPanelProps {
   validation: {
@@ -13,8 +14,8 @@ interface ValidationChecklistPanelProps {
 
 export const ValidationChecklistPanel: React.FC<ValidationChecklistPanelProps> = ({ validation, formData }) => {
   const closeDateIsPast = !!formData.closeDate && (() => {
-    const t = new Date(); t.setHours(0,0,0,0);
-    return new Date(formData.closeDate) < t;
+    // Calendar days: a close date of today is not "past".
+    return (daysFromNow(formData.closeDate) ?? 0) < 0;
   })();
   const closeDateNeedsReason = closeDateIsPast && !formData.closeDateOverrideReason?.trim();
 
