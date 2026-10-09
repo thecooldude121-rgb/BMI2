@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Bell, Inbox, Settings, LogOut, ChevronDown, Plus,
+  Inbox, Settings, LogOut, ChevronDown, Plus,
   DollarSign, Users, UserPlus, Building2, CheckSquare,
-  X, Menu
+  Menu
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import GlobalSearch from './GlobalSearch';
+import NotificationsBell from '../Notifications/NotificationsBell';
 
 // The section label beside the brand (Figma shows one word, e.g. "Settings").
 // `parent` is kept for callers and tests; the bar renders only `label`.
@@ -19,6 +20,7 @@ const getBreadcrumb = (pathname: string): { parent?: string; label: string } => 
   if (pathname.startsWith('/crm/activities'))    return { parent: 'CRM', label: 'Activities' };
   if (pathname.startsWith('/crm/tasks'))         return { parent: 'CRM', label: 'Tasks' };
   if (pathname.startsWith('/crm/meetings'))      return { parent: 'CRM', label: 'Meetings' };
+  if (pathname.startsWith('/crm/inbox'))         return { parent: 'CRM', label: 'Inbox' };
   if (pathname.startsWith('/crm/calls'))         return { parent: 'CRM', label: 'Calls' };
   if (pathname.startsWith('/crm/reports'))       return { parent: 'CRM', label: 'Reports' };
   if (pathname.startsWith('/crm/documents'))     return { parent: 'CRM', label: 'Documents' };
@@ -109,16 +111,13 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
   const { pathname } = useLocation();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const newMenuRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
 
   const crumb = getBreadcrumb(pathname);
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
       if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) setShowNewMenu(false);
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifications(false);
     };
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
@@ -197,43 +196,19 @@ const TopBar: React.FC<{ onOpenMobileNav?: () => void }> = ({ onOpenMobileNav })
           )}
         </div>
 
-        {/* Inbox — not built: no handler, no data. Disabled rather than dead. */}
+        {/* Inbox — the internal activity feed (Group A item 5), not email. */}
         <button
           type="button"
-          disabled
-          aria-label="Inbox (coming soon)"
-          title="Inbox is coming soon"
-          className={`${toolButton} hidden cursor-not-allowed opacity-60 sm:flex`}
+          onClick={() => navigate('/crm/inbox')}
+          aria-label="Inbox"
+          title="Inbox"
+          className={`${toolButton} hidden hover:bg-black/5 sm:flex`}
         >
           <Inbox className="h-[18px] w-[18px]" />
         </button>
 
-        {/* Notifications */}
-        <div className="relative" ref={notifRef}>
-          <button
-            onClick={() => { setShowNotifications(v => !v); }}
-            aria-label="Notifications"
-            className={`${toolButton} hover:bg-black/5`}
-          >
-            <Bell className="h-[18px] w-[18px]" />
-          </button>
-
-          {showNotifications && (
-            <div className="absolute right-0 z-50 mt-2 w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-line bg-surface-panel shadow-xl">
-              <div className="flex items-center justify-between border-b border-line px-4 py-3">
-                <span className="text-sm font-semibold text-ink">Notifications</span>
-                <button onClick={() => setShowNotifications(false)} aria-label="Close notifications" className="rounded p-1 text-ink-muted hover:text-ink">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="px-4 py-8 text-center">
-                <Bell className="mx-auto mb-2 h-6 w-6 text-ink-muted" aria-hidden="true" />
-                <p className="text-sm font-medium text-ink">Notifications are not available yet</p>
-                <p className="mt-1 text-xs text-ink-muted">Nothing generates notifications in this CRM yet, so there is nothing to show.</p>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Notifications — real since Group A item 5. */}
+        <NotificationsBell buttonClass={toolButton} />
 
         {/* Profile */}
         <div className="relative">

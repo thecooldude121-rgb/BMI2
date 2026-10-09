@@ -1375,6 +1375,44 @@ old constraint, which fails the shared-name test.
   `tenantIsolation`'s setup now asserts the refusal instead of planting the bad row, and the search
   test that planted one is replaced by a comment (the row can no longer exist).
 
+- **DONE — Group A item 5: the internal notifications feed (migration 065, 2026-10-10).**
+  Event list APPROVED by Venkat 2026-10-10. Not email: bell + `/crm/inbox`.
+  - **Stored events (`notifications`, one row per recipient):** a lead assigned to you, a deal
+    assigned to you, a stage change on a deal you own, a lead you own converted (owners only —
+    Venkat's adjustment, never company-wide). **Never about your own action** — the writer skips
+    it AND a CHECK (`actor_user_id IS DISTINCT FROM user_id`) refuses it. Recipient and actor are
+    COMPOSITE references to `users (id, tenant_id)`.
+  - **Written by `utils/notifications.ts` on the writer's own client, inside its transaction** —
+    lead create/update, deal create/update (a PUT can change stage too), stage transition, bulk
+    owner and bulk stage, conversion. `updateLead` / `updateDeal` were NOT transactional; they now
+    lock the row, read the old owner/stage alone (lesson 11), update and notify in one
+    transaction. Atomicity is tested in BOTH directions (a failing notification rolls the change
+    back; a change failing at COMMIT leaves no notification) — the second test exists because
+    the first let a mutation through.
+  - **"Due" is read live, never stored, and never in the unread badge (approved):** follow-ups on
+    leads YOU own due today or overdue (`GET /notifications/due`, the Leads Overdue predicate's
+    CURRENT_DATE).
+  - API: `GET /notifications` (server-paged, `total` + `unread_count`), `POST /:id/read` (your own
+    row only — anyone else's is 404, absent), `POST /read-all`. Every query keys on token
+    workspace AND user id; no parameter names another person.
+  - UI: `NotificationsBell` (server unread count, polled 60 s while visible; Due section; read
+    state changes only after a 2xx) and `InboxPage` (All / Unread, numbered pages, a failed load is
+    an error, never an empty inbox). The Inbox button is live.
+  - **Default chosen while building, NOT ratified:** CSV imports do not notify (a file load is not
+    a personal event, and could drop hundreds of rows into one feed).
+  - **Left out, as proposed:** task assignment / due tasks (`tasks.assigned_to` is free text — needs
+    a user FK first, with item 8) and mentions (no mention feature exists).
+  - **FOUND AND FIXED on the way: bulk owner change on deals had NEVER worked.** Its SQL used `$1` as
+    both a varchar column value and a `btrim()` argument and Postgres refused to deduce a type
+    ("inconsistent types deduced for parameter $1"), so the Kanban bulk bar's owner change always
+    answered 500 (it did say "failed" — honest, but broken). `$1::text`; covered by the new tests.
+  - `roundTrip.notifications.test.ts` (11), `Notifications.test.tsx` (9); writer, atomicity and the
+    due-never-counts rule mutation-tested. E2E through the real UI on `bmi_crm_iso_test` (a second
+    backend on :5002), confirmed in Postgres, seed torn down and re-counted.
+  - **Group A item 7 note:** the "immediate honesty fix" for `exportLeads` asked for on 2026-10-10
+    was already in place — `exportLeads()` / `'export_url'` were removed 2026-10-03 (same day as
+    `mergeLeads`), and the only lead export left (the bulk bar's) builds a real CSV client-side.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two
