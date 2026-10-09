@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AccountsProvider } from '../../contexts/AccountsContext';
 import CRMDashboard from './CRMDashboard';
 import LeadsPage from './LeadsPage';
+import InboxPage from './InboxPage';
 import ContactsPage from './ContactsPage';
 import ContactDetailView from './ContactDetailView';
 import AddEditContactPage from './AddEditContactPage';
@@ -87,6 +88,7 @@ const CRMModule = () => {
           <Route path="/forecast" element={<ForecastPage />} />
           <Route path="/pipeline" element={<Navigate to="/crm/forecast" replace />} />
           <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/inbox" element={<InboxPage />} />
           <Route path="/activities" element={<ActivitiesPage />} />
           <Route path="/activities/:id" element={<ActivityDetailPage />} />
           <Route path="/reports" element={<ReportsPage />} />

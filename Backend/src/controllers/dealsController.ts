@@ -6,6 +6,13 @@ import { foreignIdsInTenant, userIdForName, userNameForId } from '../utils/tenan
 import { resolveStageForWrite, findStage, STAGE_NOT_IN_WORKSPACE } from '../utils/pipelineStages';
 import { resolveActorName } from '../utils/actorName';
 import { workspaceDefaultCurrency } from './workspaceController';
+import { notifyOwnerChange, notifyDealStageChange } from '../utils/notifications';
+
+/** The caller's numeric user id, or null — for notification attribution. */
+const actorIdOf = (req: AuthRequest): number | null => {
+  const n = Number(req.user?.id);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
 
 /**
  * The JSONB columns a client may write through updateDeal's generic field loop.
@@ -466,6 +473,9 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
         resolveActorName(req), tenantId,
       ],
     );
+    // Created already owned by someone else: an assignment to them.
+    await notifyOwnerChange(client, { tenantId, actorId: actorIdOf(req) }, 'deal',
+      result.rows[0].id, result.rows[0].name, null, result.rows[0].assigned_to_user_id);
     await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK').catch(() => undefined);
@@ -654,9 +664,34 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     if (!updates.length) { res.status(400).json({ success: false, message: 'No fields to update' }); return; }
     updates.push(`updated_at = NOW()`);
     params.push(req.params.id, tenantId);
-    const result = await pool.query(`UPDATE deals SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params);
-    if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Deal not found' }); return; }
-    res.json({ success: true, data: result.rows[0] });
+    // One transaction: owner and stage BEFORE (row locked, read alone —
+    // lesson 11), the update, and the notifications commit together.
+    const client = await pool.connect();
+    let updated: any;
+    try {
+      await client.query('BEGIN');
+      const before = await client.query(
+        'SELECT assigned_to_user_id, stage_id FROM deals WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [req.params.id, tenantId]);
+      const result = await client.query(`UPDATE deals SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`, params);
+      updated = result.rows[0];
+      if (updated) {
+        const ids = { tenantId, actorId: actorIdOf(req) };
+        const prev = before.rows[0];
+        await notifyOwnerChange(client, ids, 'deal', updated.id, updated.name, prev?.assigned_to_user_id, updated.assigned_to_user_id);
+        // A PUT can move a deal's stage too (the generic update path). If the
+        // owner just changed in the same request, the new owner gets the
+        // assignment; the stage notice goes to whoever owns it now.
+        await notifyDealStageChange(client, ids, updated.id, updated.name, updated.assigned_to_user_id, prev?.stage_id ?? null, updated.stage_id);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
+    if (!updated) { res.status(404).json({ success: false, message: 'Deal not found' }); return; }
+    res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 };
 
@@ -818,6 +853,10 @@ export const transitionDealStage = async (req: AuthRequest, res: Response, next:
       [req.params.id, fromStage, target.slug, nextProbability, isOverride,
        reason_code ?? null, note ?? null, changedBy, tenantId],
     );
+    // The deal's owner hears about the move, unless they made it.
+    const moved = updated.rows[0];
+    await notifyDealStageChange(client, { tenantId, actorId: actorIdOf(req) }, moved.id, moved.name,
+      moved.assigned_to_user_id, current.rows[0].stage_id, target.id);
 
     await client.query('COMMIT');
     res.json({ success: true, data: { ...updated.rows[0], stage: target.slug } });
@@ -900,7 +939,7 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
       // above. A blocked locking SELECT re-fetches the locked rows but reuses
       // the stale joined ones, so a projected ps.slug can come back NULL for a
       // deal that has a stage.
-      `SELECT id, probability, pipeline_id, stage_id
+      `SELECT id, name, probability, pipeline_id, stage_id, assigned_to_user_id
          FROM deals WHERE id = ANY($1::varchar[]) AND tenant_id = $2 FOR UPDATE`,
       [deal_ids, tenantId],
     );
@@ -963,18 +1002,28 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
         // a global primary key, so without it a name matching a user in another
         // workspace would be resolved to that user's id.
         const r = await client.query(
-          `UPDATE deals SET assigned_to = $1,
+          // $1::text: the parameter is used as a varchar column value AND as a
+          // btrim() argument, and Postgres refused to deduce one type for both
+          // ("inconsistent types deduced for parameter $1") — so every bulk
+          // owner change was a 500 until 2026-10-10 (found by the notifications tests).
+          `UPDATE deals SET assigned_to = $1::text,
                             assigned_to_user_id = (
                               SELECT u.id FROM users u
                                WHERE u.tenant_id = $3
-                                 AND lower(btrim(u.first_name || ' ' || u.last_name)) = lower(btrim($1))
+                                 AND lower(btrim(u.first_name || ' ' || u.last_name)) = lower(btrim($1::text))
                                LIMIT 1
                             ),
                             updated_at = NOW()
-           WHERE id = ANY($2::varchar[]) AND tenant_id = $3 RETURNING id`,
+           WHERE id = ANY($2::varchar[]) AND tenant_id = $3 RETURNING id, name, assigned_to_user_id`,
           [payload!.owner, foundIds, tenantId],
         );
         affected = r.rowCount ?? 0;
+        // Each deal that now has a NEW resolved owner is an assignment to them.
+        const ownerBefore = new Map(found.map(d => [d.id, d.assigned_to_user_id]));
+        for (const row of r.rows) {
+          await notifyOwnerChange(client, { tenantId, actorId: actorIdOf(req) }, 'deal',
+            row.id, row.name, ownerBefore.get(row.id), row.assigned_to_user_id);
+        }
         break;
       }
 
@@ -1035,6 +1084,8 @@ export const bulkUpdateDeals = async (req: AuthRequest, res: Response, next: Nex
              VALUES ($1,$2,$3,$4,false,'bulk-update',$5,$6)`,
             [deal.id, deal.stage, target.slug, nextProbability, changedBy, tenantId],
           );
+          await notifyDealStageChange(client, { tenantId, actorId: actorIdOf(req) }, deal.id, deal.name,
+            deal.assigned_to_user_id, deal.stage_id, target.id);
           moved++;
         }
 

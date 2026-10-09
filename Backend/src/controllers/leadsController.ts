@@ -8,6 +8,7 @@ import { resolveActorName } from '../utils/actorName';
 import { buildLeadListQuery, FilterError } from '../utils/leadListQuery';
 import { foreignIdsInTenant, userIdForName, userNameForId } from '../utils/tenantScope';
 import { PRIVILEGED_ROLES } from '../utils/roles';
+import { notifyOwnerChange, notifyLeadConverted, leadDisplayName } from '../utils/notifications';
 import {
   OVERRIDE_TARGET, isGatedMove, unmetCriteria, evaluateQualification,
 } from '../utils/leadQualification';
@@ -309,6 +310,9 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
        VALUES ($1, NULL, $2, $3, $4, $5)`,
       [result.rows[0].id, result.rows[0].stage, actorId(req), resolveActorName(req), tenantId],
     );
+    // Created already owned by someone else: that is an assignment to them.
+    await notifyOwnerChange(client, { tenantId, actorId: actorId(req) }, 'lead',
+      result.rows[0].id, leadDisplayName(result.rows[0]), null, result.rows[0].assigned_to_user_id);
     await client.query('COMMIT');
     res.status(201).json({ success: true, data: result.rows[0] });
     } catch (e) {
@@ -404,13 +408,33 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
     updates.push(`updated_at = NOW()`);
     params.push(req.params.id, tenantId);
 
-    const result = await pool.query(
-      `UPDATE leads SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`,
-      params
-    );
+    // One transaction: the owner BEFORE (row locked, read alone — lesson 11),
+    // the update, and the assignment notification commit or roll back together.
+    const client = await pool.connect();
+    let updated: any;
+    try {
+      await client.query('BEGIN');
+      const before = await client.query(
+        'SELECT assigned_to_user_id FROM leads WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [req.params.id, tenantId]);
+      const result = await client.query(
+        `UPDATE leads SET ${updates.join(', ')} WHERE id = $${i++} AND tenant_id = $${i} RETURNING *`,
+        params
+      );
+      updated = result.rows[0];
+      if (updated) {
+        await notifyOwnerChange(client, { tenantId, actorId: actorId(req) }, 'lead',
+          updated.id, leadDisplayName(updated), before.rows[0]?.assigned_to_user_id, updated.assigned_to_user_id);
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    } finally {
+      client.release();
+    }
 
-    if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
-    res.json({ success: true, data: result.rows[0] });
+    if (!updated) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
+    res.json({ success: true, data: updated });
   } catch (error) { next(error); }
 };
 

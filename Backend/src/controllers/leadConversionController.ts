@@ -7,6 +7,7 @@ import { resolveActorName } from '../utils/actorName';
 import { resolveStageForWrite } from '../utils/pipelineStages';
 import { QUALIFIED_STAGES } from '../utils/leadQualification';
 import { workspaceDefaultCurrency } from './workspaceController';
+import { notifyLeadConverted, leadDisplayName } from '../utils/notifications';
 
 /**
  * POST /api/v1/leads/:id/convert — REAL lead conversion. Step 5, slice B.
@@ -217,6 +218,9 @@ export const convertLead = async (req: AuthRequest, res: Response, next: NextFun
        VALUES ($1, $2, 'converted', $3, $4, $5)`,
       [lead.id, lead.stage, actorId, actorName, tenantId],
     );
+    // The lead's OWNER hears about it, unless they converted it themselves.
+    await notifyLeadConverted(client, { tenantId, actorId }, lead.id, leadDisplayName(lead),
+      lead.assigned_to_user_id, deal?.id ?? null);
     await client.query('COMMIT');
 
     res.status(201).json({

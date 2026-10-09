@@ -65,6 +65,7 @@ export async function setupWorkspace(label: string): Promise<TestWorkspace> {
 
 /** Remove everything a workspace could hold, in FK-safe order, then the workspace itself. */
 export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
+  await pool.query('DELETE FROM notifications WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM deal_stage_history WHERE tenant_id = $1', [ws.tenantId]);
   // documents was missing here until the RBAC suite began creating them, and a
   // leftover document blocks the tenant delete with documents_tenant_id_fkey.

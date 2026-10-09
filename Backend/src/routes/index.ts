@@ -18,6 +18,7 @@ import targetsRoutes from './targets';
 import moduleLinksRoutes from './moduleLinks';
 import serviceCredentialsRoutes from './serviceCredentials';
 import searchRoutes from './search';
+import notificationsRoutes from './notifications';
 
 const router = Router();
 
@@ -40,5 +41,6 @@ router.use('/targets', targetsRoutes);
 router.use('/module-links', moduleLinksRoutes);
 router.use('/service-credentials', serviceCredentialsRoutes);
 router.use('/search', searchRoutes);
+router.use('/notifications', notificationsRoutes);
 
 export default router;

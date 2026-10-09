@@ -20,6 +20,11 @@ vi.mock('../../utils/workspaceApi', () => ws);
 // The connection line is covered by ConnectionStatus.test; here the health
 // check never answers, so the shell must show NO connection claim at all.
 vi.mock('../../utils/healthApi', () => ({ checkConnection: () => new Promise(() => {}) }));
+// The bell's feed is covered by Notifications.test; here it never answers.
+vi.mock('../../utils/notificationsApi', async () => ({
+  ...(await vi.importActual<object>('../../utils/notificationsApi')),
+  fetchNotifications: () => new Promise(() => {}), fetchDueFollowUps: () => new Promise(() => {}),
+}));
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({ user: mockUser, logout: vi.fn() }),
 }));
@@ -103,11 +108,13 @@ describe('TopBar — unbuilt controls are labelled, not live', () => {
     expect(screen.getByText('Ctrl K')).toHaveAttribute('data-tone', 'neutral');
   });
 
-  it('the inbox is disabled and carries no "unread" dot (it had no handler)', () => {
+  it('the inbox is a real button now (Group A item 5) and carries no invented "unread" dot', () => {
     renderAt(<TopBar />);
-    const inbox = screen.getByRole('button', { name: /inbox \(coming soon\)/i });
-    expect(inbox).toBeDisabled();
+    const inbox = screen.getByRole('button', { name: /^inbox$/i });
+    expect(inbox).toBeEnabled();
     expect(inbox.querySelector('span')).toBeNull();
+    // No badge on the bell before the server has answered.
+    expect(screen.queryByTestId('unread-badge')).toBeNull();
   });
 
   it('a user with no avatar gets their initials — never a stock photo of somebody else', () => {
