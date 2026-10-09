@@ -1427,12 +1427,36 @@ old constraint, which fails the shared-name test.
     forward-only guard and the panel's source all mutation-tested. Browser check on
     `bmi_crm_iso_test` in Kolkata and New York, a real call logged through the composer moved the
     line, confirmed in Postgres; seed torn down and re-counted.
-  - **FOUND, NOT FIXED — the engagement / intent factors cannot score.** `call_count`,
-    `meeting_count`, `email_sent_count`, `email_opens_count`, `email_clicks_count` and
-    `page_views_count` have NO columns; `mapRowToLead` hardcodes them to 0, so those factors read
-    "0 meetings, 0 calls" even for a lead with logged calls. Calls/meetings/emails could be
-    COUNTED from `lead_activities` (server-side, per lead); opens/clicks/page views have no source
-    at all and should be shown as not tracked rather than 0. Its own slice.
+  - **The engagement / intent factors could not score — FIXED the same day, next entry.**
+
+- **FIXED (2026-10-10, prioritised by Venkat ahead of items 4-9) — lead engagement counts were
+  hardcoded to 0.** `mapRowToLead` set calls, meetings and emails sent to 0, so a lead with logged
+  calls read "0 calls" and the engagement / intent factors could never score. A wrong-data defect,
+  same class as the timezone and cross-workspace fixes.
+  - **The server counts them** (`utils/leadEngagement.ENGAGEMENT_COLUMNS`) from BOTH places lead
+    activity is recorded — `activities` rows with a lead_id (the composers) and the per-type
+    `lead_calls` / `lead_emails` / `lead_meetings` (the older endpoints) — with the same meaning of
+    "happened" as `recordLeadContact`: a completed call or any lead_calls row; a COMPLETED meeting
+    (planned ones are not counted); a completed non-inbound email or a sent outbound lead_emails row
+    (not draft / failed / bounced / scheduled). Every subquery is tenant-matched. Served on GET
+    /leads (scalar subqueries run only for the returned page — the 10k pagination suite passes) and
+    GET /leads/:id, and merged into every lead WRITE response (`withEngagement`: create, update,
+    stage move, conversion) so the client never has to guess.
+  - **Opens, clicks and page views are NOT TRACKED** — nothing records them. The mapper sets them
+    `null`, never 0, and every reader was audited: the Email Engagement factor reads "Email opens
+    and clicks are not tracked"; Engagement Depth reads "2 meetings, 3 calls, page views not
+    tracked". Three claims built on the fake zeros are gone: the explainer's "N emails sent, no
+    opens", Sales Memory's "(no opens)", and next-best-action's "Try different email subject
+    lines" — each now fires only when opens are MEASURED as zero, which today is never.
+  - A count a response did not carry is `null` ("calls unknown"), never 0.
+  - **Score formula unchanged, deliberately:** untracked factors still cannot earn their points
+    (Email Engagement is up to 20). Re-weighting toward measurable factors is a scoring decision
+    for Venkat, not part of this fix.
+  - `roundTrip.leadEngagement.test.ts` (6), `leadEngagementCounts.test.ts` (6); the mapper, the
+    "no opens" guard and the tenant match mutation-tested. Browser check on `bmi_crm_iso_test`: a
+    call logged through the composer plus a meeting -> "1 meeting, 1 call, page views not tracked",
+    Intent 0 -> 53; seed torn down and re-counted. Live has 0 lead activity rows today, so no live
+    figure changes until something is logged.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

@@ -123,12 +123,17 @@ export function explainScore(lead: Lead, mfs?: MultiFactorScore): ScoreExplanati
     signals.push({ label: `${meets} meeting${meets > 1 ? 's' : ''} logged`, direction: 'up' });
   }
 
-  const opens = lead.email_opens_count ?? 0;
+  // Opens are NOT TRACKED (null). "Sent, no opens" is only said when opens were
+  // measured as zero; otherwise sent emails are reported plainly — never as a
+  // negative signal built on data nobody recorded.
+  const opens = lead.email_opens_count;
   const sent  = lead.email_sent_count  ?? 0;
-  if (opens > 0) {
+  if (opens !== null && opens > 0) {
     signals.push({ label: `${opens} email open${opens > 1 ? 's' : ''}`, direction: 'up' });
-  } else if (sent > 0) {
+  } else if (sent > 0 && opens === 0) {
     signals.push({ label: `${sent} email${sent > 1 ? 's' : ''} sent, no opens`, direction: 'down' });
+  } else if (sent > 0) {
+    signals.push({ label: `${sent} email${sent > 1 ? 's' : ''} sent`, direction: 'neutral' });
   }
 
   const calls = lead.call_count ?? 0;

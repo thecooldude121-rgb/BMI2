@@ -184,7 +184,7 @@ function buildSystemEvents(lead: Lead, skipEmailFields: boolean): TimelineEvent[
       evts.push({
         id: `sys_email_sent_${lead.id}`, kind: 'email_sent', category: 'email',
         timestamp: lead.last_email_sent_at,
-        title: `Email sent${lead.email_sent_count > 1 ? ` (${lead.email_sent_count} total)` : ''}`,
+        title: `Email sent${(lead.email_sent_count ?? 0) > 1 ? ` (${lead.email_sent_count} total)` : ''}`,
         source: 'system',
       });
     }
@@ -192,7 +192,7 @@ function buildSystemEvents(lead: Lead, skipEmailFields: boolean): TimelineEvent[
       evts.push({
         id: `sys_email_opened_${lead.id}`, kind: 'email_opened', category: 'email',
         timestamp: lead.last_email_opened_at,
-        title: `Email opened${lead.email_opens_count > 1 ? ` (${lead.email_opens_count}×)` : ''}`,
+        title: `Email opened${(lead.email_opens_count ?? 0) > 1 ? ` (${lead.email_opens_count}×)` : ''}`,
         source: 'system',
       });
     }
@@ -200,7 +200,7 @@ function buildSystemEvents(lead: Lead, skipEmailFields: boolean): TimelineEvent[
       evts.push({
         id: `sys_email_clicked_${lead.id}`, kind: 'email_clicked', category: 'email',
         timestamp: lead.last_email_clicked_at,
-        title: `Link clicked${lead.email_clicks_count > 1 ? ` (${lead.email_clicks_count}×)` : ''}`,
+        title: `Link clicked${(lead.email_clicks_count ?? 0) > 1 ? ` (${lead.email_clicks_count}×)` : ''}`,
         source: 'system',
       });
     }
@@ -294,10 +294,12 @@ export function buildLastTouchSummary(lead: Lead): string {
 
   const parts: string[] = [`Last touched ${label}`];
 
-  if (lead.email_opens_count > 0) {
-    parts.push(`${lead.email_opens_count} email${lead.email_opens_count > 1 ? 's' : ''} opened`);
-  } else if (lead.email_sent_count > 0) {
-    parts.push(`${lead.email_sent_count} email${lead.email_sent_count > 1 ? 's' : ''} sent`);
+  const opened = lead.email_opens_count ?? 0;   // null = not tracked
+  const sent = lead.email_sent_count ?? 0;      // null = not served
+  if (opened > 0) {
+    parts.push(`${opened} email${opened > 1 ? 's' : ''} opened`);
+  } else if (sent > 0) {
+    parts.push(`${sent} email${sent > 1 ? 's' : ''} sent`);
   }
 
   if (lead.next_follow_up_date) {
@@ -407,19 +409,22 @@ export function buildSalesMemory(lead: Lead, recentActivities?: LeadActivity[]):
       histParts.push(`WhatsApp: ${byType.whatsapp[0].outcome ?? 'sent'}`);
     }
   } else {
-    if (lead.email_sent_count > 0) {
+    const sentN = lead.email_sent_count ?? 0;
+    const opensN = lead.email_opens_count;
+    const clicksN = lead.email_clicks_count;
+    if (sentN > 0) {
+      // Opens are only mentioned when MEASURED. Untracked (null) says nothing —
+      // it used to print "(no opens)", a fact nobody recorded.
       const eng =
-        lead.email_opens_count > 0
-          ? ` (${lead.email_opens_count} opened${lead.email_clicks_count > 0 ? `, ${lead.email_clicks_count} clicked` : ''})`
-          : ' (no opens)';
-      histParts.push(`${lead.email_sent_count} email${lead.email_sent_count > 1 ? 's' : ''}${eng}`);
+        opensN !== null && opensN > 0
+          ? ` (${opensN} opened${clicksN !== null && clicksN > 0 ? `, ${clicksN} clicked` : ''})`
+          : opensN === 0 ? ' (no opens)' : '';
+      histParts.push(`${sentN} email${sentN > 1 ? 's' : ''}${eng}`);
     }
-    if (lead.call_count > 0) {
-      histParts.push(`${lead.call_count} call${lead.call_count > 1 ? 's' : ''}`);
-    }
-    if (lead.meeting_count > 0) {
-      histParts.push(`${lead.meeting_count} meeting${lead.meeting_count > 1 ? 's' : ''}`);
-    }
+    const callsN = lead.call_count ?? 0;
+    const meetingsN = lead.meeting_count ?? 0;
+    if (callsN > 0) histParts.push(`${callsN} call${callsN > 1 ? 's' : ''}`);
+    if (meetingsN > 0) histParts.push(`${meetingsN} meeting${meetingsN > 1 ? 's' : ''}`);
   }
   const s2 = histParts.length > 0 ? `${histParts.join('; ')}.` : 'No outreach logged yet.';
 

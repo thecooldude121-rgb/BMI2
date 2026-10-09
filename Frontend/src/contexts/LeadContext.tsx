@@ -383,9 +383,10 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
   const calculateLeadScore = (lead: Lead): number => {
     let score = 0;
 
-    if (lead.email_opens_count > 0) score += Math.min(lead.email_opens_count * 2, 20);
-    if (lead.email_clicks_count > 0) score += Math.min(lead.email_clicks_count * 5, 25);
-    if (lead.meeting_count > 0) score += Math.min(lead.meeting_count * 10, 30);
+    // Opens/clicks are untracked (null) and earn nothing; meetings are counted.
+    if ((lead.email_opens_count ?? 0) > 0) score += Math.min((lead.email_opens_count ?? 0) * 2, 20);
+    if ((lead.email_clicks_count ?? 0) > 0) score += Math.min((lead.email_clicks_count ?? 0) * 5, 25);
+    if ((lead.meeting_count ?? 0) > 0) score += Math.min((lead.meeting_count ?? 0) * 10, 30);
 
     if (lead.last_activity_date) {
       const daysSince = Math.floor((Date.now() - new Date(lead.last_activity_date).getTime()) / (1000 * 60 * 60 * 24));

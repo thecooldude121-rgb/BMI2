@@ -140,12 +140,21 @@ export interface Lead {
   last_email_sent_at?: string;
   last_email_opened_at?: string;
   last_email_clicked_at?: string;
-  email_opens_count: number;
-  email_clicks_count: number;
-  page_views_count: number;
-  meeting_count: number;
-  call_count: number;
-  email_sent_count: number;
+  /**
+   * NOT TRACKED — nothing in this CRM records email opens, clicks or page views.
+   * Always null from the API mapper; render "not tracked", never 0.
+   */
+  email_opens_count: number | null;
+  email_clicks_count: number | null;
+  page_views_count: number | null;
+  /**
+   * COUNTED by the server from logged activity (completed calls, completed
+   * meetings, emails sent). null only if a response did not carry the count —
+   * unknown, which is not the same as zero.
+   */
+  meeting_count: number | null;
+  call_count: number | null;
+  email_sent_count: number | null;
   ai_recommendations: any[];
   automation_paused: boolean;
   automation_paused_until?: string;
