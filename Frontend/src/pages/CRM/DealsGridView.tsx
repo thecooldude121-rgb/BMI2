@@ -38,9 +38,11 @@ interface DealsGridViewProps {
   stages: PipelineStage[];
   onDealClick: (dealId: string) => void;
   onStageChange?: (dealId: string, newStage: string) => void;
+  /** The parent's REAL delete (it used to console.log). */
+  onDelete?: (dealId: string) => void;
 }
 
-const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onStageChange }) => {
+const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onStageChange, onDelete }) => {
   const navigate = useNavigate();
   const { lookup: gridStageLookup } = useStageLookup();
   const [selectedStage, setSelectedStage] = useState<string>('all');
@@ -133,8 +135,8 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
   };
 
   const handleDelete = (dealId: string) => {
-    console.log('Deleting deal:', dealId);
     setShowDeleteModal(null);
+    onDelete?.(dealId);   // the parent reports success only after the server confirms
   };
 
   const loadMore = () => {

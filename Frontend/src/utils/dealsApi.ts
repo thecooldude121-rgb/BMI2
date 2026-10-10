@@ -248,6 +248,65 @@ export async function fetchDeals(limit = 50): Promise<any[]> {
   return json.success ? json.data : [];
 }
 
+/** One page of a deal list, with the SERVER's total for the filtered set (slice 1). */
+export interface DealsPage { deals: any[]; total: number; limit: number; offset: number }
+
+export interface DealsPageQuery {
+  pipeline_id?: string;
+  stage_id?: string;
+  /** Deals in pipeline_id that belong to none of its stages. */
+  unplaced?: boolean;
+  search?: string;
+  assigned_to_user_id?: string | number;
+  sort?: 'created_at' | 'updated_at' | 'name' | 'value' | 'base_amount_usd' | 'probability' | 'expected_close_date' | 'stage';
+  dir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+const toQuery = (q: Record<string, unknown>) => {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== null && v !== '') p.set(k, String(v));
+  return p.toString();
+};
+
+/** GET /deals as a page — THROWS the server's message on a non-2xx. */
+export async function fetchDealsPage(q: DealsPageQuery): Promise<DealsPage> {
+  const res = await fetch(`${API_BASE}/deals?${toQuery(q as Record<string, unknown>)}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load deals (HTTP ${res.status})`);
+  return { deals: json.data ?? [], total: json.total ?? 0, limit: json.limit ?? 0, offset: json.offset ?? 0 };
+}
+
+export interface StageSummaryRow {
+  stage_id: string; slug: string; name: string; position: number;
+  stage_type: string; archived_at: string | null;
+  /** Every deal in the column under the active filters — not the loaded page. */
+  count: number;
+  /** USD, summed ONLY over trustworthy base amounts (see the endpoint). */
+  value_usd: number;
+  /** Deals whose amount could not be counted in USD (not converted). */
+  unconverted: number;
+}
+export interface StageSummary { pipeline_id: string; stages: StageSummaryRow[]; unplaced: number }
+
+/** GET /deals/stage-summary — the board's column headers. THROWS on a non-2xx. */
+export async function fetchDealStageSummary(q: Pick<DealsPageQuery, 'pipeline_id' | 'search' | 'assigned_to_user_id'>): Promise<StageSummary> {
+  const res = await fetch(`${API_BASE}/deals/stage-summary?${toQuery(q as Record<string, unknown>)}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load column totals (HTTP ${res.status})`);
+  return json.data as StageSummary;
+}
+
+/** DELETE /deals/:id — THROWS the server's message (e.g. a 403 for sales). */
+export async function deleteDealViaAPI(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/deals/${encodeURIComponent(id)}`, { method: 'DELETE', headers: getAuthHeaders() });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.message || `The deal was not deleted (HTTP ${res.status})`);
+  }
+}
+
 /** The subset of a deal row the contact and account pages render. */
 export interface RelatedDeal {
   id: string;

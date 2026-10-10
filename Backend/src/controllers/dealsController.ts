@@ -229,8 +229,24 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     // simply matches zero rows rather than reading across the boundary.
     if (company_id)    { query += ` AND d.company_id = $${i++}`;      params.push(company_id); }
 
-    // Slice-1 filter for the per-pipeline board (slice 2).
-    if (req.query.pipeline_id) { query += ` AND d.pipeline_id = $${i++}`; params.push(req.query.pipeline_id); }
+    // The board's own rule: a deal with no pipeline_id belongs to new-business.
+    if (req.query.pipeline_id) { query += ` AND COALESCE(d.pipeline_id, 'new-business') = $${i++}`; params.push(req.query.pipeline_id); }
+    // Deals in this pipeline that belong to NO column of it (slice 2a): the
+    // board lists them instead of dropping them. Same test as the summary's
+    // unplaced count, so the list and the number cannot disagree.
+    if (req.query.unplaced === 'true') {
+      if (!req.query.pipeline_id) { res.status(400).json({ success: false, message: 'unplaced needs pipeline_id' }); return; }
+      query += ` AND NOT EXISTS (SELECT 1 FROM pipeline_stages us JOIN pipelines up ON up.id = us.pipeline_id AND up.tenant_id = us.tenant_id
+                   WHERE us.id = d.stage_id AND us.tenant_id = d.tenant_id AND up.slug = $${i++})`;
+      params.push(req.query.pipeline_id);
+    }
+    // One board COLUMN (slice 2a) by stage id, not slug: two pipelines may both
+    // have a "prospecting", and an id cannot be confused. Tenant-safe because
+    // ps is joined with the tenant match and an id from elsewhere matches nothing.
+    if (req.query.stage_id) {
+      if (!/^[0-9a-f-]{36}$/i.test(String(req.query.stage_id))) { res.status(400).json({ success: false, message: 'stage_id must be a stage id' }); return; }
+      query += ` AND d.stage_id = $${i++}`; params.push(req.query.stage_id);
+    }
 
     // TOTAL over the same FROM + WHERE — the size of the filtered set, not the page.
     const total = await pool.query(`SELECT COUNT(*)::int AS n ${query}`, params);
@@ -239,6 +255,75 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
       [...params, page.limit, page.offset],
     );
     res.json(listEnvelope(result.rows, total.rows[0].n, page));
+  } catch (error) { next(error); }
+};
+
+/**
+ * GET /deals/stage-summary?pipeline_id=&search=&assigned_to_user_id=
+ * The board's column headers (Group A item 4, slice 2a): per stage of the
+ * pipeline, the deal COUNT and the value in USD, under the same filters the
+ * columns are fetched with — so a header describes every deal in the column,
+ * not the page that happens to be loaded.
+ *
+ * CURRENCY. The value is a sum of base_amount_usd, and ONLY where that number
+ * can be trusted: a USD deal, or a non-USD deal whose base differs from its
+ * native value (i.e. was actually converted). This server holds no exchange
+ * rates, and two write paths (createDeal without a base, lead conversion) store
+ * the NATIVE amount as base_amount_usd — summing those would add rupees to
+ * dollars. Those deals are counted in `unconverted` per stage, never summed.
+ * The board used to sum native amounts across currencies and label it USD.
+ *
+ * `unplaced` counts deals in this pipeline whose stage is not one of its
+ * stages (a stage from another pipeline, or none): they belong to no column,
+ * and a board that silently omits them under-reports the pipeline.
+ */
+export const getDealStageSummary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const pipeline = String(req.query.pipeline_id || 'new-business');
+    const params: unknown[] = [tenantId, pipeline];
+    let filters = '';
+    if (req.query.search) {
+      params.push(`%${escapeLike(String(req.query.search))}%`);
+      filters += ` AND (d.name ILIKE $${params.length} OR d.company_name ILIKE $${params.length})`;
+    }
+    if (req.query.assigned_to_user_id) {
+      params.push(req.query.assigned_to_user_id);
+      filters += ` AND d.assigned_to_user_id = $${params.length}`;
+    }
+    const result = await pool.query(
+      `WITH f AS (
+         SELECT d.id, d.stage_id, d.currency, d.value, d.base_amount_usd
+           FROM deals d
+          WHERE d.tenant_id = $1 AND d.is_test = false AND d.is_archived = false
+            AND COALESCE(d.pipeline_id, 'new-business') = $2 ${filters}
+       ), st AS (
+         SELECT s.id, s.slug, s.name, s.position, s.stage_type, s.archived_at
+           FROM pipeline_stages s
+           JOIN pipelines p ON p.id = s.pipeline_id AND p.tenant_id = s.tenant_id
+          WHERE s.tenant_id = $1 AND p.slug = $2
+       )
+       SELECT st.id AS stage_id, st.slug, st.name, st.position, st.stage_type, st.archived_at,
+              count(f.id)::int AS count,
+              COALESCE(sum(f.base_amount_usd) FILTER (
+                WHERE f.base_amount_usd IS NOT NULL
+                  AND (upper(coalesce(f.currency, 'USD')) = 'USD' OR f.base_amount_usd IS DISTINCT FROM f.value)), 0)::float8 AS value_usd,
+              count(f.id) FILTER (
+                WHERE f.base_amount_usd IS NULL
+                   OR (upper(coalesce(f.currency, 'USD')) <> 'USD' AND f.base_amount_usd = f.value))::int AS unconverted
+         FROM st LEFT JOIN f ON f.stage_id = st.id
+        GROUP BY st.id, st.slug, st.name, st.position, st.stage_type, st.archived_at
+        ORDER BY st.position`,
+      params);
+    const unplaced = await pool.query(
+      `SELECT count(*)::int AS n FROM deals d
+        WHERE d.tenant_id = $1 AND d.is_test = false AND d.is_archived = false
+          AND COALESCE(d.pipeline_id, 'new-business') = $2 ${filters}
+          AND NOT EXISTS (
+            SELECT 1 FROM pipeline_stages s JOIN pipelines p ON p.id = s.pipeline_id AND p.tenant_id = s.tenant_id
+             WHERE s.id = d.stage_id AND s.tenant_id = d.tenant_id AND p.slug = $2)`,
+      params);
+    res.json({ success: true, data: { pipeline_id: pipeline, stages: result.rows, unplaced: unplaced.rows[0].n } });
   } catch (error) { next(error); }
 };
 
