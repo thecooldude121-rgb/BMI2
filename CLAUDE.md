@@ -1524,6 +1524,30 @@ old constraint, which fails the shared-name test.
       sum such rows, but the data is still wrong. Live has none today. The server holds no exchange
       rates (they live in the browser's `currencyUtils`), so the fix needs a decision: store NULL /
       refuse a non-USD deal without a base, or move rates server-side.
+  - **SLICE 2b DONE (2026-10-11) — the Deals LIST pages on the server.** It flattened whatever the
+    board had loaded and filtered, counted, sorted and "paged" it in the browser — with NO page
+    controls (`pagedDeals = sortedDeals`), so every filtered row rendered at once.
+    - One `GET /deals` page under the board's server filters (pipeline, search, My deals) plus the
+      list's own sort, ONE Stage (by id) and ONE Owner (by name; options are the workspace roster from
+      `GET /users`, not the names on a loaded page). A real pager — "Showing 1–25 of N", rows per page,
+      Previous / Next — from the server's total; a narrower query returns to page 1.
+    - Sorting by name, amount (`base_amount_usd`), stage, close date, probability and deal age runs on
+      the server; account, owner, contact, source and competitor are not sortable yet (no arrow, no
+      request). A failed load is an error with Retry, never "No deals match".
+    - **"Coming soon"** (as approved): the KPI cards (total value, win rate, closing this week, stalled,
+      days to close, weighted forecast, duplicates — the deal COUNT is the server's total); the Source,
+      Deal age and Velocity filters and every per-option count computed from a page; "Select all
+      matching" (selection is "on this page"). Filters restored from a URL or a saved view that the
+      server cannot run are dropped, never applied to one page.
+    - **When the KPI cards are rebuilt on server aggregates (slice 5) two rules must carry over** —
+      win rate classified by `stage_type`, and the weighted forecast EXCLUDING open deals with no
+      probability (and saying how many). The comment in `DealsListView` says so where the code was.
+    - `mapApiDeal` moved to `utils/dealCards.ts` so the board and the list map rows identically.
+    - `DealsListView.test.tsx` (6), mutation-tested (offset 0, empty state not gated on a successful
+      load, unsortable column requesting anyway). E2E on `bmi_crm_iso_test`: 60 / Qualified 20 /
+      Qualified + one owner 4 on screen against the same SQL; seed torn down and re-counted. Found and
+      fixed in that check: the pager pushed past the viewport (the table's height reserved 12px for
+      the old count footer), so the window scrolled and the sticky filter bar slid under the table.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no

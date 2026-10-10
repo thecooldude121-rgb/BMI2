@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '../../components/ui/Button';
-import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, isWithinDays, parseDateMs } from '../../utils/dateUtils';
+import { formatCloseDate, formatRelativeTime, daysFromNow, daysFromNowLabel, parseDateMs } from '../../utils/dateUtils';
 import { localDay } from '../../utils/dates';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, Settings, BarChart3, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Building2, User, Sparkles, Mail, Phone, MoreHorizontal, CheckCircle2, AlertTriangle, Clock, Target, X, Copy, Trash2, Archive, StickyNote, CalendarPlus, ExternalLink, SlidersHorizontal, PauseCircle, UserX, Pencil, ArrowLeftRight, UserCog, Zap, FileText, CheckSquare, ClipboardList, Workflow, Link2, ListFilter, Swords, AlertCircle, Search, TrendingUp, TrendingDown } from 'lucide-react';
-import { formatAmountUSD, formatAmountCompact, type SupportedCurrency, CURRENCY_SYMBOLS, getReportingAmount, RATES_SNAPSHOT_DATE, convertToBaseCurrency } from '../../utils/currencyUtils';
+import { formatAmountUSD, formatAmountCompact, type SupportedCurrency, CURRENCY_SYMBOLS, getReportingAmount, convertToBaseCurrency } from '../../utils/currencyUtils';
 import { explainDealHealth } from '../../utils/dealHealthDrivers';
 import type { DealCard } from '../../components/Deal/DealKanbanCard';
 import { getStageStyle } from '../../config/stageColors';
@@ -20,55 +20,16 @@ import { findDuplicatePairs } from '../../utils/duplicateDetection';
 import type { DuplicatePair, DuplicatableDeal } from '../../utils/duplicateDetection';
 import { getDealDataQuality } from '../../utils/dealDataQuality';
 import {
-  fetchPipelines, buildStageLookup, isOpenWith, isWonWith, isLostWith,
-  weightedProbability, type ApiPipeline,
+  fetchPipelines, buildStageLookup, isWonWith, type ApiPipeline,
 } from '../../utils/pipelinesApi';
 import type { DataQualityIssue } from '../../utils/dealDataQuality';
+import { fetchDealsPage } from '../../utils/dealsApi';
+import { fetchUsers } from '../../utils/usersApi';
+import { NotAvailableBadge } from '../../components/common/NotAvailable';
+import { mapApiDeal } from '../../utils/dealCards';
 
-// ── Advanced filter builder predicate ─────────────────────────────────────────
-// Evaluates a single FilterCondition against a deal. Returns true for incomplete
-// conditions (empty valueStrings / null numbers) so building mid-air never hides results.
-function evaluateCondition(deal: {
-  stage: string; owner: string; amount: number; closeDate: string;
-  daysSinceContact: number; aiScore: number; contactName: string;
-}, c: FilterCondition): boolean {
-  switch (c.field) {
-    case 'stage':
-      if (c.valueStrings.length === 0) return true;
-      return c.operator === 'isNoneOf'
-        ? !c.valueStrings.includes(deal.stage)
-        : c.valueStrings.includes(deal.stage);
-    case 'owner':
-      if (c.valueStrings.length === 0) return true;
-      return c.operator === 'isNoneOf'
-        ? !c.valueStrings.includes(deal.owner)
-        : c.valueStrings.includes(deal.owner);
-    case 'value':
-      if (c.operator === 'between') {
-        if (c.valueNumber !== null && deal.amount < c.valueNumber) return false;
-        if (c.valueNumber2 !== null && deal.amount > c.valueNumber2) return false;
-        return true;
-      }
-      if (c.valueNumber === null) return true;
-      return c.operator === 'greaterThan' ? deal.amount > c.valueNumber : deal.amount < c.valueNumber;
-    case 'closeDate': {
-      if (!c.valueDate) return true;
-      const closeMs = deal.closeDate ? new Date(deal.closeDate).getTime() : null;
-      if (closeMs === null) return false;
-      const filterMs = new Date(c.valueDate).getTime();
-      return c.operator === 'before' ? closeMs < filterMs : closeMs > filterMs;
-    }
-    case 'lastActivity':
-      if (c.valueNumber === null) return true;
-      return c.operator === 'olderThan'
-        ? deal.daysSinceContact > c.valueNumber
-        : deal.daysSinceContact <= c.valueNumber;
-    case 'contact':
-      return c.operator === 'isSet' ? !!deal.contactName : !deal.contactName;
-    default:
-      return true;
-  }
-}
+// (The advanced filter builder's predicate lived here; no builder was ever
+// rendered, and the list now filters on the server — slice 2b.)
 
 interface Deal {
   id: string;
@@ -202,7 +163,32 @@ interface DealsListViewProps {
   density?: 'standard' | 'compact';
   openDQDrawer?: boolean;
   onDQDrawerClose?: () => void;
+  /**
+   * Slice 2b: the list pages on the SERVER. The board's server filters
+   * (pipeline, search, "My deals") arrive here; the list adds its own page,
+   * sort and single Stage / Owner filter. `refreshKey` re-fetches after a write.
+   */
+  serverQuery: { pipeline_id?: string; search?: string; assigned_to_user_id?: string };
+  /** Stage slug -> stage id, for the Stage filter (the server filters by id). */
+  stageIds: Record<string, string>;
+  /** Stage slug -> the column's server count, for the Stage filter's option counts. */
+  stageTotals: Record<string, number>;
+  refreshKey?: number;
 }
+
+/**
+ * List sort keys the SERVER can order by (slice 2b). `flip`: deal AGE ascending
+ * is created_at DESCENDING. Keys absent here (account, owner, contact, source,
+ * competitor) are not sortable until the server can sort them.
+ */
+const LIST_SORT: Partial<Record<string, { sort: 'name' | 'base_amount_usd' | 'stage' | 'expected_close_date' | 'probability' | 'created_at'; flip?: boolean }>> = {
+  deal: { sort: 'name' },
+  value: { sort: 'base_amount_usd' },
+  stage: { sort: 'stage' },
+  closeDate: { sort: 'expected_close_date' },
+  probability: { sort: 'probability' },
+  dealAge: { sort: 'created_at', flip: true },
+};
 
 const MERGE_FIELDS: Array<{ key: keyof DuplicatableDeal; label: string }> = [
   { key: 'dealName',     label: 'Deal Name'  },
@@ -249,6 +235,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   density: densityProp,
   openDQDrawer: openDQDrawerProp,
   onDQDrawerClose,
+  serverQuery, stageIds, stageTotals, refreshKey = 0,
 }) => {
   const stageOrder = useMemo(() => stages.map(st => st.id), [stages]);
 
@@ -504,11 +491,63 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
   };
 
+  /*
+   * SLICE 2b — ONE PAGE FROM THE SERVER. This list used to flatten whatever the
+   * board had loaded (50 deals) and filter, count, sort and page it in the
+   * browser, with no page controls at all. Now it asks GET /deals for one page
+   * under the board's filters plus its own sort, a single Stage and a single
+   * Owner, and renders the server's total. Figures that need the whole set (the
+   * KPI cards, duplicates, data-quality counts, the other filters) are "Coming
+   * soon" until a later slice serves them.
+   */
+  const [serverRows, setServerRows] = useState<Deal[]>([]);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const singleStage = selectedStages.size === 1 ? [...selectedStages][0] : undefined;
+  const singleOwner = selectedOwners.size === 1 ? [...selectedOwners][0] : undefined;
+  const listSort = LIST_SORT[sortBy];
+  useEffect(() => {
+    let cancelled = false;
+    setLoadState('loading');
+    fetchDealsPage({
+      ...serverQuery,
+      search: debouncedDealSearch || serverQuery.search,
+      stage_id: singleStage ? stageIds[singleStage] : undefined,
+      assigned_to: singleOwner,
+      ...(listSort ? { sort: listSort.sort, dir: listSort.flip ? (sortOrder === 'asc' ? 'desc' : 'asc') : sortOrder } : {}),
+      limit: rowsPerPage,
+      offset: currentPage * rowsPerPage,
+    })
+      .then(page => {
+        if (cancelled) return;
+        setServerRows(page.deals.map(r => mapApiDeal(r, r.stage ?? '') as Deal));
+        setServerTotal(page.total);
+        setLoadState('ready');
+        setLoadError(null);
+      })
+      .catch((e: Error) => { if (!cancelled) { setLoadState('error'); setLoadError(e.message); } });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverQuery.pipeline_id, serverQuery.search, serverQuery.assigned_to_user_id, debouncedDealSearch,
+      singleStage, singleOwner, sortBy, sortOrder, rowsPerPage, currentPage, refreshKey, retryKey]);
+  // A narrower query starts again at page 1.
+  useEffect(() => { setCurrentPage(0); },
+    [serverQuery.pipeline_id, serverQuery.search, serverQuery.assigned_to_user_id, singleStage, singleOwner, sortBy, sortOrder]);
+
+  const [rosterNames, setRosterNames] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchUsers()
+      .then(us => { if (!cancelled) setRosterNames([...new Set(us.map(u => u.displayName).filter(Boolean))].sort()); })
+      .catch(() => { /* no Owner filter rather than a guessed list */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const allDeals = useMemo(
-    () => stages
-      .flatMap(stage => stage.deals.map(deal => ({ ...deal, stage: stage.id })))
-      .filter(d => !archivedDealIds.has(d.id)),
-    [stages, archivedDealIds],
+    () => serverRows.filter(d => !archivedDealIds.has(d.id)),
+    [serverRows, archivedDealIds],
   );
 
   const stageFilterOptions = useMemo(
@@ -516,56 +555,15 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     [allDeals]
   );
 
-  // Unfiltered counts for filter dropdowns (so unchecked options always show totals)
-  const stageDealCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const d of allDeals) counts[d.stage] = (counts[d.stage] ?? 0) + 1;
-    return counts;
-  }, [allDeals]);
-
-  const ownerDealCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const d of allDeals) if (d.owner) counts[d.owner] = (counts[d.owner] ?? 0) + 1;
-    return counts;
-  }, [allDeals]);
-
-  const sourceDealCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const d of allDeals) if (d.source) counts[d.source] = (counts[d.source] ?? 0) + 1;
-    return counts;
-  }, [allDeals]);
-
-  const velocityDealCounts = useMemo(() => {
-    let ahead = 0, slipping = 0;
-    for (const d of allDeals) {
-      const v = getDealVelocity(d, metaFor(d));
-      if (v?.rating === 'ahead') ahead++;
-      else if (v?.rating === 'slipping') slipping++;
-    }
-    return { ahead, slipping };
-  }, [allDeals]);
-
-  const dealAgeCounts = useMemo(() => {
-    let new30 = 0, d30to90 = 0, d90plus = 0, d180plus = 0;
-    for (const d of allDeals) {
-      const age = getDealAgeDays(d.createdAt);
-      if (age < 30) new30++;
-      if (age >= 30 && age <= 90) d30to90++;
-      if (age > 90) d90plus++;
-      if (age > 180) d180plus++;
-    }
-    return { new30, d30to90, d90plus, d180plus };
-  }, [allDeals]);
+  // The per-option counts for the Stage / Owner / Source / Velocity / Deal-age
+  // dropdowns were computed over the loaded deals — one page now. The Stage
+  // filter shows the server's column totals instead; the rest are coming soon.
 
   const ownerFilterOptions = useMemo(
     () => availableOwners.length > 0
       ? availableOwners
       : [...new Set(allDeals.map(d => d.owner).filter(Boolean))].sort(),
     [allDeals, availableOwners]
-  );
-  const sourceFilterOptions = useMemo(
-    () => [...new Set(allDeals.map(d => d.source).filter(Boolean))].sort(),
-    [allDeals]
   );
 
   const availableCompetitors = useMemo(() => {
@@ -579,166 +577,18 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
   const selectedDealSet = useMemo(() => new Set(selectedDeals), [selectedDeals]);
 
-  const filteredDeals = useMemo(() => {
-    return allDeals.filter(deal => {
-      // Stage
-      if (selectedStages.size > 0 && !selectedStages.has(deal.stage)) return false;
+  // The server applied every filter it runs (stage, owner, search, the board's);
+  // the others are "Coming soon", so nothing is filtered again in the browser.
+  const filteredDeals = allDeals;
 
-      // Owner
-      if (selectedOwners.size > 0 && !selectedOwners.has(deal.owner)) return false;
+  // The KPI filters and "issues only" need the whole set — coming soon.
+  const kpiFilteredDeals = filteredDeals;
 
-      // Close Date
-      if (closeDateFilter.preset !== 'all') {
-        // The close date is a calendar DAY: compare days, never instants
-        // (new Date('YYYY-MM-DD') is UTC midnight — a deal closing today read
-        // as overdue from 05:30 IST, and as "last month" on the 1st).
-        const ms = deal.closeDate ? parseDateMs(deal.closeDate) : Infinity;
-        if (!isFinite(ms)) return false;
-        const close = new Date(ms);
-        const now = new Date();
-        const days = daysFromNow(deal.closeDate) ?? 0;
-        const day = localDay(close);
-        if (closeDateFilter.preset === 'thisWeek') {
-          if (days < 0 || days > 7) return false;
-        } else if (closeDateFilter.preset === 'thisMonth') {
-          if (close.getMonth() !== now.getMonth() || close.getFullYear() !== now.getFullYear()) return false;
-        } else if (closeDateFilter.preset === 'thisQuarter') {
-          const q = Math.floor(now.getMonth() / 3);
-          if (Math.floor(close.getMonth() / 3) !== q || close.getFullYear() !== now.getFullYear()) return false;
-        } else if (closeDateFilter.preset === 'overdue') {
-          if (days >= 0) return false;
-        } else if (closeDateFilter.preset === 'custom') {
-          if (closeDateFilter.from && day < closeDateFilter.from.slice(0, 10)) return false;
-          if (closeDateFilter.to && day > closeDateFilter.to.slice(0, 10)) return false;
-        }
-      }
+  // The page arrives SORTED by the server (LIST_SORT); re-sorting one page in
+  // the browser would disagree with the next page.
+  const sortedDeals = kpiFilteredDeals;
 
-      // Value — compare against reporting currency amount
-      const repAmt = getReportingAmount(deal, reportingCurrency);
-      if (valueFilter.min !== null && repAmt < valueFilter.min) return false;
-      if (valueFilter.max !== null && repAmt > valueFilter.max) return false;
-
-      // Source
-      if (selectedSources.size > 0 && !selectedSources.has(deal.source)) return false;
-
-      // Health tier
-      // (Health-tier filtering removed 2026-10-03 with the score it filtered on.)
-
-      // Velocity
-      if (velocityFilter.size > 0) {
-        const v = getDealVelocity(deal, metaFor(deal));
-        const r = (v?.rating ?? 'unknown') as string;
-        if (!velocityFilter.has(r as 'ahead' | 'slipping')) return false;
-      }
-
-      // Deal age (days since creation)
-      if (dealAgeFilter.min !== null || dealAgeFilter.max !== null) {
-        const age = getDealAgeDays(deal.createdAt);
-        if (dealAgeFilter.min !== null && age < dealAgeFilter.min) return false;
-        if (dealAgeFilter.max !== null && age > dealAgeFilter.max) return false;
-      }
-
-      // Activity gap (days since last contact)
-      if (pipelineAgeFilter.min !== null || pipelineAgeFilter.max !== null) {
-        const idleDays = deal.daysSinceContact;
-        if (pipelineAgeFilter.min !== null && idleDays < pipelineAgeFilter.min) return false;
-        if (pipelineAgeFilter.max !== null && idleDays > pipelineAgeFilter.max) return false;
-      }
-
-      // Competitor filter (primary OR secondary match)
-      if (selectedCompetitors.size > 0) {
-        const allComps = [
-          ...(deal.primaryCompetitor ? [deal.primaryCompetitor] : []),
-          ...(deal.secondaryCompetitors ?? []),
-        ];
-        if (!allComps.some(c => selectedCompetitors.has(c))) return false;
-      }
-
-      // Advanced filter builder conditions (additive AND with quick filters)
-      if (advancedConditions.length > 0) {
-        const results = advancedConditions.map(c => evaluateCondition(deal, c));
-        const passes = advancedConjunction === 'AND'
-          ? results.every(Boolean)
-          : results.some(Boolean);
-        if (!passes) return false;
-      }
-
-      // Deal search (debounced, matches name / company / contact)
-      if (debouncedDealSearch) {
-        const q = debouncedDealSearch;
-        const matches =
-          deal.dealName?.toLowerCase().includes(q) ||
-          deal.companyName?.toLowerCase().includes(q) ||
-          deal.contactName?.toLowerCase().includes(q);
-        if (!matches) return false;
-      }
-
-      return true;
-    });
-  }, [allDeals, selectedStages, selectedOwners, closeDateFilter, valueFilter, selectedSources, selectedHealthTiers, velocityFilter, dealAgeFilter, pipelineAgeFilter, selectedCompetitors, advancedConditions, advancedConjunction, reportingCurrency, debouncedDealSearch]);
-
-  const kpiFilteredDeals = useMemo(() => {
-    let result = filteredDeals;
-    if (activeKpiFilter === 'closingWeek') result = result.filter(d => d.closeDate && isWithinDays(d.closeDate, 7));
-    else if (activeKpiFilter === 'stalled') result = result.filter(d => isStalled(d));
-    if (showIssuesOnly) result = result.filter(d => !getDealDataQuality(d, metaFor(d)).isClean);
-    return result;
-  }, [filteredDeals, activeKpiFilter, showIssuesOnly]);
-
-  const sortedDeals = [...kpiFilteredDeals].sort((a, b) => {
-    let comparison = 0;
-    switch (sortBy) {
-      case 'deal':
-        comparison = a.dealName.localeCompare(b.dealName);
-        break;
-      case 'account':
-        comparison = (a.companyName || '').localeCompare(b.companyName || '');
-        break;
-      case 'value':
-        comparison = getReportingAmount(a, reportingCurrency) - getReportingAmount(b, reportingCurrency);
-        break;
-      case 'stage': {
-        // Unknown stages sort AFTER the known ones rather than before them:
-        // indexOf gives -1, and a raw subtraction ranked a stage this pipeline
-        // does not list above the first real stage.
-        const ia = stageOrder.indexOf(a.stage);
-        const ib = stageOrder.indexOf(b.stage);
-        const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
-        const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
-        comparison = ra - rb;
-        break;
-      }
-      case 'closeDate':
-        // parseDateMs returns Infinity for empty/invalid dates — sorts them to end, never NaN
-        comparison = parseDateMs(a.closeDate) - parseDateMs(b.closeDate);
-        break;
-      case 'owner':
-        comparison = (a.owner || '').localeCompare(b.owner || '');
-        break;
-      case 'contact':
-        comparison = (a.contactName || '').localeCompare(b.contactName || '');
-        break;
-      case 'probability':
-        // TODO: rename aiScore → probability
-        comparison = a.aiScore - b.aiScore;
-        break;
-      case 'dealAge': {
-        const msA = a.createdAt ? Date.now() - new Date(a.createdAt).getTime() : 0;
-        const msB = b.createdAt ? Date.now() - new Date(b.createdAt).getTime() : 0;
-        comparison = msA - msB;
-        break;
-      }
-      case 'source':
-        comparison = (a.source || '').localeCompare(b.source || '');
-        break;
-      case 'competitor':
-        comparison = (a.primaryCompetitor ?? 'zzz').localeCompare(b.primaryCompetitor ?? 'zzz');
-        break;
-    }
-    return sortOrder === 'asc' ? comparison : -comparison;
-  });
-
-  const totalPages = Math.ceil(sortedDeals.length / rowsPerPage);
+  const totalPages = Math.max(1, Math.ceil(serverTotal / rowsPerPage));
   const pagedDeals = sortedDeals;
 
   const formatDate = formatCloseDate;
@@ -839,6 +689,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   };
 
   const handleSort = (column: typeof sortBy) => {
+    if (!LIST_SORT[column]) return;   // the server cannot sort this column yet
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
@@ -1184,69 +1035,17 @@ const DealsListView: React.FC<DealsListViewProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showColumnSettings]);
 
-  const totalValue = useMemo(
-    () => sortedDeals.reduce((sum, deal) => sum + getReportingAmount(deal, reportingCurrency), 0),
-    [sortedDeals, reportingCurrency],
-  );
   /*
-   * WIN RATE. Both halves were literal comparisons, so a Renewals or
-   * Partnerships outcome landed in NEITHER the numerator nor the denominator —
-   * the figure was computed over the default pipeline alone while being labelled
-   * as the workspace's rate.
+   * The KPI computations (total value, win rate, closing this week, stalled,
+   * avg days to close, weighted forecast) lived here and summed whatever the
+   * browser had — one page under server paging (slice 2b), so they are "Coming
+   * soon" until item 4 slice 5 serves them as server aggregates. Two rules they
+   * encoded MUST carry over when that is built (see git history for the code):
+   *   - WIN RATE is classified by stage_type (isWonWith / isLostWith), never by
+   *     slug, so Renewals and Partnerships outcomes count;
+   *   - WEIGHTED FORECAST excludes OPEN deals with no probability (probabilityRaw
+   *     null) and reports how many it excluded — never value x 0.
    */
-  const computedWinRate = useMemo(() => {
-    const won = allDeals.filter(isWonWith(stageLookup));
-    const lost = allDeals.filter(isLostWith(stageLookup));
-    const closed = won.length + lost.length;
-    if (closed === 0) return null;
-    return Math.round((won.length / closed) * 100);
-  }, [allDeals, stageLookup]);
-
-  // KPI counts from filteredDeals (pre-KPI-filter) so they stay stable when a KPI card is active
-  const kpiClosingCount  = filteredDeals.filter(d => d.closeDate && isWithinDays(d.closeDate, 7)).length;
-  const kpiStalledCount  = filteredDeals.filter(d => isStalled(d)).length;
-
-  const computedAvgDaysToClose = useMemo(() => {
-    const closedWon = filteredDeals.filter(d => isWonWith(stageLookup)(d) && d.createdAt && d.closeDate);
-    if (closedWon.length === 0) return null;
-    const total = closedWon.reduce((sum, d) => {
-      const ms = parseDateMs(d.closeDate) - new Date(d.createdAt!).getTime();
-      return sum + Math.max(0, Math.round(ms / 86_400_000));
-    }, 0);
-    return Math.round(total / closedWon.length);
-  }, [filteredDeals, stageLookup]);
-
-  /*
-   * WEIGHTED FORECAST — two fixes, both of which move a revenue number.
-   *
-   * 1. OUTCOMES BY TYPE. It excluded only the literals 'closed-won' and
-   *    'closed-lost', so a WON Renewals or Partnerships deal was weighted into
-   *    the forecast as though it were still in flight — counting revenue already
-   *    booked as revenue still to come.
-   *
-   * 2. UNSET PROBABILITY IS EXCLUDED, NOT ZEROED (design Q3, settled). A deal
-   *    with no probability of its own and a stage with none either contributed
-   *    `value × 0` — silently dragging the total down by the full value of every
-   *    unassessed deal, and doing it in a way that looks like a smaller pipeline
-   *    rather than a missing input. It is now left out, and the count of
-   *    exclusions is surfaced next to the figure so the total is never quietly
-   *    computed over fewer deals than the user thinks.
-   */
-  const weightedForecast = useMemo(() => {
-    const open = filteredDeals.filter(isOpenWith(stageLookup));
-    let total = 0;
-    let unweighted = 0;
-    for (const d of open) {
-      // probabilityRaw, NOT aiScore: aiScore is `d.probability || 0`, so an
-      // unset probability arrives as a real 0 and would be weighted in as an
-      // explicit "will not close" rather than excluded as unassessed.
-      const p = weightedProbability({ ...d, probability: d.probabilityRaw ?? null }, stageLookup);
-      if (p === null) { unweighted++; continue; }
-      total += getReportingAmount(d, reportingCurrency) * (p / 100);
-    }
-    return { total, unweighted, counted: open.length - unweighted };
-  }, [filteredDeals, reportingCurrency, stageLookup]);
-
   const PIPELINE_STAGES = stageOrder;
   const stageSummary = useMemo(() => {
     const byStage: Record<string, { count: number; value: number }> = {};
@@ -1325,15 +1124,29 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   }, [advancedConditions, advancedConjunction]);
 
   // ── Apply external filters (from saved views via DealsKanbanPage) ──────────
+  // Slice 2b: only ONE stage and ONE owner run on the server; a saved view's
+  // other list filters are not applied (the board says so when it applies one).
   useEffect(() => {
     if (!externalFilters) return;
-    if (externalFilters.stages)           setSelectedStages(externalFilters.stages);
-    if (externalFilters.owners)           setSelectedOwners(externalFilters.owners);
-    if (externalFilters.sources)          setSelectedSources(externalFilters.sources);
-    if (externalFilters.closeDateFilter)  setCloseDateFilter(externalFilters.closeDateFilter);
-    if (externalFilters.valueFilter)      setValueFilter(externalFilters.valueFilter);
-    if (externalFilters.pipelineAgeFilter) setPipelineAgeFilter(externalFilters.pipelineAgeFilter);
+    if (externalFilters.stages) setSelectedStages(new Set([...externalFilters.stages].slice(0, 1)));
+    if (externalFilters.owners) setSelectedOwners(new Set([...externalFilters.owners].slice(0, 1)));
   }, [externalFilters]);
+
+  // Filters restored from a URL that the server cannot run are dropped on mount,
+  // so a shared link never shows a list that LOOKS filtered by them.
+  useEffect(() => {
+    setSelectedStages(prev => new Set([...prev].slice(0, 1)));
+    setSelectedOwners(prev => new Set([...prev].slice(0, 1)));
+    setCloseDateFilter({ preset: 'all' });
+    setValueFilter({ min: null, max: null });
+    setSelectedSources(new Set());
+    setSelectedHealthTiers(new Set());
+    setVelocityFilter(new Set());
+    setDealAgeFilter({ min: null, max: null });
+    setPipelineAgeFilter({ min: null, max: null });
+    setSelectedCompetitors(new Set());
+    setAdvancedConditions([]);
+  }, []);
 
   // ── Notify parent of filter changes (for saveCurrentView) ─────────────────
   useEffect(() => {
@@ -1424,6 +1237,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
   const visibleColCount = 1 + orderedVisible.length;
 
   const SortIcon = ({ column }: { column: typeof sortBy }) => {
+    if (!LIST_SORT[column]) return <span className="sr-only">(not sortable yet)</span>;
     if (sortBy !== column) return null;
     return sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
   };
@@ -2874,198 +2688,21 @@ const DealsListView: React.FC<DealsListViewProps> = ({
       {/* ── Stats Bar + Stage Pipeline Bar — sticky below the two kanban toolbar rows ── */}
       <div ref={kpiSectionRef} className="sticky top-[104px] z-30 bg-gray-50 -mx-6">
 
-      {/* ── Stats Bar ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 sm:py-6">
-        <div className={`grid gap-3 sm:gap-4 lg:gap-6 grid-cols-2 sm:grid-cols-3 ${activePairCount > 0 ? 'lg:grid-cols-8' : 'lg:grid-cols-7'}`}>
-
-          {/* Card 1: Total Deals — clickable, active when no KPI filter */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveKpiFilter(null)}
-            onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(null)}
-            className={[
-              'relative bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-l-4',
-              'cursor-pointer select-none transition-all duration-150',
-              'hover:shadow-md hover:-translate-y-0.5',
-              activeKpiFilter === null
-                ? 'border-indigo-400 border-l-blue-500 ring-2 ring-indigo-400 ring-offset-1'
-                : 'border-blue-200 border-l-blue-500',
-            ].join(' ')}
-          >
-            <div className={`text-xl sm:text-3xl text-blue-900 tabular-nums ${activeKpiFilter === null ? 'font-extrabold' : 'font-black'}`}>
-              {filteredDeals.length}
-            </div>
-            <div
-              className="text-xs text-blue-700 font-medium mt-1 uppercase tracking-wide"
-              title={hasActiveFilters ? 'Count reflects current filters — clear filters to see all deals' : undefined}
-            >
-              {hasActiveFilters ? 'Deals Shown' : 'Total Deals'}
-            </div>
+      {/* ── Stats Bar — slice 2b ─────────────────────────────────────────────────
+          The eight KPI cards (total value, win rate, closing this week, stalled,
+          avg days to close, weighted forecast, duplicates) summed the deals the
+          browser happened to have; with paging that is one page. The deal count
+          is the SERVER's total; the rest wait for server aggregates. */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3" data-testid="list-total">
+            <div className="text-2xl font-black text-gray-900 tabular-nums">{loadState === 'ready' ? serverTotal : '—'}</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Deals{hasActiveFilters || serverQuery.search || serverQuery.assigned_to_user_id ? ' matching' : ''}</div>
           </div>
-
-          {/* Card 2: Total Value — decorative only */}
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-l-4 border-green-200 border-l-green-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5">
-            <div className="text-xl sm:text-3xl font-black text-green-900 tabular-nums">{formatAmountUSD(totalValue)}</div>
-            <div
-              className="text-xs text-green-700 font-medium mt-1 uppercase tracking-wide"
-              title={`Values converted to ${reportingCurrency} · Indicative rates, ${RATES_SNAPSHOT_DATE}`}
-            >
-              Total Value ({reportingCurrency})
-            </div>
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-gray-200 px-4 py-3 text-[13px] text-gray-500" aria-disabled="true">
+            Total value, win rate, closing this week, stalled, days to close, weighted forecast and duplicates
+            <NotAvailableBadge label="Coming soon" />
           </div>
-
-          {/* Card 3: Avg Win Rate — computed from allDeals closed-won / total closed */}
-          <div
-            className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-l-4 border-purple-200 border-l-purple-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
-            title="Win rate computed from all closed deals (won ÷ total closed)"
-          >
-            <div className="text-xl sm:text-3xl font-black text-purple-900 tabular-nums">
-              {computedWinRate !== null ? `${computedWinRate}%` : '—'}
-            </div>
-            <div className="text-xs text-purple-700 font-medium mt-1 uppercase tracking-wide">Avg Win Rate</div>
-          </div>
-
-          {/* Card 4: Closing This Week — clickable filter */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveKpiFilter(activeKpiFilter === 'closingWeek' ? null : 'closingWeek')}
-            onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'closingWeek' ? null : 'closingWeek')}
-            className={[
-              'relative bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-l-4',
-              'cursor-pointer select-none transition-all duration-150',
-              'hover:shadow-md hover:-translate-y-0.5',
-              activeKpiFilter === 'closingWeek'
-                ? 'border-amber-400 border-l-amber-500 ring-2 ring-amber-400 ring-offset-2'
-                : 'border-amber-200 border-l-amber-500',
-            ].join(' ')}
-          >
-            {activeKpiFilter === 'closingWeek' && (
-              <button
-                title="Clear filter"
-                onClick={e => { e.stopPropagation(); setActiveKpiFilter(null); }}
-                className="absolute top-2 right-2 w-4 h-4 text-gray-400 hover:text-gray-600 leading-none"
-                tabIndex={-1}
-              >×</button>
-            )}
-            <div className={`text-xl sm:text-3xl text-amber-900 tabular-nums ${activeKpiFilter === 'closingWeek' ? 'font-extrabold' : 'font-black'}`}>
-              {kpiClosingCount}
-            </div>
-            <div className="text-xs text-amber-700 font-medium mt-1 uppercase tracking-wide">Closing This Week</div>
-          </div>
-
-          {/* Card 5: Stalled Deals — clickable filter */}
-          <div
-            role="button"
-            tabIndex={0}
-            title={stalledConfig.enabled
-              ? `Deals stalled when: ${[
-                  stalledConfig.criteria.noActivity.enabled && `no activity ${stalledConfig.criteria.noActivity.threshold}d+`,
-                  stalledConfig.criteria.noNextStep.enabled && 'no next step set',
-                  stalledConfig.criteria.closeOverdue.enabled && 'close date passed',
-                  stalledConfig.criteria.dealAge.enabled && `deal age ${stalledConfig.criteria.dealAge.threshold}d+`,
-                ].filter(Boolean).join(', ')}. Click to filter.`
-              : 'Stall detection is disabled. Click to filter.'}
-            onClick={() => setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
-            onKeyDown={e => e.key === 'Enter' && setActiveKpiFilter(activeKpiFilter === 'stalled' ? null : 'stalled')}
-            className={[
-              'relative bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-l-4',
-              'cursor-pointer select-none transition-all duration-150',
-              'hover:shadow-md hover:-translate-y-0.5',
-              activeKpiFilter === 'stalled'
-                ? 'border-red-400 border-l-red-500 ring-2 ring-red-400 ring-offset-2'
-                : 'border-red-200 border-l-red-500',
-            ].join(' ')}
-          >
-            {activeKpiFilter === 'stalled' && (
-              <button
-                title="Clear filter"
-                onClick={e => { e.stopPropagation(); setActiveKpiFilter(null); }}
-                className="absolute top-2 right-2 w-4 h-4 text-gray-400 hover:text-gray-600 leading-none"
-                tabIndex={-1}
-              >×</button>
-            )}
-            <div className="flex items-center gap-2">
-              <span className={`text-xl sm:text-3xl text-red-900 tabular-nums ${activeKpiFilter === 'stalled' ? 'font-extrabold' : 'font-black'}`}>
-                {kpiStalledCount}
-              </span>
-              {kpiStalledCount > 5 && (
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" title="High stall count — action required" />
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-xs text-red-700 font-medium uppercase tracking-wide">Stalled Deals</span>
-              <button
-                onClick={e => { e.stopPropagation(); navigate('/crm/settings'); }}
-                title="Configure stall rules in Settings → Pipeline Settings → Stalled Rules"
-                className="text-red-400 hover:text-red-600 transition-colors"
-                tabIndex={-1}
-              >
-                <Settings size={12} />
-              </button>
-            </div>
-          </div>
-
-          {/* Card 6: Avg Days to Close — computed from closed-won deals in filteredDeals */}
-          <div
-            className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4 border border-l-4 border-gray-200 border-l-gray-400 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
-            title="Average days from creation to close, based on closed-won deals in current filter"
-          >
-            <div className="text-xl sm:text-3xl font-black text-gray-900 tabular-nums">
-              {computedAvgDaysToClose !== null ? computedAvgDaysToClose : '—'}
-            </div>
-            <div className="text-xs text-gray-700 font-medium mt-1 uppercase tracking-wide">Avg Days to Close</div>
-          </div>
-
-          {/* Card 7: Weighted Forecast — Σ value × probability for active deals */}
-          <div
-            className="bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg p-4 border border-l-4 border-violet-200 border-l-violet-500 cursor-default transition-all duration-150 hover:shadow-md hover:-translate-y-0.5"
-            title={
-              `Weighted pipeline: sum of deal value × win probability for the ` +
-              `${weightedForecast.counted} open deal${weightedForecast.counted === 1 ? '' : 's'} ` +
-              `in this filter that have a probability set · ${reportingCurrency}` +
-              (weightedForecast.unweighted
-                ? `. ${weightedForecast.unweighted} excluded for having none — they are NOT counted as zero.`
-                : '')
-            }
-          >
-            <div className="text-xl sm:text-3xl font-black text-violet-900 tabular-nums">
-              {formatAmountUSD(weightedForecast.total)}
-            </div>
-            <div className="text-xs text-violet-700 font-medium mt-1 uppercase tracking-wide">Weighted Forecast</div>
-            {weightedForecast.unweighted > 0 && (
-              /*
-               * SAID ON THE CARD, NOT ONLY IN A TOOLTIP.
-               *
-               * Excluding an unassessed deal and counting it as zero produce the
-               * SAME total — a sum is a sum. The whole difference is whether the
-               * shortfall is declared, so hiding that in a hover would give back
-               * exactly what the change was for: a number quietly computed over
-               * fewer deals than the user is looking at.
-               */
-              <div className="text-[11px] text-violet-800 mt-1 normal-case leading-tight">
-                {weightedForecast.unweighted} deal{weightedForecast.unweighted === 1 ? '' : 's'} excluded — no probability set
-              </div>
-            )}
-          </div>
-
-          {/* Card 8: Duplicate Pairs — only shown when pairs exist */}
-          {activePairCount > 0 && (
-            <button
-              onClick={() => setDuplicateDrawerOpen(true)}
-              title="Potential duplicate deals detected — click to review"
-              className={[
-                'relative bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border',
-                'cursor-pointer select-none transition-all duration-150 text-left w-full',
-                'hover:shadow-md hover:scale-[1.01] border-amber-300',
-              ].join(' ')}
-            >
-              <div className="text-xl sm:text-3xl font-black text-amber-800 tabular-nums">{activePairCount}</div>
-              <div className="text-xs text-amber-700 font-medium mt-1 uppercase tracking-wide">Duplicates to Review</div>
-            </button>
-          )}
-
         </div>
       </div>
 
@@ -3104,22 +2741,23 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 {isOpen && (
                   <div className="absolute left-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30">
                     {STAGE_ORDER.map(stageId => {
-                      const count = stageDealCounts[stageId] ?? 0;
+                      // ONE stage at a time — that is what the server filters on
+                      // (slice 2b). The count is the column's server total under
+                      // the board's filters, shown only when no other list filter
+                      // would make it disagree with the table.
+                      const count = !singleOwner && !debouncedDealSearch ? stageTotals[stageId] : undefined;
                       const checked = selectedStages.has(stageId);
                       return (
                         <label key={stageId} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
                           <input
-                            type="checkbox"
+                            type="radio"
+                            name="deal-list-stage"
                             checked={checked}
-                            onChange={() => setSelectedStages(prev => {
-                              const next = new Set(prev);
-                              if (next.has(stageId)) next.delete(stageId); else next.add(stageId);
-                              return next;
-                            })}
-                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
+                            onChange={() => setSelectedStages(new Set([stageId]))}
+                            className="border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
                           />
                           <span className="flex-1 text-[13px] text-gray-700">{getStageName(stageId)}</span>
-                          <span className="text-[11px] text-gray-400 tabular-nums">{count}</span>
+                          {count !== undefined && <span className="text-[11px] text-gray-400 tabular-nums">{count}</span>}
                         </label>
                       );
                     })}
@@ -3140,7 +2778,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           })()}
 
           {/* ── Owner ──────────────────────────────────────────── */}
-          {ownerFilterOptions.length > 0 && (() => {
+          {rosterNames.length > 0 && (() => {
             const isOpen = openFilter === 'owner';
             return (
               <div className="relative flex-shrink-0">
@@ -3163,20 +2801,18 @@ const DealsListView: React.FC<DealsListViewProps> = ({
 
                 {isOpen && (
                   <div className="absolute left-0 top-full mt-1.5 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30 max-h-56 overflow-y-auto">
-                    {ownerFilterOptions.map(owner => (
+                    {/* The workspace ROSTER (GET /users), not the names on one loaded
+                        page; one owner at a time, as the server filters. */}
+                    {rosterNames.map(owner => (
                       <label key={owner} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
                         <input
-                          type="checkbox"
+                          type="radio"
+                          name="deal-list-owner"
                           checked={selectedOwners.has(owner)}
-                          onChange={() => setSelectedOwners(prev => {
-                            const next = new Set(prev);
-                            if (next.has(owner)) next.delete(owner); else next.add(owner);
-                            return next;
-                          })}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
+                          onChange={() => setSelectedOwners(new Set([owner]))}
+                          className="border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
                         />
                         <span className="flex-1 text-[13px] text-gray-700 truncate">{owner}</span>
-                        <span className="text-[11px] text-gray-400 tabular-nums">{ownerDealCounts[owner] ?? 0}</span>
                       </label>
                     ))}
                     {selectedOwners.size > 0 && (
@@ -3195,207 +2831,23 @@ const DealsListView: React.FC<DealsListViewProps> = ({
             );
           })()}
 
-          {/* ── Source ─────────────────────────────────────────── */}
-          {sourceFilterOptions.length > 0 && (() => {
-            const isOpen = openFilter === 'source';
-            return (
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={() => setOpenFilter(isOpen ? null : 'source')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
-                    selectedSources.size > 0
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  Source
-                  {selectedSources.size > 0 && (
-                    <span className="bg-indigo-600 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                      {selectedSources.size}
-                    </span>
-                  )}
-                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isOpen && (
-                  <div className="absolute left-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30">
-                    {sourceFilterOptions.map(src => (
-                      <label key={src} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={selectedSources.has(src)}
-                          onChange={() => setSelectedSources(prev => {
-                            const next = new Set(prev);
-                            if (next.has(src)) next.delete(src); else next.add(src);
-                            return next;
-                          })}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 w-3.5 h-3.5 flex-shrink-0"
-                        />
-                        <span className="flex-1 text-[13px] text-gray-700">{src}</span>
-                        <span className="text-[11px] text-gray-400 tabular-nums">{sourceDealCounts[src] ?? 0}</span>
-                      </label>
-                    ))}
-                    {selectedSources.size > 0 && (
-                      <div className="border-t border-gray-100 mt-1 pt-1">
-                        <button
-                          onClick={() => { setSelectedSources(new Set()); setOpenFilter(null); }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
-                        >
-                          Clear source filter
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
+          {/* ── Source / Deal age / Velocity — filtered one loaded page; server-side later (slice 2b) ── */}
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border border-gray-200 bg-white text-gray-400 flex-shrink-0 cursor-not-allowed"
+            aria-disabled="true" title="Source filter is coming soon">
+            Source <NotAvailableBadge label="Soon" />
+          </span>
           {/* The "Health / Win Score" filter sat here — tiers of deal.aiScore,
               the stored win probability presented as an AI score. Removed
               2026-10-03 (Evidence-Based AI). */}
 
-          {/* ── Deal Age ───────────────────────────────────────── */}
-          {(() => {
-            type Preset = { label: string; min: number | null; max: number | null; countKey: keyof typeof dealAgeCounts; icon?: 'warn' | 'crit' };
-            const PRESETS: Preset[] = [
-              { label: 'New (< 30 days)',   min: null, max: 30,   countKey: 'new30'   },
-              { label: '30–90 days',        min: 30,   max: 90,   countKey: 'd30to90' },
-              { label: '90+ days',          min: 90,   max: null, countKey: 'd90plus', icon: 'warn' },
-              { label: '180+ days (Stale)', min: 180,  max: null, countKey: 'd180plus', icon: 'crit' },
-            ];
-            const isActive = dealAgeFilter.min !== null || dealAgeFilter.max !== null;
-            const activePreset = PRESETS.find(p => p.min === dealAgeFilter.min && p.max === dealAgeFilter.max);
-            const activeLabel = activePreset
-              ? activePreset.label
-              : dealAgeFilter.min !== null && dealAgeFilter.max !== null
-                ? `${dealAgeFilter.min}–${dealAgeFilter.max} days`
-                : dealAgeFilter.min !== null
-                  ? `${dealAgeFilter.min}+ days`
-                  : dealAgeFilter.max !== null
-                    ? `< ${dealAgeFilter.max} days`
-                    : 'Deal Age';
-            const isOpen = openFilter === 'dealAge';
-            return (
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={() => setOpenFilter(isOpen ? null : 'dealAge')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
-                    isActive
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  {activeLabel}
-                  <ChevronDown className={`h-3.5 w-3.5 opacity-50 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isOpen && (
-                  <div className="absolute left-0 top-full mt-1.5 w-58 bg-white rounded-xl shadow-xl border border-gray-200 py-1.5 z-30" style={{ minWidth: '224px' }}>
-                    {PRESETS.map(p => {
-                      const selected = dealAgeFilter.min === p.min && dealAgeFilter.max === p.max;
-                      return (
-                        <button
-                          key={p.label}
-                          onClick={() => { setDealAgeFilter({ min: p.min, max: p.max }); setOpenFilter(null); }}
-                          className={`w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-left transition-colors ${selected ? 'bg-indigo-50' : ''}`}
-                        >
-                          {p.icon === 'crit'
-                            ? <AlertCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
-                            : p.icon === 'warn'
-                              ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                              : <span className="w-3.5 flex-shrink-0" />
-                          }
-                          <span className={`flex-1 text-[13px] ${selected ? 'text-indigo-700 font-medium' : 'text-gray-700'}`}>{p.label}</span>
-                          <span className="text-[11px] text-gray-400 tabular-nums">{dealAgeCounts[p.countKey]}</span>
-                        </button>
-                      );
-                    })}
-
-                    {/* Custom range */}
-                    <div className="border-t border-gray-100 mt-1 pt-2 px-3 pb-2">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Custom range</p>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          min={0}
-                          placeholder="Min"
-                          value={dealAgeFilter.min ?? ''}
-                          onChange={e => setDealAgeFilter(prev => ({ ...prev, min: e.target.value ? parseInt(e.target.value) : null }))}
-                          className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                          onClick={e => e.stopPropagation()}
-                        />
-                        <span className="text-gray-400 text-xs">–</span>
-                        <input
-                          type="number"
-                          min={0}
-                          placeholder="Max"
-                          value={dealAgeFilter.max ?? ''}
-                          onChange={e => setDealAgeFilter(prev => ({ ...prev, max: e.target.value ? parseInt(e.target.value) : null }))}
-                          className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                          onClick={e => e.stopPropagation()}
-                        />
-                        <span className="text-[11px] text-gray-400">days</span>
-                      </div>
-                    </div>
-
-                    {isActive && (
-                      <div className="border-t border-gray-100 pt-1">
-                        <button
-                          onClick={() => { setDealAgeFilter({ min: null, max: null }); setOpenFilter(null); }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 font-medium"
-                        >
-                          Clear deal age filter
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* ── Velocity ───────────────────────────────────────── */}
-          <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-200 flex-shrink-0">
-            <button
-              onClick={() => setVelocityFilter(prev => {
-                const n = new Set(prev);
-                if (n.has('ahead')) n.delete('ahead'); else n.add('ahead');
-                return n;
-              })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
-                velocityFilter.has('ahead')
-                  ? 'bg-green-50 border-green-300 text-green-700'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <TrendingUp className="h-3.5 w-3.5" />
-              Accelerating
-              <span className={`text-[11px] tabular-nums ml-0.5 ${velocityFilter.has('ahead') ? 'text-green-600' : 'text-gray-400'}`}>
-                {velocityDealCounts.ahead}
-              </span>
-            </button>
-            <button
-              onClick={() => setVelocityFilter(prev => {
-                const n = new Set(prev);
-                if (n.has('slipping')) n.delete('slipping'); else n.add('slipping');
-                return n;
-              })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border transition-colors ${
-                velocityFilter.has('slipping')
-                  ? 'bg-orange-50 border-orange-300 text-orange-700'
-                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <TrendingDown className="h-3.5 w-3.5" />
-              Stalling
-              <span className={`text-[11px] tabular-nums ml-0.5 ${velocityFilter.has('slipping') ? 'text-orange-600' : 'text-gray-400'}`}>
-                {velocityDealCounts.slipping}
-              </span>
-            </button>
-          </div>
-
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border border-gray-200 bg-white text-gray-400 flex-shrink-0 cursor-not-allowed"
+            aria-disabled="true" title="Deal age filter is coming soon">
+            Deal age <NotAvailableBadge label="Soon" />
+          </span>
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium border border-gray-200 bg-white text-gray-400 flex-shrink-0 cursor-not-allowed"
+            aria-disabled="true" title="Velocity filter is coming soon">
+            Velocity <NotAvailableBadge label="Soon" />
+          </span>
           {/* ── Clear all (right-aligned) ───────────────────────── */}
           {hasActiveFilters && (
             <button
@@ -3530,7 +2982,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
         <div ref={tableContainerRef} className="hidden md:block">
           <div
             className="bg-white overflow-auto"
-            style={{ height: `calc(100vh - ${tableOffsetTop + 12}px)`, minHeight: '220px' }}
+            // Room below the table for the pager (slice 2b; the 12px was the old
+            // count footer) — otherwise the pager sat past the viewport and the
+            // window had to scroll, sliding the sticky filter bar under the table.
+            style={{ height: `calc(100vh - ${tableOffsetTop + (loadState === 'ready' && serverTotal > 0 ? 56 : 12)}px)`, minHeight: '220px' }}
           >
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20">
@@ -3633,7 +3088,7 @@ const DealsListView: React.FC<DealsListViewProps> = ({
               </tbody>
             </table>
 
-            {sortedDeals.length === 0 && (
+            {loadState === 'ready' && sortedDeals.length === 0 && (
               <div className="text-center py-16 px-8">
                 {(totalPipelineDeals ?? allDeals.length) === 0 ? (
                   <>
@@ -3677,18 +3132,42 @@ const DealsListView: React.FC<DealsListViewProps> = ({
           </div>
         </div>
 
-        {/* 8.4 — Total count footer (desktop) */}
-        {sortedDeals.length > 0 && (
-          <div className="hidden md:flex items-center bg-white border-t border-gray-200" style={{ height: '12px', paddingLeft: '24px', paddingRight: '24px' }}>
-            <span style={{ fontSize: '10px', lineHeight: 1, color: '#9CA3AF' }}>
-              {sortedDeals.length} deal{sortedDeals.length !== 1 ? 's' : ''}
-            </span>
+        {/* A failed load says so — never an empty table that reads as "no deals". */}
+        {loadState === 'error' && (
+          <div role="alert" className="mx-4 my-4 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            The deals could not load — {loadError}.
+            <button onClick={() => setRetryKey(k => k + 1)} className="font-medium underline">Try again</button>
+          </div>
+        )}
+        {loadState === 'loading' && sortedDeals.length === 0 && (
+          <p role="status" className="px-6 py-8 text-sm text-gray-500">Loading deals…</p>
+        )}
+
+        {/* Pager — from the SERVER's total (slice 2b). There were page variables
+            but no controls: every filtered row rendered at once. */}
+        {loadState === 'ready' && serverTotal > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-white px-6 py-2.5 text-[13px] text-gray-600" data-testid="deals-pager">
+            <span>Showing {currentPage * rowsPerPage + 1}–{Math.min((currentPage + 1) * rowsPerPage, serverTotal)} of {serverTotal}</span>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5">
+                Rows
+                <select value={rowsPerPage} onChange={e => setRowsPerPage(Number(e.target.value) as 25 | 50 | 100)}
+                  className="rounded border border-gray-200 px-1.5 py-1 text-[13px]" aria-label="Rows per page">
+                  {[25, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <button onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0}
+                className="rounded border border-gray-200 px-2.5 py-1 font-medium disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+              <span className="tabular-nums">Page {currentPage + 1} of {totalPages}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage + 1 >= totalPages}
+                className="rounded border border-gray-200 px-2.5 py-1 font-medium disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+            </div>
           </div>
         )}
 
         {/* Mobile card list (< md) */}
         <div className="block md:hidden py-2 space-y-2">
-          {sortedDeals.length === 0 && (
+          {loadState === 'ready' && sortedDeals.length === 0 && (
             <div className="text-center py-12 px-4">
               {showIssuesOnly ? (
                 <>
@@ -4443,9 +3922,10 @@ const DealsListView: React.FC<DealsListViewProps> = ({
                 onClick={selectAllDeals}
                 className="text-sm text-indigo-300 hover:text-indigo-200 underline transition-colors"
               >
-                Select all {kpiFilteredDeals.length}
+                Select all {kpiFilteredDeals.length} on this page
               </button>
             )}
+            {/* "Select all N matching" across pages needs filter-based bulk actions — coming soon. */}
           </div>
 
           <div className="w-px h-5 bg-gray-600 mx-1 flex-shrink-0" />

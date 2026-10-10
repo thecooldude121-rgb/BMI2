@@ -258,6 +258,8 @@ export interface DealsPageQuery {
   unplaced?: boolean;
   search?: string;
   assigned_to_user_id?: string | number;
+  /** Owner by NAME (resolved user or legacy free text). */
+  assigned_to?: string;
   sort?: 'created_at' | 'updated_at' | 'name' | 'value' | 'base_amount_usd' | 'probability' | 'expected_close_date' | 'stage';
   dir?: 'asc' | 'desc';
   limit?: number;
