@@ -3,6 +3,14 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
+import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+
+/** When an activity happened, or is planned to. */
+const OCCURRED = 'COALESCE(a.completed_at, a.scheduled_at, a.created_at)';
+/** GET /activities ?sort= keys -> SQL (allowlist). */
+const ACTIVITY_SORTS: Record<string, string> = {
+  occurred_at: OCCURRED, created_at: 'a.created_at', scheduled_at: 'a.scheduled_at', type: 'a.type',
+};
 
 /**
  * Activities — the CRM timeline.
@@ -95,16 +103,21 @@ const resolveActorName = (req: AuthRequest): string => {
 export const getActivities = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { type, status, assigned_to, upcoming, limit = 50, offset = 0 } = req.query;
+    const { type, status, assigned_to, upcoming, search, occurred_after, occurred_before } = req.query;
+    const page = pageParams(req.query as Record<string, unknown>);
+    // Upcoming reads ascending (soonest first); history reads descending.
+    const order = orderBy(req.query as Record<string, unknown>, ACTIVITY_SORTS,
+      upcoming === 'true' ? 'a.scheduled_at ASC' : `${OCCURRED} DESC`, 'a.id');
 
     // Join the parent names so a timeline does not need N extra requests to
     // render "Call with Acme Corp".
-    let query = `
+    const selectPart = `
       SELECT a.*,
              c.first_name || ' ' || COALESCE(c.last_name, '') AS contact_name,
              co.name  AS company_name,
              d.name   AS deal_name,
-             l.name   AS lead_name
+             l.name   AS lead_name`;
+    let query = `
       FROM activities a
       -- Every one of these four FKs references its parent's GLOBAL primary key,
       -- so an activity in this workspace can name a parent in another one. The
@@ -130,18 +143,17 @@ export const getActivities = async (req: AuthRequest, res: Response, next: NextF
     if (upcoming === 'true') {
       query += ` AND a.scheduled_at >= NOW() AND a.status = 'planned'`;
     }
+    if (search) { query += ` AND a.subject ILIKE $${i++}`; params.push(`%${escapeLike(String(search))}%`); }
+    // A time range over when it happened (or is planned) — slice 4's views.
+    if (occurred_after)  { query += ` AND ${OCCURRED} >= $${i++}`; params.push(occurred_after); }
+    if (occurred_before) { query += ` AND ${OCCURRED} <  $${i++}`; params.push(occurred_before); }
 
-    const safeLimit = Math.min(Math.max(parseInt(String(limit), 10) || 50, 1), 500);
-    const safeOffset = Math.max(parseInt(String(offset), 10) || 0, 0);
-
-    // Upcoming reads ascending (soonest first); history reads descending.
-    query += upcoming === 'true'
-      ? ` ORDER BY a.scheduled_at ASC LIMIT $${i++} OFFSET $${i}`
-      : ` ORDER BY COALESCE(a.completed_at, a.scheduled_at, a.created_at) DESC LIMIT $${i++} OFFSET $${i}`;
-    params.push(safeLimit, safeOffset);
-
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+    const total = await pool.query(`SELECT COUNT(*)::int AS n ${query}`, params);
+    const result = await pool.query(
+      `${selectPart} ${query} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      [...params, page.limit, page.offset],
+    );
+    res.json(listEnvelope(result.rows, total.rows[0].n, page));
   } catch (error) { next(error); }
 };
 

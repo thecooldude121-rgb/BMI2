@@ -3,6 +3,13 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
+import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+
+/** GET /tasks ?sort= keys -> SQL (allowlist). */
+const TASK_SORTS: Record<string, string> = {
+  due_date: 'due_date', created_at: 'created_at', title: 'lower(title)', status: 'status',
+  priority: "CASE priority WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END",
+};
 
 /**
  * Tasks.
@@ -163,10 +170,15 @@ export const getTasks = async (req: AuthRequest, res: Response, next: NextFuncti
     const tenantId = requireTenantId(req);
     const {
       status, priority, type, assigned_to, related_to_type, related_to_id,
-      overdue, due_before, limit = 50, offset = 0,
+      overdue, due_before, due_after, search,
     } = req.query;
+    const page = pageParams(req.query as Record<string, unknown>);
+    // Open tasks first, then soonest due. NULLS LAST so undated tasks do not
+    // squat at the top of the list.
+    const order = orderBy(req.query as Record<string, unknown>, TASK_SORTS,
+      `(status = 'completed'), due_date ASC NULLS LAST, created_at DESC`, 'id');
 
-    let query = `SELECT ${TASK_COLUMNS} FROM tasks WHERE tenant_id = $1`;
+    let query = `WHERE tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
 
@@ -177,22 +189,20 @@ export const getTasks = async (req: AuthRequest, res: Response, next: NextFuncti
     if (related_to_type) { query += ` AND related_to_type = $${i++}`; params.push(related_to_type); }
     if (related_to_id)   { query += ` AND related_to_id = $${i++}`;   params.push(related_to_id); }
     if (due_before)      { query += ` AND due_date <= $${i++}`;       params.push(due_before); }
+    // A date range (the calendar's visible month, slice 4).
+    if (due_after)       { query += ` AND due_date >= $${i++}`;       params.push(due_after); }
+    if (search)          { query += ` AND title ILIKE $${i++}`;       params.push(`%${escapeLike(String(search))}%`); }
     // Past due and not finished — the only definition of overdue that matters.
     if (overdue === 'true') {
       query += ` AND due_date < CURRENT_DATE AND status <> 'completed'`;
     }
 
-    const safeLimit = Math.min(Math.max(parseInt(String(limit), 10) || 50, 1), 500);
-    const safeOffset = Math.max(parseInt(String(offset), 10) || 0, 0);
-
-    // Open tasks first, then soonest due. NULLS LAST so undated tasks do not
-    // squat at the top of the list.
-    query += ` ORDER BY (status = 'completed'), due_date ASC NULLS LAST, created_at DESC
-               LIMIT $${i++} OFFSET $${i}`;
-    params.push(safeLimit, safeOffset);
-
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+    const total = await pool.query(`SELECT COUNT(*)::int AS n FROM tasks ${query}`, params);
+    const result = await pool.query(
+      `SELECT ${TASK_COLUMNS} FROM tasks ${query} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      [...params, page.limit, page.offset],
+    );
+    res.json(listEnvelope(result.rows, total.rows[0].n, page));
   } catch (error) { next(error); }
 };
 
