@@ -1484,6 +1484,50 @@ old constraint, which fails the shared-name test.
       page walked returns each row exactly once. Mutation-tested: cap removed, total = page size,
       unknown sort ignored, contacts total without the filter — each fails. No frontend caller asks
       above 500.
+  - **Slice 2 split into 2a (board) and 2b (list), approved 2026-10-10. SLICE 2a DONE:**
+    - **The board pages per COLUMN on the server.** One request per column
+      (`GET /deals?pipeline_id=&stage_id=&limit=20&offset=`, sorted by the server per `BOARD_SORT`),
+      a real per-column "Load more" (it was a timed slice of data already loaded), and an offset
+      that steps back when a loaded card leaves a column (a move or a delete) so no row is skipped.
+      `stage_id` filters by id — two pipelines may both have a "prospecting".
+    - **Column headers come from `GET /deals/stage-summary`** — every column's real count and USD
+      value under the same filters. **Currency:** only a trustworthy `base_amount_usd` is summed (USD,
+      or a base that differs from the native value); anything else is counted as "not in USD" and
+      shown in the header. The board used to add native amounts across currencies and print USD.
+    - **`unplaced`**: the summary counts deals in the pipeline sitting in another pipeline's stage, and
+      `GET /deals?unplaced=true` lists them, so the banner still names them.
+    - **Three live defects fixed:** (1) board **delete was fake** — removed the card, toasted
+      "deleted", refetched, and the deal came back; now `DELETE /deals/:id`, success only after a 2xx,
+      a 403 (sales) shown verbatim. The **Grid view's delete** was the same fake (console.log behind a
+      confirm) and now uses the same path; its stage change (console.log) uses the real endpoint.
+      (2) **a content dedupe hid real deals** sharing name + company + stage — removed.
+      (3) **drag-and-drop wrote `probability`** while the card reads `aiScore` / `probabilityRaw` —
+      fixed, and both columns' totals re-read after a move.
+    - **"Coming soon" until the server can run them** (approved as written): the close-date, value,
+      source, account and unassigned filters; built-in views other than All / My Deals (a user view
+      carrying those filters is applied WITHOUT them and says so); the Attention / data-quality /
+      Forecast signals; Inspect; Export / Import / Archived / Customize Columns (they logged to the
+      console); the Calendar view toggle (a placeholder page). Pipeline Settings opens Settings.
+      The context menu's won / lost / stage / owner / email items open the deal instead of toasting
+      ("Deal marked as Won" over an unchanged deal).
+    - **List mode until 2b** shows the deals loaded on the board and says so (a banner with the loaded
+      count and the pipeline's real total).
+    - Tests: `roundTrip.dealStageSummary.test.ts` (7), `DealsKanbanPage.test.tsx` (9),
+      `ActivitiesPage.test.tsx` (1); mutation-tested (currency trust filter, delete before 2xx,
+      header from the loaded page, load-more offset 0). E2E on `bmi_crm_iso_test` through the real UI:
+      "$45K + 1 not in USD", 20 -> 40 -> 46 on load more, both twins, unplaced named, a KEYBOARD drag
+      persisted (probability 60 -> 80 in Postgres), admin delete gone from Postgres, sales delete
+      refused with the server's message and the row intact; seed torn down and re-counted.
+    - **Found, NOT fixed:** two write paths store a NATIVE amount as `base_amount_usd` — `createDeal`
+      falls back to `value` when no base is sent, and lead conversion sets `base_amount_usd = value`.
+      For a non-USD deal that is wrong (INR 125,000 stored as USD 125,000); the board now refuses to
+      sum such rows, but the data is still wrong. Live has none today. The server holds no exchange
+      rates (they live in the browser's `currencyUtils`), so the fix needs a decision: store NULL /
+      refuse a non-USD deal without a base, or move rates server-side.
+  - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
+    AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
+    Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no
+    handler. The working "Clear Filters" control is kept.
   - **Found on the way, NOT fixed:** (a) on the login page the data providers fire their list
     fetches BEFORE sign-in (five 401s, then a retry after login) — pre-existing, harmless, noisy;
     (b) the Activities page's labelled "AI Insights" sample panel describes **HRMS** figures ("HRMS:

@@ -4,14 +4,15 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchDeals, updateDeal, transitionDealStage, bulkUpdateDeals } from '../../utils/dealsApi';
+import { updateDeal, transitionDealStage, bulkUpdateDeals, fetchDealsPage, fetchDealStageSummary, deleteDealViaAPI, type DealsPageQuery, type StageSummaryRow } from '../../utils/dealsApi';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
-import { formatRelativeTime, formatCloseDate, daysFromNow, isWithinDays, parseDateMs, normalizeDateField } from '../../utils/dateUtils';
+import { formatRelativeTime, formatCloseDate, daysFromNow, parseDateMs, normalizeDateField } from '../../utils/dateUtils';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 import { getStageChartColor } from '../../config/stageColors';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Plus, Search, Filter, Download, Settings, TrendingUp, AlertTriangle, Target, Calendar, CheckCircle2, XCircle, MoreVertical, MoreHorizontal, FileDown, Upload, Archive, Columns, LayoutList, AlignJustify, RotateCcw, X as XIcon, Eye, ShieldAlert, ChevronDown, ArrowUpDown, Check, Bookmark, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Download, Settings, AlertTriangle, Target, Calendar, CheckCircle2, XCircle, MoreVertical, MoreHorizontal, FileDown, Upload, Archive, Columns, LayoutList, AlignJustify, RotateCcw, X as XIcon, Eye, ShieldAlert, ChevronDown, ArrowUpDown, Check, Bookmark, Pencil, Trash2 } from 'lucide-react';
 import DealsListView from './DealsListView';
+import { NotAvailableBadge } from '../../components/common/NotAvailable';
 import DealsGridView from './DealsGridView';
 import DealKanbanCard, { type DealCard } from '../../components/Deal/DealKanbanCard';
 import DealSlideoutPanel from '../../components/Deal/DealSlideoutPanel';
@@ -23,7 +24,6 @@ import {
   computeInspectionSignals,
   getInspectionBadge,
 } from '../../utils/inspectionSignals';
-import { getDealDataQuality } from '../../utils/dealDataQuality';
 import {
   fetchPipelines, defaultPipeline, stageTint, buildStageLookup,
   type ApiPipeline,
@@ -61,6 +61,110 @@ interface PipelineStage {
   name: string;
   deals: DealCard[];
   color: string;
+}
+
+
+/** The saved views the server can run for the board today (slice 2a). */
+const SERVER_VIEWS = new Set(['all', 'my-deals']);
+
+/** Board sort -> the server's allowlisted sort (each column is sorted on the server). */
+const BOARD_SORT: Record<'closeDate' | 'value' | 'health' | 'activity' | 'stage', Pick<DealsPageQuery, 'sort' | 'dir'>> = {
+  closeDate: { sort: 'expected_close_date', dir: 'asc' },
+  value:     { sort: 'base_amount_usd', dir: 'desc' },  // USD, so mixed currencies compare
+  health:    { sort: 'probability', dir: 'desc' },
+  activity:  { sort: 'updated_at', dir: 'desc' },       // days_since_contact derives from updated_at
+  stage:     {},
+};
+
+/** Keep the first of each id — a card can arrive twice across a move and a next page. */
+const uniqueById = <T extends { id: string }>(rows: T[]): T[] =>
+  Array.from(new Map(rows.map(r => [r.id, r] as const)).values());
+
+/**
+ * One API deal row -> a board card. Lifted out of the fetch effect so the
+ * per-column pages and "load more" (Group A item 4, slice 2a) map rows the
+ * same way. `aiScore` and `probabilityRaw` both come from `probability`.
+ */
+function mapApiDeal(d: any, stageSlug: string): DealCard {
+  return {
+            id: d.id,
+            companyName: d.company_name || '',
+            dealName: d.name || d.title || 'Untitled',
+            accountName: d.company_name || '',
+            amount: parseFloat(d.value) || 0,
+            currency: d.currency || 'USD',
+            baseAmountUsd: parseFloat(d.base_amount_usd) || parseFloat(d.value) || 0,
+            closeDate: normalizeDateField(d.expected_close_date),
+            stage: stageSlug,
+            aiScore: d.probability || 0,
+            // NULL kept, unlike aiScore above — see DealCard.probabilityRaw.
+            probabilityRaw: d.probability ?? null,
+            contactName: d.contact_name || '',
+            contactTitle: d.contact_title || '',
+            owner: d.assigned_to || 'Unassigned',
+            // Store raw ISO; formatRelativeTime() from dateUtils renders it human-readable on card
+            lastActivity: d.updated_at || d.created_at || '',
+            daysSinceContact: d.days_since_contact ?? 0,
+            priority: (['high', 'medium', 'low'].includes(d.priority?.toLowerCase())
+              ? d.priority.toLowerCase()
+              : 'medium') as 'high' | 'medium' | 'low',
+            health: (['healthy', 'at-risk', 'stalled'].includes(d.health)
+              ? d.health
+              : 'healthy') as 'healthy' | 'at-risk' | 'stalled',
+            hasAccount: !!(d.company_name?.trim()),
+            source: d.source || 'manual',
+            nextStep: d.next_step || '',
+            nextStepDueDate: normalizeDateField(d.next_step_due_date),
+            nextStepOwner: d.next_step_owner || '',
+            nextStepStatus: (['pending', 'done', 'overdue'].includes(d.next_step_status)
+              ? d.next_step_status : 'pending') as 'pending' | 'done' | 'overdue',
+            stakeholders: (() => {
+              try {
+                const s = typeof d.stakeholders === 'string'
+                  ? JSON.parse(d.stakeholders) : (d.stakeholders ?? []);
+                return Array.isArray(s) ? s : [];
+              } catch { return []; }
+            })(),
+            contactCount: (() => {
+              try {
+                const s = typeof d.stakeholders === 'string'
+                  ? JSON.parse(d.stakeholders) : (d.stakeholders ?? []);
+                return (d.contact_name ? 1 : 0) + (Array.isArray(s) ? s.length : 0);
+              } catch { return d.contact_name ? 1 : 0; }
+            })(),
+            competitorCount: (() => {
+              try {
+                const c = typeof d.competitors === 'string'
+                  ? JSON.parse(d.competitors) : (d.competitors ?? []);
+                return Array.isArray(c)
+                  ? c.filter((x: any) => x && (typeof x === 'string' ? x.trim() : true)).length
+                  : 0;
+              } catch { return 0; }
+            })(),
+            createdAt: d.created_at || '',
+            // PHASE 0: four blocks of fabricated fields were removed from here.
+            // They derived values from `id.charCodeAt()` sums and spliced them
+            // onto real database rows, so every downstream feature — relationship
+            // risk, competitive intel, the data-quality drawer, the currency
+            // selector — was scoring invented data while looking live:
+            //
+            //   1. stakeholderCount / hasChampion / lastMeetingDaysAgo
+            //      → needs a deal_stakeholders table + activity join
+            //   2. primaryCompetitor / secondaryCompetitors
+            //      → needs a deal_competitors join table
+            //   3. a block that blanked owner/closeDate/contactName on ~20% of
+            //      REAL rows, labelled "for pipeline hygiene demo purposes".
+            //      This overwrote correct data and made the DQ drawer flag
+            //      healthy deals. Deleted outright — it has no replacement.
+            //   4. currency/amount/baseAmountUsd at hardcoded FX rates
+            //      → deals.currency and base_amount_usd already exist; read
+            //        those instead of inventing a rate.
+            //
+            // All four fields are optional in the Deal type and every consumer
+            // guards with `??` / truthiness, so these now render as "no data",
+            // which is the truth. Do not reintroduce placeholder values here:
+            // populate them from the API or leave them absent.
+  };
 }
 
 const DealsKanbanPage: React.FC = () => {
@@ -110,9 +214,7 @@ const DealsKanbanPage: React.FC = () => {
   const [cardDensity, setCardDensity] = useState<'standard' | 'compact'>('standard');
   // Slideout panel — stores the deal ID to preview; null = panel closed
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
-  const [visibleDealsCount, setVisibleDealsCount] = useState<Record<string, number>>({});
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
-  const DEALS_PER_PAGE = 10;
   const observerRefs = useRef<Record<string, IntersectionObserver | null>>({});
 
   // Stage skeletons — deals are populated exclusively from the backend fetch below.
@@ -197,213 +299,11 @@ const DealsKanbanPage: React.FC = () => {
     }));
     stageSlugsRef.current = cols.map(c => c.id);
     setStages(cols);
-    setUnplacedDeals([]);
   }, [activePipeline]);
 
-  // Fetch all deals from the backend and populate stages.
-  // Re-runs on mount and whenever triggerRefetch() is called (explicit actions).
-  // NOT driven by contextDeals.length to avoid race conditions during drag-and-drop.
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchDeals().then((apiDeals: any[]) => {
-      if (cancelled) return;
-      setFetchError(false);
-
-      // ── Pass 1: drop malformed records ────────────────────────────────────
-      // Any record without a string id is unusable as a React key and as a
-      // @hello-pangea/dnd draggableId — log and discard immediately.
-      const malformed = apiDeals.filter(
-        (d: any) => !d.id || typeof d.id !== 'string'
-      );
-      if (malformed.length > 0) {
-        console.warn(
-          `[Pipeline] ${malformed.length} deal(s) dropped — missing or non-string id.`,
-          malformed
-        );
-      }
-
-      // ── Pass 2: deduplicate by id ──────────────────────────────────────────
-      // Guards against same-id rows that could appear if a future query adds a
-      // one-to-many JOIN (e.g. tags, activities).  First-occurrence wins so the
-      // array order (created_at DESC from the API) is preserved.
-      const seenById = new Map<string, any>();
-      apiDeals.forEach((d: any) => {
-        if (d.id && typeof d.id === 'string' && !seenById.has(d.id)) {
-          seenById.set(d.id, d);
-        }
-      });
-      const idDedupedDeals = Array.from(seenById.values());
-
-      if (idDedupedDeals.length !== apiDeals.length) {
-        console.warn(
-          `[Pipeline] API returned ${apiDeals.length} rows, id-deduped to ` +
-          `${idDedupedDeals.length} (${apiDeals.length - idDedupedDeals.length} same-id rows removed).`
-        );
-      }
-
-      // ── Pass 3: deduplicate by content identity ────────────────────────────
-      // The backend LEFT JOIN on leads is one-to-one and cannot inflate rows,
-      // so same-id duplicates are rare.  The more common problem is genuine DB
-      // duplicates: two rows with different IDs but the same (name, company,
-      // stage) created by double-submitting the form or repeated test inserts.
-      // These survive Pass 2 and render as duplicate cards on the board.
-      //
-      // Key: name + company_name + stage (company scopes the key so two deals
-      // with identical names at different companies are not wrongly merged).
-      // First-occurrence wins — API is sorted created_at DESC so the first
-      // record seen is the most recently created one (the canonical version).
-      // Discarded IDs are logged so the DB can be cleaned up.
-      const contentKey = (d: any) =>
-        `${(d.name || '').toLowerCase().trim()}|` +
-        `${(d.company_name || '').toLowerCase().trim()}|` +
-        `${d.stage}`;
-      const seenByContent = new Map<string, string>(); // key → kept id
-      const dedupedDeals = idDedupedDeals.filter(d => {
-        const key = contentKey(d);
-        if (seenByContent.has(key)) {
-          console.warn(
-            `[Pipeline] DB duplicate: "${d.name}" / "${d.company_name || '—'}" in "${d.stage}" ` +
-            `— keeping id ${seenByContent.get(key)}, discarding id ${d.id}. ` +
-            `Run: DELETE FROM deals WHERE id = '${d.id}';`
-          );
-          return false;
-        }
-        seenByContent.set(key, d.id);
-        return true;
-      });
-
-      if (!dedupedDeals.length) return;
-
-      /*
-       * ONLY THIS PIPELINE'S DEALS, and the filter is on pipeline_id rather than
-       * on "does its stage happen to match a column". A deal in the renewals
-       * pipeline whose stage is coincidentally named like a new-business one
-       * must not appear on the new-business board.
-       */
-      const forThisPipeline = activePipelineSlug
-        ? dedupedDeals.filter((d: any) => (d.pipeline_id ?? 'new-business') === activePipelineSlug)
-        : dedupedDeals;
-
-      /*
-       * THE DROP IS NOW VISIBLE. Anything in this pipeline that matches no
-       * column — a stage retired since the board loaded, or data that predates a
-       * configuration change — is counted and surfaced in the UI instead of
-       * vanishing. This is the specific failure the hardcoded array caused.
-       */
-      const columnSlugs = new Set(stageSlugsRef.current);
-      setUnplacedDeals(
-        forThisPipeline.filter((d: any) => !columnSlugs.has(d.stage)),
-      );
-
-      setStages(prev => prev.map(stage => {
-        // Build each stage's deal list and apply a final ID-dedup pass so the
-        // board state invariant "every deal appears exactly once per stage" is
-        // guaranteed at storage time, not just at render time.
-        const raw = forThisPipeline
-          .filter((d: any) => d.stage === stage.id)
-          .map((d: any) => ({
-            id: d.id,
-            companyName: d.company_name || '',
-            dealName: d.name || d.title || 'Untitled',
-            accountName: d.company_name || '',
-            amount: parseFloat(d.value) || 0,
-            currency: d.currency || 'USD',
-            baseAmountUsd: parseFloat(d.base_amount_usd) || parseFloat(d.value) || 0,
-            closeDate: normalizeDateField(d.expected_close_date),
-            stage: stage.id,
-            aiScore: d.probability || 0,
-            // NULL kept, unlike aiScore above — see DealCard.probabilityRaw.
-            probabilityRaw: d.probability ?? null,
-            contactName: d.contact_name || '',
-            contactTitle: d.contact_title || '',
-            owner: d.assigned_to || 'Unassigned',
-            // Store raw ISO; formatRelativeTime() from dateUtils renders it human-readable on card
-            lastActivity: d.updated_at || d.created_at || '',
-            daysSinceContact: d.days_since_contact ?? 0,
-            priority: (['high', 'medium', 'low'].includes(d.priority?.toLowerCase())
-              ? d.priority.toLowerCase()
-              : 'medium') as 'high' | 'medium' | 'low',
-            health: (['healthy', 'at-risk', 'stalled'].includes(d.health)
-              ? d.health
-              : 'healthy') as 'healthy' | 'at-risk' | 'stalled',
-            hasAccount: !!(d.company_name?.trim()),
-            source: d.source || 'manual',
-            nextStep: d.next_step || '',
-            nextStepDueDate: normalizeDateField(d.next_step_due_date),
-            nextStepOwner: d.next_step_owner || '',
-            nextStepStatus: (['pending', 'done', 'overdue'].includes(d.next_step_status)
-              ? d.next_step_status : 'pending') as 'pending' | 'done' | 'overdue',
-            stakeholders: (() => {
-              try {
-                const s = typeof d.stakeholders === 'string'
-                  ? JSON.parse(d.stakeholders) : (d.stakeholders ?? []);
-                return Array.isArray(s) ? s : [];
-              } catch { return []; }
-            })(),
-            contactCount: (() => {
-              try {
-                const s = typeof d.stakeholders === 'string'
-                  ? JSON.parse(d.stakeholders) : (d.stakeholders ?? []);
-                return (d.contact_name ? 1 : 0) + (Array.isArray(s) ? s.length : 0);
-              } catch { return d.contact_name ? 1 : 0; }
-            })(),
-            competitorCount: (() => {
-              try {
-                const c = typeof d.competitors === 'string'
-                  ? JSON.parse(d.competitors) : (d.competitors ?? []);
-                return Array.isArray(c)
-                  ? c.filter((x: any) => x && (typeof x === 'string' ? x.trim() : true)).length
-                  : 0;
-              } catch { return 0; }
-            })(),
-            createdAt: d.created_at || '',
-            // PHASE 0: four blocks of fabricated fields were removed from here.
-            // They derived values from `id.charCodeAt()` sums and spliced them
-            // onto real database rows, so every downstream feature — relationship
-            // risk, competitive intel, the data-quality drawer, the currency
-            // selector — was scoring invented data while looking live:
-            //
-            //   1. stakeholderCount / hasChampion / lastMeetingDaysAgo
-            //      → needs a deal_stakeholders table + activity join
-            //   2. primaryCompetitor / secondaryCompetitors
-            //      → needs a deal_competitors join table
-            //   3. a block that blanked owner/closeDate/contactName on ~20% of
-            //      REAL rows, labelled "for pipeline hygiene demo purposes".
-            //      This overwrote correct data and made the DQ drawer flag
-            //      healthy deals. Deleted outright — it has no replacement.
-            //   4. currency/amount/baseAmountUsd at hardcoded FX rates
-            //      → deals.currency and base_amount_usd already exist; read
-            //        those instead of inventing a rate.
-            //
-            // All four fields are optional in the Deal type and every consumer
-            // guards with `??` / truthiness, so these now render as "no data",
-            // which is the truth. Do not reintroduce placeholder values here:
-            // populate them from the API or leave them absent.
-          }));
-        // Hard invariant: deduplicate by id before committing to state.
-        const seen = new Set<string>();
-        const deals = raw.filter(d => {
-          if (seen.has(d.id)) return false;
-          seen.add(d.id);
-          return true;
-        });
-        return { ...stage, deals };
-      }));
-    })
-    .catch(() => {
-      if (!cancelled) setFetchError(true);
-    });
-
-    return () => { cancelled = true; };
-  // refetchKey is incremented by triggerRefetch() on explicit mutations.
-  // contextDeals is intentionally excluded — its length fluctuates during
-  // drag-and-drop optimistic updates and caused stale-fetch races.
-  // activePipelineSlug is a dependency because switching pipeline changes which
-  // deals belong on the board — without it the new columns would be populated
-  // from the previous pipeline's deals.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refetchKey, activePipelineSlug]);
+  // The board's deals are loaded per COLUMN from the server (slice 2a) by the
+  // effect further down, which needs the search / owner / sort state declared
+  // below it.
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -417,6 +317,73 @@ const DealsKanbanPage: React.FC = () => {
   // viewPredicate is the view's extra filter function (null for dropdown-only views).
   const [activeViewId, setActiveViewId] = useState<string | null>('all');
   const [viewPredicate, setViewPredicate] = useState<((d: DealCard) => boolean) | null>(null);
+
+  /*
+   * GROUP A ITEM 4, SLICE 2a — THE BOARD PAGES PER COLUMN ON THE SERVER.
+   * It used to make ONE request (fetchDeals(), limit 50) and bucket the result,
+   * so deal 51 onwards never reached the board, and a dedupe pass hid real rows
+   * that shared a name + company + stage. Now each column fetches its own page
+   * (pipeline + stage id + the server-backed filters) and
+   * GET /deals/stage-summary gives every column header its REAL count and USD
+   * value under the same filters. Only search, "My deals" and sort are
+   * server-backed here; the other filters are "Coming soon" until a later slice.
+   */
+  const COLUMN_PAGE = 20;
+  const [columnTotals, setColumnTotals] = useState<Record<string, StageSummaryRow>>({});
+  const [unplacedCount, setUnplacedCount] = useState(0);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  /** Rows fetched from the server per column — the next page's offset. */
+  const fetchedRef = useRef<Record<string, number>>({});
+
+  const ownerFilterId = selectedOwner === 'me' && user?.id ? String(user.id) : undefined;
+  const serverFilters = useMemo(() => ({
+    pipeline_id: activePipelineSlug ?? undefined,
+    search: debouncedSearch || undefined,
+    assigned_to_user_id: ownerFilterId,
+  }), [activePipelineSlug, debouncedSearch, ownerFilterId]);
+  const serverSort = BOARD_SORT[sortBy];
+
+  const refreshSummary = React.useCallback(() => {
+    if (!serverFilters.pipeline_id) return;
+    fetchDealStageSummary(serverFilters)
+      .then(sum => {
+        setColumnTotals(Object.fromEntries(sum.stages.map(r => [r.slug, r])));
+        setUnplacedCount(sum.unplaced);
+        setSummaryError(null);
+        // Name them, not just count them (up to 50; the count is the server's).
+        if (sum.unplaced > 0) {
+          fetchDealsPage({ ...serverFilters, unplaced: true, limit: 50 })
+            .then(p => setUnplacedDeals(p.deals))
+            .catch(() => setUnplacedDeals([]));
+        } else {
+          setUnplacedDeals([]);
+        }
+      })
+      .catch((e: Error) => setSummaryError(e.message));
+  }, [serverFilters]);
+
+  useEffect(() => {
+    if (!activePipeline) return;
+    let cancelled = false;
+    setFetchError(false);
+    refreshSummary();
+    Promise.all(activePipeline.stages.map(st =>
+      fetchDealsPage({ ...serverFilters, ...serverSort, stage_id: st.id, limit: COLUMN_PAGE, offset: 0 })
+        .then(page => [st.slug, page.deals] as const)))
+      .then(results => {
+        if (cancelled) return;
+        const bySlug = new Map<string, any[]>(results.map(([slug, rows]) => [slug, rows]));
+        fetchedRef.current = Object.fromEntries(results.map(([slug, rows]) => [slug, rows.length]));
+        setStages(prev => prev.map(stage => {
+          const rows = bySlug.get(stage.id);
+          return rows ? { ...stage, deals: uniqueById(rows.map(r => mapApiDeal(r, stage.id))) } : stage;
+        }));
+      })
+      .catch(() => { if (!cancelled) setFetchError(true); });
+    return () => { cancelled = true; };
+  // activePipeline is memoised on the pipelines list; refetchKey re-runs it after a write.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchKey, activePipeline, serverFilters, sortBy]);
 
   // Column state lifted from DealsListView so saved views can capture them
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
@@ -672,13 +639,19 @@ const DealsKanbanPage: React.FC = () => {
         .then(({ data }) => {
           // Adopt the server's probability: it comes from the pipeline stage's
           // default, so the card should not keep the old stage's number.
-          if (data?.probability != null) {
+          // The card reads aiScore / probabilityRaw — writing `probability`
+          // (as this did) left the old stage's number on the card until reload.
+          if (data && 'probability' in data) {
             setStages(prev => prev.map(s => ({
               ...s,
               deals: s.deals.map(d =>
-                d.id === updatedDeal.id ? { ...d, probability: data.probability } : d),
+                d.id === updatedDeal.id ? { ...d, aiScore: data.probability ?? 0, probabilityRaw: data.probability ?? null } : d),
             })));
           }
+          // The source column's next page starts one row earlier now that a
+          // loaded card left it; both headers re-read their server totals.
+          fetchedRef.current[source.droppableId] = Math.max(0, (fetchedRef.current[source.droppableId] ?? 1) - 1);
+          refreshSummary();
           if (needsNextStep) {
             setToast({
               message: `"${updatedDeal.dealName}" moved to ${destStage.name} — add a next step to keep it on track`,
@@ -774,31 +747,6 @@ const DealsKanbanPage: React.FC = () => {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [inspectionMode]);
 
-  const handleExportPipeline = (format: 'csv' | 'pdf') => {
-    console.log(`Exporting pipeline as ${format.toUpperCase()}`);
-    setShowMoreOptions(false);
-  };
-
-  const handleImportDeals = () => {
-    console.log('Opening import deals dialog');
-    setShowMoreOptions(false);
-  };
-
-  const handlePipelineSettings = () => {
-    console.log('Opening pipeline settings');
-    setShowMoreOptions(false);
-  };
-
-  const handleViewArchived = () => {
-    console.log('Viewing archived deals');
-    setShowMoreOptions(false);
-  };
-
-  const handleCustomizeColumns = () => {
-    console.log('Opening column customization');
-    setShowMoreOptions(false);
-  };
-
   const handleStatClick = (stat: string) => {
     setHighlightedDeals([]);
 
@@ -838,18 +786,8 @@ const DealsKanbanPage: React.FC = () => {
     }
   };
 
-  const handleViewDeals = () => {
-    const dealsToHighlight = aiInsights.needAttention.map(d => d.id);
-    setHighlightedDeals(dealsToHighlight);
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-  };
-
   const handleCreateTasks = () => {
     setShowTaskModal(true);
-  };
-
-  const handleViewForecast = () => {
-    navigate('/crm/forecast');
   };
 
   const handleSort = (sortOption: 'closeDate' | 'value' | 'health' | 'activity' | 'stage') => {
@@ -860,21 +798,6 @@ const DealsKanbanPage: React.FC = () => {
   const handleViewChange = (view: 'kanban' | 'list' | 'grid' | 'calendar') => {
     setViewMode(view);
     setShowViewDropdown(false);
-  };
-
-  const handleExportCSV = () => {
-    const allDeals = stages.flatMap(s => s.deals);
-    const csvData = allDeals.map(d => ({
-      Company: d.companyName,
-      Deal: d.dealName,
-      Account: d.accountName,
-      Amount: d.amount,
-      Stage: d.stage,
-      CloseDate: d.closeDate,
-      Owner: d.owner,
-      'Probability (%)': d.aiScore,
-      Health: d.health
-    }));
   };
 
   const getSortLabel = () => {
@@ -972,17 +895,12 @@ const DealsKanbanPage: React.FC = () => {
       case 'edit':
         navigate(`/crm/deals/${dealId}/edit`);
         break;
+      // These have no board action behind them; they open the deal instead of
+      // toasting something that did not happen ("Opening email composer…").
       case 'email':
-        setToast({ message: 'Opening email composer…', type: 'info' });
-        setTimeout(() => setToast(null), 2500);
-        break;
       case 'stage':
-        setToast({ message: 'Stage change — open the deal to reassign', type: 'info' });
-        setTimeout(() => setToast(null), 2500);
-        break;
       case 'owner':
-        setToast({ message: 'Owner change — open the deal to reassign', type: 'info' });
-        setTimeout(() => setToast(null), 2500);
+        navigate(`/crm/deals/${dealId}`);
         break;
       case 'activity':
         navigate(`/crm/deals/${dealId}`);
@@ -990,13 +908,12 @@ const DealsKanbanPage: React.FC = () => {
       case 'meeting':
         navigate('/meetings/new', { state: { dealId } });
         break;
+      // "Deal marked as Won" toasted over an unchanged deal. Won / lost need the
+      // deal's pipeline-specific closing stage and its reason flow, which live on
+      // the deal page — so they go there rather than pretend from a menu.
       case 'won':
-        setToast({ message: 'Deal marked as Won', type: 'success' });
-        setTimeout(() => setToast(null), 3000);
-        break;
       case 'lost':
-        setToast({ message: 'Deal marked as Lost', type: 'info' });
-        setTimeout(() => setToast(null), 3000);
+        navigate(`/crm/deals/${dealId}`);
         break;
       case 'delete': {
         // Show confirmation modal instead of deleting immediately
@@ -1010,19 +927,34 @@ const DealsKanbanPage: React.FC = () => {
   };
 
   // Remove the deal from all stages and close the confirmation modal
-  const confirmDeleteDeal = () => {
-    if (!deleteConfirmDeal) return;
-    setStages(prev =>
-      prev.map(stage => ({
-        ...stage,
-        deals: stage.deals.filter(d => d.id !== deleteConfirmDeal.id),
-      }))
-    );
-    setToast({ message: `"${deleteConfirmDeal.name}" deleted`, type: 'error' });
-    setTimeout(() => setToast(null), 3000);
-    setDeleteConfirmDeal(null);
-    // Re-sync with backend after deletion so the board reflects DB truth.
-    triggerRefetch();
+  /*
+   * DELETE IS REAL (slice 2a). It used to remove the card locally, toast
+   * "deleted", and refetch — and the deal came back, because nothing had called
+   * the server. Now: DELETE /deals/:id, and the card leaves and "deleted" shows
+   * ONLY after a 2xx. A refusal (sales users get a 403) is shown verbatim and
+   * the card stays.
+   */
+  const [deletingDeal, setDeletingDeal] = useState(false);
+  const confirmDeleteDeal = () => { if (deleteConfirmDeal) performDelete(deleteConfirmDeal); };
+  /** The one delete path — the board's modal and the Grid view's both use it. */
+  const performDelete = async (target: { id: string; name: string }) => {
+    if (deletingDeal) return;
+    setDeletingDeal(true);
+    try {
+      await deleteDealViaAPI(target.id);
+      const column = stages.find(st => st.deals.some(d => d.id === target.id))?.id;
+      setStages(prev => prev.map(stage => ({ ...stage, deals: stage.deals.filter(d => d.id !== target.id) })));
+      if (column) fetchedRef.current[column] = Math.max(0, (fetchedRef.current[column] ?? 1) - 1);
+      refreshSummary();
+      setToast({ message: `"${target.name}" deleted`, type: 'success' });
+      setDeleteConfirmDeal(null);
+    } catch (e) {
+      setToast({ message: `"${target.name}" was not deleted — ${(e as Error).message}`, type: 'error' });
+      setDeleteConfirmDeal(null);
+    } finally {
+      setDeletingDeal(false);
+      setTimeout(() => setToast(null), 5000);
+    }
   };
 
   const toggleStageCollapse = (stageId: string) => {
@@ -1051,6 +983,7 @@ const DealsKanbanPage: React.FC = () => {
   // Apply a saved view — presets the dropdown controls and sets the custom
   // predicate.  The user can then further refine with manual dropdown changes.
   const applyView = (view: SavedView) => {
+    if (!SERVER_VIEWS.has(view.id)) return;   // "Coming soon" — see the views panel
     setActiveViewId(view.id);
     // Only override the dropdown values explicitly specified by the view
     if (view.filterPreset.owner     !== undefined) setSelectedOwner(view.filterPreset.owner);
@@ -1066,10 +999,22 @@ const DealsKanbanPage: React.FC = () => {
   const applyUserView = (view: UserSavedView) => {
     setActiveViewId(view.id);
     setViewPredicate(null);
-    setSelectedOwner(view.selectedOwner);
-    setSelectedCloseDateFilter(view.selectedCloseDateFilter);
-    setSelectedValueFilter(view.selectedValueFilter);
-    setSelectedSourceFilter(view.selectedSourceFilter);
+    // A saved view can carry board filters the server does not run yet. Apply
+    // what it can and SAY what it skipped — never quietly filter a loaded page.
+    const skipped = [
+      !['all', 'me'].includes(view.selectedOwner) && 'owner',
+      view.selectedCloseDateFilter !== 'all' && 'close date',
+      view.selectedValueFilter !== 'all' && 'value',
+      view.selectedSourceFilter !== 'all' && 'source',
+    ].filter(Boolean);
+    setSelectedOwner(['all', 'me'].includes(view.selectedOwner) ? view.selectedOwner : 'all');
+    setSelectedCloseDateFilter('all');
+    setSelectedValueFilter('all');
+    setSelectedSourceFilter('all');
+    if (skipped.length) {
+      setToast({ message: `"${view.name}" applied without its ${skipped.join(', ')} filter${skipped.length > 1 ? 's' : ''} — those are coming soon for the board.`, type: 'info' });
+      setTimeout(() => setToast(null), 6000);
+    }
     setSortBy(view.sortBy as any);
     setViewMode(view.viewMode);
     setCardDensity(view.cardDensity);
@@ -1182,35 +1127,25 @@ const DealsKanbanPage: React.FC = () => {
     ? stages.filter(s => s.id === focusedStage)
     : stages;
 
-  useEffect(() => {
-    const updates: Record<string, number> = {};
-    stages.forEach(stage => {
-      const target = Math.min(DEALS_PER_PAGE, stage.deals.length);
-      const current = visibleDealsCount[stage.id];
-      // Allow count to grow when new deals are injected; never shrink a
-      // count the user has already expanded via "load more".
-      if (!current || current < target) {
-        updates[stage.id] = target;
-      }
-    });
-    if (Object.keys(updates).length > 0) {
-      setVisibleDealsCount(prev => ({ ...prev, ...updates }));
-    }
-  }, [stages]);
-
-  const loadMoreDeals = (stageId: string) => {
-    const stage = stages.find(s => s.id === stageId);
-    if (!stage) return;
-
+  /** The next page of ONE column from the server (it was a timed slice of data already loaded). */
+  const loadMoreDeals = async (stageId: string) => {
+    const st = activePipeline?.stages.find(x => x.slug === stageId);
+    if (!st || loadingMore[stageId]) return;
     setLoadingMore(prev => ({ ...prev, [stageId]: true }));
-
-    setTimeout(() => {
-      setVisibleDealsCount(prev => ({
-        ...prev,
-        [stageId]: Math.min((prev[stageId] || DEALS_PER_PAGE) + DEALS_PER_PAGE, stage.deals.length)
-      }));
+    try {
+      const page = await fetchDealsPage({
+        ...serverFilters, ...serverSort, stage_id: st.id, limit: COLUMN_PAGE, offset: fetchedRef.current[stageId] ?? 0,
+      });
+      fetchedRef.current[stageId] = (fetchedRef.current[stageId] ?? 0) + page.deals.length;
+      setStages(prev => prev.map(s => s.id === stageId
+        ? { ...s, deals: uniqueById([...s.deals, ...page.deals.map(r => mapApiDeal(r, stageId))]) }
+        : s));
+    } catch (e) {
+      setToast({ message: `More deals could not load — ${(e as Error).message}`, type: 'error' });
+      setTimeout(() => setToast(null), 5000);
+    } finally {
       setLoadingMore(prev => ({ ...prev, [stageId]: false }));
-    }, 500);
+    }
   };
 
   const setupInfiniteScroll = (element: HTMLDivElement | null, stageId: string) => {
@@ -1225,10 +1160,7 @@ const DealsKanbanPage: React.FC = () => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !loadingMore[stageId]) {
             const stage = stages.find(s => s.id === stageId);
-            const currentVisible = visibleDealsCount[stageId] || DEALS_PER_PAGE;
-            if (stage && currentVisible < stage.deals.length) {
-              loadMoreDeals(stageId);
-            }
+            if (stage && hasMoreDeals(stage)) loadMoreDeals(stageId);
           }
         });
       },
@@ -1245,66 +1177,17 @@ const DealsKanbanPage: React.FC = () => {
     };
   }, []);
 
-  // All active filter + search predicates applied in one pass
-  const filterDeals = (deals: PipelineStage['deals']) => {
-    return deals.filter(d => {
-      // Text search across deal name, account, contact
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase();
-        if (![d.dealName, d.accountName, d.contactName].some(f => f?.toLowerCase().includes(q))) {
-          return false;
-        }
-      }
-      // Owner filter — 'me' matches the logged-in user's name from AuthContext
-      if (selectedOwner === 'me' && user && d.owner !== user.name) return false;
-      if (selectedOwner === 'unassigned' && d.owner && d.owner !== 'Unassigned') return false;
+  /*
+   * NO CLIENT-SIDE FILTERING OF THE BOARD (slice 2a). Search, "My deals" and
+   * sort run on the server per column; the close-date, value, source, account
+   * and unassigned filters and the predicate-based views are "Coming soon",
+   * because filtering a loaded PAGE would look like filtering the pipeline.
+   * Kept as a function so the List view's input is unchanged until slice 2b.
+   */
+  const filterDeals = (deals: PipelineStage['deals']) => deals;
 
-      // Close date filter — isWithinDays uses parseDate internally, null-safe
-      if (selectedCloseDateFilter === 'week'    && !isWithinDays(d.closeDate, 7))  return false;
-      if (selectedCloseDateFilter === 'month'   && !isWithinDays(d.closeDate, 30)) return false;
-      if (selectedCloseDateFilter === 'quarter' && !isWithinDays(d.closeDate, 90)) return false;
-
-      // Value range filter
-      if (selectedValueFilter === '0-25k'  && d.amount > 25_000)  return false;
-      if (selectedValueFilter === '25-50k' && (d.amount < 25_000 || d.amount > 50_000)) return false;
-      if (selectedValueFilter === '50-100k' && (d.amount < 50_000 || d.amount > 100_000)) return false;
-      if (selectedValueFilter === '100k+'  && d.amount < 100_000) return false;
-
-      // Source filter. Matches the stored vocabulary EXACTLY (migration 040
-      // constrains deals.source to lowercase-hyphenated slugs).
-      //
-      // The 'leadgen' arm used to substring-match 'lead gen' WITH A SPACE while
-      // the deal form submits 'lead-gen-apollo' / 'lead-gen-zoominfo' with
-      // hyphens, so it matched nothing the product could produce — a filter that
-      // silently returned an empty board. Normalizing the column is what made
-      // that visible; leaving it would have been half the job.
-      if (selectedSourceFilter === 'website' && d.source !== 'website') return false;
-      if (selectedSourceFilter === 'leadgen' && !d.source?.startsWith('lead-gen')) return false;
-
-      if (selectedAccountFilter === 'missing' && d.hasAccount) return false;
-
-      // Apply the active saved view's custom predicate — handles conditions that
-      // the dropdown controls cannot express (aiScore, daysSinceContact, etc.)
-      if (viewPredicate && !viewPredicate(d)) return false;
-
-      return true;
-    });
-  };
-
-  // Sort a filtered deal list by the active sort key
-  const sortDeals = (deals: PipelineStage['deals']) => {
-    return [...deals].sort((a, b) => {
-      switch (sortBy) {
-        case 'value':    return b.amount - a.amount;
-        case 'health':   return b.aiScore - a.aiScore;
-        case 'activity': return a.daysSinceContact - b.daysSinceContact;
-        case 'closeDate':
-          // parseDateMs returns Infinity for missing/invalid dates → sorts to end safely
-          return parseDateMs(a.closeDate) - parseDateMs(b.closeDate);
-        default: return 0;
-      }
-    });
-  };
+  // Each column arrives SORTED by the server (BOARD_SORT); re-sorting a loaded
+  // page in the browser would disagree with the next page's order.
 
   // Deduplicate within a single stage's deal array by id before any
   // filtering or sorting.  This is the render-layer safety net: even if
@@ -1314,31 +1197,16 @@ const DealsKanbanPage: React.FC = () => {
   const dedupStageDeals = (deals: PipelineStage['deals']): PipelineStage['deals'] =>
     Array.from(new Map(deals.map(d => [d.id, d])).values());
 
-  const getVisibleDeals = (stage: PipelineStage) => {
-    const unique   = dedupStageDeals(stage.deals);
-    const filtered = sortDeals(filterDeals(unique));
-    const count    = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
-    return filtered.slice(0, count);
-  };
+  const getVisibleDeals = (stage: PipelineStage) => dedupStageDeals(stage.deals);
 
-  const hasMoreDeals = (stage: PipelineStage) => {
-    const unique   = dedupStageDeals(stage.deals);
-    const filtered = filterDeals(unique);
-    const count    = visibleDealsCount[stage.id] || DEALS_PER_PAGE;
-    return count < filtered.length;
-  };
+  /** More on the server than loaded — from the column's REAL total. */
+  const hasMoreDeals = (stage: PipelineStage) =>
+    dedupStageDeals(stage.deals).length < (columnTotals[stage.id]?.count ?? 0);
 
   // Text-search pre-filter passed to List/Grid children so they don't need their own search input.
   // The kanban view runs filterDeals() (which already uses debouncedSearch) internally during render.
-  const searchFilteredStages = debouncedSearch
-    ? stages.map(stage => ({
-        ...stage,
-        deals: stage.deals.filter(d => {
-          const q = debouncedSearch.toLowerCase();
-          return [d.dealName, d.accountName, d.contactName].some(f => f?.toLowerCase().includes(q));
-        }),
-      }))
-    : stages;
+  // The server already applied the search to every column.
+  const searchFilteredStages = stages;
 
   // All kanban filters applied to stages — passed to List view so every toolbar
   // control (Filter panel, My Deals/All Deals tabs, Search) works in list mode.
@@ -1353,18 +1221,6 @@ const DealsKanbanPage: React.FC = () => {
     [stages, debouncedSearch, selectedOwner, selectedCloseDateFilter,
      selectedValueFilter, selectedSourceFilter, selectedAccountFilter, viewPredicate]
   );
-
-  // DQ summary — computed from all pipeline deals so Attention tab can show counts
-  const dqSummary = useMemo(() => {
-    let errors = 0;
-    let warnings = 0;
-    stages.flatMap(s => s.deals).forEach(d => {
-      const dq = getDealDataQuality(d, stageLookup(d.stage, activePipelineSlug));
-      if (dq.hasErrors) errors++;
-      else if (dq.hasWarnings) warnings++;
-    });
-    return { errors, warnings, total: errors + warnings };
-  }, [stages]);
 
   // Controls the DQ drawer inside DealsListView from this parent
   const [openDQDrawer, setOpenDQDrawer] = useState(false);
@@ -1522,6 +1378,19 @@ const DealsKanbanPage: React.FC = () => {
                           .filter(v => !viewsPanelSearch || v.label.toLowerCase().includes(viewsPanelSearch.toLowerCase()))
                           .map(view => {
                             const isActive = activeViewId === view.id;
+                            // Views built on close-date / value / probability /
+                            // activity predicates would filter one loaded page.
+                            // Only All and My Deals run on the server (slice 2a).
+                            if (!SERVER_VIEWS.has(view.id)) {
+                              return (
+                                <div key={view.id} aria-disabled="true" title={`${view.label} is coming soon`}
+                                  className="flex items-center px-4 py-2 text-gray-400 cursor-not-allowed">
+                                  <span className="mr-2 text-sm opacity-50">{view.emoji}</span>
+                                  <span className="flex-1 text-[13px]">{view.label}</span>
+                                  <NotAvailableBadge label="Soon" />
+                                </div>
+                              );
+                            }
                             return (
                               <div
                                 key={view.id}
@@ -1670,88 +1539,22 @@ const DealsKanbanPage: React.FC = () => {
 
           <div className="w-px h-5 bg-gray-200 mx-3 flex-shrink-0" />
 
-          {/* ── AI signal chips — compact single-line ──────────────────── */}
-          {(() => {
-            const fmtK = (v: number) =>
-              v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
-              : v >= 1_000   ? `$${Math.round(v / 1_000)}K`
-              : v === 0      ? '—'
-              : `$${v}`;
-            return (
-              <div className="flex items-center gap-0.5 flex-shrink-0">
-                {/* Needs Attention + DQ errors/warnings */}
-                <button
-                  onClick={() => {
-                    if (dqSummary.total > 0) setOpenDQDrawer(true);
-                    else handleViewDeals();
-                  }}
-                  title={
-                    dqSummary.total > 0
-                      ? `${dqSummary.errors} data error${dqSummary.errors !== 1 ? 's' : ''}, ${dqSummary.warnings} warning${dqSummary.warnings !== 1 ? 's' : ''} — click to review`
-                      : aiInsights.needAttention.length > 0
-                        ? `${aiInsights.needAttention.length} deal${aiInsights.needAttention.length !== 1 ? 's' : ''} with no recent activity`
-                        : 'All deals have recent activity'
-                  }
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 transition-colors group flex-shrink-0"
-                >
-                  <AlertTriangle className={`h-3.5 w-3.5 flex-shrink-0 transition-colors ${(aiInsights.needAttention.length > 0 || dqSummary.total > 0) ? 'text-amber-500' : 'text-gray-300 group-hover:text-amber-400'}`} />
-                  {dqSummary.total > 0 ? (
-                    <>
-                      {dqSummary.errors > 0 && (
-                        <span className="text-[13px] font-semibold tabular-nums text-gray-800">
-                          {dqSummary.errors} <span className="text-[11px] font-normal text-gray-500">error{dqSummary.errors !== 1 ? 's' : ''}</span>
-                        </span>
-                      )}
-                      {dqSummary.errors > 0 && dqSummary.warnings > 0 && (
-                        <span className="text-gray-300 text-[11px]">·</span>
-                      )}
-                      {dqSummary.warnings > 0 && (
-                        <span className="text-[13px] font-semibold tabular-nums text-gray-800">
-                          {dqSummary.warnings} <span className="text-[11px] font-normal text-gray-500">warning{dqSummary.warnings !== 1 ? 's' : ''}</span>
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className={`text-[13px] font-semibold tabular-nums transition-colors ${aiInsights.needAttention.length > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                        {aiInsights.needAttention.length > 0 ? aiInsights.needAttention.length : '0'}
-                      </span>
-                      <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Attention</span>
-                    </>
-                  )}
-                </button>
-
-                <div className="w-px h-4 bg-gray-100 flex-shrink-0 mx-0.5" />
-
-                {/* Forecast */}
-                <button
-                  onClick={handleViewForecast}
-                  title={`${formatCurrency(aiInsights.highProbValue)} across ${aiInsights.negotiationDeals.length} deal${aiInsights.negotiationDeals.length !== 1 ? 's' : ''} in Negotiation`}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors group flex-shrink-0"
-                >
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 group-hover:text-emerald-600 transition-colors" />
-                  <span className="text-[13px] font-semibold text-gray-800 tabular-nums group-hover:text-emerald-600 transition-colors">
-                    {fmtK(aiInsights.highProbValue)}
-                  </span>
-                  <span className="text-[11px] text-gray-400 font-medium group-hover:text-gray-600 transition-colors">Forecast</span>
-                </button>
-
-              </div>
-            );
-          })()}
+          {/* ── Pipeline signals — "Coming soon" (slice 2a). The Attention / data
+              quality and Forecast chips summed whatever page was loaded; they need
+              server aggregates (item 4, slice 5) before they can be true. */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-gray-400 flex-shrink-0"
+            title="Attention, data-quality and forecast signals are coming soon" aria-disabled="true">
+            <AlertTriangle className="h-3.5 w-3.5 text-gray-300" /> Signals <NotAvailableBadge label="Soon" />
+          </div>
 
           {/* ── Right actions — always visible, pushed to far edge ─────── */}
           <div className="ml-auto flex items-center gap-2 flex-shrink-0 pl-4 border-l border-gray-200">
-            <button
-              onClick={() => setInspectionMode(m => !m)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[13px] font-medium transition-all duration-150
-                ${inspectionMode
-                  ? 'bg-slate-900 text-amber-400 border-slate-700'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'}`}
-              title={inspectionMode ? 'Exit Manager Inspection (Esc)' : 'Enter Manager Inspection Mode'}
-            >
+            {/* Inspection signals are computed over the whole pipeline — coming soon (slice 2a). */}
+            <button type="button" disabled aria-disabled="true" title="Manager inspection is coming soon"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-200 bg-white text-[13px] font-medium text-gray-400 cursor-not-allowed">
               <ShieldAlert className="h-3.5 w-3.5" />
-              <span>{inspectionMode ? 'Inspecting' : 'Inspect'}</span>
+              <span>Inspect</span>
+              <NotAvailableBadge label="Soon" />
             </button>
 
             <button
@@ -1772,31 +1575,36 @@ const DealsKanbanPage: React.FC = () => {
               </button>
               {showMoreOptions && (
                 <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200/80 py-1.5 z-50">
-                  <button onClick={() => handleExportPipeline('csv')}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
-                    <FileDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <div className="text-left"><div className="font-medium">Export Pipeline</div><div className="text-[11px] text-gray-400">CSV or PDF format</div></div>
+                  {/* These only logged to the console. Disabled and labelled until built (slice 2a). */}
+                  <button type="button" disabled aria-disabled="true" title="Export Pipeline is coming soon"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-400 cursor-not-allowed">
+                    <FileDown className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                    <div className="text-left flex-1"><div className="font-medium">Export Pipeline</div><div className="text-[11px]">CSV or PDF format</div></div>
+                    <NotAvailableBadge label="Soon" />
                   </button>
-                  <button onClick={handleImportDeals}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
-                    <Upload className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <div className="text-left"><div className="font-medium">Import Deals</div><div className="text-[11px] text-gray-400">Upload CSV file</div></div>
+                  <button type="button" disabled aria-disabled="true" title="Import Deals is coming soon"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-400 cursor-not-allowed">
+                    <Upload className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                    <div className="text-left flex-1"><div className="font-medium">Import Deals</div><div className="text-[11px]">Upload CSV file</div></div>
+                    <NotAvailableBadge label="Soon" />
                   </button>
                   <div className="border-t border-gray-100 my-1" />
-                  <button onClick={handlePipelineSettings}
+                  <button onClick={() => { setShowMoreOptions(false); navigate('/crm/settings'); }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
                     <Settings className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <div className="text-left"><div className="font-medium">Pipeline Settings</div><div className="text-[11px] text-gray-400">Configure stages</div></div>
+                    <div className="text-left"><div className="font-medium">Pipeline Settings</div><div className="text-[11px] text-gray-400">In Settings → Pipeline settings</div></div>
                   </button>
-                  <button onClick={handleViewArchived}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
-                    <Archive className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <div className="text-left"><div className="font-medium">Archived Deals</div><div className="text-[11px] text-gray-400">Access archive</div></div>
+                  <button type="button" disabled aria-disabled="true" title="Archived Deals is coming soon"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-400 cursor-not-allowed">
+                    <Archive className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                    <div className="text-left flex-1"><div className="font-medium">Archived Deals</div><div className="text-[11px]">Access archive</div></div>
+                    <NotAvailableBadge label="Soon" />
                   </button>
-                  <button onClick={handleCustomizeColumns}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors">
-                    <Columns className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <div className="text-left"><div className="font-medium">Customize Columns</div><div className="text-[11px] text-gray-400">Adjust view layout</div></div>
+                  <button type="button" disabled aria-disabled="true" title="Customize Columns is coming soon"
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-400 cursor-not-allowed">
+                    <Columns className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                    <div className="text-left flex-1"><div className="font-medium">Customize Columns</div><div className="text-[11px]">Adjust view layout</div></div>
+                    <NotAvailableBadge label="Soon" />
                   </button>
                 </div>
               )}
@@ -1920,7 +1728,14 @@ const DealsKanbanPage: React.FC = () => {
             ['kanban',   Columns,      'Kanban board'],
             ['grid',     LayoutList,   'Grid view'],
             ['calendar', Calendar,     'Calendar view'],
-          ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => (
+          ] as [string, React.ElementType, string][]).map(([key, Icon, label]) => key === 'calendar' ? (
+            // Was a "coming soon..." placeholder page behind a live toggle; a view
+            // toggle that is not built is disabled and labelled instead.
+            <button key={key} type="button" disabled aria-disabled="true" title="Calendar view is coming soon"
+              className="p-1.5 rounded-md text-gray-300 cursor-not-allowed">
+              <Icon className="h-[15px] w-[15px]" />
+            </button>
+          ) : (
             <button
               key={key}
               onClick={() => handleViewChange(key as 'kanban' | 'list' | 'grid' | 'calendar')}
@@ -1992,8 +1807,9 @@ const DealsKanbanPage: React.FC = () => {
             )}
           </div>
 
-          <button onClick={handleExportCSV} title="Export pipeline"
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors">
+          {/* Built a CSV and threw it away. Export of the full pipeline is a later slice. */}
+          <button type="button" disabled aria-disabled="true" title="Export is coming soon"
+            className="p-1.5 text-gray-300 rounded-md cursor-not-allowed">
             <Download className="h-[15px] w-[15px]" />
           </button>
 
@@ -2012,7 +1828,7 @@ const DealsKanbanPage: React.FC = () => {
           <div className="flex items-center gap-2 flex-wrap px-6 py-3 border-t border-gray-100 bg-gray-50/60">
             {([
               { label: 'Owner', value: selectedOwner, onChange: setSelectedOwner,
-                options: [['all','All owners'],['me','Assigned to me'],['team','My team'],['unassigned','Unassigned']] },
+                options: [['all','All owners'],['me','Assigned to me']] },
               { label: 'Close date', value: selectedCloseDateFilter, onChange: setSelectedCloseDateFilter,
                 options: [['all','Any close date'],['week','This week'],['month','This month'],['quarter','This quarter']] },
               { label: 'Value', value: selectedValueFilter, onChange: setSelectedValueFilter,
@@ -2021,10 +1837,17 @@ const DealsKanbanPage: React.FC = () => {
                 options: [['all','All sources'],['leadgen','Lead gen'],['website','Website']] },
               { label: 'Account', value: selectedAccountFilter, onChange: (v: any) => setSelectedAccountFilter(v),
                 options: [['all','Any account'],['missing','Missing account']] },
-            ] as const).map(f => (
-              <div key={f.label} className="relative flex-shrink-0">
+            ] as const).map(f => {
+              // Only Owner (all / me) runs on the server for the board today. The
+              // rest would filter one loaded page while looking like the whole
+              // pipeline, so they wait for the server (slice 2a: "Coming soon").
+              const live = f.label === 'Owner';
+              return (
+              <div key={f.label} className="relative flex-shrink-0" title={live ? undefined : `${f.label} filter is coming soon`}>
                 <select
-                  value={f.value}
+                  value={live ? f.value : 'all'}
+                  disabled={!live}
+                  aria-label={live ? f.label : `${f.label} (coming soon)`}
                   onChange={(e) => f.onChange(e.target.value as any)}
                   className={`appearance-none bg-white border rounded-md pl-3 pr-7 py-1.5 text-[13px] cursor-pointer
                     focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 transition-colors
@@ -2033,12 +1856,13 @@ const DealsKanbanPage: React.FC = () => {
                       : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
                 >
                   {(f.options as readonly (readonly [string, string])[]).map(([val, lbl]) => (
-                    <option key={val} value={val}>{val === 'all' ? `${f.label}: ${lbl}` : lbl}</option>
+                    <option key={val} value={val}>{val === 'all' ? `${f.label}: ${live ? lbl : 'coming soon'}` : lbl}</option>
                   ))}
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -2127,16 +1951,17 @@ const DealsKanbanPage: React.FC = () => {
 
       {/* DEALS THAT MATCH NO COLUMN. The hardcoded array dropped these silently;
           the whole point of the cutover is that it cannot any more. */}
-      {unplacedDeals.length > 0 && (
-        <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+      {unplacedCount > 0 && (
+        <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900" data-testid="unplaced-banner">
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
             <span>
-              <strong>{unplacedDeals.length}</strong>{' '}
-              {unplacedDeals.length === 1 ? 'deal is' : 'deals are'} in a stage this board has
-              no column for, so {unplacedDeals.length === 1 ? 'it is' : 'they are'} not shown
-              above. {unplacedDeals.length === 1 ? 'Its stage' : 'Their stages'} may have been
+              <strong>{unplacedCount}</strong>{' '}
+              {unplacedCount === 1 ? 'deal is' : 'deals are'} in a stage this board has
+              no column for, so {unplacedCount === 1 ? 'it is' : 'they are'} not shown
+              above. {unplacedCount === 1 ? 'Its stage' : 'Their stages'} may have been
               retired or renamed.
+              {unplacedCount > unplacedDeals.length && ` The first ${unplacedDeals.length} are listed.`}
             </span>
           </div>
           <ul className="mt-2 ml-6 space-y-1">
@@ -2170,6 +1995,13 @@ const DealsKanbanPage: React.FC = () => {
         />
       )}
 
+      {viewMode === 'list' && (
+        <div className="mx-6 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-900" data-testid="list-scope-note">
+          The list shows the {stages.reduce((n, st) => n + st.deals.length, 0)} deals loaded on the board
+          {Object.values(columnTotals).length > 0 && ` of ${Object.values(columnTotals).reduce((n, t) => n + t.count, 0)} in this pipeline`}.
+          Its own server paging, and the figures computed over it, come in the next slice.
+        </div>
+      )}
       {viewMode === 'list' ? (
         <DealsListView
           stages={filteredStagesForList}
@@ -2260,16 +2092,22 @@ const DealsKanbanPage: React.FC = () => {
         <DealsGridView
           stages={searchFilteredStages}
           onDealClick={handleCardClick}
+          // Was console.log. Same real path as the List view's stage change.
           onStageChange={(dealId, newStage) => {
-            console.log('Stage change:', dealId, newStage);
+            transitionDealStage(dealId, newStage)
+              .then(() => {
+                setToast({ message: `Stage updated to ${newStage}`, type: 'success' });
+                triggerRefetch();
+              })
+              .catch((err: Error) =>
+                setToast({ message: `Could not update stage — ${err.message}`, type: 'error' }));
+          }}
+          // Was console.log behind a confirm that just closed. Real delete now.
+          onDelete={(dealId) => {
+            const d = stages.flatMap(st => st.deals).find(x => x.id === dealId);
+            performDelete({ id: dealId, name: d?.dealName ?? dealId });
           }}
         />
-      ) : viewMode === 'calendar' ? (
-        <div className="px-8 py-12 text-center">
-          <Calendar className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Calendar View</h3>
-          <p className="text-gray-600">Calendar view coming soon...</p>
-        </div>
       ) : (
         <div className="px-6 py-5 overflow-x-auto" style={{ scrollBehavior: 'smooth' }}>
           {focusedStage && (
@@ -2293,12 +2131,13 @@ const DealsKanbanPage: React.FC = () => {
           <div className="flex gap-4 min-w-max">
             {displayedStages.map((stage) => {
               const isCollapsed = collapsedStages.includes(stage.id);
-              // Dedup before computing the header count and value total so the
-              // column badge never shows "12 deals" when 6 are real duplicates.
-              const filteredDeals = filterDeals(dedupStageDeals(stage.deals));
+              // The header is the SERVER's view of the whole column under the
+              // active filters (GET /deals/stage-summary) — never the loaded page.
+              // It used to sum native amounts across currencies and print USD.
+              const totals = columnTotals[stage.id];
+              const columnCount = totals?.count ?? null;
               // Hide column entirely when search is active and nothing matches
-              if (debouncedSearch && filteredDeals.length === 0) return null;
-              const stageTotal = filteredDeals.reduce((sum, d) => sum + d.amount, 0);
+              if (debouncedSearch && columnCount === 0) return null;
 
               const accentColor = getStageChartColor(stage.id);
 
@@ -2321,7 +2160,7 @@ const DealsKanbanPage: React.FC = () => {
                           className="text-xs font-bold text-white rounded-full px-2 py-0.5 tabular-nums"
                           style={{ backgroundColor: accentColor }}
                         >
-                          {filteredDeals.length}
+                          {columnCount ?? '—'}
                         </span>
                         {!['closed-won', 'closed-lost'].includes(stage.id) && (
                           <button
@@ -2335,8 +2174,12 @@ const DealsKanbanPage: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <div className="text-[11px] font-medium text-gray-400 tabular-nums">
-                      {formatCurrency(stageTotal)}
+                    <div className="text-[11px] font-medium text-gray-500 tabular-nums" data-testid={`column-value-${stage.id}`}
+                      title={totals ? 'USD, from each deal\'s converted amount. Deals whose amount was never converted to USD are counted, not added.' : (summaryError ?? 'Loading totals')}>
+                      {totals ? formatCurrency(totals.value_usd) : '—'}
+                      {totals && totals.unconverted > 0 && (
+                        <span className="ml-1 text-amber-700">+ {totals.unconverted} not in USD</span>
+                      )}
                     </div>
                   </div>
 
@@ -2384,7 +2227,7 @@ const DealsKanbanPage: React.FC = () => {
                       {provided.placeholder}
 
                       {/* Empty state */}
-                      {!isCollapsed && filterDeals(stage.deals).length === 0 && !debouncedSearch && (
+                      {!isCollapsed && columnCount === 0 && !debouncedSearch && (
                         <div className="flex flex-col items-center justify-center py-10 px-3">
                           <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center mb-3">
                             <Target className="h-4 w-4 text-gray-300" />
@@ -2398,7 +2241,7 @@ const DealsKanbanPage: React.FC = () => {
                       {isCollapsed && (
                         <div className="flex items-center justify-center py-3">
                           <span className="text-[12px] text-gray-400 tabular-nums">
-                            {stage.deals.length} deal{stage.deals.length !== 1 ? 's' : ''} hidden
+                            {columnCount ?? stage.deals.length} deal{(columnCount ?? stage.deals.length) !== 1 ? 's' : ''} hidden
                           </span>
                         </div>
                       )}
@@ -2418,7 +2261,7 @@ const DealsKanbanPage: React.FC = () => {
                             >
                               Load more
                               <span className="text-gray-400 ml-1">
-                                ({filterDeals(dedupStageDeals(stage.deals)).length - (visibleDealsCount[stage.id] || DEALS_PER_PAGE)} remaining)
+                                ({Math.max(0, (columnCount ?? 0) - dedupStageDeals(stage.deals).length)} more)
                               </span>
                             </button>
                           )}
@@ -2680,9 +2523,11 @@ const DealsKanbanPage: React.FC = () => {
               </button>
               <button
                 onClick={confirmDeleteDeal}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                disabled={deletingDeal}
+                aria-busy={deletingDeal || undefined}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-60"
               >
-                Delete
+                {deletingDeal ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
