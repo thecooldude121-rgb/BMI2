@@ -182,6 +182,25 @@ export async function fetchContacts(opts: { search?: string; companyId?: string;
   return (json.data ?? []).map(mapRowToContact);
 }
 
+/** Contacts list query (Group A item 4, slice 3a) — every param runs on the server. */
+export interface ContactsPageQuery {
+  search?: string;
+  status?: string;
+  buying_role?: string;
+  sort?: 'created_at' | 'updated_at' | 'name' | 'email' | 'company';
+  dir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of contacts with the SERVER's total for the filtered set. THROWS on a non-2xx. */
+export async function fetchContactsPage(q: ContactsPageQuery): Promise<{ contacts: Contact[]; total: number }> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+  const json = await request<{ success: boolean; data: ContactRow[]; total: number }>(`/contacts?${params}`);
+  return { contacts: (json.data ?? []).map(mapRowToContact), total: json.total ?? 0 };
+}
+
 /**
  * Returns null for a contact that does not exist (or belongs to another
  * tenant), and throws for anything else. A caller must be able to tell "no such

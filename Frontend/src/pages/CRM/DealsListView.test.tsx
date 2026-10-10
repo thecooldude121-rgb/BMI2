@@ -60,7 +60,7 @@ beforeEach(() => {
     deals: Array.from({ length: Math.min(q.limit, 60 - q.offset) }, (_, k) => row(q.offset + k)), total: 60, limit: q.limit, offset: q.offset,
   }));
 });
-const lastQuery = () => api.fetchDealsPage.mock.calls.at(-1)![0];
+const lastQuery = () => api.fetchDealsPage.mock.calls[api.fetchDealsPage.mock.calls.length - 1][0];
 
 describe('Deals list — one server page at a time', () => {
   it('asks the server for page 1 under the board\'s filters, and shows the SERVER total', async () => {

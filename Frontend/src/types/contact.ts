@@ -119,6 +119,7 @@ export interface ContactFilters {
   source: 'all' | ContactSource;
   tags: 'all' | string;
   searchQuery: string;
-  sortBy: 'lastContact' | 'name' | 'company' | 'createdAt';
+  /** Server sorts (slice 3a). 'lastContact' is gone: nothing ever set it, so it sorted on blanks. */
+  sortBy: 'updatedAt' | 'name' | 'company' | 'createdAt';
   sortOrder: 'asc' | 'desc';
 }

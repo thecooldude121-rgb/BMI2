@@ -6,7 +6,7 @@ import { NotAvailableBadge } from '../../components/common/NotAvailable';
 import type { LucideIcon } from 'lucide-react';
 import { Contact, ContactFilters, ContactStatus, ContactSource } from '../../types/contact';
 import {
-  fetchContacts,
+  fetchContactsPage,
   createContactViaAPI,
   updateContactViaAPI,
   deleteContactViaAPI,
@@ -19,6 +19,15 @@ import ContactForm from '../../components/CRM/ContactForm';
 import ImportContactsModal from '../../components/CRM/ImportContactsModal';
 import ContactActionMenu from '../../components/CRM/ContactActionMenu';
 import ReengagementModal from '../../components/CRM/ReengagementModal';
+import { CONTACT_ROLES } from '../../config/contactRoles';
+
+/** Contacts sort -> the server's allowlisted sort (slice 3a). */
+const CONTACT_SORT: Record<ContactFilters['sortBy'], { sort: 'updated_at' | 'name' | 'company' | 'created_at'; dir: 'asc' | 'desc' }> = {
+  updatedAt: { sort: 'updated_at', dir: 'desc' },
+  name:      { sort: 'name', dir: 'asc' },
+  company:   { sort: 'company', dir: 'asc' },
+  createdAt: { sort: 'created_at', dir: 'desc' },
+};
 import AssignOwnerModal from '../../components/CRM/AssignOwnerModal';
 
 
@@ -37,15 +46,6 @@ const ContactsPage: React.FC = () => {
 
   // PHASE 2: contacts now come from /api/v1/contacts, which has had full CRUD
   // all along. Errors are surfaced rather than swallowed into an empty list.
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchContacts()
-      .then(rows => { if (!cancelled) { setContacts(rows); setLoadError(null); } })
-      .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load contacts'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [reloadKey]);
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [expandedContact, setExpandedContact] = useState<string | null>(null);
   /**
@@ -74,9 +74,42 @@ const ContactsPage: React.FC = () => {
     source: 'all',
     tags: 'all',
     searchQuery: '',
-    sortBy: 'lastContact',
+    sortBy: 'updatedAt',
     sortOrder: 'desc'
   });
+  // SLICE 3a: ONE PAGE FROM THE SERVER. This fetched up to 200 contacts and
+  // filtered, sorted and counted them in the browser, with a "Load More…"
+  // button that had no handler — contact #201 was unreachable. Search, status,
+  // buying role and sort run on the server; the total is the server's.
+  const PAGE = 25;
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [buyingRole, setBuyingRole] = useState('all');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(filters.searchQuery.trim()), 250);
+    return () => clearTimeout(t);
+  }, [filters.searchQuery]);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchContactsPage({
+      search: debouncedSearch || undefined,
+      status: filters.status !== 'all' ? filters.status : undefined,
+      buying_role: buyingRole !== 'all' ? buyingRole : undefined,
+      ...CONTACT_SORT[filters.sortBy],
+      limit: PAGE,
+      offset: page * PAGE,
+    })
+      .then(r => { if (!cancelled) { setContacts(r.contacts); setTotal(r.total); setLoadError(null); } })
+      .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load contacts'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey, debouncedSearch, filters.status, buyingRole, filters.sortBy, page]);
+  // A narrower query starts again at page 1; selection never spans pages.
+  useEffect(() => { setPage(0); }, [debouncedSearch, filters.status, buyingRole, filters.sortBy]);
+  useEffect(() => { setSelectedContacts([]); }, [page, debouncedSearch, filters.status, buyingRole, filters.sortBy]);
 
   // PHASE 2: these were the literals 147 / 23 / 45 / 12 / 8, shown above a table
   // of 6 sample records. Now derived from the contacts actually loaded.
@@ -99,76 +132,13 @@ const ContactsPage: React.FC = () => {
   const stats = useMemo(() => {
     const unknown = Boolean(loadError) || loading;
     const count = (n: number) => (unknown ? '—' : String(n));
-    return {
-      total: count(contacts.length),
-      activeDeals: count(contacts.filter(c => c.activeDeal).length),
-      fromLeadGen: count(contacts.filter(c => c.source === 'lead-gen').length),
-      fromHRMS: count(contacts.filter(c => c.source === 'hrms').length),
-      vip: count(contacts.filter(c => c.tags?.includes('VIP')).length),
-    };
-  }, [contacts, loadError, loading]);
+    // The SERVER's total for the active filters. The other tiles counted the
+    // loaded rows (one page now); they wait for a server summary (slice 3a).
+    return { total: count(total) };
+  }, [total, loadError, loading]);
 
-  // Filter and sort contacts
-  const filteredContacts = useMemo(() => {
-    let filtered = [...contacts];
-
-    // Status filter
-    if (filters.status !== 'all') {
-      filtered = filtered.filter(c => c.status === filters.status);
-    }
-
-    // Source filter
-    if (filters.source !== 'all') {
-      filtered = filtered.filter(c => c.source === filters.source);
-    }
-
-    // Tags filter
-    if (filters.tags !== 'all') {
-      filtered = filtered.filter(c => c.tags.includes(filters.tags));
-    }
-
-    // Search filter
-    if (filters.searchQuery) {
-      const query = filters.searchQuery.toLowerCase();
-      filtered = filtered.filter(c =>
-        c.name.toLowerCase().includes(query) ||
-        c.email.toLowerCase().includes(query) ||
-        c.company.toLowerCase().includes(query)
-      );
-    }
-
-    // Sort
-    filtered.sort((a, b) => {
-      let aVal, bVal;
-
-      switch (filters.sortBy) {
-        case 'name':
-          aVal = a.name;
-          bVal = b.name;
-          break;
-        case 'company':
-          aVal = a.company;
-          bVal = b.company;
-          break;
-        case 'createdAt':
-          aVal = a.createdAt;
-          bVal = b.createdAt;
-          break;
-        case 'lastContact':
-        default:
-          aVal = a.lastContact?.date ?? '';
-          bVal = b.lastContact?.date ?? '';
-      }
-
-      if (filters.sortOrder === 'asc') {
-        return aVal > bVal ? 1 : -1;
-      } else {
-        return aVal < bVal ? 1 : -1;
-      }
-    });
-
-    return filtered;
-  }, [contacts, filters]);
+  // The server filtered and sorted this page; nothing is re-filtered here.
+  const filteredContacts = contacts;
 
   const toggleContactSelection = (id: string) => {
     setSelectedContacts(prev =>
@@ -332,6 +302,7 @@ const ContactsPage: React.FC = () => {
       setContacts(prev => prev.map(c => (ids.includes(c.id) ? { ...c, status } : c)));
       addToast(describeBulk(result, pastTense), result.affected > 0 ? 'success' : 'warning');
       setSelectedContacts([]);
+      setReloadKey(k => k + 1);   // a status filter and the server total may both have changed
     } catch (e) {
       addToast(e instanceof Error ? e.message : 'Could not update these contacts', 'error');
     } finally {
@@ -403,10 +374,11 @@ const ContactsPage: React.FC = () => {
     if (!tag) return;
     setBusy(true);
     try {
-      await bulkUpdateContactsViaAPI('tag', [contactId], { tag });
+      const result = await bulkUpdateContactsViaAPI('tag', [contactId], { tag });
       setContacts(prev => prev.map(c =>
         c.id === contactId && !c.tags.includes(tag) ? { ...c, tags: [...c.tags, tag] } : c));
-      addToast(`Tagged "${tag}"`, 'success');
+      // "Tagged" only when the server changed a row (it said so regardless).
+      addToast(describeBulk(result, `Added the tag "${tag}" to`), result.affected > 0 ? 'success' : 'warning');
     } catch (e) {
       addToast(e instanceof Error ? e.message : 'Could not add that tag', 'error');
     } finally {
@@ -422,6 +394,7 @@ const ContactsPage: React.FC = () => {
       setContacts(prev => prev.filter(c => !selectedContacts.includes(c.id)));
       addToast(describeBulk(result, 'Deleted'), result.affected > 0 ? 'success' : 'warning');
       setSelectedContacts([]);
+      setReloadKey(k => k + 1);   // refill the page and the server total
     } catch (e) {
       // One 23503 rolls the whole batch back, and the message says so. Do not
       // remove anything from the list in that case.
@@ -502,21 +475,11 @@ const ContactsPage: React.FC = () => {
             <div className="text-3xl font-bold text-blue-900">{stats.total}</div>
             <div className="text-sm text-blue-700 font-medium mt-1">Total Contacts</div>
           </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-            <div className="text-3xl font-bold text-green-900">{stats.activeDeals}</div>
-            <div className="text-sm text-green-700 font-medium mt-1">Active Deals</div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-            <div className="text-3xl font-bold text-purple-900">{stats.fromLeadGen}</div>
-            <div className="text-sm text-purple-700 font-medium mt-1">From Lead Gen</div>
-          </div>
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200">
-            <div className="text-3xl font-bold text-orange-900">{stats.fromHRMS}</div>
-            <div className="text-sm text-orange-700 font-medium mt-1">From HRMS</div>
-          </div>
-          <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200">
-            <div className="text-3xl font-bold text-yellow-900">{stats.vip}</div>
-            <div className="text-sm text-yellow-700 font-medium mt-1">VIP Contacts</div>
+          {/* "Active Deals" was always 0 — nothing populated it — so it is gone.
+              The source / VIP counts summed the loaded rows; with paging that is
+              one page, so they wait for a server count (slice 3a). */}
+          <div className="col-span-4 flex items-center gap-2 rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500" aria-disabled="true">
+            Counts by source and VIP contacts <NotAvailableBadge label="Coming soon" />
           </div>
         </div>
       </div>
@@ -539,33 +502,26 @@ const ContactsPage: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Source:</span>
+            <span className="text-sm font-medium text-gray-700">Buying role:</span>
+            {/* Real: contacts.buying_role, filtered on the server (slice 3a). */}
             <select
-              value={filters.source}
-              onChange={(e) => setFilters({ ...filters, source: e.target.value as any })}
+              value={buyingRole}
+              onChange={(e) => setBuyingRole(e.target.value)}
+              aria-label="Buying role"
               className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All</option>
-              <option value="lead-gen">Lead Gen</option>
-              <option value="hrms">HRMS</option>
-              <option value="manual">Manual</option>
-              <option value="website">Website</option>
+              {CONTACT_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700">Tags:</span>
-            <select
-              value={filters.tags}
-              onChange={(e) => setFilters({ ...filters, tags: e.target.value as any })}
-              className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All</option>
-              <option value="VIP">VIP</option>
-              <option value="Decision Maker">Decision Maker</option>
-              <option value="Champion">Champion</option>
-            </select>
-          </div>
+          {/* Source and Tags filtered the loaded rows (one page now) and the
+              server cannot filter on them yet — "Coming soon". */}
+          {['Source', 'Tags'].map(label => (
+            <span key={label} className="flex items-center gap-1.5 text-sm text-gray-400" aria-disabled="true" title={`${label} filter is coming soon`}>
+              {label}: <NotAvailableBadge label="Soon" />
+            </span>
+          ))}
         </div>
 
         {/* Search & Sort */}
@@ -587,7 +543,8 @@ const ContactsPage: React.FC = () => {
               onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as any })}
               className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="lastContact">Sort: Last Contact (Recent)</option>
+              {/* "Last Contact" sorted on a field nothing sets — blanks, no order. */}
+              <option value="updatedAt">Sort: Recently updated</option>
               <option value="name">Sort: Name</option>
               <option value="company">Sort: Company</option>
               <option value="createdAt">Sort: Date Added</option>
@@ -906,12 +863,18 @@ const ContactsPage: React.FC = () => {
               {/* Was "of 147 contacts" — a literal left behind when the KPI tiles
                   above were put on real data in 13/n. The tiles said 20 and this
                   line said 147, on the same screen. */}
-              Showing {filteredContacts.length} of {contacts.length} contact{contacts.length === 1 ? '' : 's'}
-              {filteredContacts.length !== contacts.length && ' (filtered)'}
+              {total > 0
+                ? <>Showing {page * PAGE + 1}–{Math.min((page + 1) * PAGE, total)} of {total} contact{total === 1 ? '' : 's'}</>
+                : <>No contacts</>}
             </div>
-            <button className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-sm font-medium">
-              Load More...
-            </button>
+            {/* Was a "Load More..." button with no handler. Real server pages now. */}
+            <div className="flex items-center gap-2" data-testid="contacts-pager">
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0 || loading}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+              <span className="text-sm text-gray-600 tabular-nums">Page {page + 1} of {Math.max(1, Math.ceil(total / PAGE))}</span>
+              <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * PAGE >= total || loading}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+            </div>
           </div>
         </div>
       </div>
