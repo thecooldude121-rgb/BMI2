@@ -8,6 +8,7 @@ import { resolveActorName } from '../utils/actorName';
 import { workspaceDefaultCurrency } from './workspaceController';
 import { notifyOwnerChange, notifyDealStageChange } from '../utils/notifications';
 import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+import { usdBase } from '../utils/baseAmount';
 
 /** GET /deals ?sort= keys -> SQL (allowlist; see utils/listQuery). */
 const DEAL_SORTS: Record<string, string> = {
@@ -534,7 +535,7 @@ export const createDeal = async (req: AuthRequest, res: Response, next: NextFunc
        RETURNING *`,
       [
         dealName, title || dealName, lead_id, value,
-        resolvedCurrency, base_amount_usd ?? value,
+        resolvedCurrency, usdBase(resolvedCurrency, value, base_amount_usd),
         resolvedPipeline, pipeline_name || 'New Business',
         deal_type || 'new-business',
         // The dual-write is over: deals.stage is dropped (migration 038) and
@@ -756,6 +757,16 @@ export const updateDeal = async (req: AuthRequest, res: Response, next: NextFunc
     if (newValueHistory !== null) {
       updates.push(`value_history = $${i++}`);
       params.push(JSON.stringify(newValueHistory));
+    }
+    // Value or currency changed without a converted amount: the old base is
+    // stale. USD -> the value; anything else -> UNKNOWN (migration 066), never
+    // the native number.
+    if ((req.body.value !== undefined || req.body.currency !== undefined) && req.body.base_amount_usd === undefined) {
+      const cur = await pool.query('SELECT value, currency FROM deals WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+      if (cur.rows[0]) {
+        updates.push(`base_amount_usd = $${i++}`);
+        params.push(usdBase(req.body.currency ?? cur.rows[0].currency, req.body.value ?? cur.rows[0].value));
+      }
     }
     // The other half of the dual-write. `stage` went in through the generic loop
     // above (already normalised to the resolved slug); stage_id is not in

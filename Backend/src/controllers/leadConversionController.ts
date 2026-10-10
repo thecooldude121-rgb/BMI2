@@ -9,6 +9,7 @@ import { QUALIFIED_STAGES } from '../utils/leadQualification';
 import { workspaceDefaultCurrency } from './workspaceController';
 import { notifyLeadConverted, leadDisplayName } from '../utils/notifications';
 import { withEngagement } from '../utils/leadEngagement';
+import { usdBase } from '../utils/baseAmount';
 
 /**
  * POST /api/v1/leads/:id/convert — REAL lead conversion. Step 5, slice B.
@@ -183,7 +184,7 @@ export const convertLead = async (req: AuthRequest, res: Response, next: NextFun
            (name, lead_id, value, currency, base_amount_usd, pipeline_id, pipeline_name, stage_id,
             probability, expected_close_date, assigned_to, assigned_to_user_id,
             company_id, company_name, contact_name, contact_email, tenant_id)
-         VALUES ($1,$2,$3,$4,$3,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         VALUES ($1,$2,$3,$4,$17,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
          RETURNING id, name`,
         [
           text(spec.deal.name), lead.id, spec.deal.value, currency, pipelineSlug,
@@ -191,6 +192,8 @@ export const convertLead = async (req: AuthRequest, res: Response, next: NextFun
           resolved.stage!.probability ?? 0, spec.deal.expected_close_date || null,
           actorName, actorId, company?.id ?? null, company?.name ?? (text(lead.company) || null),
           contact.name, contact.email, tenantId,
+          // USD amount: the value for a USD deal, otherwise UNKNOWN (migration 066).
+          usdBase(currency, spec.deal.value),
         ],
       );
       deal = { id: ins.rows[0].id, name: ins.rows[0].name };

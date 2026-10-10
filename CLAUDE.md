@@ -1518,12 +1518,19 @@ old constraint, which fails the shared-name test.
       "$45K + 1 not in USD", 20 -> 40 -> 46 on load more, both twins, unplaced named, a KEYBOARD drag
       persisted (probability 60 -> 80 in Postgres), admin delete gone from Postgres, sales delete
       refused with the server's message and the row intact; seed torn down and re-counted.
-    - **Found, NOT fixed:** two write paths store a NATIVE amount as `base_amount_usd` — `createDeal`
-      falls back to `value` when no base is sent, and lead conversion sets `base_amount_usd = value`.
-      For a non-USD deal that is wrong (INR 125,000 stored as USD 125,000); the board now refuses to
-      sum such rows, but the data is still wrong. Live has none today. The server holds no exchange
-      rates (they live in the browser's `currencyUtils`), so the fix needs a decision: store NULL /
-      refuse a non-USD deal without a base, or move rates server-side.
+    - **Found in 2a, FIXED after 2b (migration 066) — see the next entry.**
+  - **DONE (migration 066, 2026-10-11) — a non-USD deal's USD amount is UNKNOWN, never its native
+    number.** DECIDED by Venkat 2026-10-11: store unknown; do NOT reject the deal; do NOT build
+    server-side exchange rates. `createDeal` fell back to `value` and lead conversion copied `value`,
+    so INR 125,000 was stored as USD 125,000; the column was also `NOT NULL DEFAULT 0` (an omitted
+    amount became a fabricated USD 0). 066 drops the default and NOT NULL and nulls any existing
+    native-as-USD row (0 on both databases). One rule, `utils/baseAmount.usdBase`: a base the caller
+    SENT is kept (the deal form converts client-side), a USD deal's base is its value, anything else
+    is NULL. `updateDeal` now recomputes the base when value or currency changes without one (it left
+    a stale base). Readers: the board summary counts NULL as "not in USD", list sorts put it last, and
+    `mapApiDeal` no longer falls back to the native value (a card showed "≈ $125K" for an INR deal; it
+    now shows the browser's labelled estimate). `roundTrip.baseAmount.test.ts` (5),
+    `dealCards.test.ts` (2); both write-path fallbacks mutation-tested.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no

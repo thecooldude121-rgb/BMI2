@@ -875,7 +875,8 @@ const DealDetail: React.FC = () => {
         title: newName,
         value: deal.amount,
         currency: deal.currency || 'USD',
-        base_amount_usd: deal.base_amount_usd || deal.amount,
+        // Never the native amount as USD; unknown is left for the server (migration 066).
+        base_amount_usd: deal.base_amount_usd || undefined,
         pipeline_id: 'new-business',
         pipeline_name: 'New Business',
         deal_type: deal.dealType || 'new-business',
