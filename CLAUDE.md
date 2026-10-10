@@ -1518,36 +1518,19 @@ old constraint, which fails the shared-name test.
       "$45K + 1 not in USD", 20 -> 40 -> 46 on load more, both twins, unplaced named, a KEYBOARD drag
       persisted (probability 60 -> 80 in Postgres), admin delete gone from Postgres, sales delete
       refused with the server's message and the row intact; seed torn down and re-counted.
-    - **Found, NOT fixed:** two write paths store a NATIVE amount as `base_amount_usd` — `createDeal`
-      falls back to `value` when no base is sent, and lead conversion sets `base_amount_usd = value`.
-      For a non-USD deal that is wrong (INR 125,000 stored as USD 125,000); the board now refuses to
-      sum such rows, but the data is still wrong. Live has none today. The server holds no exchange
-      rates (they live in the browser's `currencyUtils`), so the fix needs a decision: store NULL /
-      refuse a non-USD deal without a base, or move rates server-side.
-  - **SLICE 2b DONE (2026-10-11) — the Deals LIST pages on the server.** It flattened whatever the
-    board had loaded and filtered, counted, sorted and "paged" it in the browser — with NO page
-    controls (`pagedDeals = sortedDeals`), so every filtered row rendered at once.
-    - One `GET /deals` page under the board's server filters (pipeline, search, My deals) plus the
-      list's own sort, ONE Stage (by id) and ONE Owner (by name; options are the workspace roster from
-      `GET /users`, not the names on a loaded page). A real pager — "Showing 1–25 of N", rows per page,
-      Previous / Next — from the server's total; a narrower query returns to page 1.
-    - Sorting by name, amount (`base_amount_usd`), stage, close date, probability and deal age runs on
-      the server; account, owner, contact, source and competitor are not sortable yet (no arrow, no
-      request). A failed load is an error with Retry, never "No deals match".
-    - **"Coming soon"** (as approved): the KPI cards (total value, win rate, closing this week, stalled,
-      days to close, weighted forecast, duplicates — the deal COUNT is the server's total); the Source,
-      Deal age and Velocity filters and every per-option count computed from a page; "Select all
-      matching" (selection is "on this page"). Filters restored from a URL or a saved view that the
-      server cannot run are dropped, never applied to one page.
-    - **When the KPI cards are rebuilt on server aggregates (slice 5) two rules must carry over** —
-      win rate classified by `stage_type`, and the weighted forecast EXCLUDING open deals with no
-      probability (and saying how many). The comment in `DealsListView` says so where the code was.
-    - `mapApiDeal` moved to `utils/dealCards.ts` so the board and the list map rows identically.
-    - `DealsListView.test.tsx` (6), mutation-tested (offset 0, empty state not gated on a successful
-      load, unsortable column requesting anyway). E2E on `bmi_crm_iso_test`: 60 / Qualified 20 /
-      Qualified + one owner 4 on screen against the same SQL; seed torn down and re-counted. Found and
-      fixed in that check: the pager pushed past the viewport (the table's height reserved 12px for
-      the old count footer), so the window scrolled and the sticky filter bar slid under the table.
+    - **Found in 2a, FIXED after 2b (migration 066) — see the next entry.**
+  - **DONE (migration 066, 2026-10-11) — a non-USD deal's USD amount is UNKNOWN, never its native
+    number.** DECIDED by Venkat 2026-10-11: store unknown; do NOT reject the deal; do NOT build
+    server-side exchange rates. `createDeal` fell back to `value` and lead conversion copied `value`,
+    so INR 125,000 was stored as USD 125,000; the column was also `NOT NULL DEFAULT 0` (an omitted
+    amount became a fabricated USD 0). 066 drops the default and NOT NULL and nulls any existing
+    native-as-USD row (0 on both databases). One rule, `utils/baseAmount.usdBase`: a base the caller
+    SENT is kept (the deal form converts client-side), a USD deal's base is its value, anything else
+    is NULL. `updateDeal` now recomputes the base when value or currency changes without one (it left
+    a stale base). Readers: the board summary counts NULL as "not in USD", list sorts put it last, and
+    `mapApiDeal` no longer falls back to the native value (a card showed "≈ $125K" for an INR deal; it
+    now shows the browser's labelled estimate). `roundTrip.baseAmount.test.ts` (5),
+    `dealCards.test.ts` (2); both write-path fallbacks mutation-tested.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no

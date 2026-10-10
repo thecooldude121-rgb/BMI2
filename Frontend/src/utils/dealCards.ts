@@ -14,7 +14,10 @@ export function mapApiDeal(d: any, stageSlug: string): DealCard {
             accountName: d.company_name || '',
             amount: parseFloat(d.value) || 0,
             currency: d.currency || 'USD',
-            baseAmountUsd: parseFloat(d.base_amount_usd) || parseFloat(d.value) || 0,
+            // UNKNOWN stays unknown (migration 066): falling back to the native
+            // value showed an INR deal as "≈ $125K". Consumers fall back to their
+            // labelled client-side estimate when this is absent.
+            baseAmountUsd: d.base_amount_usd != null && d.base_amount_usd !== '' ? parseFloat(d.base_amount_usd) : undefined,
             closeDate: normalizeDateField(d.expected_close_date),
             stage: stageSlug,
             aiScore: d.probability || 0,

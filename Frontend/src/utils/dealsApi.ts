@@ -43,7 +43,8 @@ export interface DealPayload {
   lead_id?: number | null;
   value: number;
   currency: string;          // ISO 4217 code e.g. 'AED'
-  base_amount_usd: number;   // value converted to USD for reporting
+  /** Value in USD for reporting; omit when unknown (the server stores NULL for non-USD). */
+  base_amount_usd?: number;
   pipeline_id: string;       // e.g. 'new-business'
   pipeline_name: string;     // e.g. 'New Business'
   deal_type: string;         // e.g. 'upsell' — analytics-friendly enum
