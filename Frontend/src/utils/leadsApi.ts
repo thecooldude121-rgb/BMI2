@@ -52,6 +52,11 @@ async function errorMessage(res: Response, scope: string, json?: any): Promise<s
 
 // Map a raw PostgreSQL row (backend schema) → frontend Lead type.
 // Fields not in the DB get safe defaults so components never see undefined.
+const toCount = (v: unknown): number | null => {
+  const n = typeof v === 'string' ? Number(v) : v;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : null;
+};
+
 export function mapRowToLead(row: any): Lead {
   return {
     id:         row.id         || '',
@@ -117,12 +122,14 @@ export function mapRowToLead(row: any): Lead {
     ...(row.converted_company_id ? { converted_to_company_id: String(row.converted_company_id) } : {}),
     ...(row.converted_deal_id ? { converted_to_deal_id: String(row.converted_deal_id) } : {}),
     is_deleted:     false,
-    email_opens_count:  0,
-    email_clicks_count: 0,
-    page_views_count:   0,
-    meeting_count:      0,
-    call_count:         0,
-    email_sent_count:   0,
+    // Opens / clicks / page views have NO source — null ("not tracked"), never 0.
+    email_opens_count:  null,
+    email_clicks_count: null,
+    page_views_count:   null,
+    // Counted by the server from logged activity; absent -> unknown (null).
+    meeting_count:      toCount(row.meeting_count),
+    call_count:         toCount(row.call_count),
+    email_sent_count:   toCount(row.email_sent_count),
     ai_recommendations:  [],
     automation_paused:   false,
   };

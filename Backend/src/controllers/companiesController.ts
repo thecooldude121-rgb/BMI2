@@ -4,6 +4,12 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { fetchAccountIntelligence } from '../services/leadGen/accountIntelligence';
+import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+
+/** GET /companies ?sort= keys -> SQL (allowlist). */
+const COMPANY_SORTS: Record<string, string> = {
+  created_at: 'created_at', updated_at: 'updated_at', name: 'lower(name)', industry: 'industry',
+};
 import {
   MAX_IMPORT_ROWS, runImport, created, skipped, failed, tooLong, firstProblem,
 } from '../utils/csvImport';
@@ -20,16 +26,21 @@ export const getIndustries = (_req: AuthRequest, res: Response): void => {
 export const getCompanies = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { industry, search, limit = 50, offset = 0 } = req.query;
-    let query = `SELECT * FROM companies WHERE tenant_id = $1`;
+    const { industry, search } = req.query;
+    const page = pageParams(req.query as Record<string, unknown>);
+    const order = orderBy(req.query as Record<string, unknown>, COMPANY_SORTS, 'created_at DESC', 'id');
+    let where = `WHERE tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
-    if (industry) { query += ` AND industry = $${i++}`; params.push(industry); }
-    if (search)   { query += ` AND name ILIKE $${i}`; params.push(`%${search}%`); i++; }
-    query += ` ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`;
-    params.push(limit, offset);
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+    if (industry) { where += ` AND industry = $${i++}`; params.push(industry); }
+    // Name OR domain, so a search for "kora.io" finds Kora.
+    if (search)   { where += ` AND (name ILIKE $${i} OR domain ILIKE $${i})`; params.push(`%${escapeLike(String(search))}%`); i++; }
+    const total = await pool.query(`SELECT COUNT(*)::int AS n FROM companies ${where}`, params);
+    const result = await pool.query(
+      `SELECT * FROM companies ${where} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      [...params, page.limit, page.offset],
+    );
+    res.json(listEnvelope(result.rows, total.rows[0].n, page));
   } catch (error) { next(error); }
 };
 

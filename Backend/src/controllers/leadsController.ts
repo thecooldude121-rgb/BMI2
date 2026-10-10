@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { profileFieldsError, normalizeProfileFields } from '../utils/leadProfileFields';
 import { FOLLOW_UP_JOIN, FOLLOW_UP_COLUMNS, OVERDUE_FOLLOW_UP } from '../utils/leadFollowUp';
+import { ENGAGEMENT_COLUMNS, withEngagement } from '../utils/leadEngagement';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
@@ -119,7 +120,7 @@ export const getLeads = async (req: AuthRequest, res: Response, next: NextFuncti
 
     const total = await pool.query(`SELECT COUNT(*)::int AS n FROM leads l WHERE ${where}`, params);
     const page = await pool.query(
-      `SELECT l.*, ${FOLLOW_UP_COLUMNS} FROM leads l ${FOLLOW_UP_JOIN} WHERE ${where}
+      `SELECT l.*, ${FOLLOW_UP_COLUMNS}, ${ENGAGEMENT_COLUMNS} FROM leads l ${FOLLOW_UP_JOIN} WHERE ${where}
         ORDER BY ${built.orderBy}
         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, safeLimit, safeOffset],
@@ -195,7 +196,7 @@ export const getLeadById = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const tenantId = requireTenantId(req);
     const result = await pool.query(
-      `SELECT l.*, ${FOLLOW_UP_COLUMNS} FROM leads l ${FOLLOW_UP_JOIN} WHERE l.id = $1 AND l.tenant_id = $2`,
+      `SELECT l.*, ${FOLLOW_UP_COLUMNS}, ${ENGAGEMENT_COLUMNS} FROM leads l ${FOLLOW_UP_JOIN} WHERE l.id = $1 AND l.tenant_id = $2`,
       [req.params.id, tenantId]);
     if (!result.rows[0]) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
     res.json({ success: true, data: result.rows[0] });
@@ -314,7 +315,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
     await notifyOwnerChange(client, { tenantId, actorId: actorId(req) }, 'lead',
       result.rows[0].id, leadDisplayName(result.rows[0]), null, result.rows[0].assigned_to_user_id);
     await client.query('COMMIT');
-    res.status(201).json({ success: true, data: result.rows[0] });
+    res.status(201).json({ success: true, data: await withEngagement(pool, tenantId, result.rows[0]) });
     } catch (e) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw e;
@@ -434,7 +435,7 @@ export const updateLead = async (req: AuthRequest, res: Response, next: NextFunc
     }
 
     if (!updated) { res.status(404).json({ success: false, message: 'Lead not found' }); return; }
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: await withEngagement(pool, tenantId, updated) });
   } catch (error) { next(error); }
 };
 
@@ -569,7 +570,7 @@ export const transitionLeadStage = async (req: AuthRequest, res: Response, next:
       ],
     );
     await client.query('COMMIT');
-    res.json({ success: true, data: updated.rows[0] });
+    res.json({ success: true, data: await withEngagement(pool, tenantId, updated.rows[0]) });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     next(error);

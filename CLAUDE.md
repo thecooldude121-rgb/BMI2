@@ -1427,12 +1427,69 @@ old constraint, which fails the shared-name test.
     forward-only guard and the panel's source all mutation-tested. Browser check on
     `bmi_crm_iso_test` in Kolkata and New York, a real call logged through the composer moved the
     line, confirmed in Postgres; seed torn down and re-counted.
-  - **FOUND, NOT FIXED — the engagement / intent factors cannot score.** `call_count`,
-    `meeting_count`, `email_sent_count`, `email_opens_count`, `email_clicks_count` and
-    `page_views_count` have NO columns; `mapRowToLead` hardcodes them to 0, so those factors read
-    "0 meetings, 0 calls" even for a lead with logged calls. Calls/meetings/emails could be
-    COUNTED from `lead_activities` (server-side, per lead); opens/clicks/page views have no source
-    at all and should be shown as not tracked rather than 0. Its own slice.
+  - **The engagement / intent factors could not score — FIXED the same day, next entry.**
+
+- **FIXED (2026-10-10, prioritised by Venkat ahead of items 4-9) — lead engagement counts were
+  hardcoded to 0.** `mapRowToLead` set calls, meetings and emails sent to 0, so a lead with logged
+  calls read "0 calls" and the engagement / intent factors could never score. A wrong-data defect,
+  same class as the timezone and cross-workspace fixes.
+  - **The server counts them** (`utils/leadEngagement.ENGAGEMENT_COLUMNS`) from BOTH places lead
+    activity is recorded — `activities` rows with a lead_id (the composers) and the per-type
+    `lead_calls` / `lead_emails` / `lead_meetings` (the older endpoints) — with the same meaning of
+    "happened" as `recordLeadContact`: a completed call or any lead_calls row; a COMPLETED meeting
+    (planned ones are not counted); a completed non-inbound email or a sent outbound lead_emails row
+    (not draft / failed / bounced / scheduled). Every subquery is tenant-matched. Served on GET
+    /leads (scalar subqueries run only for the returned page — the 10k pagination suite passes) and
+    GET /leads/:id, and merged into every lead WRITE response (`withEngagement`: create, update,
+    stage move, conversion) so the client never has to guess.
+  - **Opens, clicks and page views are NOT TRACKED** — nothing records them. The mapper sets them
+    `null`, never 0, and every reader was audited: the Email Engagement factor reads "Email opens
+    and clicks are not tracked"; Engagement Depth reads "2 meetings, 3 calls, page views not
+    tracked". Three claims built on the fake zeros are gone: the explainer's "N emails sent, no
+    opens", Sales Memory's "(no opens)", and next-best-action's "Try different email subject
+    lines" — each now fires only when opens are MEASURED as zero, which today is never.
+  - A count a response did not carry is `null` ("calls unknown"), never 0.
+  - **Score formula unchanged — DECIDED by Venkat 2026-10-10:** the 20-point Email Engagement
+    allocation stays unearnable until real open/click tracking exists, so scores stay capped below
+    their old maximum. No re-weighting; do not "fix" this without a new decision.
+  - `roundTrip.leadEngagement.test.ts` (6), `leadEngagementCounts.test.ts` (6); the mapper, the
+    "no opens" guard and the tenant match mutation-tested. Browser check on `bmi_crm_iso_test`: a
+    call logged through the composer plus a meeting -> "1 meeting, 1 call, page views not tracked",
+    Intent 0 -> 53; seed torn down and re-counted. Live has 0 lead activity rows today, so no live
+    figure changes until something is logged.
+
+- **Group A item 4 (pagination beyond Leads) — slice plan, and SLICE 1 DONE (2026-10-10).**
+  Mapped first: only Leads paged on the server. The Deals board loaded **50** deals, Contacts and
+  Accounts **200**, everything else one 500-row fetch filtered in the browser; Analytics, the
+  Accounts KPIs and the Tasks / Contacts counters aggregated capped lists with NO warning. Slices:
+  (1) backend groundwork; (2) Deals board + list; (3) Contacts + Accounts; (4) Tasks, Activities,
+  Calendar; (5) Dashboards, Reports, Analytics from server aggregates; (6) pickers to server search.
+  - **Slice 1 — the five non-lead list endpoints** (`deals`, `contacts`, `companies`, `tasks`,
+    `activities`) share `utils/listQuery`:
+    - **`limit` clamped to 1..500, `offset` >= 0**, the lenient rule /leads, /tasks and /activities
+      already used (a malformed value falls back to the default). Deals, contacts and companies
+      passed the raw `?limit=` into SQL — unbounded, and `?limit=abc` was a masked 500.
+    - **Envelope `{ data, count, total, limit, offset }`** — `total` is COUNT(*) over the SAME
+      FROM + WHERE (the filtered set); `count` (page size) kept for existing callers; the APPLIED
+      limit is echoed so a clamp is visible.
+    - **`?sort=&dir=` against per-endpoint allowlists**; unknown key or direction is a 400 naming
+      the allowed values, never ignored; every order ends in a unique tiebreaker (pages never
+      overlap). Defaults unchanged.
+    - Filters for the coming slices: deals `pipeline_id`; contacts `company_id` (alias of
+      `account_id`) and `buying_role`; companies search on name OR domain; tasks `due_after` (with
+      `due_before`, a date range) and `search`; activities `search`, `occurred_after` /
+      `occurred_before`. Search text has LIKE wildcards escaped (`escapeLike`), as global search does.
+    - `roundTrip.listTotals.test.ts` (25): 10,000 rows per table, total vs independent SQL, another
+      workspace's rows never counted, clamp, garbage limits, search narrows total, sort + 400s, every
+      page walked returns each row exactly once. Mutation-tested: cap removed, total = page size,
+      unknown sort ignored, contacts total without the filter — each fails. No frontend caller asks
+      above 500.
+  - **Found on the way, NOT fixed:** (a) on the login page the data providers fire their list
+    fetches BEFORE sign-in (five 401s, then a retry after login) — pre-existing, harmless, noisy;
+    (b) the Activities page's labelled "AI Insights" sample panel describes **HRMS** figures ("HRMS:
+    92% completion…", "View HRMS Activities") — the same cross-product fixture removed from
+    `ReportDetailView` for the reason recorded there; (c) `POST /activities` refused a parentless
+    call with no clear reason in the smoke seed — worth a look when slice 4 touches activities.
 
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different

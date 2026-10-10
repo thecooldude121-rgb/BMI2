@@ -4,6 +4,14 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant } from '../utils/tenantScope';
+import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+
+/** GET /contacts ?sort= keys -> SQL (allowlist). */
+const CONTACT_SORTS: Record<string, string> = {
+  created_at: 'c.created_at', updated_at: 'c.updated_at',
+  name: "lower(coalesce(c.last_name, '') || ' ' || coalesce(c.first_name, ''))",
+  email: 'lower(c.email)', company: 'lower(co.name)',
+};
 import {
   MAX_IMPORT_ROWS, runImport, created, skipped, failed,
   invalidEmail, tooLong, firstProblem,
@@ -163,17 +171,25 @@ async function foreignRefError(
 export const getContacts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { account_id, search, status, limit = 50, offset = 0 } = req.query;
-    let query = `SELECT ${SELECT_COLUMNS} ${FROM_JOINS} WHERE c.tenant_id = $1`;
+    const { account_id, company_id, search, status, buying_role } = req.query;
+    const page = pageParams(req.query as Record<string, unknown>);
+    const order = orderBy(req.query as Record<string, unknown>, CONTACT_SORTS, 'c.is_primary DESC, c.created_at DESC', 'c.id');
+    let where = `WHERE c.tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
-    if (account_id) { query += ` AND c.company_id = $${i++}`; params.push(account_id); }
-    if (status) { query += ` AND c.status = $${i++}`; params.push(status); }
-    if (search) { query += ` AND (c.first_name ILIKE $${i} OR c.last_name ILIKE $${i} OR c.email ILIKE $${i} OR co.name ILIKE $${i})`; params.push(`%${search}%`); i++; }
-    query += ` ORDER BY c.is_primary DESC, c.created_at DESC LIMIT $${i++} OFFSET $${i}`;
-    params.push(limit, offset);
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+    // company_id is the canonical name; account_id stays for existing callers.
+    const company = company_id ?? account_id;
+    if (company) { where += ` AND c.company_id = $${i++}`; params.push(company); }
+    if (status) { where += ` AND c.status = $${i++}`; params.push(status); }
+    if (buying_role) { where += ` AND c.buying_role = $${i++}`; params.push(buying_role); }
+    if (search) { where += ` AND (c.first_name ILIKE $${i} OR c.last_name ILIKE $${i} OR c.email ILIKE $${i} OR co.name ILIKE $${i})`; params.push(`%${escapeLike(String(search))}%`); i++; }
+    // TOTAL over the same FROM + WHERE (the filtered set, not the page).
+    const total = await pool.query(`SELECT COUNT(*)::int AS n ${FROM_JOINS} ${where}`, params);
+    const result = await pool.query(
+      `SELECT ${SELECT_COLUMNS} ${FROM_JOINS} ${where} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      [...params, page.limit, page.offset],
+    );
+    res.json(listEnvelope(result.rows, total.rows[0].n, page));
   } catch (error) { next(error); }
 };
 

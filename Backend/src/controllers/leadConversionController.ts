@@ -8,6 +8,7 @@ import { resolveStageForWrite } from '../utils/pipelineStages';
 import { QUALIFIED_STAGES } from '../utils/leadQualification';
 import { workspaceDefaultCurrency } from './workspaceController';
 import { notifyLeadConverted, leadDisplayName } from '../utils/notifications';
+import { withEngagement } from '../utils/leadEngagement';
 
 /**
  * POST /api/v1/leads/:id/convert — REAL lead conversion. Step 5, slice B.
@@ -226,7 +227,7 @@ export const convertLead = async (req: AuthRequest, res: Response, next: NextFun
     res.status(201).json({
       success: true,
       data: {
-        lead: updated.rows[0],
+        lead: await withEngagement(pool, tenantId, updated.rows[0]),
         contact: { id: contact.id, name: contact.name, created: contact.created },
         company: company ? { id: company.id, name: company.name, created: company.created } : null,
         deal,

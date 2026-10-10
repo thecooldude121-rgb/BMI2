@@ -16,6 +16,12 @@ export interface LeadScoreBreakdown {
   nextBestActions: string[];
 }
 
+/** "3 calls" / "1 call", or "calls unknown" when the count was not served. */
+function countLabel(n: number | null, noun: string): string {
+  if (n === null) return `${noun}s unknown`;
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
 export class LeadScoringEngine {
   static calculateDetailedScore(lead: Lead): LeadScoreBreakdown {
     const factors: ScoreFactor[] = [];
@@ -66,19 +72,23 @@ export class LeadScoringEngine {
     let points = 0;
     const maxPoints = 20;
 
-    if (lead.email_opens_count > 0) {
-      points += Math.min(lead.email_opens_count * 2, 10);
-    }
+    const opens = lead.email_opens_count;
+    const clicks = lead.email_clicks_count;
+    if (opens !== null && opens > 0) points += Math.min(opens * 2, 10);
+    if (clicks !== null && clicks > 0) points += Math.min(clicks * 5, 10);
 
-    if (lead.email_clicks_count > 0) {
-      points += Math.min(lead.email_clicks_count * 5, 10);
-    }
+    // Nothing in this CRM records opens or clicks: say so rather than "0 opens".
+    // The factor still cannot earn points; whether its weight should move to a
+    // measurable factor is a scoring decision, not made here.
+    const description = opens === null && clicks === null
+      ? 'Email opens and clicks are not tracked'
+      : `${opens ?? 'untracked'} opens, ${clicks ?? 'untracked'} clicks`;
 
     return {
       name: 'Email Engagement',
       points: Math.min(points, maxPoints),
       maxPoints,
-      description: `${lead.email_opens_count} opens, ${lead.email_clicks_count} clicks`,
+      description,
       category: 'engagement'
     };
   }
@@ -183,15 +193,24 @@ export class LeadScoringEngine {
     let points = 0;
     const maxPoints = 15;
 
-    if (lead.meeting_count > 0) points += Math.min(lead.meeting_count * 5, 8);
-    if (lead.call_count > 0) points += Math.min(lead.call_count * 3, 5);
-    if (lead.page_views_count > 3) points += 2;
+    // Meetings and calls are COUNTED from logged activity by the server; page
+    // views have no source. An unknown count earns nothing and says so.
+    const meetings = lead.meeting_count;
+    const calls = lead.call_count;
+    const views = lead.page_views_count;
+    if (meetings !== null && meetings > 0) points += Math.min(meetings * 5, 8);
+    if (calls !== null && calls > 0) points += Math.min(calls * 3, 5);
+    if (views !== null && views > 3) points += 2;
 
     return {
       name: 'Engagement Depth',
       points: Math.min(points, maxPoints),
       maxPoints,
-      description: `${lead.meeting_count} meetings, ${lead.call_count} calls, ${lead.page_views_count} page views`,
+      description: [
+        countLabel(meetings, 'meeting'),
+        countLabel(calls, 'call'),
+        views === null ? 'page views not tracked' : countLabel(views, 'page view'),
+      ].join(', '),
       category: 'behavior'
     };
   }
@@ -301,11 +320,11 @@ export class LeadScoringEngine {
   private static getNextBestActions(lead: Lead, factors: ScoreFactor[]): string[] {
     const actions: string[] = [];
 
-    if (lead.email_opens_count > 2 && lead.email_clicks_count > 0 && lead.meeting_count === 0) {
+    if ((lead.email_opens_count ?? 0) > 2 && (lead.email_clicks_count ?? 0) > 0 && lead.meeting_count === 0) {
       actions.push('Schedule demo or discovery call');
     }
 
-    if (lead.meeting_count > 0 && !lead.is_qualified) {
+    if ((lead.meeting_count ?? 0) > 0 && !lead.is_qualified) {
       actions.push('Qualify lead based on BANT criteria');
     }
 
@@ -320,7 +339,8 @@ export class LeadScoringEngine {
       actions.push('Research and connect on LinkedIn');
     }
 
-    if (lead.email_opens_count === 0 && lead.email_sent_count > 0) {
+    // Only when opens are actually MEASURED as zero — untracked is not "no opens".
+    if (lead.email_opens_count === 0 && (lead.email_sent_count ?? 0) > 0) {
       actions.push('Try different email subject lines');
     }
 
@@ -377,8 +397,8 @@ export class LeadScoringEngine {
 
   static shouldAutoQualify(lead: Lead, score: number): boolean {
     return score >= 75 &&
-           lead.meeting_count > 0 &&
-           lead.email_clicks_count > 2 &&
+           (lead.meeting_count ?? 0) > 0 &&
+           (lead.email_clicks_count ?? 0) > 2 &&
            !!lead.company &&
            !!lead.position;
   }

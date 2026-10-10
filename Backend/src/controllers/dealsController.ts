@@ -7,6 +7,14 @@ import { resolveStageForWrite, findStage, STAGE_NOT_IN_WORKSPACE } from '../util
 import { resolveActorName } from '../utils/actorName';
 import { workspaceDefaultCurrency } from './workspaceController';
 import { notifyOwnerChange, notifyDealStageChange } from '../utils/notifications';
+import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+
+/** GET /deals ?sort= keys -> SQL (allowlist; see utils/listQuery). */
+const DEAL_SORTS: Record<string, string> = {
+  created_at: 'd.created_at', updated_at: 'd.updated_at', name: 'lower(d.name)',
+  value: 'd.value', base_amount_usd: 'd.base_amount_usd', probability: 'd.probability',
+  expected_close_date: 'd.expected_close_date', stage: 'ps.position',
+};
 
 /** The caller's numeric user id, or null — for notification attribution. */
 const actorIdOf = (req: AuthRequest): number | null => {
@@ -69,7 +77,10 @@ const normalizeSource = (value: unknown): { ok: true; value: string | null } | {
 export const getDeals = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { stage, assigned_to, assigned_to_user_id, search, contact_email, company_name, company_id, limit = 50, offset = 0, include_test } = req.query;
+    const { stage, assigned_to, assigned_to_user_id, search, contact_email, company_name, company_id, include_test } = req.query;
+    const page = pageParams(req.query as Record<string, unknown>);
+    // Validated before any query runs, so a bad sort is a 400 with no work done.
+    const order = orderBy(req.query as Record<string, unknown>, DEAL_SORTS, 'd.created_at DESC', 'd.id');
     // The LEFT JOIN on leads is one-to-one (d.lead_id FK → leads PK) and cannot
     // produce duplicate rows for the same deal.  Duplicate cards on the board
     // are caused by genuine duplicate rows in the deals table (different ids,
@@ -83,7 +94,7 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     //
     // is_test guard: excludes dev/debug records from all production-facing views
     // unless the caller explicitly passes include_test=true (dev tooling only).
-    let query = `
+    const selectPart = `
       SELECT d.*,
              -- The stage field comes from pipeline_stages. There is no
              -- deals.stage column any more: migration 038 dropped it, and this
@@ -146,6 +157,8 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
              to_char(d.contract_end_date,   'YYYY-MM-DD') AS contract_end_date,
              l.email AS lead_email,
              GREATEST(0, EXTRACT(epoch FROM (NOW() - d.updated_at)) / 86400)::int AS days_since_contact
+`;
+    let query = `
       FROM deals d
       -- The tenant predicate on the JOIN is load-bearing, not redundant with
       -- the WHERE below. deals_lead_id_fkey references leads(id) globally, so a
@@ -190,7 +203,7 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     }
     // Optional exact-ownership filter for callers that hold a user id.
     if (assigned_to_user_id) { query += ` AND d.assigned_to_user_id = $${i++}`; params.push(assigned_to_user_id); }
-    if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${search}%`); i++; }
+    if (search)      { query += ` AND (d.name ILIKE $${i} OR d.company_name ILIKE $${i})`; params.push(`%${escapeLike(String(search))}%`); i++; }
 
     // contact_email / company_name: the ONLY link deals carry to a contact or an
     // account. `deals` has no contact_id and no account_id — just the free-text
@@ -216,10 +229,16 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     // simply matches zero rows rather than reading across the boundary.
     if (company_id)    { query += ` AND d.company_id = $${i++}`;      params.push(company_id); }
 
-    query += ` ORDER BY d.created_at DESC LIMIT $${i++} OFFSET $${i}`;
-    params.push(limit, offset);
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rowCount });
+    // Slice-1 filter for the per-pipeline board (slice 2).
+    if (req.query.pipeline_id) { query += ` AND d.pipeline_id = $${i++}`; params.push(req.query.pipeline_id); }
+
+    // TOTAL over the same FROM + WHERE — the size of the filtered set, not the page.
+    const total = await pool.query(`SELECT COUNT(*)::int AS n ${query}`, params);
+    const result = await pool.query(
+      `${selectPart} ${query} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      [...params, page.limit, page.offset],
+    );
+    res.json(listEnvelope(result.rows, total.rows[0].n, page));
   } catch (error) { next(error); }
 };
 
