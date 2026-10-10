@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '../../components/ui/Button';
 import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MoreVertical, TrendingUp, AlertTriangle, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Plus, MoreVertical, TrendingUp, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
 import { NotAvailableBadge } from '../../components/common/NotAvailable';
 import { groupActivities, groupingCoverage, type ActivityGroup, type ActivityGroupMode } from '../../utils/activityGrouping';
 
@@ -29,11 +29,6 @@ interface Activity {
   outcome?: 'positive' | 'neutral' | 'negative';
   notes?: string;
   source?: string;
-  hrmsConnection?: {
-    contactName: string;
-    recruitedDate: string;
-    closeRate?: string;
-  };
   emailTracking?: {
     delivered: string;
     opens: Array<{ time: string; number: number }>;
@@ -212,7 +207,7 @@ const ActivitiesPage: React.FC = () => {
    * this page renders.
    *
    * The local Activity shape is much richer than the table: aiSummary,
-   * emailTracking, hrmsConnection, riskAlert and aiInsight have no columns and no
+   * emailTracking, riskAlert and aiInsight have no columns and no
    * data source. They are left ABSENT — every render site already guards with
    * `activity.x && ...`, so those panels simply do not appear. Do not fill them
    * with placeholders; that is what Phase 0 spent its time removing.
@@ -351,18 +346,6 @@ const ActivitiesPage: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">{activity.title}</h3>
               <span className="text-sm text-gray-500">{activity.time}</span>
             </div>
-
-            {activity.hrmsConnection && (
-              <div className="mb-3 p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-                <div className="font-semibold text-purple-900 mb-1">🏢 HRMS CONNECTION</div>
-                <div className="text-sm text-purple-800">
-                  ✨ Recruited: {activity.hrmsConnection.contactName} - {activity.hrmsConnection.recruitedDate}
-                </div>
-                {activity.hrmsConnection.closeRate && (
-                  <div className="text-sm text-purple-800">💡 {activity.hrmsConnection.closeRate} close rate</div>
-                )}
-              </div>
-            )}
 
             <div className="space-y-2 text-sm text-gray-600 mb-3">
               <div>
@@ -840,22 +823,9 @@ const ActivitiesPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold mb-2">🏢 HRMS: 92% completion vs 67% others</div>
-                  <div className="text-sm">TechStart: 15 activities 100%, DataFlow: 12 100%</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium">
-                    View HRMS Activities
-                  </button>
-                  <button className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium">
-                    View HRMS Report
-                  </button>
-                </div>
-              </div>
-            </div>
+            {/* An "HRMS: 92% completion" row lived here — removed 2026-10-10. HRMS is a
+                separate product reached over SSO; sample data naming it encodes a
+                cross-product read, the reason ReportDetailView's HRMS fixture went. */}
           </div>
         </div>
 
@@ -1009,36 +979,13 @@ const ActivitiesPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-semibold text-gray-700">Quick Filters:</span>
-              <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
-                My Open Tasks
-                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">8</span>
-              </button>
-              <button className="px-3 py-1.5 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-100 text-sm font-medium flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" />
-                Overdue
-                <span className="ml-1 px-1.5 py-0.5 bg-orange-600 text-white rounded text-xs">18</span>
-              </button>
-              <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
-                <Video className="w-4 h-4" />
-                Today's Meetings
-                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">12</span>
-              </button>
-              <button className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                This Week
-                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white rounded text-xs">32</span>
-              </button>
-              <button className="px-3 py-1.5 bg-white border border-purple-300 text-purple-700 rounded-lg hover:bg-purple-100 text-sm font-medium flex items-center gap-2">
-                <Building2 className="w-4 h-4" />
-                HRMS Activities
-                <span className="ml-1 px-1.5 py-0.5 bg-purple-600 text-white rounded text-xs">27</span>
-              </button>
-            </div>
+        {/* The "Quick Filters" bar that sat here is gone (2026-10-10): every button
+            carried a hardcoded count (8 / 18 / 12 / 32 and "HRMS Activities 27"),
+            none had a handler, and none was labelled sample. The real Today / This
+            Week / Overdue figures are the stat cards above. Only the working
+            control is kept. */}
+        {hasActiveFilters() && (
+          <div className="mb-6 flex justify-end">
             <button
               onClick={clearAllFilters}
               className="px-3 py-1.5 text-gray-600 hover:text-gray-800 text-sm font-medium"
@@ -1046,7 +993,7 @@ const ActivitiesPage: React.FC = () => {
               Clear Filters
             </button>
           </div>
-        </div>
+        )}
 
         {/* Empty State - No Activities at All */}
         {activities.length === 0 && !hasActiveFilters() && (
