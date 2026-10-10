@@ -51,6 +51,18 @@ describe('deals.base_amount_usd: unknown rather than the native amount', () => {
     expect(Number(await base(untouched))).toBe(100);
   });
 
+  it('deals with an UNKNOWN USD amount sort LAST in both directions (NULLS LAST, deliberate)', async () => {
+    const tag = `S${Date.now()}`;
+    for (const [v, cur] of [[300, 'USD'], [100, 'USD'], [999999, 'INR']] as const) {
+      await create({ name: `${tag} ${cur} ${v}`, value: v, currency: cur });
+    }
+    const order = async (dir: 'asc' | 'desc') =>
+      (await request(app).get('/api/v1/deals').query({ search: tag, sort: 'base_amount_usd', dir, limit: 10 }).set(auth(ws)))
+        .body.data.map((d: { name: string }) => d.name.replace(`${tag} `, ''));
+    expect(await order('asc')).toEqual(['USD 100', 'USD 300', 'INR 999999']);
+    expect(await order('desc')).toEqual(['USD 300', 'USD 100', 'INR 999999']);
+  });
+
   it('lead conversion: an INR deal gets an unknown USD amount, a USD deal its value', async () => {
     const convert = async (currency: string) => {
       const l = await request(app).post('/api/v1/leads').set(auth(ws)).send({ first_name: 'C', last_name: 'V', email: `c.${Date.now()}.${Math.random()}@baseamt.example`, company: 'Kora', phone: '+91 1' });
