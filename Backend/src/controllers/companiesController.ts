@@ -5,10 +5,11 @@ import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { fetchAccountIntelligence } from '../services/leadGen/accountIntelligence';
 import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+import { ACCOUNT_ROLLUP_COLUMNS, TRUSTED_USD } from '../utils/accountRollups';
 
 /** GET /companies ?sort= keys -> SQL (allowlist). */
 const COMPANY_SORTS: Record<string, string> = {
-  created_at: 'created_at', updated_at: 'updated_at', name: 'lower(name)', industry: 'industry',
+  created_at: 'c.created_at', updated_at: 'c.updated_at', name: 'lower(c.name)', industry: 'c.industry',
 };
 import {
   MAX_IMPORT_ROWS, runImport, created, skipped, failed, tooLong, firstProblem,
@@ -28,19 +29,51 @@ export const getCompanies = async (req: AuthRequest, res: Response, next: NextFu
     const tenantId = requireTenantId(req);
     const { industry, search } = req.query;
     const page = pageParams(req.query as Record<string, unknown>);
-    const order = orderBy(req.query as Record<string, unknown>, COMPANY_SORTS, 'created_at DESC', 'id');
-    let where = `WHERE tenant_id = $1`;
+    const order = orderBy(req.query as Record<string, unknown>, COMPANY_SORTS, 'c.created_at DESC', 'c.id');
+    let where = `WHERE c.tenant_id = $1`;
     const params: any[] = [tenantId];
     let i = 2;
-    if (industry) { where += ` AND industry = $${i++}`; params.push(industry); }
+    if (industry) { where += ` AND c.industry = $${i++}`; params.push(industry); }
     // Name OR domain, so a search for "kora.io" finds Kora.
-    if (search)   { where += ` AND (name ILIKE $${i} OR domain ILIKE $${i})`; params.push(`%${escapeLike(String(search))}%`); i++; }
-    const total = await pool.query(`SELECT COUNT(*)::int AS n FROM companies ${where}`, params);
+    if (search)   { where += ` AND (c.name ILIKE $${i} OR c.domain ILIKE $${i})`; params.push(`%${escapeLike(String(search))}%`); i++; }
+    const total = await pool.query(`SELECT COUNT(*)::int AS n FROM companies c ${where}`, params);
+    // Each row carries its own contact / open-deal roll-ups (slice 3b) — the
+    // list joined them in the browser from capped lists of 500.
     const result = await pool.query(
-      `SELECT * FROM companies ${where} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      `SELECT c.*, ${ACCOUNT_ROLLUP_COLUMNS} FROM companies c ${where} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
       [...params, page.limit, page.offset],
     );
     res.json(listEnvelope(result.rows, total.rows[0].n, page));
+  } catch (error) { next(error); }
+};
+
+
+/**
+ * GET /companies/summary — the Accounts page's tiles (slice 3b), workspace-wide.
+ * They were computed in the browser from 200 accounts, 500 contacts and 500
+ * deals. Open = stage_type 'open'; test / archived deals excluded; USD summed
+ * only where trustworthy, the rest counted as unconverted. Deals with no
+ * account are reported separately rather than folded into "on accounts".
+ */
+export const getCompaniesSummary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const r = await pool.query(
+      `WITH od AS (
+         SELECT d.company_id, d.currency, d.value, d.base_amount_usd
+           FROM deals d
+           JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
+          WHERE d.tenant_id = $1 AND d.is_test = false AND d.is_archived = false AND ps.stage_type = 'open'
+       )
+       SELECT
+         (SELECT count(*) FROM companies WHERE tenant_id = $1)::int AS accounts,
+         (SELECT count(*) FROM contacts WHERE tenant_id = $1 AND company_id IS NOT NULL)::int AS contacts_on_accounts,
+         (SELECT count(*) FROM od WHERE company_id IS NOT NULL)::int AS open_deals_on_accounts,
+         (SELECT COALESCE(sum(base_amount_usd) FILTER (WHERE ${TRUSTED_USD('od')}), 0) FROM od WHERE company_id IS NOT NULL)::float8 AS open_value_usd_on_accounts,
+         (SELECT count(*) FILTER (WHERE NOT ${TRUSTED_USD('od')}) FROM od WHERE company_id IS NOT NULL)::int AS open_unconverted_on_accounts,
+         (SELECT count(*) FROM od WHERE company_id IS NULL)::int AS open_deals_without_account`,
+      [tenantId]);
+    res.json({ success: true, data: r.rows[0] });
   } catch (error) { next(error); }
 };
 

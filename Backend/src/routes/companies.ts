@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getCompanies, getCompanyById, createCompany, updateCompany, deleteCompany, importCompanies, getIndustries, getCompanyAccountIntelligence } from '../controllers/companiesController';
+import { getCompanies, getCompaniesSummary, getCompanyById, createCompany, updateCompany, deleteCompany, importCompanies, getIndustries, getCompanyAccountIntelligence } from '../controllers/companiesController';
 import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
 
 const router = Router();
@@ -12,6 +12,8 @@ router.post('/import', importCompanies);
 // Before '/:id', or GET /industries would be read as a company whose id is
 // "industries" and answer 404.
 router.get('/industries', getIndustries);
+// Before '/:id', or Express reads "summary" as an account id.
+router.get('/summary', getCompaniesSummary);
 router.get('/:id', getCompanyById);
 // Read-only, ungated: any user who can see the account can see its external
 // signals. The workspace's Lead Gen credential never leaves the server, and the

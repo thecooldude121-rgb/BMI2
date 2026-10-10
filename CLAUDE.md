@@ -1546,6 +1546,46 @@ old constraint, which fails the shared-name test.
     - `ContactsPage.test.tsx` (6), mutation-tested (offset 0, no refetch after delete);
       `honestFetchStates.test.tsx` updated for the remaining tile. E2E on `bmi_crm_iso_test`: 60 /
       champions 15 / inactive champions 5 / search 10 on screen, all equal to SQL; seed torn down.
+  - **SLICE 3b DONE (2026-10-11) — Accounts pages on the server (migration 067).** The page read
+    AccountsContext, which loaded 200 accounts + 500 contacts + 500 deals ONCE per CRM session, joined
+    them in the browser and showed 3 rows at a time with "Load More".
+    - **Server:** `GET /companies` rows carry `contact_count`, `open_deal_count`, `open_deal_value_usd`,
+      `open_deal_unconverted` (`utils/accountRollups`: open = `stage_type 'open'`, test / archived
+      excluded, USD summed only where trustworthy — `TRUSTED_USD`, the board's rule). `GET
+      /companies/summary` feeds the tiles (accounts, contacts on accounts, open deals and USD value on
+      accounts with the unconverted count, open deals WITHOUT an account reported separately).
+      **Migration 067** indexes `contacts (tenant_id, company_id)`: the per-row contact count was a
+      sequential scan per row and the 10,000-account list walk timed out; index only, no data change.
+    - **Page:** server page (25) with search, ONE industry from the real vocabulary (`GET
+      /companies/industries` — the chips were six hardcoded names), sort by name / recently updated /
+      date added (the sort control was never applied); tiles from the summary; row counts from the
+      server; a real pager. Size and Source are "Coming soon" (Size chips filtered nothing; Source chips
+      were sent as a status every account shares, so any choice hid EVERY row); Value / Deals / Health
+      sorts, bulk Assign / Tag and the row menu's Add Tag / Assign Owner are "Coming soon".
+    - **Live defects fixed:** Add Account did nothing (set state nothing rendered) — opens
+      `/crm/accounts/new`; select-all compared against visible rows but selected HIDDEN ones too — it now
+      takes this page only; bulk delete stopped at the first failure as an unhandled rejection (partial,
+      silent) and single delete had no feedback — both report each result, success only on a 2xx, a 403
+      shown verbatim; the unreachable expanded row (health score the API never returns, a fixed
+      "Opportunity: High-value target") removed; **`mapRowToAccount` defaulted size to '1-10'**, so every
+      unsized account read "1-10 employees" and the edit form would SAVE that band — now absent.
+    - **Detail / edit / merge load their account BY ID** (`hooks/useAccountById`, `fetchAccountByIdOrNull`:
+      404 = not found, other failures = error). They looked it up in the context's first 200, so account
+      #201 read "not found"; the edit form's duplicate-name warning now uses a server search (it matched
+      the list page's capped, possibly search-narrowed set). **AccountsContext no longer loads on mount**
+      — its remaining consumers use only create / update / delete.
+    - Tests: `roundTrip.accountRollups.test.ts` (3), `AccountsPage.test.tsx` (7, replaces
+      `accountsStaleData.test.tsx` — its "asks on every mount" and "failure says so + retry" properties
+      kept; its timestamp tests described a cache that no longer exists), `useAccountById.test.ts` (3),
+      `accountsApi.test.ts` (2). Mutation-tested (open-stage filter, dead Add Account, stop-at-first-failure
+      delete). E2E on `bmi_crm_iso_test`: tiles, row counts, pages, Healthcare 10, account #26 opens, Add
+      Account routes, sales delete refused and the row intact — all against SQL; seed torn down.
+    - **Found, NOT fixed:** `AccountsContext.mergeAccounts` "merges" by DELETING the secondary accounts
+      without moving their contacts / deals (which then lose their account via SET NULL). No caller today
+      (AccountMergePage is a placeholder) — but it must not be wired up as-is.
+    - **Process note:** this session started the live backend from this worktree, so backend mutation
+      edits briefly RESTARTED it with mutated (read-only) code. Make backend mutation edits with the dev
+      server stopped, or in a separate worktree.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no

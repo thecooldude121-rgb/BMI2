@@ -2,15 +2,32 @@ import React from 'react';
 import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, GitMerge } from 'lucide-react';
-import { useAccounts } from '../../contexts/AccountsContext';
+import { useAccountById } from '../../hooks/useAccountById';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 
 const AccountMergePage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
-  const { getAccountById } = useAccounts();
+  // From the server by id (slice 3b), not the context's first 200 accounts.
+  const { account, loading, error } = useAccountById(accountId);
 
-  const account = accountId ? getAccountById(accountId) : undefined;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <CRMNavigation />
+        <p className="p-12 text-center text-gray-500" role="status">Loading account…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <CRMNavigation />
+        <p className="p-12 text-center text-red-700" role="alert">The account could not load — {error}</p>
+      </div>
+    );
+  }
 
   if (!account) {
     return (
