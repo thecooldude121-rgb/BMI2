@@ -1531,6 +1531,21 @@ old constraint, which fails the shared-name test.
     `mapApiDeal` no longer falls back to the native value (a card showed "≈ $125K" for an INR deal; it
     now shows the browser's labelled estimate). `roundTrip.baseAmount.test.ts` (5),
     `dealCards.test.ts` (2); both write-path fallbacks mutation-tested.
+  - **Slice 3 split into 3a (Contacts) and 3b (Accounts), approved 2026-10-11. SLICE 3a DONE — Contacts
+    pages on the server.** It fetched up to 200 contacts and filtered / sorted / counted them in the
+    browser; "Load More…" had NO handler, so contact #201 was unreachable.
+    - `fetchContactsPage` (one `GET /contacts` page, 25) with debounced search, Status, a NEW Buying-role
+      filter (the API had it; the page had no control), and server sorts (recently updated — the new
+      default —, name, company, date added). "Last Contact" sort is gone: nothing ever set the field,
+      so it sorted on blanks. A real pager ("Showing 1–25 of N", Previous / Next) from the server total;
+      a narrower query returns to page 1 and clears the selection.
+    - The Total tile is the server's total. **Active Deals is GONE** (always 0 — nothing populated it);
+      the From Lead Gen / From HRMS / VIP tiles and the Source / Tags filters are "Coming soon" (they
+      counted or filtered one page). Bulk status / delete re-fetch the page and total; the single
+      "Add tag" now reports `describeBulk` instead of "Tagged" regardless of `affected`.
+    - `ContactsPage.test.tsx` (6), mutation-tested (offset 0, no refetch after delete);
+      `honestFetchStates.test.tsx` updated for the remaining tile. E2E on `bmi_crm_iso_test`: 60 /
+      champions 15 / inactive champions 5 / search 10 on screen, all equal to SQL; seed torn down.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no

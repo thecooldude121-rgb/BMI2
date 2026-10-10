@@ -57,10 +57,14 @@ describe('ContactsPage KPI tiles', () => {
     await waitFor(() => expect(screen.getByText(/could not load contacts/i)).toBeInTheDocument());
     expect(fetchCalls(), 'the page never reached the network — this test would pass on a thrown error instead').toBeGreaterThan(0);
 
-    for (const label of ['Total Contacts', 'Active Deals', 'From Lead Gen', 'From HRMS', 'VIP Contacts']) {
-      const tile = screen.getByText(label).parentElement!;
-      expect(tile.textContent, `"${label}" still reports a number after a failed fetch`).toContain('—');
-      expect(tile.textContent).not.toMatch(/\b0\b/);
+    // Slice 3a: Total Contacts is the server's total; the source / VIP tiles
+    // are "Coming soon" and Active Deals (never populated) is gone — none of
+    // them can show a number at all, failed fetch or not.
+    const tile = screen.getByText('Total Contacts').parentElement!;
+    expect(tile.textContent, '"Total Contacts" still reports a number after a failed fetch').toContain('—');
+    expect(tile.textContent).not.toMatch(/\b0\b/);
+    for (const gone of ['Active Deals', 'From Lead Gen', 'From HRMS', 'VIP Contacts']) {
+      expect(screen.queryByText(gone)).toBeNull();
     }
   });
 });
