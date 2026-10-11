@@ -71,6 +71,9 @@ export async function teardownWorkspace(ws: TestWorkspace): Promise<void> {
   // leftover document blocks the tenant delete with documents_tenant_id_fkey.
   // It goes before deals/contacts/companies, which it also references.
   await pool.query('DELETE FROM documents WHERE tenant_id = $1', [ws.tenantId]);
+  // Meetings reference users (owner) and the tenant; a leftover meeting blocked
+  // a teardown on 2026-10-11 and orphaned a test workspace.
+  await pool.query('DELETE FROM meetings WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM activities WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM tasks WHERE tenant_id = $1', [ws.tenantId]);
   await pool.query('DELETE FROM deals WHERE tenant_id = $1', [ws.tenantId]);

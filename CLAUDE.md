@@ -585,6 +585,18 @@ never what the product looked like either; `brand` had been a blue `#2563EB` sca
 below were EXTRACTED from the frames by frequency, not read from a token export. If the
 designer later adds variables, re-derive from those and treat any disagreement as a question.
 
+> **UPDATED 2026-10-11 — the file now HAS variables**, on a new "Design system — foundations"
+> page (frames "Foundations — Light" 206:33619 and "Foundations — Dark" 206:33954), alongside a
+> new Dark theme screens page, a pre-cleanup backup page and a States & edge cases page. Every
+> core light value extracted below MATCHES its named variable exactly. Decisions (Venkat,
+> 2026-10-11): the ~50 further light variables (hover / input / raised / track surfaces, sky
+> and violet accents, disabled text …) are added to Tailwind as their own small no-visible-change
+> slice; **`ink-secondary` `#6B645A` STAYS** — Figma's `text/secondary` is still `#756E63`, which
+> is under AA on the tinted surfaces, so the app's value is correct, not a gap; the **dark theme
+> is its own project, AFTER Group A**; Forecast "Reps & quota" / "Snapshots" (206:18094,
+> 206:18563) are compared when the Forecast screen comes up; the ⌘K palette frame (206:34290) is
+> applied next time Leads is touched; the ⌘J Copilot drawer (206:34802) stays "Coming soon".
+
 **Tokens** (`Frontend/tailwind.config.js` — use the token names, never the hex):
 - Primary `brand-600` `#4F46E5`, hover `brand-700` `#4338CA`, selected tint `brand-100`
   `#E7E7FF` / `brand-50` `#EEF2FF`. Headings `ink-heading` `#312E81`.
@@ -1580,12 +1592,70 @@ old constraint, which fails the shared-name test.
       `accountsApi.test.ts` (2). Mutation-tested (open-stage filter, dead Add Account, stop-at-first-failure
       delete). E2E on `bmi_crm_iso_test`: tiles, row counts, pages, Healthcare 10, account #26 opens, Add
       Account routes, sales delete refused and the row intact — all against SQL; seed torn down.
-    - **Found, NOT fixed:** `AccountsContext.mergeAccounts` "merges" by DELETING the secondary accounts
-      without moving their contacts / deals (which then lose their account via SET NULL). No caller today
-      (AccountMergePage is a placeholder) — but it must not be wired up as-is.
-    - **Process note:** this session started the live backend from this worktree, so backend mutation
-      edits briefly RESTARTED it with mutated (read-only) code. Make backend mutation edits with the dev
-      server stopped, or in a separate worktree.
+    - **Found, NOT fixed — DECIDED by Venkat 2026-10-11: leave it until a real account-merge feature is
+      scoped.** `AccountsContext.mergeAccounts` "merges" by DELETING the secondary accounts without moving
+      their contacts / deals (which then lose their account via SET NULL). No caller today
+      (AccountMergePage is a placeholder). **REQUIREMENT for any future merge feature: it must REASSIGN the
+      secondary accounts' contacts and deals (and any other company_id references) to the surviving
+      account, in one transaction, before removing the secondary — never delete and orphan.** Flag this
+      the moment account merge is scoped.
+    - **Process rule — DECIDED by Venkat 2026-10-11:** this session started the live backend from this
+      worktree, so backend mutation edits briefly RESTARTED it with mutated (read-only) code. **Breakage /
+      mutation edits to backend files are made ONLY with the live dev server stopped, or in a separate
+      copy of the repo (a git worktree) — live must never run broken code, even briefly.**
+    - **If the intermittent full-suite failure recurs, CAPTURE its output** (assertion, response body,
+      stack) before re-running — DECIDED 2026-10-11 — so a real flake can be told from a real bug.
+  - **Slice 4 split into 4a (Tasks + Calendar) and 4b (Activities), approved 2026-10-11. SLICE 4a DONE.**
+    **"Today" is the VIEWER'S local calendar day — DECIDED by Venkat 2026-10-11** ("use the viewer's
+    local date for Today/Overdue, not the server's"): the browser sends `?today=YYYY-MM-DD`
+    (`utils/dates.localDay`) and no day-dependent bucket falls back to CURRENT_DATE — without a valid
+    `today` it is a 400. (The legacy `GET /tasks?overdue=true` still uses CURRENT_DATE; no screen sends it.)
+    - **Server (`tasksController`):** ONE bucket vocabulary (`all, mine, open, overdue, today, upcoming,
+      no_date, completed`) shared by `GET /tasks?bucket=` and the new `GET /tasks/summary` (every count in
+      one query, under the SAME filters as the list, so a tab's number is its list's total). `mine` is
+      the TOKEN's user's display name (tasks.assigned_to is still free text — item 8). `related_to_type=
+      none` lists unlinked tasks. New `GET /tasks/by-day?from=&to=` (max 62 days) returns each day's real
+      count, open count and first 3 tasks (open first) — the calendar's "+N more" is the server's number.
+      `due_after` / `due_before` are now strict calendar days (400 otherwise). `GET /meetings` gained
+      `date_from` / `date_to` (INSTANTS — a meeting's day depends on the viewer's zone), `order=asc` and
+      a real `total`. The summary echoes its day as `as_of`, because `today` is the bucket count.
+    - **Tasks page:** one server page (25) per tab with a real pager (`LeadsPager`, now with a `noun`
+      prop), tabs and KPI tiles from the summary ("—" if it fails, never 0), search / priority / type /
+      sort / related-record filters on the server (both list and counts), page 1 on any narrower query.
+      Status changes are NOT optimistic: "Saving…", then "Saved" only after the 2xx, then reload; a
+      refusal stays on the row. Delete confirms inline (the frame's strip), reports only after a 2xx, a
+      403 shown verbatim. `?bucket=` opens a tab; `?new=1&due=` opens the form with that date
+      (`TaskFormModal.defaultDueDate`). The Kanban toggle is disabled "Coming soon".
+    - **Calendar:** reads exactly the 42 visible days (by-day + meetings window) instead of 500 tasks
+      regardless of month; REAL meetings from the Meeting Agent API (it rendered a DataContext stub that
+      was always empty — and imported HRMS `employees` it never needed); Week / Day disabled "Coming
+      soon" (they restyled a button and left the month grid); the rail's due-soon, overdue and undated
+      counts are server queries; a selected day loads that day's tasks; "New task" carries the date. A
+      capped meeting window says so.
+    - Tests: `roundTrip.taskBuckets.test.ts` (10, incl. 10,000 tasks vs SQL), `TasksPage.test.tsx` (11),
+      `Calendar.test.tsx` (8). Mutation-tested in the separate worktree: 8 backend + 9 frontend
+      mutations, all killed. E2E on `bmi_crm_iso_test` through the real login and sidebar (KPIs, tabs,
+      pages, a status change confirmed in Postgres and surviving reload, calendar cells / meeting /
+      undated note, sales delete refused with the row intact); seed removed and re-counted.
+    - **NOT YET DONE: the side-by-side visual comparison with the UPDATED frames** (Tasks 69:16477,
+      Calendar 83:39194). The Figma connection dropped mid-slice; the structure (KPI cards with detail
+      lines, related-record buttons, List/Kanban toggle, inline delete strip, the calendar rail cards and
+      the undated note) was followed from saved frame metadata, which carries no text or colour.
+  - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
+    `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
+    Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary
+    key. Found when `bmi_crm_iso_test` crossed 999 and `roundTrip.meetings` failed deterministically.
+    068 uses 033's `next_prefixed_id`. **Live was unaffected** (sequence at 1, 0 meetings); dry-run in a
+    rolled-back transaction, committed, then applied to both databases. `roundTrip.idDefaults.test.ts`
+    asserts no column default anywhere pads a sequence with lpad() (catches the class in future
+    tables) and that meetings keep distinct ids past 999; mutation-tested by restoring 049's default.
+    Test teardown now deletes meetings too (a leftover meeting orphaned a test workspace).
+  - **Flake data point, CAPTURED as instructed (2026-10-11):** one full run failed
+    `roundTrip.leadPagination` "…sort with many ties" with `TypeError: res.body.data is not iterable`
+    at the page walk (line 78) — the server answered something without `data`, but the test never
+    asserted the status, so the body was lost. The file then passed 3/3 alone and the suite passed in
+    full twice. That loop (and its sibling) now assert `status === 200` with the body in the message,
+    so the next occurrence records what the server said. No retries were added.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no

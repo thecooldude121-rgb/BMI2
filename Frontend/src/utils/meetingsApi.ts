@@ -114,6 +114,21 @@ export async function fetchMeetings(filter?: {
   return unwrap<Meeting[]>(await fetch(`${API_BASE}/meetings${suffix}`, { headers: getAuthHeaders() }));
 }
 
+/**
+ * Meetings inside a time window, soonest first (the calendar, slice 4a).
+ * `from` / `to` are INSTANTS — pass the viewer's local midnights — because
+ * meetings.date is a timestamp and its calendar day depends on the viewer.
+ * `total` is the window's real count, so a capped page can say so.
+ */
+export async function fetchMeetingsInWindow(from: Date, to: Date, limit = 200): Promise<{ meetings: Meeting[]; total: number }> {
+  const params = new URLSearchParams({ date_from: from.toISOString(), date_to: to.toISOString(), order: 'asc', limit: String(limit) });
+  const res = await fetch(`${API_BASE}/meetings?${params}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new MeetingsApiError(json?.message || `Request failed (${res.status})`, res.status);
+  const meetings: Meeting[] = json.data ?? [];
+  return { meetings, total: typeof json.total === 'number' ? json.total : meetings.length };
+}
+
 export async function fetchMeeting(id: string): Promise<MeetingDetail> {
   return unwrap<MeetingDetail>(
     await fetch(`${API_BASE}/meetings/${encodeURIComponent(id)}`, { headers: getAuthHeaders() }),

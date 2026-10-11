@@ -54,6 +54,8 @@ interface TaskFormModalProps {
   onClose: () => void;
   /** Absent = create. Present = edit that task. */
   task?: TaskRecord | null;
+  /** Pre-fills the due date of a NEW task (the calendar's selected day). Ignored when editing. */
+  defaultDueDate?: string;
   /** Records the related-to picker can choose from, by type. */
   relatedRecords: Record<RelatedType, RelatedOption[]>;
   onSaved: (task: TaskRecord, mode: 'created' | 'updated') => void;
@@ -63,7 +65,7 @@ const inputClass =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600';
 
 const TaskFormModal: React.FC<TaskFormModalProps> = ({
-  isOpen, onClose, task, relatedRecords, onSaved,
+  isOpen, onClose, task, defaultDueDate, relatedRecords, onSaved,
 }) => {
   const editing = Boolean(task);
 
@@ -93,12 +95,12 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     setStatus(task?.status ?? 'pending');
     // due_date is a DATE column; the API returns it as an ISO timestamp, and
     // <input type="date"> wants exactly YYYY-MM-DD.
-    setDueDate(task?.due_date ? String(task.due_date).slice(0, 10) : '');
+    setDueDate(task?.due_date ? String(task.due_date).slice(0, 10) : (defaultDueDate ?? ''));
     setAssignedTo(task?.assigned_to ?? '');
     setRelatedType(task?.related_to_type ?? '');
     setRelatedId(task?.related_to_id ?? '');
     setError(null);
-  }, [isOpen, task]);
+  }, [isOpen, task, defaultDueDate]);
 
   useEffect(() => {
     if (!isOpen) return;

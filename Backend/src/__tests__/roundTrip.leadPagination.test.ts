@@ -64,7 +64,7 @@ describe('Lead pagination — 10,000 leads', () => {
     let dupes = 0;
     for (let offset = 0; offset < N; offset += 500) {
       const res = await list(`limit=500&offset=${offset}&sort=newest`);
-      expect(res.status).toBe(200);
+      expect(res.status, `offset ${offset}: ${JSON.stringify(res.body).slice(0, 500)}`).toBe(200);
       for (const row of res.body.data) { if (seen.has(row.id)) dupes++; seen.add(row.id); }
     }
     expect(dupes).toBe(0);
@@ -75,6 +75,10 @@ describe('Lead pagination — 10,000 leads', () => {
     const seen = new Set<number>();
     for (let offset = 0; offset < N; offset += 500) {
       const res = await list(`limit=500&offset=${offset}&sort=score_high_low`);
+      // Status AND body in the message: this assertion was missing, and the
+      // intermittent failure here (2026-10-11) surfaced only as "data is not
+      // iterable", with nothing saying what the server actually answered.
+      expect(res.status, `offset ${offset}: ${JSON.stringify(res.body).slice(0, 500)}`).toBe(200);
       for (const row of res.body.data) seen.add(row.id);
     }
     expect(seen.size).toBe(N);

@@ -1,158 +1,196 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Plus, Pencil, Trash2, Search, LayoutDashboard, UserPlus, Briefcase, Building2, Users, ListChecks } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { CheckSquare, Clock, AlertTriangle, Plus, CalendarDays, Trash2, Pencil } from 'lucide-react';
+import { Badge } from '../../components/ui/Badge';
+import { Alert } from '../../components/ui/Alert';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Card, SectionHeading } from '../../components/ui/Card';
+import { selectClass, inputClass } from '../../components/ui/Field';
+import PageHeader from '../../components/Layout/PageHeader';
+import LeadsPager from '../../components/Leads/LeadsPager';
 import {
-  fetchTasks,
+  fetchTasksPage,
+  fetchTaskSummary,
   setTaskStatus,
   deleteTask,
+  TASK_TYPES,
+  TASK_PRIORITIES,
   type TaskRecord,
   type TaskStatus,
+  type TaskBucket,
+  type TaskSummary,
+  type TaskFilters,
 } from '../../utils/activitiesApi';
 import { useAuth } from '../../contexts/AuthContext';
-import { localDay, dateOnly } from '../../utils/dates';
+import { localDay, parseLocalDay } from '../../utils/dates';
 import TaskFormModal, { type RelatedOption } from '../../components/CRM/TaskFormModal';
-import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { fetchContacts } from '../../utils/contactsApi';
 import { fetchAccounts } from '../../utils/accountsApi';
 import { fetchDeals } from '../../utils/dealsApi';
 
 /**
- * PHASE 2: this page read `useData()` sample tasks — pure in-memory state — while
- * 15 real rows sat in the tasks table with no API at all. Its "Add Task" button
- * had no onClick, so a task could not be created from anywhere in the product.
- * Both are now real.
+ * Tasks — Group A item 4, slice 4a (2026-10-11).
  *
- * PHASE-1 ITEM 5 adds the four filter buckets and a real create/edit form.
- * Before this, "Add Task" was a window.prompt that could set only a title —
- * type and priority were hardcoded and there was NO WAY TO SET A DUE DATE, so
- * nothing created in the product could ever appear in Overdue, Today or
- * Upcoming. The form and the filters had to land together for either to mean
- * anything.
+ * This page used to load 500 tasks ONCE and derive every tab, every tile and
+ * every row from them, so task #501 existed nowhere in the product and every
+ * count was a count of whatever happened to load. Now:
+ *   - the list is ONE server page (25) of the selected tab (?bucket=), under
+ *     the search / priority / type / related-record filters;
+ *   - every tab and tile number is GET /tasks/summary under the SAME filters,
+ *     so the count on a tab is exactly the total its list answers with;
+ *   - "today" is the VIEWER'S local calendar day, sent to the server
+ *     (decided 2026-10-11) — the row highlighting, the tabs and the tiles all
+ *     use that one value, so they cannot disagree about what is overdue.
+ *
+ * Writes are not optimistic: a status change shows "Saving…", then "Saved"
+ * only after the server's 2xx, then the page and counts reload (the task may
+ * have left the tab it was in). A refusal stays on the row.
  */
 
-/** One fetch, buckets derived from it — see BUCKETS. */
-const FETCH_LIMIT = 500; // the server's own cap on /tasks
+const PAGE_SIZE = 25;
 
-type BucketId = 'all' | 'mine' | 'overdue' | 'today' | 'upcoming';
-
-/** Shared with the calendar so the two cannot disagree about what day it is. */
-function dueDay(t: TaskRecord): string | null {
-  return dateOnly(t.due_date);
-}
-
-const isOpen = (t: TaskRecord) => t.status !== 'completed';
-
-/**
- * The buckets, each with the predicate AND the sentence its empty state shows.
- *
- * The empty text is part of the definition on purpose. An empty list that does
- * not say why reads as a bug, and one of these buckets is EXPECTED to be empty:
- * all 15 seeded tasks are assigned to "John Smith", who is not one of the five
- * workspace users, so "Mine" legitimately returns nothing for everybody until
- * someone creates or reassigns a task. Saying so is the difference between an
- * honest empty state and a broken-looking page.
- */
-const BUCKETS: {
-  id: BucketId;
-  label: string;
-  match: (t: TaskRecord, ctx: { today: string; me: string }) => boolean;
-  emptyTitle: string;
-  emptyBody: (ctx: { me: string }) => string;
-}[] = [
+/** The tabs, each with the sentence its empty state shows. */
+const TABS: { id: TaskBucket; label: string; emptyTitle: string; emptyBody: (me: string) => string }[] = [
+  { id: 'all', label: 'All', emptyTitle: 'No tasks yet', emptyBody: () => 'Use “New task” to create the first one.' },
   {
-    id: 'all', label: 'All',
-    match: () => true,
-    emptyTitle: 'No tasks yet',
-    emptyBody: () => 'Use “New task” to create the first one.',
+    id: 'mine', label: 'Mine', emptyTitle: 'No tasks assigned to you yet',
+    // tasks.assigned_to still holds a DISPLAY NAME (the owner-FK migration is
+    // Group A item 8), so "Mine" is the server matching your name.
+    emptyBody: me => `Nothing here is assigned to ${me || 'you'}. Tasks you create are assigned to you by default, and you can reassign one from Edit.`,
   },
-  {
-    id: 'mine', label: 'Mine',
-    // tasks.assigned_to holds a DISPLAY NAME, not a user id (see the open
-    // decision in HANDOFF about migrating it to owner_id). Matching on the name
-    // is the only join available, and it is why the seeded rows match nobody.
-    match: (t, { me }) => !!t.assigned_to && t.assigned_to === me,
-    emptyTitle: 'No tasks assigned to you yet',
-    emptyBody: ({ me }) =>
-      `Nothing in this workspace is assigned to ${me}. Tasks you create are assigned to you by default, ` +
-      'and you can reassign an existing one from Edit.',
-  },
-  {
-    id: 'overdue', label: 'Overdue',
-    match: (t, { today }) => { const d = dueDay(t); return !!d && d < today && isOpen(t); },
-    emptyTitle: 'Nothing overdue',
-    emptyBody: () => 'No task with a due date in the past is still open.',
-  },
-  {
-    id: 'today', label: 'Today',
-    match: (t, { today }) => dueDay(t) === today && isOpen(t),
-    emptyTitle: 'Nothing due today',
-    emptyBody: () => 'No open task is due today.',
-  },
-  {
-    id: 'upcoming', label: 'Upcoming',
-    match: (t, { today }) => { const d = dueDay(t); return !!d && d > today && isOpen(t); },
-    emptyTitle: 'Nothing upcoming',
-    emptyBody: () => 'No open task has a due date after today.',
-  },
+  { id: 'overdue', label: 'Overdue', emptyTitle: 'Nothing overdue', emptyBody: () => 'No open task has a due date before today.' },
+  { id: 'today', label: 'Today', emptyTitle: 'Nothing due today', emptyBody: () => 'No open task is due today.' },
+  { id: 'upcoming', label: 'Upcoming', emptyTitle: 'Nothing upcoming', emptyBody: () => 'No open task has a due date after today.' },
 ];
+
+/** The related-record filter. 'none' = tasks linked to no record. */
+const RELATED: { id: string; label: string; Icon: LucideIcon }[] = [
+  { id: '', label: 'All records', Icon: LayoutDashboard },
+  { id: 'lead', label: 'Leads', Icon: UserPlus },
+  { id: 'deal', label: 'Deals', Icon: Briefcase },
+  { id: 'company', label: 'Accounts', Icon: Building2 },
+  { id: 'contact', label: 'Contacts', Icon: Users },
+  { id: 'none', label: 'Not linked', Icon: ListChecks },
+];
+
+/** Sort choice -> the server's allowlisted sort. '' = the server's default order. */
+const SORTS: { id: string; label: string; sort?: string; dir?: 'asc' | 'desc' }[] = [
+  { id: '', label: 'Sort: Open first, soonest due' },
+  { id: 'due', label: 'Sort: Due date', sort: 'due_date', dir: 'asc' },
+  { id: 'priority', label: 'Sort: Priority', sort: 'priority', dir: 'desc' },
+  { id: 'newest', label: 'Sort: Newest', sort: 'created_at', dir: 'desc' },
+  { id: 'title', label: 'Sort: Title', sort: 'title', dir: 'asc' },
+];
+
+const RELATED_LABEL: Record<string, string> = { lead: 'Lead', deal: 'Deal', company: 'Account', contact: 'Contact', employee: 'Employee' };
+
+type RowState = { state: 'saving' } | { state: 'saved' } | { state: 'error'; message: string };
+
+const fmtDay = (d: string) => parseLocalDay(d)?.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) ?? d;
 
 const TasksPage: React.FC = () => {
   const { user } = useAuth();
   const me = user?.name ?? '';
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  // `?bucket=overdue` (the calendar's overdue link) opens on that tab.
+  const [bucket, setBucket] = useState<TaskBucket>(() => {
+    const b = searchParams.get('bucket');
+    return TABS.some(t => t.id === b) ? (b as TaskBucket) : 'all';
+  });
+  const [related, setRelated] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [priority, setPriority] = useState('');
+  const [type, setType] = useState('');
+  const [sortId, setSortId] = useState('');
+  const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
+
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [bucket, setBucket] = useState<BucketId>('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<TaskSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  /** The viewer's day the current page and counts were computed for. */
+  const [asOf, setAsOf] = useState(() => localDay(new Date()));
+
+  const [rowState, setRowState] = useState<Record<string, RowState>>({});
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<TaskRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TaskRecord | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [notice, setNotice] = useState<string | null>(null);
-  /** The task awaiting delete confirmation. */
-  const [confirming, setConfirming] = useState<TaskRecord | null>(null);
+  const [defaultDue, setDefaultDue] = useState<string | undefined>(undefined);
 
   /** Records the task form's "Related to" picker can choose from. */
-  const [related, setRelated] = useState<Record<'contact' | 'company' | 'deal' | 'lead', RelatedOption[]>>({
+  const [relatedRecords, setRelatedRecords] = useState<Record<'contact' | 'company' | 'deal' | 'lead', RelatedOption[]>>({
     contact: [], company: [], deal: [], lead: [],
   });
 
   /**
-   * `?new=1` opens the create form. This is how the global "+ New → New Task"
-   * item works: there is no task create PAGE, because creating a task is
-   * `TaskFormModal` and it already exists here.
-   *
-   * The parameter is stripped once consumed, with `replace` so it leaves no
-   * history entry. Without that, Back would land on the same URL and reopen a
-   * form the user had just dismissed, and a refresh would reopen it too.
+   * `?new=1` opens the create form — the global "+ New → New Task" item and the
+   * calendar's "New task" on a selected day (`&due=YYYY-MM-DD` pre-fills the
+   * date). Stripped once consumed, with `replace`, so Back and refresh do not
+   * reopen a form the user dismissed.
    */
   useEffect(() => {
     if (searchParams.get('new') === null) return;
+    const due = searchParams.get('due');
     setEditing(null);
+    setDefaultDue(due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : undefined);
     setFormOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete('new');
+    next.delete('due');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const filters = useMemo<TaskFilters>(() => ({
+    search: search || undefined, priority: priority || undefined, type: type || undefined,
+    related_to_type: related || undefined,
+  }), [search, priority, type, related]);
+
+  // A narrower query starts again at page 1.
+  useEffect(() => { setPage(1); }, [filters, bucket, sortId]);
+
+  const reload = useCallback(() => setReloadKey(k => k + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const today = localDay(new Date());
+    const s = SORTS.find(x => x.id === sortId);
     setLoading(true);
-    try {
-      setTasks(await fetchTasks({ limit: FETCH_LIMIT }));
-      setError(null);
-    } catch (e: any) {
-      setError(e?.message ?? 'Could not load tasks');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    fetchTasksPage({
+      ...filters, bucket, today, sort: s?.sort, dir: s?.dir,
+      limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE,
+    })
+      .then(r => {
+        if (cancelled) return;
+        // A write emptied the last page: step back rather than show nothing.
+        if (r.tasks.length === 0 && r.total > 0 && page > 1) { setPage(Math.ceil(r.total / PAGE_SIZE)); return; }
+        setTasks(r.tasks); setTotal(r.total); setLoadError(null); setAsOf(today);
+      })
+      .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load tasks'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    fetchTaskSummary(today, filters)
+      .then(r => { if (!cancelled) { setSummary(r); setSummaryError(null); } })
+      .catch(e => { if (!cancelled) setSummaryError(e?.message ?? 'Could not load the task counts'); });
+    return () => { cancelled = true; };
+  }, [filters, bucket, sortId, page, reloadKey]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  // Loaded once for the picker. A failure here must not block the page: tasks
-  // are still usable without a related record, so the lists stay empty and the
-  // form says so rather than the whole page erroring.
+  // Loaded once for the form's picker. A failure must not block the page: a
+  // task is still usable without a related record. (Server-side search for
+  // these pickers is slice 6.)
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -162,246 +200,278 @@ const TasksPage: React.FC = () => {
         fetchDeals(200).catch(() => []),
       ]);
       if (cancelled) return;
-      setRelated({
+      setRelatedRecords({
         contact: contacts.map(c => ({ id: c.id, label: c.name || c.email || c.id })),
         company: accounts.map(a => ({ id: a.id, label: a.name || a.id })),
         deal: deals.map((d: any) => ({ id: d.id, label: d.name || d.title || d.id })),
-        // Leads are a permitted related type and 8 tasks already use it, but the
-        // leads list is not loaded here — see the note by the Lead option.
         lead: [],
       });
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const today = localDay(new Date());
-  const ctx = useMemo(() => ({ today, me }), [today, me]);
-
-  const counts = useMemo(() => {
-    const out = {} as Record<BucketId, number>;
-    for (const b of BUCKETS) out[b.id] = tasks.filter(t => b.match(t, ctx)).length;
-    return out;
-  }, [tasks, ctx]);
-
-  const active = BUCKETS.find(b => b.id === bucket)!;
-  const visible = useMemo(() => tasks.filter(t => active.match(t, ctx)), [tasks, active, ctx]);
-
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
-    const previous = tasks;
-    // Optimistic, then reconcile — and roll back on failure so the list never
-    // shows a status the server rejected.
-    setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, status: newStatus as TaskStatus } : t)));
-    setBusyId(taskId);
+  const handleStatusChange = async (task: TaskRecord, next: TaskStatus) => {
+    setRowState(s => ({ ...s, [task.id]: { state: 'saving' } }));
+    setNotice(null);
     try {
-      const saved = await setTaskStatus(taskId, newStatus as TaskStatus);
-      setTasks(prev => prev.map(t => (t.id === taskId ? saved : t)));
+      const saved = await setTaskStatus(task.id, next);
+      setTasks(prev => prev.map(t => (t.id === task.id ? saved : t)));
+      setRowState(s => ({ ...s, [task.id]: { state: 'saved' } }));
+      reload();
     } catch (e: any) {
-      setTasks(previous);
-      setError(e?.message ?? 'Could not update the task');
-    } finally {
-      setBusyId(null);
+      setRowState(s => ({ ...s, [task.id]: { state: 'error', message: e?.message ?? 'Not saved' } }));
     }
   };
 
-  /**
-   * Confirmed via ConfirmationModal rather than window.confirm. A native
-   * confirm() is inconsistent with every other destructive action in this app,
-   * cannot be styled or made accessible, and blocks the page's event loop —
-   * which also makes the delete path impossible to exercise in an automated
-   * check, so it would have shipped unverified.
-   */
-  const handleDelete = async (task: TaskRecord) => {
-    const previous = tasks;
-    setTasks(prev => prev.filter(t => t.id !== task.id));
-    setBusyId(task.id);
+  const confirmDelete = async () => {
+    const task = confirming;
+    if (!task) return;
+    setDeleting(true);
     try {
       await deleteTask(task.id);
+      setConfirming(null);
       setNotice(`Deleted “${task.title}”.`);
-      setError(null);
+      setActionError(null);
+      reload();
     } catch (e: any) {
-      setTasks(previous);
-      setError(e?.message ?? 'Could not delete the task');
+      setActionError(`“${task.title}” was not deleted — ${e?.message ?? 'the server refused'}`);
     } finally {
-      setBusyId(null);
+      setDeleting(false);
     }
   };
 
   const handleSaved = (saved: TaskRecord, mode: 'created' | 'updated') => {
-    setTasks(prev => (mode === 'created' ? [saved, ...prev] : prev.map(t => (t.id === saved.id ? saved : t))));
     setNotice(mode === 'created' ? `Created “${saved.title}”.` : `Updated “${saved.title}”.`);
-    setError(null);
+    setActionError(null);
+    reload();
   };
 
-  const stat = (id: BucketId) => counts[id] ?? 0;
+  const filtered = !!(search || priority || type || related);
+  const clearFilters = () => { setSearchInput(''); setSearch(''); setPriority(''); setType(''); setRelated(''); };
+  const count = (b: TaskBucket) => (summary ? summary[b].toLocaleString() : '—');
+  const activeTab = TABS.find(t => t.id === bucket)!;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const kpis: { label: string; bucket: TaskBucket; detail: string }[] = [
+    { label: 'Open', bucket: 'open', detail: summary ? `${summary.no_date.toLocaleString()} without a due date` : '' },
+    { label: 'Due today', bucket: 'today', detail: `Open tasks due ${fmtDay(asOf)}` },
+    { label: 'Overdue', bucket: 'overdue', detail: 'Open tasks due before today' },
+    { label: 'Completed', bucket: 'completed', detail: 'All time' },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        {([
-          { label: 'Open', icon: Clock, tone: 'text-blue-600', value: tasks.filter(isOpen).length },
-          { label: 'Due today', icon: CalendarDays, tone: 'text-yellow-600', value: stat('today') },
-          { label: 'Overdue', icon: AlertTriangle, tone: 'text-red-600', value: stat('overdue') },
-          { label: 'Completed', icon: CheckSquare, tone: 'text-green-600', value: tasks.filter(t => t.status === 'completed').length },
-        ]).map(s => (
-          <div key={s.label} className="rounded-lg border border-gray-200 bg-white p-6">
-            <div className="flex items-center">
-              <s.icon className={`h-8 w-8 ${s.tone}`} aria-hidden="true" />
-              <div className="ml-4">
-                <p className="text-sm text-gray-600">{s.label}</p>
-                <p className="text-2xl font-bold text-gray-900">{s.value}</p>
-              </div>
-            </div>
-          </div>
+      <PageHeader
+        eyebrow="Engage"
+        title="Tasks"
+        description="Follow-ups, calls and to-dos across your leads, deals, accounts and contacts."
+        actions={
+          <Button onClick={() => { setEditing(null); setDefaultDue(undefined); setFormOpen(true); }}>
+            <Plus className="h-4 w-4" aria-hidden="true" /> New task
+          </Button>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="task-kpis">
+        {kpis.map(k => (
+          <Card key={k.label} padding="none" className="p-3.5">
+            <p className="text-xs leading-[18px] text-ink-muted">{k.label}</p>
+            <p className="mt-1 text-2xl font-bold leading-8 text-ink" data-testid={`kpi-${k.bucket}`}>{count(k.bucket)}</p>
+            <p className="mt-1 text-xs leading-[18px] text-ink-muted">{k.detail}</p>
+          </Card>
         ))}
       </div>
+      {summaryError && (
+        <Alert tone="danger" title="The task counts could not load">{summaryError}</Alert>
+      )}
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h3 className="text-lg font-semibold text-gray-900">Tasks</h3>
-          <Button onClick={() => { setEditing(null); setFormOpen(true); }} className="rounded-md">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            New task
-          </Button>
+      <Card padding="none" className="space-y-3 p-4">
+        <SectionHeading
+          title="Tasks"
+          description={`Overdue, today and upcoming follow your calendar day (${fmtDay(asOf)}).`}
+          actions={<Button variant="secondary" disabled={!filtered} onClick={clearFilters}>Clear filters</Button>}
+        />
+
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Related record">
+          {RELATED.map(r => (
+            <Button
+              key={r.id || 'all'}
+              variant={related === r.id ? 'primary' : 'secondary'}
+              aria-pressed={related === r.id}
+              onClick={() => setRelated(r.id)}
+              className="h-8"
+            >
+              <r.Icon className="h-3.5 w-3.5" aria-hidden="true" /> {r.label}
+            </Button>
+          ))}
+          <div className="ml-auto inline-flex rounded-ctrl border border-line p-0.5 text-xs" role="group" aria-label="View">
+            <button type="button" aria-pressed="true" className="rounded px-2 py-1 font-semibold bg-brand-50 text-brand-700">List</button>
+            <button type="button" disabled title="Kanban view is coming soon" className="cursor-not-allowed rounded px-2 py-1 text-ink-secondary">
+              Kanban · Soon
+            </button>
+          </div>
         </div>
 
-        {/* Filter buckets */}
-        <div className="flex flex-wrap gap-1 border-b border-gray-200 px-4 py-2" role="tablist" aria-label="Task filters">
-          {BUCKETS.map(b => (
+        <div className="flex flex-wrap gap-2">
+          <label className="relative min-w-[220px] flex-1">
+            <span className="sr-only">Search tasks</span>
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" aria-hidden="true" />
+            <input
+              className={`${inputClass()} pl-8`} placeholder="Search task titles…"
+              value={searchInput} onChange={e => setSearchInput(e.target.value)}
+            />
+          </label>
+          <div className="w-40"><select aria-label="Priority" className={selectClass()} value={priority} onChange={e => setPriority(e.target.value)}>
+            <option value="">Any priority</option>
+            {TASK_PRIORITIES.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
+          </select></div>
+          <div className="w-40"><select aria-label="Type" className={selectClass()} value={type} onChange={e => setType(e.target.value)}>
+            <option value="">Any type</option>
+            {TASK_TYPES.map(t => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
+          </select></div>
+          <div className="w-64"><select aria-label="Sort" className={selectClass()} value={sortId} onChange={e => setSortId(e.target.value)}>
+            {SORTS.map(s => <option key={s.id || 'default'} value={s.id}>{s.label}</option>)}
+          </select></div>
+        </div>
+
+        <div className="flex flex-wrap gap-1 border-b border-line" role="tablist" aria-label="Task filters">
+          {TABS.map(t => (
             <button
-              key={b.id}
+              key={t.id}
               role="tab"
-              aria-selected={bucket === b.id}
-              onClick={() => setBucket(b.id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 ${
-                bucket === b.id ? 'bg-brand-50 text-brand-700' : 'text-gray-600 hover:bg-gray-100'
+              aria-selected={bucket === t.id}
+              onClick={() => setBucket(t.id)}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 ${
+                bucket === t.id ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-muted hover:text-ink'
               }`}
             >
-              {b.label}
-              <span className={`ml-1.5 tabular-nums ${bucket === b.id ? 'text-brand-600' : 'text-gray-400'}`}>
-                {counts[b.id] ?? 0}
-              </span>
+              {t.label}
+              <span className="ml-1.5 tabular-nums" data-testid={`tab-count-${t.id}`}>{count(t.id)}</span>
             </button>
           ))}
         </div>
 
         {notice && (
-          <div className="flex items-center justify-between border-b border-success-200 bg-success-50 px-6 py-2">
-            <p className="text-sm text-success-800">{notice}</p>
-            <button onClick={() => setNotice(null)} className="text-xs text-success-700 hover:underline">Dismiss</button>
+          <Alert tone="success" title={notice} action={<Button variant="link" onClick={() => setNotice(null)}>Dismiss</Button>} />
+        )}
+        {actionError && <Alert tone="danger" title={actionError} />}
+
+        {confirming && (
+          <div className="flex flex-wrap items-center gap-3 rounded-card border border-danger-200 bg-danger-50 p-3" role="alertdialog" aria-label="Delete task">
+            <Trash2 className="h-5 w-5 text-danger-700" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink">Delete “{confirming.title}”?</p>
+              <p className="text-xs text-ink-muted">This cannot be undone.</p>
+            </div>
+            <Button variant="secondary" onClick={() => setConfirming(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="danger" onClick={() => void confirmDelete()} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete task'}
+            </Button>
           </div>
         )}
-        {error && (
-          <div className="border-b border-danger-200 bg-danger-50 px-6 py-3">
-            <p className="text-sm text-danger-800">{error}</p>
+
+        {loadError && (
+          <EmptyState tone="error" title="The tasks could not load" reason={loadError}
+            action={<Button variant="secondary" onClick={reload}>Try again</Button>} />
+        )}
+        {!loadError && loading && tasks.length === 0 && <p className="py-8 text-center text-sm text-ink-muted">Loading tasks…</p>}
+        {!loadError && !loading && total === 0 && (
+          <EmptyState
+            title={filtered ? 'No tasks match these filters' : activeTab?.emptyTitle ?? 'No tasks'}
+            reason={filtered ? 'Clear the filters to see every task in this tab.' : activeTab?.emptyBody(me) ?? ''}
+          />
+        )}
+
+        {!loadError && total > 0 && (
+          <div className="overflow-x-auto" aria-busy={loading}>
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs font-semibold text-ink-muted">
+                  {['Task', 'Type', 'Priority', 'Status', 'Assigned to', 'Due date', 'Actions'].map(h => (
+                    <th key={h} scope="col" className="px-2 py-2.5">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map(task => {
+                  const due = task.due_date;
+                  const open = task.status !== 'completed';
+                  const overdue = !!due && due < asOf && open;
+                  const rs = rowState[task.id];
+                  return (
+                    <tr key={task.id} className="border-b border-line align-top last:border-0">
+                      <td className="px-2 py-3">
+                        <p className="font-semibold text-ink">{task.title}</p>
+                        {task.description && <p className="text-xs text-ink-muted">{task.description}</p>}
+                        {task.related_to_type && task.related_to_id && (
+                          <p className="mt-0.5 text-xs text-ink-muted">
+                            {RELATED_LABEL[task.related_to_type] ?? task.related_to_type} · {task.related_to_id}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 capitalize text-ink">{task.type ?? '—'}</td>
+                      <td className="px-2 py-3">
+                        {task.priority
+                          ? <Badge tone={task.priority === 'high' ? 'danger' : task.priority === 'medium' ? 'warning' : 'neutral'}>{task.priority}</Badge>
+                          : '—'}
+                      </td>
+                      <td className="px-2 py-3">
+                        <select
+                          value={task.status ?? 'pending'}
+                          aria-label={`Status of ${task.title}`}
+                          onChange={e => { void handleStatusChange(task, e.target.value as TaskStatus); }}
+                          disabled={rs?.state === 'saving'}
+                          className={`${selectClass()} h-8 w-[116px] py-1 text-xs`}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in-progress">In progress</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                        {rs && (
+                          <p className={`mt-1 w-[116px] text-xs ${rs.state === 'error' ? 'text-danger-700' : 'text-ink-muted'}`}
+                             role={rs.state === 'error' ? 'alert' : 'status'}>
+                            {rs.state === 'saving' ? 'Saving…' : rs.state === 'saved' ? 'Saved' : `Not saved — ${rs.message}`}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 text-ink">{task.assigned_to || 'Unassigned'}</td>
+                      <td className="px-2 py-3">
+                        <span className={overdue ? 'font-semibold text-danger-700' : 'text-ink'}>{due ? fmtDay(due) : 'No due date'}</span>
+                        {overdue && <p className="text-xs text-danger-700">Overdue</p>}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-3">
+                        <button
+                          onClick={() => { setEditing(task); setFormOpen(true); }}
+                          className="mr-3 inline-flex items-center gap-1 text-brand-600 hover:underline"
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit
+                        </button>
+                        <button
+                          onClick={() => { setConfirming(task); setActionError(null); }}
+                          className="inline-flex items-center gap-1 text-danger-700 hover:underline"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <LeadsPager
+              page={page} pageCount={pageCount} total={total} pageSize={PAGE_SIZE}
+              shown={tasks.length} loading={loading} onPage={setPage} noun="tasks"
+            />
           </div>
         )}
-        {loading && <div className="px-6 py-10 text-center text-sm text-gray-500">Loading tasks…</div>}
-
-        {!loading && !error && visible.length === 0 && (
-          <div className="px-6 py-10 text-center">
-            <p className="text-sm font-medium text-gray-900">{active.emptyTitle}</p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-gray-600">{active.emptyBody({ me })}</p>
-          </div>
-        )}
-
-        <div className="overflow-x-auto" hidden={loading || visible.length === 0}>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {['Task', 'Type', 'Priority', 'Status', 'Assigned To', 'Due Date', 'Actions'].map(h => (
-                  <th key={h} scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {visible.map(task => {
-                const d = dueDay(task);
-                const overdue = !!d && d < today && isOpen(task);
-                return (
-                  <tr key={task.id} className={`hover:bg-gray-50 ${overdue ? 'bg-red-50' : ''}`}>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{task.title}</div>
-                      {task.description && <div className="text-sm text-gray-500">{task.description}</div>}
-                      {task.related_to_type && task.related_to_id && (
-                        <div className="mt-0.5 text-xs text-gray-400">
-                          {task.related_to_type} · {task.related_to_id}
-                        </div>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm capitalize text-gray-900">{task.type ?? '—'}</td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        task.priority === 'high' ? 'bg-red-100 text-red-800'
-                          : task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-gray-100 text-gray-800'}`}>
-                        {task.priority ?? '—'}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <select
-                        value={task.status ?? 'pending'}
-                        aria-label={`Status of ${task.title}`}
-                        onChange={e => { void handleStatusChange(task.id, e.target.value); }}
-                        disabled={busyId === task.id}
-                        className={`rounded-full border-0 px-2 py-1 text-xs font-medium focus:ring-2 focus:ring-brand-600 ${
-                          task.status === 'completed' ? 'bg-green-100 text-green-800'
-                            : task.status === 'in-progress' ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-blue-100 text-blue-800'}`}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in-progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </td>
-                    {/* assigned_to holds a display name already, not a user id. */}
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{task.assigned_to || 'Unassigned'}</td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <div className={`text-sm ${overdue ? 'font-medium text-red-600' : 'text-gray-900'}`}>
-                        {d ? new Date(`${d}T00:00:00`).toLocaleDateString() : 'No due date'}
-                        {overdue && <div className="text-xs text-red-500">Overdue</div>}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm">
-                      <button
-                        onClick={() => { setEditing(task); setFormOpen(true); }}
-                        className="mr-3 inline-flex items-center gap-1 text-brand-600 hover:underline"
-                      >
-                        <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit
-                      </button>
-                      <button
-                        onClick={() => setConfirming(task)}
-                        disabled={busyId === task.id}
-                        className="inline-flex items-center gap-1 text-danger-600 hover:underline disabled:opacity-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Delete
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <ConfirmationModal
-        isOpen={confirming !== null}
-        type="danger"
-        title="Delete task"
-        message={confirming ? `Delete “${confirming.title}”? This cannot be undone.` : ''}
-        confirmLabel="Delete"
-        onCancel={() => setConfirming(null)}
-        onConfirm={() => { const t = confirming; setConfirming(null); if (t) void handleDelete(t); }}
-      />
+      </Card>
 
       <TaskFormModal
         isOpen={formOpen}
-        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onClose={() => { setFormOpen(false); setEditing(null); setDefaultDue(undefined); }}
         task={editing}
-        relatedRecords={related}
+        defaultDueDate={defaultDue}
+        relatedRecords={relatedRecords}
         onSaved={handleSaved}
       />
     </div>
