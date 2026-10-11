@@ -76,7 +76,7 @@ describe('ActivitiesPage KPI tiles', () => {
     await waitFor(() => expect(screen.getByText(/could not load activities/i)).toBeInTheDocument());
     expect(fetchCalls(), 'the page never reached the network').toBeGreaterThan(0);
 
-    for (const label of ['Total', 'Today', 'This Week', 'Overdue']) {
+    for (const label of ['Total', 'Today', 'This week', 'Overdue']) {
       const tile = screen.getAllByText(label)[0].parentElement!;
       expect(tile.textContent, `"${label}" still reports a number after a failed fetch`).toContain('—');
     }

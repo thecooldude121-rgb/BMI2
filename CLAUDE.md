@@ -1641,6 +1641,38 @@ old constraint, which fails the shared-name test.
       Calendar 83:39194). The Figma connection dropped mid-slice; the structure (KPI cards with detail
       lines, related-record buttons, List/Kanban toggle, inline delete strip, the calendar rail cards and
       the undated note) was followed from saved frame metadata, which carries no text or colour.
+  - **SLICE 4b DONE (2026-10-12) — Activities on the server.** The page loaded 200 activities; its Type /
+    Date / Owner / Related / Status dropdowns and its search box set state NOTHING read (every "filter"
+    left the list unchanged), the Owner list was three hardcoded names, the six tiles counted the loaded
+    rows, and buttons announced results that never happened ("Meeting cancelled", "Task marked as
+    complete!", "Note shared with team!").
+    - **Server (`activitiesController`):** one shared FROM + WHERE (`activityFilter`) for the list and the
+      new `GET /activities/summary` (total, today, this week, overdue, meetings / calls today, under the
+      SAME filters). New filters `state=overdue|upcoming` (planned + scheduled time past / future) and
+      `linked=lead|deal|contact|company`; `occurred_after` / `occurred_before` are validated ISO instants
+      (garbage used to reach SQL as a masked 500). Day and week are the VIEWER'S local midnights, sent as
+      instants (activity times are timestamps) — the 2026-10-11 Tasks decision.
+    - **Page:** one server page (25) with the shared pager, every filter real on list AND tiles, Owner from
+      the roster (`fetchUsers`; assigned_to is still a display name), tiles "—" on failure. **Mark complete
+      and Cancel are real saves** (`PUT /activities/:id`, status completed / cancelled), reported after the
+      2xx. Gone: Join Meeting (no link is stored — it opened zoom.us / meet.google.com blank), the dead
+      `/crm/calendar` links, Reschedule / Escalate / Edit / Share / Transcript / Recording / Send follow-up,
+      the never-rendered AI summary / email-tracking / risk panels, the second empty state with its dead
+      Google Calendar / Gmail / CSV buttons, and the AI-insights panel's four dead buttons (the panel stays,
+      labelled sample). Export / Import / Calendar view are disabled "Coming soon". "Create follow-up task"
+      opens the real task form. **Log activity** now works: choose the record (contact / account / deal —
+      an activity must hang off exactly one) then the existing `LogActivityModal`. Related links go to the
+      RECORD (they went to the list pages). The timeline groups by the viewer's local day (it used a UTC
+      day key); the grouped views say they regroup this page "of N in all".
+    - Tests: `roundTrip.activityFilters.test.ts` (5, incl. the viewer-midnight boundary and 10,000 rows vs
+      SQL), `ActivitiesPage.test.tsx` (9; replaces the 1-test file, keeps its no-HRMS / no-Quick-Filters
+      assertion). Mutation-tested in the separate worktree: 5 backend + 5 frontend, all killed. E2E on
+      `bmi_crm_iso_test` via the real login and sidebar: tiles and every filter matched the seed, Mark
+      complete and Log activity confirmed in Postgres and surviving reload, no browser dialog fired; seed
+      removed and re-counted.
+    - **Still open:** the Activities frame (64:17786) side-by-side visual pass, with Tasks / Calendar's, when
+      Figma is reconnected (it remained disconnected on 2026-10-12); the record pickers here and on Tasks
+      still list the first 200 records (server search is slice 6).
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary
