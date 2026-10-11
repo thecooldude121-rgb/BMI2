@@ -1580,12 +1580,19 @@ old constraint, which fails the shared-name test.
       `accountsApi.test.ts` (2). Mutation-tested (open-stage filter, dead Add Account, stop-at-first-failure
       delete). E2E on `bmi_crm_iso_test`: tiles, row counts, pages, Healthcare 10, account #26 opens, Add
       Account routes, sales delete refused and the row intact — all against SQL; seed torn down.
-    - **Found, NOT fixed:** `AccountsContext.mergeAccounts` "merges" by DELETING the secondary accounts
-      without moving their contacts / deals (which then lose their account via SET NULL). No caller today
-      (AccountMergePage is a placeholder) — but it must not be wired up as-is.
-    - **Process note:** this session started the live backend from this worktree, so backend mutation
-      edits briefly RESTARTED it with mutated (read-only) code. Make backend mutation edits with the dev
-      server stopped, or in a separate worktree.
+    - **Found, NOT fixed — DECIDED by Venkat 2026-10-11: leave it until a real account-merge feature is
+      scoped.** `AccountsContext.mergeAccounts` "merges" by DELETING the secondary accounts without moving
+      their contacts / deals (which then lose their account via SET NULL). No caller today
+      (AccountMergePage is a placeholder). **REQUIREMENT for any future merge feature: it must REASSIGN the
+      secondary accounts' contacts and deals (and any other company_id references) to the surviving
+      account, in one transaction, before removing the secondary — never delete and orphan.** Flag this
+      the moment account merge is scoped.
+    - **Process rule — DECIDED by Venkat 2026-10-11:** this session started the live backend from this
+      worktree, so backend mutation edits briefly RESTARTED it with mutated (read-only) code. **Breakage /
+      mutation edits to backend files are made ONLY with the live dev server stopped, or in a separate
+      copy of the repo (a git worktree) — live must never run broken code, even briefly.**
+    - **If the intermittent full-suite failure recurs, CAPTURE its output** (assertion, response body,
+      stack) before re-running — DECIDED 2026-10-11 — so a real flake can be told from a real bug.
   - **Also done with 2a: the Activities page's HRMS sample and fabricated Quick Filters removed** — the
     AI-Insights "HRMS: 92% completion" row, an unreachable "HRMS CONNECTION" card block, and a "Quick
     Filters" bar of hardcoded counts (8 / 18 / 12 / 32, "HRMS Activities 27") on buttons with no
