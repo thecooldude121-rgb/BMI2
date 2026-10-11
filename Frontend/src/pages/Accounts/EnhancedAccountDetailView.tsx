@@ -7,6 +7,7 @@ import {
   Copy, Archive, AlertCircle, Download,
 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
+import { useAccountById } from '../../hooks/useAccountById';
 import { fetchContacts, updateContactViaAPI } from '../../utils/contactsApi';
 import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
 import { fetchDealsForAccount, type RelatedDeal } from '../../utils/dealsApi';
@@ -102,12 +103,14 @@ const TABS = [
 const AccountDetail: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
-  const { getAccountById, deleteAccount, loading: accountsLoading, error: accountsError } = useAccounts();
+  const { deleteAccount } = useAccounts();
+  // From the server by id (slice 3b) — not the context's first 200 accounts.
+  const { account: loadedAccount, loading: accountsLoading, error: accountsError } = useAccountById(accountId);
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showActionsMenu, setShowActionsMenu] = useState(false);
 
-  const account = accountId ? getAccountById(accountId) : undefined;
+  const account = loadedAccount ?? undefined;
 
   // ── Related records ───────────────────────────────────────────────────────
   const [contacts, setContacts] = useState<Contact[]>([]);

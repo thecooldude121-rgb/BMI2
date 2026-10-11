@@ -3,6 +3,8 @@ import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, X, Globe, Linkedin, Twitter, Building2 } from 'lucide-react';
 import { useAccounts } from '../../contexts/AccountsContext';
+import { useAccountById } from '../../hooks/useAccountById';
+import { fetchAccountsPage } from '../../utils/accountsApi';
 import type { EnhancedAccount } from '../../types/accounts';
 import { useToast } from '../../contexts/ToastContext';
 import { fetchIndustries } from '../../utils/industriesApi';
@@ -103,10 +105,13 @@ export interface AccountFormData {
 const AccountFormPage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
-  const { getAccountById, createAccount, updateAccount } = useAccounts();
+  const { createAccount, updateAccount } = useAccounts();
 
   const isEditMode = !!accountId && accountId !== 'add';
-  const existingAccount = isEditMode ? getAccountById(accountId) : null;
+  // From the server by id (slice 3b) — the context held only the first 200, so
+  // editing account #201 prefilled nothing.
+  const { account: loadedAccount } = useAccountById(isEditMode ? accountId : undefined);
+  const existingAccount = isEditMode ? (loadedAccount ?? null) : null;
 
   // The served industry vocabulary (migration 045). Empty until it loads; a
   // failure is shown rather than replaced with a guessed list the server
@@ -189,7 +194,10 @@ const AccountFormPage: React.FC = () => {
   const [, setGrowthRate] = useState('');
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { showToast } = useToast();
-  const { filteredAccounts } = useAccounts();
+  // Possible duplicates come from a SERVER search (slice 3b). They were matched
+  // against the list page's capped accounts — also narrowed by whatever search
+  // that page had active, so a real duplicate could be missed.
+  const [nameMatches, setNameMatches] = useState<EnhancedAccount[]>([]);
 
   useEffect(() => {
     if (isEditMode && existingAccount) {
@@ -280,18 +288,25 @@ const AccountFormPage: React.FC = () => {
   }, [formData, hasUnsavedChanges, accountId]);
 
   useEffect(() => {
-    if (formData.companyName.trim().length > 2) {
-      const duplicates = filteredAccounts.filter(acc =>
-        acc.name.toLowerCase().includes(formData.companyName.toLowerCase()) &&
-        acc.id !== accountId
-      );
-      setDuplicateAccounts(duplicates);
-      setShowDuplicateWarning(duplicates.length > 0);
-    } else {
-      setDuplicateAccounts([]);
-      setShowDuplicateWarning(false);
-    }
-  }, [formData.companyName, filteredAccounts, accountId]);
+    const name = formData.companyName.trim();
+    if (name.length <= 2) { setNameMatches([]); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetchAccountsPage({ search: name, limit: 5 })
+        .then(r => { if (!cancelled) setNameMatches(r.accounts); })
+        .catch(() => { if (!cancelled) setNameMatches([]); });   // no warning rather than a guessed one
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [formData.companyName]);
+
+  useEffect(() => {
+    const name = formData.companyName.trim().toLowerCase();
+    const duplicates = name.length > 2
+      ? nameMatches.filter(acc => acc.name.toLowerCase().includes(name) && acc.id !== accountId)
+      : [];
+    setDuplicateAccounts(duplicates);
+    setShowDuplicateWarning(duplicates.length > 0);
+  }, [nameMatches, formData.companyName, accountId]);
 
   useEffect(() => {
     if (formData.foundedMonth && formData.foundedYear) {

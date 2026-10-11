@@ -89,7 +89,10 @@ export function mapRowToAccount(row: CompanyRow): EnhancedAccount {
     phone: row.phone ?? undefined,
     description: row.description ?? undefined,
     annualRevenue: Number.isFinite(revenue) ? revenue : undefined,
-    accountSize: (row.size && SIZE_TO_UI[row.size]) || '1-10',
+    // Absent when not recorded. It defaulted to '1-10', so every account with
+    // no size showed "1-10 employees" — and the edit form, prefilled from this,
+    // would write that invented band back on save (slice 3b).
+    accountSize: (row.size && SIZE_TO_UI[row.size]) || undefined,
 
     // Real address columns.
     billingAddress: {
@@ -167,11 +170,80 @@ export async function fetchAccounts(limit = 200): Promise<EnhancedAccount[]> {
   return (json.data ?? []).map(mapRowToAccount);
 }
 
+/** The server's per-account roll-ups (slice 3b) — never joined in the browser. */
+export interface AccountRollup {
+  contactCount: number;
+  openDealCount: number;
+  /** USD, summed only over trustworthy amounts. */
+  openDealValueUsd: number;
+  /** Open deals whose amount is not known in USD — counted, never summed. */
+  openDealUnconverted: number;
+}
+export type ListedAccount = EnhancedAccount & AccountRollup;
+
+export interface AccountsPageQuery {
+  search?: string;
+  industry?: string;
+  sort?: 'created_at' | 'updated_at' | 'name' | 'industry';
+  dir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of accounts with the SERVER's total. THROWS the server's message on a non-2xx. */
+export async function fetchAccountsPage(q: AccountsPageQuery): Promise<{ accounts: ListedAccount[]; total: number }> {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== null && v !== '') p.set(k, String(v));
+  const res = await fetch(`${API_BASE}/companies?${p}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load accounts (HTTP ${res.status})`);
+  return {
+    accounts: (json.data ?? []).map((row: CompanyRow & Record<string, unknown>) => ({
+      ...mapRowToAccount(row),
+      contactCount: Number(row.contact_count ?? 0),
+      openDealCount: Number(row.open_deal_count ?? 0),
+      openDealValueUsd: Number(row.open_deal_value_usd ?? 0),
+      openDealUnconverted: Number(row.open_deal_unconverted ?? 0),
+    })),
+    total: json.total ?? 0,
+  };
+}
+
+export interface AccountsSummary {
+  accounts: number;
+  contacts_on_accounts: number;
+  open_deals_on_accounts: number;
+  open_value_usd_on_accounts: number;
+  open_unconverted_on_accounts: number;
+  open_deals_without_account: number;
+}
+
+/** GET /companies/summary — the Accounts tiles. THROWS on a non-2xx. */
+export async function fetchAccountsSummary(): Promise<AccountsSummary> {
+  const res = await fetch(`${API_BASE}/companies/summary`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load account totals (HTTP ${res.status})`);
+  return json.data as AccountsSummary;
+}
+
 export async function fetchAccountById(id: string): Promise<EnhancedAccount & { contacts?: unknown[] }> {
   const json = await request<{ success: boolean; data: CompanyRow & { contacts?: unknown[] } }>(
     `/companies/${encodeURIComponent(id)}`,
   );
   return { ...mapRowToAccount(json.data), contacts: json.data.contacts };
+}
+
+/**
+ * One account by id, or null when it does not exist in this workspace (404).
+ * Any other failure THROWS. Screens used to look the id up in AccountsContext's
+ * first 200 loaded accounts, so account #201 read as "not found" (slice 3b).
+ */
+export async function fetchAccountByIdOrNull(id: string): Promise<(EnhancedAccount & { contacts?: unknown[] }) | null> {
+  const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
+  if (res.status === 404) return null;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load the account (HTTP ${res.status})`);
+  return { ...mapRowToAccount(json.data), contacts: json.data?.contacts };
 }
 
 // The id is generated server-side (companiesController), not here. A client

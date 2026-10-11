@@ -1,124 +1,105 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '../../components/ui/Button';
-import { formatDisplayDate } from '../../utils/dateUtils';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, AlertTriangle, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, Target, UserPlus, X, UserCog, GitMerge } from 'lucide-react';
-import { useAccounts } from '../../contexts/AccountsContext';
+import { Plus, Search, Filter, Download, Upload, MoreVertical, Building2, Eye, Edit, Trash2, Users, DollarSign, Tag, Briefcase, X, UserCog, GitMerge } from 'lucide-react';
+import { fetchAccountsPage, fetchAccountsSummary, deleteAccountViaAPI, type ListedAccount, type AccountsSummary } from '../../utils/accountsApi';
+import { fetchIndustries } from '../../utils/industriesApi';
+import { useToast } from '../../contexts/ToastContext';
 import { EnhancedAccount } from '../../types/accounts';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { NotAvailableBadge } from '../../components/common/NotAvailable';
 
+/** Accounts sort -> the server's allowlisted sort (slice 3b). */
+const ACCOUNT_SORT = {
+  name:    { sort: 'name', dir: 'asc' },
+  recent:  { sort: 'updated_at', dir: 'desc' },
+  created: { sort: 'created_at', dir: 'desc' },
+} as const;
+
 const AccountsPage: React.FC = () => {
   const navigate = useNavigate();
-  const {
-    filteredAccounts,
-    currentView,
-    views,
-    applyFilter,
-    applyView,
-    setSelectedAccountIds,
-    selectedAccountIds,
-    executeBulkAction,
-    getKPIs,
-    deleteAccount,
-    dealStats,
-    loading,
-    refreshing,
-    lastLoadedAt,
-    error,
-    refreshAccounts,
-  } = useAccounts();
-
+  const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState('name');
+  const [selectedSources] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<'name' | 'recent' | 'created'>('name');
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'kanban'>('list');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [showAddAccountForm, setShowAddAccountForm] = useState(false);
-  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
-  const [showBulkTagModal, setShowBulkTagModal] = useState(false);
-  const [displayCount, setDisplayCount] = useState(3);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 
-  /**
-   * REVALIDATE ON MOUNT, and this is the engineering call worth recording.
-   *
-   * The audit measured ZERO requests when navigating to this page, while every
-   * other CRM page fired 2-14. That is not a cache: `AccountsProvider` wraps the
-   * whole of CRMModule, so its one `refreshAccounts()` runs when the CRM module
-   * mounts and never again for the life of the session. Navigating in from Deals
-   * at 17:00 therefore rendered figures fetched at 09:00 — "Total Accounts 15 /
-   * Open Deals 24 / Open Pipeline $1.6M" whose only claim to being current was
-   * that nothing said otherwise.
-   *
-   * A timestamp alone would have been an admission with no remedy: "these are
-   * eight hours old" and no way to act on it but a full page reload. So the page
-   * asks again on mount AND says when the data is from.
-   *
-   * Stale-while-revalidate, not a blocking refetch — the context sets
-   * `refreshing` rather than `loading` once a load has succeeded, so an existing
-   * table is never blanked on a revisit. A failed revalidation leaves the old
-   * timestamp standing, because the data on screen really is from then.
+  /*
+   * SLICE 3b — ONE PAGE FROM THE SERVER. This page read AccountsContext, which
+   * loads 200 accounts, 500 contacts and 500 deals once and joins them in the
+   * browser; it then showed 3 at a time with a "Load More" over that capped set.
+   * Now: GET /companies (search, ONE industry, sort, page) whose rows carry their
+   * own contact and open-deal roll-ups, and GET /companies/summary for the tiles.
    */
-  useEffect(() => { void refreshAccounts(); }, [refreshAccounts]);
+  const PAGE = 25;
+  const [page, setPage] = useState(0);
+  const [rows, setRows] = useState<ListedAccount[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [summary, setSummary] = useState<AccountsSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const industry = selectedIndustries[0];
 
-  const kpis = getKPIs();
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  /**
-   * Contact count for a row. `undefined` means the join has not resolved (still
-   * loading, or /contacts failed) and must NOT print as 0 — the previous code
-   * was `relatedContacts?.length || 0`, which collapsed "unknown" into "none".
-   */
-  const contactCountLabel = (account: EnhancedAccount): string => {
-    const n = account.relatedContacts?.length;
-    if (n === undefined) return '—';
-    return `${n} contact${n === 1 ? '' : 's'}`;
+  useEffect(() => {
+    let cancelled = false;
+    setLoadState('loading');
+    fetchAccountsPage({ search: debouncedSearch || undefined, industry, ...ACCOUNT_SORT[sortBy], limit: PAGE, offset: page * PAGE })
+      .then(r => { if (!cancelled) { setRows(r.accounts); setTotal(r.total); setLoadState('ready'); setLoadError(null); } })
+      .catch((e: Error) => { if (!cancelled) { setLoadState('error'); setLoadError(e.message); } });
+    return () => { cancelled = true; };
+  }, [debouncedSearch, industry, sortBy, page, reloadKey]);
+  // A narrower query starts at page 1; a selection never spans pages.
+  useEffect(() => { setPage(0); }, [debouncedSearch, industry, sortBy]);
+  useEffect(() => { setSelectedAccountIds([]); }, [debouncedSearch, industry, sortBy, page]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAccountsSummary()
+      .then(sum => { if (!cancelled) { setSummary(sum); setSummaryError(null); } })
+      .catch((e: Error) => { if (!cancelled) setSummaryError(e.message); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  // The workspace's real industry vocabulary (21 values, migration 045) — the
+  // chips were six hardcoded names, three of which no account could hold.
+  useEffect(() => { fetchIndustries().then(setIndustryOptions).catch(() => setIndustryOptions([])); }, []);
+
+  /** "3 contacts" — the server's count for this account. */
+  const contactCountLabel = (account: ListedAccount): string =>
+    `${account.contactCount} contact${account.contactCount === 1 ? '' : 's'}`;
+
+  /** Open deals linked to this account (deals.company_id), from the server. */
+  const dealCountLabel = (account: ListedAccount): string =>
+    account.openDealCount === 0 ? 'No open deals' : `${account.openDealCount} open`;
+
+  const dealCountTitle = (account: ListedAccount): string => {
+    if (account.openDealCount === 0) return 'No open deals are linked to this account';
+    const usd = `$${Math.round(account.openDealValueUsd).toLocaleString()} in USD`;
+    return account.openDealUnconverted > 0
+      ? `${usd}, plus ${account.openDealUnconverted} deal${account.openDealUnconverted === 1 ? '' : 's'} whose amount is not known in USD`
+      : usd;
   };
 
-  /**
-   * Deal count for a row, and why an empty result is shown as "—" not "0".
-   *
-   * `deals` has no account_id — only a free-text company_name — so a deal is
-   * matched to an account by name. Of 25 deals, 10 carry a name and 1 matches an
-   * account exactly. Printing "0 active" on the other 16 would assert those
-   * accounts have no deals, which is not something the data supports; "—" says
-   * we do not know. A real count is shown wherever a match exists.
-   */
-  const dealCountLabel = (account: EnhancedAccount): string => {
-    const n = account.relatedDeals?.length;
-    if (n === undefined || n === 0) return '—';
-    return `${n} active`;
-  };
+  const handleSearch = (term: string) => setSearchTerm(term);
 
-  const dealCountTitle = (account: EnhancedAccount): string => {
-    const n = account.relatedDeals?.length;
-    if (n === undefined) return 'Deals could not be loaded';
-    if (n === 0) return 'No deals could be matched to this account. Deals record a company name rather than a link to an account, so a deal naming this company differently will not appear here.';
-    return `${n} open deal${n === 1 ? '' : 's'} matched by company name`;
-  };
-
-  const handleSearch = (term: string) => {
-    setSearchTerm(term);
-    applyFilter({ search: term });
-  };
-
-  const handleFilterChange = () => {
-    applyFilter({
-      search: searchTerm,
-      industry: selectedIndustries.length > 0 ? selectedIndustries : undefined,
-      status: selectedSources.length > 0 ? selectedSources as any : undefined
-    });
-  };
-
+  /** Select-all covers the rows ON THIS PAGE — the checkbox used to compare
+   *  against the displayed rows but select every loaded row, hidden ones too. */
+  const allOnPageSelected = rows.length > 0 && rows.every(r => selectedAccountIds.includes(r.id));
   const handleSelectAll = () => {
-    if (selectedAccountIds.length === filteredAccounts.length) {
-      setSelectedAccountIds([]);
-    } else {
-      setSelectedAccountIds(filteredAccounts.map(acc => acc.id));
-    }
+    setSelectedAccountIds(allOnPageSelected ? [] : rows.map(acc => acc.id));
   };
 
   const handleSelectAccount = (accountId: string) => {
@@ -129,20 +110,10 @@ const AccountsPage: React.FC = () => {
     }
   };
 
-  const toggleRowExpansion = (accountId: string) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(accountId)) {
-      newExpanded.delete(accountId);
-    } else {
-      newExpanded.add(accountId);
-    }
-    setExpandedRows(newExpanded);
-  };
-
   const handleKPIClick = (type: string) => {
     switch (type) {
       case 'total':
-        applyFilter({});
+        setSearchTerm(''); setSelectedIndustries([]);
         break;
       case 'deals':
         navigate('/crm/deals');
@@ -154,24 +125,29 @@ const AccountsPage: React.FC = () => {
   };
 
   const handleSortChange = (sortField: string) => {
-    setSortBy(sortField);
+    if (sortField === 'name' || sortField === 'recent' || sortField === 'created') setSortBy(sortField);
   };
 
   const handleCreateDeal = (account: EnhancedAccount) => {
     navigate('/crm/deals/create', { state: { accountId: account.id, accountName: account.name } });
   };
 
-  const handleAddContact = (account: EnhancedAccount) => {
-    navigate('/crm/contacts/new', { state: { accountId: account.id, accountName: account.name } });
-  };
+
 
   const handleEditAccount = (account: EnhancedAccount) => {
     navigate(`/crm/accounts/${account.id}/edit`);
   };
 
+  /** Real delete, with the server's answer shown — a 403 (sales) included. It
+   *  had no error handling and no feedback either way. */
   const handleDeleteAccount = async (account: EnhancedAccount) => {
-    if (window.confirm(`Are you sure you want to delete "${account.name}"?`)) {
-      await deleteAccount(account.id);
+    if (!window.confirm(`Are you sure you want to delete "${account.name}"?`)) return;
+    try {
+      await deleteAccountViaAPI(account.id);
+      addToast(`"${account.name}" deleted`, 'success');
+      setReloadKey(k => k + 1);
+    } catch (e) {
+      addToast(`"${account.name}" was not deleted — ${(e as Error).message}`, 'error');
     }
   };
 
@@ -190,7 +166,7 @@ const AccountsPage: React.FC = () => {
   };
 
   const handleBulkExport = () => {
-    const selectedAccounts = filteredAccounts.filter(acc => selectedAccountIds.includes(acc.id));
+    const selectedAccounts = rows.filter(acc => selectedAccountIds.includes(acc.id));
     const data = JSON.stringify(selectedAccounts, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -200,17 +176,20 @@ const AccountsPage: React.FC = () => {
     a.click();
   };
 
+  /** Every selected account is attempted and each result counted — the loop
+   *  stopped at the first failure as an unhandled rejection, silently leaving a
+   *  partial delete. Success is reported only for what the server confirmed. */
   const handleBulkDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedAccountIds.length} account(s)?`)) {
-      for (const id of selectedAccountIds) {
-        await deleteAccount(id);
-      }
-      setSelectedAccountIds([]);
-    }
-  };
-
-  const handleLoadMore = () => {
-    setDisplayCount(prev => prev + 3);
+    const ids = [...selectedAccountIds];
+    if (!window.confirm(`Are you sure you want to delete ${ids.length} account(s)?`)) return;
+    const results = await Promise.allSettled(ids.map(id => deleteAccountViaAPI(id)));
+    const ok = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')?.reason as Error | undefined;
+    if (failed === 0) addToast(`${ok} account${ok === 1 ? '' : 's'} deleted`, 'success');
+    else addToast(`${ok} deleted, ${failed} not deleted${firstError ? ` — ${firstError.message}` : ''}`, ok > 0 ? 'warning' : 'error');
+    setSelectedAccountIds([]);
+    setReloadKey(k => k + 1);
   };
 
   const getHealthScoreColor = (score?: number) => {
@@ -252,18 +231,9 @@ const AccountsPage: React.FC = () => {
     return details ? `${label} (${details})` : label;
   };
 
-  const formatRevenue = (revenue?: number) => {
-    if (!revenue) return 'N/A';
-    if (revenue >= 1000000) return `$${(revenue / 1000000).toFixed(1)}M`;
-    if (revenue >= 1000) return `$${(revenue / 1000).toFixed(0)}K`;
-    return `$${revenue}`;
-  };
 
-  const industries = ['SaaS', 'FinTech', 'Manufacturing', 'Healthcare', 'E-commerce', 'Retail'];
-  const sizes = ['1-10', '11-50', '51-200', '201-500', '500+'];
-  const sources = ['lead-gen', 'manual', 'partner', 'website'];
 
-  const displayedAccounts = filteredAccounts.slice(0, displayCount);
+  const displayedAccounts = rows;
 
   return (
     <div>
@@ -289,7 +259,9 @@ const AccountsPage: React.FC = () => {
             <span className="hidden md:inline">Import</span>
           </button>
           <Button
-            onClick={() => setShowAddAccountForm(true)}
+            // Was setShowAddAccountForm(true) — a form nothing rendered, so the
+            // button did nothing. The create page exists at /crm/accounts/new.
+            onClick={() => navigate('/crm/accounts/new')}
             size="sm" className="md:px-4"
           >
             <Plus className="h-4 w-4 md:mr-2" />
@@ -305,122 +277,75 @@ const AccountsPage: React.FC = () => {
         neither, so a failed load showed the previous figures, or zeros, with no
         indication at all.
       */}
-      {error && (
+      {loadState === 'error' && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-4" role="alert">
           <p className="text-sm font-semibold text-red-900">Couldn't load accounts</p>
-          <p className="mt-1 text-sm text-red-800">
-            {error}{' '}
-            {lastLoadedAt
-              ? 'The figures below are from the last successful load and may be out of date.'
-              : 'Nothing below was loaded from your data.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => { void refreshAccounts(); }}
-            disabled={refreshing}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
-          >
-            {refreshing ? 'Retrying…' : 'Try again'}
+          <p className="mt-1 text-sm text-red-800">{loadError} — nothing below is from your data.</p>
+          <button type="button" onClick={() => setReloadKey(k => k + 1)}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-800 hover:bg-red-100">
+            Try again
           </button>
         </div>
       )}
 
-      {/* When the figures are from, stated rather than implied. Only ever shows a
-          timestamp a successful load actually set. */}
-      {!error && lastLoadedAt && (
-        <p className="text-xs text-gray-500">
-          {refreshing
-            ? 'Refreshing…'
-            : `Showing data loaded at ${new Date(lastLoadedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
-        </p>
-      )}
-
-      {/* Stats Bar - 6 KPI Cards. Hidden on the very first load, where there are
-          no figures yet and zeros would be a claim rather than a count. */}
-      {loading && !lastLoadedAt ? (
-        <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500">
-          Loading accounts…
-        </div>
-      ) : (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        <div
-          onClick={() => handleKPIClick('total')}
-          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-        >
+      {/* KPI tiles — from GET /companies/summary (slice 3b), workspace-wide. They
+          were summed in the browser from 200 accounts / 500 contacts / 500 deals. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4" data-testid="accounts-kpis">
+        <div onClick={() => handleKPIClick('total')}
+          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-600">Total Accounts</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.totalAccounts}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{summary ? summary.accounts : '—'}</p>
             </div>
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Building2 className="h-5 w-5 text-blue-600" />
-            </div>
+            <div className="p-2 bg-blue-100 rounded-lg"><Building2 className="h-5 w-5 text-blue-600" /></div>
           </div>
         </div>
-
-        <div
-          onClick={() => handleKPIClick('deals')}
-          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-        >
+        <div onClick={() => handleKPIClick('deals')}
+          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Open Deals</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {dealStats ? kpis.totalDeals : '—'}
-              </p>
-              {/* Says "across all accounts" because deals carry no account_id
-                  and cannot be attributed to one — see dealStats. Without this
-                  the number reads as "deals belonging to these accounts". */}
+              <p className="text-xs text-gray-600">Open Deals on Accounts</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{summary ? summary.open_deals_on_accounts : '—'}</p>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                {dealStats ? 'Across all accounts' : 'Could not load deals'}
+                {summary
+                  ? (summary.open_deals_without_account > 0 ? `+ ${summary.open_deals_without_account} open with no account` : 'Every open deal has an account')
+                  : (summaryError ?? 'Loading…')}
               </p>
             </div>
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Briefcase className="h-5 w-5 text-green-600" />
-            </div>
+            <div className="p-2 bg-green-100 rounded-lg"><Briefcase className="h-5 w-5 text-green-600" /></div>
           </div>
         </div>
-
-        <div
-          onClick={() => handleKPIClick('value')}
-          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-        >
+        <div onClick={() => handleKPIClick('value')}
+          className="bg-white rounded-lg border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Open Pipeline</p>
+              <p className="text-xs text-gray-600">Open Pipeline on Accounts</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                {dealStats ? `$${(kpis.totalRevenue / 1_000_000).toFixed(2)}M` : '—'}
+                {summary ? `$${Math.round(summary.open_value_usd_on_accounts).toLocaleString()}` : '—'}
               </p>
               <p className="text-[11px] text-gray-500 mt-0.5">
-                {dealStats ? 'Excludes closed deals' : 'Could not load deals'}
+                {summary
+                  ? (summary.open_unconverted_on_accounts > 0
+                      ? `USD; + ${summary.open_unconverted_on_accounts} not in USD`
+                      : 'USD, excludes closed deals')
+                  : (summaryError ?? 'Loading…')}
               </p>
             </div>
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <DollarSign className="h-5 w-5 text-purple-600" />
-            </div>
+            <div className="p-2 bg-purple-100 rounded-lg"><DollarSign className="h-5 w-5 text-purple-600" /></div>
           </div>
         </div>
-
-        {/* A second "Active Deals" card lived here with the literal value 23,
-            beside the derived one above that read 0. It had no click handler and
-            no data source; its agreement with today's open-deal count was
-            coincidence. Removed — one card, one number, from the API. */}
-
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-600">Total Contacts</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{kpis.totalContacts}</p>
-              {/* Real: contacts.company_id is a foreign key, so this IS per-account. */}
-              <p className="text-[11px] text-gray-500 mt-0.5">Linked to these accounts</p>
+              <p className="text-xs text-gray-600">Contacts on Accounts</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{summary ? summary.contacts_on_accounts : '—'}</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">Linked to an account</p>
             </div>
-            <div className="p-2 bg-teal-100 rounded-lg">
-              <Users className="h-5 w-5 text-teal-600" />
-            </div>
+            <div className="p-2 bg-teal-100 rounded-lg"><Users className="h-5 w-5 text-teal-600" /></div>
           </div>
         </div>
       </div>
-      )}
 
       {/* Filter & Search Bar */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 md:p-6 space-y-4">
@@ -434,80 +359,24 @@ const AccountsPage: React.FC = () => {
         </button>
 
         <div className={`space-y-3 ${showFilters ? 'block' : 'hidden md:block'}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-gray-700 w-full md:w-20">Industry:</span>
-            <button className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-              All ▼
-            </button>
-            {industries.map(industry => (
-              <button
-                key={industry}
-                onClick={() => {
-                  const newSelected = selectedIndustries.includes(industry)
-                    ? selectedIndustries.filter(i => i !== industry)
-                    : [...selectedIndustries, industry];
-                  setSelectedIndustries(newSelected);
-                  handleFilterChange();
-                }}
-                className={`px-3 py-1 text-sm rounded-lg border ${
-                  selectedIndustries.includes(industry)
-                    ? 'bg-blue-100 border-blue-300 text-blue-700'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {industry}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-gray-700 w-full md:w-20">Size:</span>
-            <button className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-              All ▼
-            </button>
-            {sizes.map(size => (
-              <button
-                key={size}
-                onClick={() => {
-                  const newSelected = selectedSizes.includes(size)
-                    ? selectedSizes.filter(s => s !== size)
-                    : [...selectedSizes, size];
-                  setSelectedSizes(newSelected);
-                }}
-                className={`px-3 py-1 text-sm rounded-lg border ${
-                  selectedSizes.includes(size)
-                    ? 'bg-blue-100 border-blue-300 text-blue-700'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-gray-700 w-full md:w-20">Source:</span>
-            <button className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-              All ▼
-            </button>
-            {sources.map(source => (
-              <button
-                key={source}
-                onClick={() => {
-                  const newSelected = selectedSources.includes(source)
-                    ? selectedSources.filter(s => s !== source)
-                    : [...selectedSources, source];
-                  setSelectedSources(newSelected);
-                  handleFilterChange();
-                }}
-                className={`px-3 py-1 text-sm rounded-lg border capitalize ${
-                  selectedSources.includes(source)
-                    ? 'bg-blue-100 border-blue-300 text-blue-700'
-                    : 'border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {getSourceIcon(source)} {source.replace('-', ' ')}
-              </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              Industry:
+              {/* ONE industry, filtered on the server, from the real vocabulary. */}
+              <select value={industry ?? ''} aria-label="Industry"
+                onChange={e => setSelectedIndustries(e.target.value ? [e.target.value] : [])}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg">
+                <option value="">All</option>
+                {industryOptions.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+            </label>
+            {/* Size chips restyled without filtering; Source chips were sent as a
+                status every account shares, so any choice hid every row. Neither
+                can run on the server yet — "Coming soon". */}
+            {['Size', 'Source'].map(label => (
+              <span key={label} className="flex items-center gap-1.5 text-sm text-gray-400" aria-disabled="true" title={`${label} filter is coming soon`}>
+                {label}: <NotAvailableBadge label="Soon" />
+              </span>
             ))}
           </div>
         </div>
@@ -529,11 +398,14 @@ const AccountsPage: React.FC = () => {
               onChange={(e) => handleSortChange(e.target.value)}
               className="flex-1 md:flex-none px-3 md:px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
             >
+              {/* The sort was never applied. Name / Recent / Date added run on the
+                  server; Value / Deals / Health need server sorts first. */}
               <option value="name">Sort: Name</option>
-              <option value="value">Value</option>
-              <option value="deals">Deals</option>
-              <option value="health">Health</option>
-              <option value="recent">Recent</option>
+              <option value="recent">Sort: Recently updated</option>
+              <option value="created">Sort: Date added</option>
+              <option value="value" disabled>Value (coming soon)</option>
+              <option value="deals" disabled>Deals (coming soon)</option>
+              <option value="health" disabled>Health (coming soon)</option>
             </select>
             {/* These three used to set `viewMode` and nothing else: the value was
                 read ONLY to style the buttons, never to choose a view, so the
@@ -578,23 +450,19 @@ const AccountsPage: React.FC = () => {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 md:p-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-3 md:space-y-0">
             <span className="text-sm font-medium text-blue-900">
-              {selectedAccountIds.length} account{selectedAccountIds.length > 1 ? 's' : ''} selected
+              {selectedAccountIds.length} account{selectedAccountIds.length > 1 ? 's' : ''} selected on this page
             </span>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setShowBulkAssignModal(true)}
-                className="px-3 py-1 text-sm border border-blue-300 rounded-lg hover:bg-blue-100 text-blue-700"
-              >
-                <UserCog className="h-4 w-4 inline mr-1" />
-                <span className="hidden sm:inline">Assign</span>
-              </button>
-              <button
-                onClick={() => setShowBulkTagModal(true)}
-                className="px-3 py-1 text-sm border border-blue-300 rounded-lg hover:bg-blue-100 text-blue-700"
-              >
-                <Tag className="h-4 w-4 inline mr-1" />
-                <span className="hidden sm:inline">Tag</span>
-              </button>
+              {/* Assign / Tag opened modals nothing rendered — "Coming soon". */}
+              {[['Assign', UserCog], ['Tag', Tag]].map(([label, Icon]) => {
+                const I = Icon as typeof Tag;
+                return (
+                  <button key={label as string} type="button" disabled title={`Bulk ${(label as string).toLowerCase()} is coming soon`}
+                    className="px-3 py-1 text-sm border border-gray-200 rounded-lg text-gray-400 cursor-not-allowed flex items-center gap-1">
+                    <I className="h-4 w-4" /><span className="hidden sm:inline">{label as string}</span> <NotAvailableBadge label="Soon" />
+                  </button>
+                );
+              })}
               <button
                 onClick={handleBulkExport}
                 className="px-3 py-1 text-sm border border-blue-300 rounded-lg hover:bg-blue-100 text-blue-700"
@@ -632,8 +500,9 @@ const AccountsPage: React.FC = () => {
                 <th className="px-4 py-3 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedAccountIds.length === displayedAccounts.length && displayedAccounts.length > 0}
+                    checked={allOnPageSelected}
                     onChange={handleSelectAll}
+                    aria-label="Select all accounts on this page"
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
@@ -752,19 +621,16 @@ const AccountsPage: React.FC = () => {
                               <GitMerge className="h-4 w-4 mr-2" />
                               Merge with Another
                             </button>
-                            <button
-                              onClick={() => { setOpenMenuId(null); }}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
-                            >
+                            {/* These only closed the menu. Disabled and labelled until built. */}
+                            <button type="button" disabled title="Adding a tag is coming soon"
+                              className="w-full text-left px-4 py-2 text-sm text-gray-400 cursor-not-allowed flex items-center">
                               <Tag className="h-4 w-4 mr-2" />
-                              Add Tag
+                              Add Tag <NotAvailableBadge label="Soon" className="ml-auto" />
                             </button>
-                            <button
-                              onClick={() => { setOpenMenuId(null); }}
-                              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
-                            >
+                            <button type="button" disabled title="Assigning an owner is coming soon"
+                              className="w-full text-left px-4 py-2 text-sm text-gray-400 cursor-not-allowed flex items-center">
                               <UserCog className="h-4 w-4 mr-2" />
-                              Assign Owner
+                              Assign Owner <NotAvailableBadge label="Soon" className="ml-auto" />
                             </button>
                             <button
                               onClick={() => { handleExportAccount(account); setOpenMenuId(null); }}
@@ -779,156 +645,9 @@ const AccountsPage: React.FC = () => {
                     </td>
                   </tr>
 
-                  {/* Expanded Row Content */}
-                  {expandedRows.has(account.id) && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-6 bg-gray-50">
-                        <div className="space-y-4 max-w-6xl">
-                          {/* Location & Revenue */}
-                          <div className="flex items-center space-x-6 text-sm">
-                            <div className="flex items-center space-x-2">
-                              <span>📍</span>
-                              <span className="text-gray-700">
-                                {account.billingAddress.city}, {account.billingAddress.state}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span>💰</span>
-                              <span className="text-gray-700">
-                                Revenue: {formatRevenue(account.annualRevenue)}/year
-                                {account.annualRevenue ? '' : ' (estimated)'}
-                              </span>
-                            </div>
-                            {account.stockSymbol && (
-                              <div className="flex items-center space-x-2">
-                                <span>📊</span>
-                                <span className="text-gray-700">Public Company ({account.stockSymbol})</span>
-                              </div>
-                            )}
-                            {account.customFields?.growth_rate && (
-                              <div className="flex items-center space-x-2">
-                                <span>🚀</span>
-                                <span className="text-gray-700">Growth: {account.customFields.growth_rate}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Active Deals */}
-                          {account.relatedDeals && account.relatedDeals.length > 0 ? (
-                            <div className="space-y-2 bg-white rounded-lg p-3 border border-gray-200">
-                              {account.relatedDeals.length === 1 ? (
-                                <div className="text-sm">
-                                  <span className="font-semibold text-gray-900">Active Deal: </span>
-                                  <button
-                                    onClick={() => navigate(`/crm/deals/${account.relatedDeals![0].id}`)}
-                                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                                  >
-                                    {account.relatedDeals[0].name} ({formatRevenue(account.relatedDeals[0].amount)})
-                                  </button>
-                                  <div className="text-xs text-gray-600 mt-1">
-                                    Stage: {account.relatedDeals[0].stage} | Close: {formatDisplayDate(account.relatedDeals[0].closeDate)}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  <p className="text-sm font-semibold text-gray-900">Active Deals:</p>
-                                  {account.relatedDeals.map((deal, idx) => (
-                                    <div key={idx} className="text-sm text-gray-700 ml-2">
-                                      • <button
-                                        onClick={() => navigate(`/crm/deals/${deal.id}`)}
-                                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                                      >
-                                        {deal.name}
-                                      </button> ({formatRevenue(deal.amount)}) - {deal.stage}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex items-center space-x-2 text-sm">
-                              <AlertTriangle className="h-4 w-4 text-orange-500" />
-                              <span className="text-orange-700">⚠️ No active deals</span>
-                              <span className="text-gray-600">💡 Opportunity: High-value target</span>
-                            </div>
-                          )}
-
-                          {/* Contacts */}
-                          {account.relatedContacts && account.relatedContacts.length > 0 && (
-                            <div className="text-sm bg-white rounded-lg p-3 border border-gray-200">
-                              <span className="font-semibold text-gray-900">Contacts: </span>
-                              <span className="text-gray-700">
-                                {account.relatedContacts.slice(0, 3).map((c, idx) => (
-                                  <span key={idx}>
-                                    <button
-                                      onClick={() => navigate(`/crm/contacts/${c.id}`)}
-                                      className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                                    >
-                                      {c.name}
-                                    </button> <span className="text-xs text-gray-600">({c.role})</span>
-                                    {idx < Math.min(2, account.relatedContacts!.length - 1) ? ', ' : ''}
-                                  </span>
-                                ))}
-                                {account.relatedContacts.length > 3 && (
-                                  <button
-                                    onClick={() => navigate(`/crm/accounts/${account.id}`)}
-                                    className="text-blue-600 hover:text-blue-800 hover:underline ml-1 font-medium"
-                                  >
-                                    +{account.relatedContacts.length - 3} more
-                                  </button>
-                                )}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Source & Health Score */}
-                          <div className="flex items-center space-x-6 text-sm">
-                            <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
-                              <span className="text-xl">{getSourceIcon(account.source)}</span>
-                              <span className="text-gray-900 font-medium">
-                                Source: {getSourceLabel(account.source, account.sourceDetails)}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
-                              <span className="text-lg">🤖</span>
-                              <div>
-                                <span className={`font-bold text-base ${getHealthScoreColor(account.healthScore)}`}>
-                                  {account.healthScore || 0}/100
-                                </span>
-                                <span className={`text-xs font-semibold ml-2 ${getHealthScoreColor(account.healthScore)}`}>
-                                  ({getHealthScoreLabel(account.healthScore)})
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Action Buttons */}
-                          <div className="flex items-center space-x-2 pt-2">
-                            <button
-                              onClick={() => navigate(`/crm/accounts/${account.id}`)}
-                              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                            >
-                              <Eye className="h-4 w-4 inline mr-1" />
-                              View
-                            </button>
-                            <Button
-                              onClick={() => handleCreateDeal(account)}
-                            >
-                              <Plus className="h-4 w-4 inline mr-1" />
-                              Create Deal
-                            </Button>
-                            <button
-                              onClick={() => handleAddContact(account)}
-                              className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-                            >
-                              <UserPlus className="h-4 w-4 inline mr-1" />
-                              Add Contact
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
+                  {/* The expanded row (health score the API never returns, a fixed
+                      "Opportunity: High-value target") was unreachable — nothing
+                      called toggleRowExpansion — and fabricated. Removed (slice 3b). */}
                 </React.Fragment>
               ))}
             </tbody>
@@ -938,16 +657,18 @@ const AccountsPage: React.FC = () => {
         {/* Pagination */}
         <div className="border-t border-gray-200 px-6 py-4 flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            Showing {Math.min(displayCount, filteredAccounts.length)} of {filteredAccounts.length} accounts
+            {loadState === 'loading' && rows.length === 0 ? 'Loading accounts…'
+              : total > 0 ? `Showing ${page * PAGE + 1}–${Math.min((page + 1) * PAGE, total)} of ${total} accounts`
+              : loadState === 'ready' ? 'No accounts match' : ''}
           </div>
-          {displayCount < filteredAccounts.length && (
-            <button
-              onClick={handleLoadMore}
-              className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium hover:bg-blue-50 rounded-lg"
-            >
-              Load More...
-            </button>
-          )}
+          {/* Server pages (slice 3b) — "Load More" showed 3 more of a capped 200. */}
+          <div className="flex items-center gap-2" data-testid="accounts-pager">
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0 || loadState === 'loading'}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+            <span className="text-sm text-gray-600 tabular-nums">Page {page + 1} of {Math.max(1, Math.ceil(total / PAGE))}</span>
+            <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * PAGE >= total || loadState === 'loading'}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+          </div>
         </div>
       </div>
 
@@ -1110,16 +831,12 @@ const AccountsPage: React.FC = () => {
         {/* Mobile Pagination */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="text-sm text-gray-600 text-center mb-3">
-            Showing {Math.min(displayCount, filteredAccounts.length)} of {filteredAccounts.length} accounts
+            {total > 0 ? `Showing ${page * PAGE + 1}–${Math.min((page + 1) * PAGE, total)} of ${total} accounts` : 'No accounts'}
           </div>
-          {displayCount < filteredAccounts.length && (
-            <Button
-              onClick={handleLoadMore}
-              fullWidth
-            >
-              Load More...
-            </Button>
-          )}
+          <div className="flex gap-2">
+            <Button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} fullWidth variant="secondary">Previous</Button>
+            <Button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * PAGE >= total} fullWidth>Next</Button>
+          </div>
         </div>
       </div>
 

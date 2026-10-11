@@ -1,5 +1,5 @@
 import { fetchPipelines, buildStageLookup, isOpenWith } from '../utils/pipelinesApi';
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
 import {
   EnhancedAccount,
   AccountActivity,
@@ -341,7 +341,12 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
     }
   }, []);
 
-  useEffect(() => { void refreshAccounts(); }, [refreshAccounts]);
+  // NO LOAD ON MOUNT any more (Group A item 4, slice 3b). This fetched 200
+  // accounts, 500 contacts and 500 deals every time the CRM module mounted —
+  // for the Accounts list, which now pages on the server, and for detail / edit /
+  // merge, which now load their account by id. The remaining consumers use only
+  // createAccount / updateAccount / deleteAccount, which call the API directly.
+  // refreshAccounts stays available for any caller that wants the lists.
 
   const filterAccounts = useCallback((filter: AccountFilter): EnhancedAccount[] => {
     return accounts.filter(account => {
@@ -363,7 +368,7 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
         return false;
       }
 
-      if (filter.accountSize && filter.accountSize.length > 0 && !filter.accountSize.includes(account.accountSize)) {
+      if (filter.accountSize && filter.accountSize.length > 0 && (!account.accountSize || !filter.accountSize.includes(account.accountSize))) {
         return false;
       }
 
@@ -814,7 +819,9 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
 
     accounts.forEach(acc => {
       accountsByIndustry[acc.industry] = (accountsByIndustry[acc.industry] || 0) + 1;
-      accountsBySize[acc.accountSize] = (accountsBySize[acc.accountSize] || 0) + 1;
+      // An account with no recorded size is counted under 'not recorded', never a band.
+      const size = acc.accountSize ?? 'not recorded';
+      accountsBySize[size] = (accountsBySize[size] || 0) + 1;
       accountsByType[acc.type] = (accountsByType[acc.type] || 0) + 1;
     });
 
