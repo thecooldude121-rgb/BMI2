@@ -272,6 +272,65 @@ export async function fetchTasks(q: TaskQuery = {}): Promise<TaskRecord[]> {
   return json.data ?? [];
 }
 
+/**
+ * Slice 4a — the Tasks page and the Calendar read the server one page / one
+ * window at a time. The buckets are the server's (GET /tasks?bucket=, counted
+ * by GET /tasks/summary under the same filters), and "today" is ALWAYS the
+ * viewer's local calendar day (utils/dates.localDay), sent as ?today= —
+ * decided 2026-10-11. Never compute a bucket count from a loaded page.
+ */
+export const TASK_BUCKETS = ['all', 'mine', 'open', 'overdue', 'today', 'upcoming', 'no_date', 'completed'] as const;
+export type TaskBucket = typeof TASK_BUCKETS[number];
+
+/** Filters shared by the list, the summary and the calendar days. */
+export interface TaskFilters {
+  search?: string;
+  priority?: string;
+  type?: string;
+  /** A record type, or 'none' for tasks linked to no record. */
+  related_to_type?: string;
+}
+
+export interface TasksPageQuery extends TaskFilters {
+  bucket?: TaskBucket;
+  /** The viewer's day (YYYY-MM-DD). Required by overdue / today / upcoming. */
+  today?: string;
+  due_after?: string;
+  due_before?: string;
+  sort?: string;
+  dir?: 'asc' | 'desc';
+  limit: number;
+  offset: number;
+}
+
+const qs = (q: object) => {
+  const params = new URLSearchParams();
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+  });
+  return params.toString();
+};
+
+export async function fetchTasksPage(q: TasksPageQuery): Promise<{ tasks: TaskRecord[]; total: number }> {
+  const json = await request<{ data: TaskRecord[]; total: number }>(`/tasks?${qs(q)}`);
+  return { tasks: json.data ?? [], total: json.total ?? 0 };
+}
+
+export type TaskSummary = Record<TaskBucket, number> & { as_of: string };
+
+export async function fetchTaskSummary(today: string, filters: TaskFilters = {}): Promise<TaskSummary> {
+  const json = await request<{ data: TaskSummary }>(`/tasks/summary?${qs({ ...filters, today })}`);
+  return json.data;
+}
+
+export interface TaskDay { day: string; total: number; open: number; tasks: TaskRecord[] }
+
+/** The calendar's visible days: per-day counts plus the first few tasks of each. */
+export async function fetchTasksByDay(from: string, to: string, filters: TaskFilters = {}): Promise<{ total: number; days: TaskDay[] }> {
+  const json = await request<{ data: { total: number; days: TaskDay[] } }>(`/tasks/by-day?${qs({ ...filters, from, to })}`);
+  return { total: json.data.total, days: json.data.days };
+}
+
 export async function createTask(task: {
   title: string;
   description?: string;

@@ -100,7 +100,7 @@ async function validateRelation(
   );
 }
 
-/** GET /api/v1/meetings?related_to_type=deal&related_to_id=D001&limit=&offset= */
+/** GET /api/v1/meetings?related_to_type=deal&related_to_id=D001&date_from=&date_to=&order=asc&limit=&offset= */
 export const getMeetings = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
@@ -131,13 +131,31 @@ export const getMeetings = async (req: AuthRequest, res: Response, next: NextFun
       }
     }
 
+    // A time window (the calendar's visible days, slice 4a). INSTANTS, not
+    // days: meetings.date is a timestamptz, and which calendar day a meeting
+    // falls on depends on the viewer's zone, so the browser sends its own local
+    // midnights and buckets the rows itself. `total` says when the window held
+    // more than one page, so a calendar can say so instead of looking complete.
+    for (const [key, op] of [['date_from', '>='], ['date_to', '<']] as const) {
+      const v = req.query[key];
+      if (v === undefined || v === '') continue;
+      if (Number.isNaN(Date.parse(String(v)))) {
+        res.status(400).json({ success: false, message: `${key} must be an ISO 8601 timestamp` });
+        return;
+      }
+      where += ` AND m.date ${op} $${params.length + 1}::timestamptz`;
+      params.push(String(v));
+    }
+    const ascending = req.query.order === 'asc';
+
+    const total = await pool.query(`SELECT COUNT(*)::int AS n ${FROM_JOINS} ${where}`, params);
     const result = await pool.query(
       `SELECT ${SELECT_COLUMNS} ${FROM_JOINS} ${where}
-        ORDER BY m.date DESC NULLS LAST, m.created_at DESC
+        ORDER BY m.date ${ascending ? 'ASC' : 'DESC'} NULLS LAST, m.created_at DESC
         LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, offset],
     );
-    res.json({ success: true, data: result.rows });
+    res.json({ success: true, data: result.rows, total: total.rows[0].n, limit, offset });
   } catch (error) { next(error); }
 };
 

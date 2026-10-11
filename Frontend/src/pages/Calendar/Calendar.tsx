@@ -1,476 +1,374 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, Plus, Info } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { Calendar as CalendarIcon, Clock, Users, Video, Plus, ChevronLeft, ChevronRight, CheckSquare } from 'lucide-react';
-import { useData } from '../../contexts/DataContext';
-import { fetchTasks, type TaskRecord } from '../../utils/activitiesApi';
-import { localDay, dateOnly } from '../../utils/dates';
+import { Card } from '../../components/ui/Card';
+import { Badge } from '../../components/ui/Badge';
+import { EmptyState } from '../../components/ui/EmptyState';
+import PageHeader from '../../components/Layout/PageHeader';
+import {
+  fetchTasksByDay,
+  fetchTasksPage,
+  fetchTaskSummary,
+  type TaskDay,
+  type TaskRecord,
+  type TaskSummary,
+} from '../../utils/activitiesApi';
+import { fetchMeetingsInWindow, type Meeting } from '../../utils/meetingsApi';
+import { localDay, parseLocalDay } from '../../utils/dates';
 
 /**
- * TASKS ARE FETCHED HERE, NOT TAKEN FROM DataContext.
+ * Calendar — Group A item 4, slice 4a (2026-10-11).
  *
- * Deliberate, and the same choice hooks/useDashboardData.ts documents: a context
- * is what let sample data spread to eighteen files unnoticed, so a surface with
- * one consumer fetches for itself. The calendar is the only consumer of tasks
- * arranged by day.
+ * It fetched 500 tasks once, whatever month was on screen, so at scale a month
+ * could show none of its tasks while looking complete; and it rendered
+ * `meetings` from DataContext, a permanent empty stub ("no /meetings route
+ * yet") long after the Meeting Agent shipped a real API. Now:
+ *   - TASKS: GET /tasks/by-day for exactly the six visible weeks — each day's
+ *     real count and its first three tasks, so "+N more" is the server's
+ *     number, never the length of what loaded;
+ *   - MEETINGS: GET /meetings for the same window, as INSTANTS (the viewer's
+ *     local midnights), bucketed into days in the browser — a meeting's day
+ *     depends on the viewer's zone, unlike a task's DATE;
+ *   - "today" is the viewer's local day everywhere (decided 2026-10-11).
+ * Week / Day views do not exist and are disabled, labelled "Coming soon"; they
+ * used to restyle a button and leave the month grid on screen.
  *
- * WHY THE CALENDAR SHOWS TASKS AT ALL: it rendered `meetings` only, and the
- * meetings table has 0 rows — so a real, correct month grid was permanently
- * empty while 15 tasks with real due dates existed and appeared on no calendar
- * anywhere. Tasks are the only dated records this workspace actually has.
+ * Not a context, deliberately (see hooks/useDashboardData.ts): the calendar is
+ * the only consumer of tasks arranged by day.
  */
 
-const Calendar: React.FC = () => {
-  const { meetings, leads, employees } = useData();
-  const [tasks, setTasks] = useState<TaskRecord[]>([]);
-  const [tasksError, setTasksError] = useState<string | null>(null);
-  const [tasksLoading, setTasksLoading] = useState(true);
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewType, setViewType] = useState<'month' | 'week' | 'day'>('month');
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MEETING_PAGE = 200;
 
+/** The 42 local days of the month grid, Sunday first. */
+function gridDays(month: Date): Date[] {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  return Array.from({ length: 42 }, (_, i) => new Date(first.getFullYear(), first.getMonth(), 1 - first.getDay() + i));
+}
+
+const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const fmtDay = (day: string) => parseLocalDay(day)?.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) ?? day;
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+const Calendar: React.FC = () => {
+  const navigate = useNavigate();
+  const [month, setMonth] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
+  const [selected, setSelected] = useState<string | null>(null);
+  const today = localDay(new Date());
+
+  const days = useMemo(() => gridDays(month), [month]);
+  const from = localDay(days[0]);
+  const to = localDay(days[41]);
+
+  // ── Tasks for the visible weeks ───────────────────────────────────────────
+  const [taskDays, setTaskDays] = useState<Map<string, TaskDay> | null>(null);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [tasksRetry, setTasksRetry] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    fetchTasks({ limit: 500 })
-      .then(rows => { if (!cancelled) { setTasks(rows); setTasksError(null); } })
-      .catch(e => { if (!cancelled) setTasksError(e?.message ?? 'Could not load tasks'); })
-      .finally(() => { if (!cancelled) setTasksLoading(false); });
+    setTaskDays(null);
+    fetchTasksByDay(from, to)
+      .then(r => { if (!cancelled) { setTaskDays(new Map(r.days.map(d => [d.day, d]))); setTasksError(null); } })
+      .catch(e => { if (!cancelled) setTasksError(e?.message ?? 'Could not load tasks'); });
     return () => { cancelled = true; };
-  }, []);
+  }, [from, to, tasksRetry]);
 
-  /** Tasks keyed by their due day, so a cell is one lookup rather than a scan. */
-  const tasksByDay = useMemo(() => {
-    const map = new Map<string, TaskRecord[]>();
-    for (const t of tasks) {
-      const day = dateOnly(t.due_date);
-      if (!day) continue; // undated tasks belong to no cell, and inventing one would be a lie
-      const list = map.get(day);
-      if (list) list.push(t); else map.set(day, [t]);
+  // ── Meetings for the same window ──────────────────────────────────────────
+  const [meetings, setMeetings] = useState<{ list: Meeting[]; total: number } | null>(null);
+  const [meetingsError, setMeetingsError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setMeetings(null);
+    fetchMeetingsInWindow(days[0], addDays(days[41], 1), MEETING_PAGE)
+      .then(r => { if (!cancelled) { setMeetings({ list: r.meetings, total: r.total }); setMeetingsError(null); } })
+      .catch(e => { if (!cancelled) setMeetingsError(e?.message ?? 'Could not load meetings'); });
+    return () => { cancelled = true; };
+  }, [days]);
+  const meetingsByDay = useMemo(() => {
+    const map = new Map<string, Meeting[]>();
+    for (const m of meetings?.list ?? []) {
+      if (!m.date) continue;
+      const key = localDay(new Date(m.date));
+      map.set(key, [...(map.get(key) ?? []), m]);
     }
     return map;
-  }, [tasks]);
+  }, [meetings]);
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+  // ── The rail: due soon, overdue + undated counts, upcoming meetings ───────
+  const [dueSoon, setDueSoon] = useState<{ tasks: TaskRecord[]; total: number } | null>(null);
+  const [summary, setSummary] = useState<TaskSummary | null>(null);
+  const [railError, setRailError] = useState<string | null>(null);
+  const [upcoming, setUpcoming] = useState<Meeting[] | null>(null);
+  const [upcomingError, setUpcomingError] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const horizon = localDay(addDays(new Date(), 6));
+    Promise.all([
+      fetchTasksPage({ bucket: 'open', due_after: today, due_before: horizon, sort: 'due_date', dir: 'asc', limit: 4, offset: 0 }),
+      fetchTaskSummary(today),
+    ])
+      .then(([soon, sum]) => { if (!cancelled) { setDueSoon(soon); setSummary(sum); setRailError(null); } })
+      .catch(e => { if (!cancelled) setRailError(e?.message ?? 'Could not load tasks'); });
+    const now = new Date();
+    fetchMeetingsInWindow(now, addDays(now, 7), 5)
+      .then(r => { if (!cancelled) { setUpcoming(r.meetings); setUpcomingError(null); } })
+      .catch(e => { if (!cancelled) setUpcomingError(e?.message ?? 'Could not load meetings'); });
+    return () => { cancelled = true; };
+  }, [today]);
 
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
+  // ── The selected day: its tasks from the server, not the cell's three ────
+  const [dayTasks, setDayTasks] = useState<{ tasks: TaskRecord[]; total: number } | null>(null);
+  const [dayError, setDayError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    setDayTasks(null);
+    fetchTasksPage({ due_after: selected, due_before: selected, limit: 10, offset: 0 })
+      .then(r => { if (!cancelled) { setDayTasks(r); setDayError(null); } })
+      .catch(e => { if (!cancelled) setDayError(e?.message ?? 'Could not load tasks'); });
+    return () => { cancelled = true; };
+  }, [selected]);
 
-    const days = [];
-    
-    // Previous month's days
-    const prevMonth = new Date(year, month - 1, 0);
-    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
-      days.push({
-        day: prevMonth.getDate() - i,
-        isCurrentMonth: false,
-        date: new Date(year, month - 1, prevMonth.getDate() - i)
-      });
-    }
-
-    // Current month's days
-    for (let day = 1; day <= daysInMonth; day++) {
-      days.push({
-        day,
-        isCurrentMonth: true,
-        date: new Date(year, month, day)
-      });
-    }
-
-    // Next month's days
-    const remainingCells = 42 - days.length;
-    for (let day = 1; day <= remainingCells; day++) {
-      days.push({
-        day,
-        isCurrentMonth: false,
-        date: new Date(year, month + 1, day)
-      });
-    }
-
-    return days;
-  };
-
-  const getMeetingsForDate = (date: Date) => {
-    return meetings.filter(meeting => {
-      const meetingDate = new Date(meeting.date);
-      return meetingDate.toDateString() === date.toDateString();
-    });
-  };
-
-  const getLeadName = (leadId: string) => {
-    const lead = leads.find(l => l.id === leadId);
-    return lead ? lead.name : 'Unknown';
-  };
-
-  const getEmployeeName = (employeeId: string) => {
-    const employee = employees.find(e => e.id === employeeId);
-    return employee ? employee.name : 'Unknown';
-  };
-
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev);
-      if (direction === 'prev') {
-        newDate.setMonth(newDate.getMonth() - 1);
-      } else {
-        newDate.setMonth(newDate.getMonth() + 1);
-      }
-      return newDate;
-    });
-  };
-
-  const days = getDaysInMonth(currentDate);
-  const today = new Date();
-  const todayKey = localDay(today);
-
-  /** Open tasks due in the next 7 days, soonest first. */
-  const upcomingTasks = useMemo(() => {
-    const horizon = localDay(new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000));
-    return tasks
-      .filter(t => {
-        const d = dateOnly(t.due_date);
-        return !!d && d >= todayKey && d <= horizon && t.status !== 'completed';
-      })
-      .sort((a, b) => (dateOnly(a.due_date) ?? '').localeCompare(dateOnly(b.due_date) ?? ''))
-      .slice(0, 5);
-    // `today` is a new Date on every render; todayKey is the stable value.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, todayKey]);
-
-  const overdueCount = useMemo(
-    () => tasks.filter(t => {
-      const d = dateOnly(t.due_date);
-      return !!d && d < todayKey && t.status !== 'completed';
-    }).length,
-    [tasks, todayKey],
+  const monthMeetings = useMemo(
+    () => (meetings?.list ?? []).filter(m => m.date && new Date(m.date).getMonth() === month.getMonth() && new Date(m.date).getFullYear() === month.getFullYear()),
+    [meetings, month],
   );
+  const meetingsCapped = !!meetings && meetings.total > meetings.list.length;
 
-  // Upcoming meetings (next 7 days)
-  const upcomingMeetings = meetings
-    .filter(meeting => {
-      const meetingDate = new Date(meeting.date);
-      const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-      return meetingDate >= today && meetingDate <= nextWeek;
-    })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 5);
+  const step = (n: number) => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
 
   return (
-    <div className="pt-4 lg:pt-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Calendar</h1>
-          <p className="text-gray-600">Manage your meetings and schedule</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <div className="flex border border-gray-300 rounded-md">
-            {(['month', 'week', 'day'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setViewType(type)}
-                className={`px-3 py-2 text-sm font-medium capitalize ${
-                  viewType === type
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-700 hover:bg-gray-50'
-                } ${type === 'month' ? 'rounded-l-md' : type === 'day' ? 'rounded-r-md' : ''}`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-          <Button className="rounded-md">
-            <Plus className="h-4 w-4 mr-2" />
-            New Meeting
+    <div className="space-y-6 pt-4 lg:pt-6">
+      <PageHeader
+        eyebrow="Engage"
+        title="Calendar"
+        description="Tasks by due date and meetings by start time, in your own time zone."
+        actions={
+          <Button onClick={() => navigate('/crm/tasks?new=1')}>
+            <Plus className="h-4 w-4" aria-hidden="true" /> New task
           </Button>
+        }
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => step(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" aria-hidden="true" /></Button>
+          <Button variant="secondary" onClick={() => { const n = new Date(); setMonth(new Date(n.getFullYear(), n.getMonth(), 1)); }}>Today</Button>
+          <Button variant="secondary" onClick={() => step(1)} aria-label="Next month"><ChevronRight className="h-4 w-4" aria-hidden="true" /></Button>
+          <h2 className="ml-2 text-2xl font-semibold leading-8 text-ink-heading" data-testid="calendar-month">
+            {MONTHS[month.getMonth()]} {month.getFullYear()}
+          </h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-ctrl border border-line p-0.5 text-xs" role="group" aria-label="Calendar view">
+            <button type="button" aria-pressed="true" className="rounded px-3 py-1 font-semibold bg-brand-50 text-brand-700">Month</button>
+            <button type="button" disabled title="Week view is coming soon" className="cursor-not-allowed rounded px-3 py-1 text-ink-secondary">Week</button>
+            <button type="button" disabled title="Day view is coming soon" className="cursor-not-allowed rounded px-3 py-1 text-ink-secondary">Day</button>
+          </div>
+          <p className="text-xs text-ink-secondary">Week and day views are coming soon.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Calendar */}
-        <div className="lg:col-span-3">
-          <div className="bg-white rounded-lg border border-gray-200">
-            {/* Calendar Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </h2>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => navigateMonth('prev')}
-                  className="p-2 hover:bg-gray-100 rounded-md"
-                >
-                  <ChevronLeft className="h-5 w-5 text-gray-600" />
-                </button>
-                <button
-                  onClick={() => setCurrentDate(new Date())}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => navigateMonth('next')}
-                  className="p-2 hover:bg-gray-100 rounded-md"
-                >
-                  <ChevronRight className="h-5 w-5 text-gray-600" />
-                </button>
-              </div>
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="p-6">
-              {/* Day Headers */}
-              <div className="grid grid-cols-7 gap-1 mb-2">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
-                    {day}
-                  </div>
-                ))}
-              </div>
-
-              {/* Calendar Days */}
-              <div className="grid grid-cols-7 gap-1">
-                {days.map((day, index) => {
-                  const dayMeetings = getMeetingsForDate(day.date);
-                  const dayKey = localDay(day.date);
-                  const dayTasks = tasksByDay.get(dayKey) ?? [];
-                  const isToday = day.date.toDateString() === today.toDateString();
-                  const isSelected = selectedDate && day.date.toDateString() === selectedDate.toDateString();
-
-                  return (
-                    <div
-                      key={index}
-                      onClick={() => setSelectedDate(day.date)}
-                      className={`
-                        min-h-[100px] p-1 border border-gray-200 cursor-pointer hover:bg-gray-50 relative
-                        ${!day.isCurrentMonth ? 'text-gray-400 bg-gray-50' : ''}
-                        ${isToday ? 'bg-blue-50 border-blue-200' : ''}
-                        ${isSelected ? 'bg-blue-100 border-blue-300' : ''}
-                      `}
-                    >
-                      <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-600' : ''}`}>
-                        {day.day}
-                      </div>
-                      
-                      {/* Meeting indicators */}
-                      <div className="space-y-1">
-                        {dayMeetings.slice(0, 3).map((meeting, idx) => (
-                          <div
-                            key={meeting.id}
-                            className={`text-xs p-1 rounded truncate ${
-                              meeting.type === 'sales-call' 
-                                ? 'bg-green-100 text-green-800'
-                                : meeting.type === 'client-meeting'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            {meeting.title}
-                          </div>
-                        ))}
-                        {dayMeetings.length > 3 && (
-                          <div className="text-xs text-gray-500 font-medium">
-                            +{dayMeetings.length - 3} more
-                          </div>
-                        )}
-
-                        {/* Tasks due on this day. Overdue is styled distinctly
-                            because a red cell is the whole point of a calendar
-                            for someone catching up on slipped work. */}
-                        {dayTasks.slice(0, 3).map(task => {
-                          const taskOverdue = dayKey < todayKey && task.status !== 'completed';
-                          return (
-                            <div
-                              key={task.id}
-                              title={`${task.title}${task.assigned_to ? ` · ${task.assigned_to}` : ''}`}
-                              className={`truncate rounded p-1 text-xs ${
-                                task.status === 'completed'
-                                  ? 'bg-gray-100 text-gray-500 line-through'
-                                  : taskOverdue
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-indigo-100 text-indigo-800'
-                              }`}
-                            >
-                              {task.title}
-                            </div>
-                          );
-                        })}
-                        {dayTasks.length > 3 && (
-                          <div className="text-xs font-medium text-gray-500">
-                            +{dayTasks.length - 3} more
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Tasks due soon. Tasks are the only dated records this workspace
-              currently has, so this panel is what makes the calendar useful. */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="flex items-center text-lg font-semibold text-gray-900">
-                <CheckSquare className="mr-2 h-5 w-5" aria-hidden="true" />
-                Tasks due soon
-              </h3>
-              <Link to="/crm/tasks" className="text-sm text-brand-600 hover:underline">All tasks</Link>
-            </div>
-
-            {overdueCount > 0 && (
-              <Link
-                to="/crm/tasks"
-                className="mb-3 block rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 hover:bg-red-100"
-              >
-                {overdueCount} overdue {overdueCount === 1 ? 'task' : 'tasks'}
-              </Link>
-            )}
-
-            {tasksLoading && <p className="text-sm text-gray-500">Loading tasks…</p>}
-            {tasksError && <p className="text-sm text-red-700">{tasksError}</p>}
-
-            {!tasksLoading && !tasksError && upcomingTasks.length === 0 && (
-              <p className="text-sm text-gray-500">
-                {overdueCount > 0
-                  ? 'Nothing else due in the next 7 days.'
-                  : 'No tasks due in the next 7 days.'}
-              </p>
-            )}
-
-            <div className="space-y-3">
-              {upcomingTasks.map(task => (
-                <div key={task.id} className="rounded-lg border border-gray-200 p-3">
-                  <p className="text-sm font-medium text-gray-900">{task.title}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {(() => { const d = dateOnly(task.due_date); return d ? new Date(`${d}T00:00:00`).toLocaleDateString() : ''; })()}
-                    {task.assigned_to ? ` · ${task.assigned_to}` : ''}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Upcoming Meetings */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <Clock className="h-5 w-5 mr-2" />
-              Upcoming Meetings
-            </h3>
-            
-            {upcomingMeetings.length === 0 ? (
-              <p className="text-gray-500 text-sm">No upcoming meetings</p>
-            ) : (
-              <div className="space-y-3">
-                {upcomingMeetings.map(meeting => (
-                  <div key={meeting.id} className="border border-gray-200 rounded-lg p-3">
-                    <h4 className="font-medium text-gray-900 text-sm">{meeting.title}</h4>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {new Date(meeting.date).toLocaleDateString()} at{' '}
-                      {new Date(meeting.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? 's' : ''}
-                    </p>
-                    {meeting.relatedTo && (
-                      <p className="text-xs text-blue-600 mt-1">
-                        Related to: {getLeadName(meeting.relatedTo.id)}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quick Stats */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">This Month</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <CalendarIcon className="h-4 w-4 text-blue-600 mr-2" />
-                  <span className="text-sm text-gray-600">Total Meetings</span>
-                </div>
-                <span className="font-medium text-gray-900">{meetings.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <Users className="h-4 w-4 text-green-600 mr-2" />
-                  <span className="text-sm text-gray-600">Sales Calls</span>
-                </div>
-                <span className="font-medium text-gray-900">
-                  {meetings.filter(m => m.type === 'sales-call').length}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div className="flex items-center">
-                  <Video className="h-4 w-4 text-purple-600 mr-2" />
-                  <span className="text-sm text-gray-600">Client Meetings</span>
-                </div>
-                <span className="font-medium text-gray-900">
-                  {meetings.filter(m => m.type === 'client-meeting').length}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Meeting Actions */}
-          {selectedDate && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                {selectedDate.toLocaleDateString()}
-              </h3>
-              <div className="space-y-2">
-                <button className="w-full flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Schedule Meeting
-                </button>
-                <button className="w-full flex items-center justify-center px-3 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Block Time
-                </button>
-              </div>
-              
-              {/* Selected Date Meetings */}
-              {selectedDate && (() => {
-                const dayMeetings = getMeetingsForDate(selectedDate);
-                return dayMeetings.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <h4 className="text-sm font-medium text-gray-900 mb-2">
-                      Meetings ({dayMeetings.length})
-                    </h4>
-                    <div className="space-y-2">
-                      {dayMeetings.map(meeting => (
-                        <div key={meeting.id} className="text-sm p-2 bg-gray-50 rounded">
-                          <p className="font-medium">{meeting.title}</p>
-                          <p className="text-gray-600">
-                            {new Date(meeting.date).toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })} • {meeting.duration}min
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-3">
+          {tasksError && (
+            <EmptyState tone="error" title="Tasks could not load for these weeks" reason={tasksError}
+              action={<Button variant="secondary" onClick={() => setTasksRetry(k => k + 1)}>Try again</Button>} />
           )}
+          <Card padding="none" className="overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-line bg-surface-subtle">
+              {WEEKDAYS.map(d => <div key={d} className="p-2 text-center text-xs font-semibold text-ink-secondary">{d}</div>)}
+            </div>
+            <div className="grid grid-cols-7" aria-busy={taskDays === null && !tasksError}>
+              {days.map(date => {
+                const key = localDay(date);
+                const inMonth = date.getMonth() === month.getMonth();
+                const td = taskDays?.get(key);
+                const dm = meetingsByDay.get(key) ?? [];
+                const moreTasks = td ? td.total - td.tasks.length : 0;
+                const isToday = key === today;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSelected(key)}
+                    aria-pressed={selected === key}
+                    aria-label={`${fmtDay(key)}: ${td?.total ?? 0} tasks, ${dm.length} meetings`}
+                    data-testid={`day-${key}`}
+                    className={`flex min-h-[116px] flex-col gap-1 border-b border-r border-line p-2 text-left align-top focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 ${
+                      selected === key ? 'bg-brand-50' : inMonth ? 'bg-surface-panel hover:bg-surface-subtle' : 'bg-surface-subtle'
+                    }`}
+                  >
+                    <span className={`self-start text-xs font-semibold ${isToday ? 'rounded-full bg-brand-600 px-1.5 text-white' : inMonth ? 'text-ink' : 'text-ink-secondary'}`}>
+                      {date.getDate()}
+                    </span>
+                    {dm.slice(0, 2).map(m => (
+                      <span key={m.id} className="w-full truncate rounded px-1.5 py-0.5 text-xs bg-sky-50 text-sky-800" title={m.title}>
+                        {m.date ? `${fmtTime(m.date)} ` : ''}{m.title}
+                      </span>
+                    ))}
+                    {dm.length > 2 && <span className="text-xs text-ink-secondary">+{dm.length - 2} more meetings</span>}
+                    {td?.tasks.map(t => {
+                      const done = t.status === 'completed';
+                      const overdue = !done && key < today;
+                      return (
+                        <span
+                          key={t.id}
+                          title={`${t.title}${t.assigned_to ? ` · ${t.assigned_to}` : ''}`}
+                          className={`w-full truncate rounded px-1.5 py-0.5 text-xs ${
+                            done ? 'bg-surface-sunken text-ink-secondary line-through' : overdue ? 'bg-danger-100 text-danger-700' : 'bg-brand-100 text-brand-700'
+                          }`}
+                        >
+                          {t.title}
+                        </span>
+                      );
+                    })}
+                    {moreTasks > 0 && <span className="text-xs text-ink-secondary" data-testid={`more-${key}`}>+{moreTasks} more tasks</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-secondary">
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-brand-600" aria-hidden="true" />Open task</span>
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-danger-700" aria-hidden="true" />Overdue task</span>
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-ink-muted" aria-hidden="true" />Completed task</span>
+            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-sky-600" aria-hidden="true" />Meeting</span>
+            <span className="ml-auto">
+              {meetingsError
+                ? `Meetings could not load — ${meetingsError}`
+                : meetingsCapped
+                  ? `Showing the first ${meetings!.list.length} of ${meetings!.total.toLocaleString()} meetings in these weeks.`
+                  : 'Meetings come from the Meetings module, at their start time in your time zone.'}
+            </span>
+          </div>
         </div>
+
+        <aside className="space-y-4">
+          <Card>
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">Due in the next 7 days</h3>
+            {railError && <p className="mt-2 text-sm text-danger-700" role="alert">{railError}</p>}
+            {!railError && (!dueSoon || !summary) && <p className="mt-2 text-sm text-ink-muted">Loading tasks…</p>}
+            {dueSoon && summary && (
+              <>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge tone="brand">{dueSoon.total.toLocaleString()} open</Badge>
+                  <span className="text-xs text-ink-muted">{fmtDay(today)} – {fmtDay(localDay(addDays(new Date(), 6)))}</span>
+                </div>
+                {summary.overdue > 0 && (
+                  <Link to="/crm/tasks?bucket=overdue" className="mt-3 block rounded-card bg-danger-100 px-3 py-2 text-sm text-danger-700 hover:underline">
+                    {summary.overdue.toLocaleString()} overdue {summary.overdue === 1 ? 'task' : 'tasks'}
+                  </Link>
+                )}
+                {dueSoon.tasks.length === 0
+                  ? <p className="mt-3 text-sm text-ink-muted">No open task is due in the next 7 days.</p>
+                  : (
+                    <ul className="mt-3 divide-y divide-line">
+                      {dueSoon.tasks.map(t => (
+                        <li key={t.id} className="py-2">
+                          <p className="text-sm font-medium text-ink">{t.title}</p>
+                          <p className="text-xs text-ink-muted">{t.due_date ? fmtDay(t.due_date) : ''}{t.assigned_to ? ` · ${t.assigned_to}` : ''}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                {dueSoon.total > dueSoon.tasks.length && (
+                  <Link to="/crm/tasks?bucket=upcoming" className="mt-1 inline-block text-sm text-brand-600 hover:underline">All upcoming tasks</Link>
+                )}
+              </>
+            )}
+          </Card>
+
+          <Card>
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">Upcoming meetings</h3>
+            {upcomingError && <p className="mt-2 text-sm text-danger-700" role="alert">{upcomingError}</p>}
+            {!upcomingError && upcoming === null && <p className="mt-2 text-sm text-ink-muted">Loading meetings…</p>}
+            {upcoming && upcoming.length === 0 && (
+              <EmptyState className="mt-3" title="No meetings in the next 7 days"
+                reason="Meetings scheduled in the Meetings module appear here and on the calendar." />
+            )}
+            {upcoming && upcoming.length > 0 && (
+              <ul className="mt-3 divide-y divide-line">
+                {upcoming.map(m => (
+                  <li key={m.id} className="py-2">
+                    <Link to={`/crm/meetings/${encodeURIComponent(m.id)}`} className="text-sm font-medium text-ink hover:underline">{m.title}</Link>
+                    {m.date && <p className="text-xs text-ink-muted">{fmtDay(localDay(new Date(m.date)))} · {fmtTime(m.date)}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button variant="secondary" className="mt-3" onClick={() => navigate('/crm/meetings')}>Open Meetings</Button>
+          </Card>
+
+          <Card>
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">{MONTHS[month.getMonth()]} meetings</h3>
+            {meetings === null && !meetingsError && <p className="mt-2 text-sm text-ink-muted">Loading meetings…</p>}
+            {meetings && (
+              <>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-2xl font-bold text-ink" data-testid="month-meetings">{monthMeetings.length}</p>
+                    <p className="text-xs text-ink-muted">Scheduled</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-ink">{monthMeetings.filter(m => m.related_to_id).length}</p>
+                    <p className="text-xs text-ink-muted">Linked to a record</p>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-ink-muted">
+                  {meetingsCapped
+                    ? `Counted from the first ${meetings.list.length} meetings loaded for these weeks — not every meeting.`
+                    : `Counted from meetings starting in ${MONTHS[month.getMonth()]}, in your time zone.`}
+                </p>
+              </>
+            )}
+          </Card>
+
+          <Card>
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">{selected ? fmtDay(selected) : 'Select a day'}</h3>
+            {!selected && <p className="mt-2 text-sm text-ink-muted">Choose a day on the calendar to see everything due then.</p>}
+            {selected && (
+              <>
+                {dayError && <p className="mt-2 text-sm text-danger-700" role="alert">{dayError}</p>}
+                {!dayError && dayTasks === null && <p className="mt-2 text-sm text-ink-muted">Loading…</p>}
+                {dayTasks && (
+                  <>
+                    <p className="mt-2 text-xs text-ink-muted" data-testid="selected-summary">
+                      {dayTasks.total} {dayTasks.total === 1 ? 'task' : 'tasks'} · {(meetingsByDay.get(selected) ?? []).length} meetings
+                    </p>
+                    <ul className="mt-2 divide-y divide-line">
+                      {dayTasks.tasks.map(t => (
+                        <li key={t.id} className="py-2">
+                          <p className={`text-sm font-medium ${t.status === 'completed' ? 'text-ink-muted line-through' : 'text-ink'}`}>{t.title}</p>
+                          <p className="text-xs text-ink-muted">{[t.status, t.priority, t.assigned_to].filter(Boolean).join(' · ')}</p>
+                        </li>
+                      ))}
+                    </ul>
+                    {dayTasks.total > dayTasks.tasks.length && (
+                      <p className="text-xs text-ink-muted">Showing {dayTasks.tasks.length} of {dayTasks.total}.</p>
+                    )}
+                  </>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button onClick={() => navigate(`/crm/tasks?new=1&due=${selected}`)}>New task</Button>
+                  <Button variant="secondary" onClick={() => navigate('/crm/meetings')}>Go to Meetings</Button>
+                </div>
+                <p className="mt-2 text-xs text-ink-muted">A new task opens with this day as its due date.</p>
+              </>
+            )}
+          </Card>
+        </aside>
       </div>
+
+      {summary && summary.no_date > 0 && (
+        <div className="flex items-center gap-2.5 rounded-card border border-line bg-surface-panel p-3 text-sm text-ink-muted" data-testid="undated-note">
+          <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {summary.no_date.toLocaleString()} open {summary.no_date === 1 ? 'task has' : 'tasks have'} no due date, so {summary.no_date === 1 ? 'it is' : 'they are'} not on the calendar.
+          <Link to="/crm/tasks" className="ml-auto text-brand-600 hover:underline">Open Tasks</Link>
+        </div>
+      )}
     </div>
   );
 };

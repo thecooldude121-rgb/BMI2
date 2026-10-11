@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   getTasks,
+  getTasksSummary,
+  getTasksByDay,
   getTaskById,
   createTask,
   updateTask,
@@ -12,6 +14,9 @@ const router = Router();
 
 router.use(protect);
 router.get('/', getTasks);
+// Before '/:id', or Express reads 'summary' as a task id.
+router.get('/summary', getTasksSummary);
+router.get('/by-day', getTasksByDay);
 router.get('/:id', getTaskById);
 router.post('/', createTask);
 router.put('/:id', updateTask);

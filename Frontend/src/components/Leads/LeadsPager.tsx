@@ -16,6 +16,8 @@ export interface LeadsPagerProps {
   shown: number;
   loading?: boolean;
   onPage: (page: number) => void;
+  /** What the rows are, plural ("leads" by default; Tasks reuses this pager). */
+  noun?: string;
 }
 
 /** 1 … p-1 p p+1 … last, with gaps marked, never more than 7 slots. */
@@ -31,13 +33,13 @@ export function pageWindow(page: number, pageCount: number): (number | 'gap')[] 
   return out;
 }
 
-const LeadsPager: React.FC<LeadsPagerProps> = ({ page, pageCount, total, pageSize, shown, loading, onPage }) => {
+const LeadsPager: React.FC<LeadsPagerProps> = ({ page, pageCount, total, pageSize, shown, loading, onPage, noun = 'leads' }) => {
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const last = total === 0 ? 0 : first + shown - 1;
   return (
-    <nav aria-label="Leads pages" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3 py-3">
+    <nav aria-label={`${noun[0].toUpperCase()}${noun.slice(1)} pages`} className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3 py-3">
       <p className="text-xs text-ink-muted" data-testid="leads-showing">
-        Showing {first.toLocaleString()}–{last.toLocaleString()} of {total.toLocaleString()} leads · {pageSize} rows per page
+        Showing {first.toLocaleString()}–{last.toLocaleString()} of {total.toLocaleString()} {noun} · {pageSize} rows per page
       </p>
       {pageCount > 1 && (
         <div className="flex items-center gap-1.5">
