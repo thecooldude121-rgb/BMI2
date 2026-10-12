@@ -1673,6 +1673,40 @@ old constraint, which fails the shared-name test.
     - **Still open:** the Activities frame (64:17786) side-by-side visual pass, with Tasks / Calendar's, when
       Figma is reconnected (it remained disconnected on 2026-10-12); the record pickers here and on Tasks
       still list the first 200 records (server search is slice 6).
+  - **SLICE 5 PLAN — APPROVED IN FULL by Venkat 2026-10-12.** 5a deals summary + main dashboard; 5b
+    Reports; 5c Forecast + Team performance; 5d REDIRECT /dashboard -> /crm/dashboard and /analytics ->
+    Reports (both confirmed duplicates; not rebuilt). Each sub-slice gated and reported separately.
+    **Decided with it:**
+    - **Currency:** sum only genuinely converted USD (`TRUSTED_USD`); count and label the rest "not in
+      USD"; no server-side exchange rates — the Deals / Accounts rule.
+    - **Win rate (5a and 5b): won / (won + lost), by stage_type, all pipelines, ALL TIME, computed on the
+      server, sample size shown** — the definition already in ReportsPage's stats comment. The Sales
+      Intelligence Guide's trailing-365-day figure stays SEPARATE and is labelled as such ("closed in the
+      last 365 days").
+    - **No weighted-forecast figure anywhere yet.** When one is built, deals with no probability are
+      EXCLUDED from the weighted value but still COUNTED in the deal count (the `weightedProbability` rule).
+  - **SLICE 5a DONE (2026-10-12) — `GET /deals/summary` + the main dashboard on server figures.**
+    - **`GET /deals/summary?today=`** (`dealsController.getDealsSummary`): total (incl. `unstaged`), open /
+      won (count, `value_usd`, `unconverted`) and lost by stage_type across every pipeline; `win_rate`
+      {value, won, lost, sample_size} (null when nothing is decided); `closing_soon` = open deals closing in
+      the viewer's next 7 calendar days (today .. today + 6); `by_stage` for every pipeline in pipeline
+      then position order. Test and archived excluded. `GET /deals` gained `stage_type=open|won|lost`.
+    - **`/crm/dashboard`**: tiles are the server totals (contacts total, accounts from the summary, deals and
+      open USD with "N not in USD"); Pipeline by Stage is the server breakdown (removing the stage-order memo
+      that went stale after pipelines loaded); win rate shown with its sample and "all time, all pipelines";
+      **Top Deals** = `GET /deals?stage_type=open&sort=base_amount_usd&dir=desc&limit=3` (a large OLD deal
+      was invisible past the newest 500); **Upcoming Meetings** = real meetings from the Meetings module, next
+      7 days (it searched the 20 newest activities); each panel loads and fails on its own, "—" never 0.
+      `SalesIntelligenceGuide`'s conversion evidence now names its window.
+    - **Live effect (read-only preview 2026-10-12):** Open Pipeline $1.15M -> $1.09M (the old figure added
+      native amounts as dollars), 0 open deals not in USD, win rate 50% (1 of 2 decided).
+    - Tests: `roundTrip.dealsSummary.test.ts` (8, incl. a second pipeline and 10,000 deals vs SQL),
+      `CRMDashboard.test.tsx` (7). Mutation-tested: 6 backend + 4 frontend, all killed. E2E on
+      `bmi_crm_iso_test` via the sidebar: 527 deals / 523 open / $5.5M + 1 not in USD / 75% (3 of 4) / the
+      400-day-old $5M deal first in Top Deals — all equal to SQL; seed removed and re-counted.
+    - **For 5d:** DataContext still fetches 500 of every table on every CRM page; its remaining readers are
+      Analytics (to be redirected), the dead CompaniesPage, an unused destructure in DealsKanbanPage and
+      `addDeal` in the deal form — so 5d can retire those loads.
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary

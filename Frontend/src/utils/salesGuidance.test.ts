@@ -70,6 +70,8 @@ describe('conversionProblem — never compares a number with itself', () => {
     expect(p!.evidence).toContain('3 won, 9 lost');
     expect(p!.evidence).toContain('40%');
     expect(p!.evidence).toContain('40 closures');
+    // Named as the trailing window, so it cannot be read as the dashboard's all-time win rate.
+    expect(p!.evidence).toContain('last 365 days');
   });
 
   it('IS SILENT when the win rate fell back to the workspace figure', () => {

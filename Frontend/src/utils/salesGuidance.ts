@@ -117,8 +117,12 @@ export function conversionProblem(row: ProjectionRow): Problem | null {
   return {
     kind: 'conversion',
     evidence:
-      `Winning ${pct(mine.value)} of closed deals (${mine.won} won, ${mine.lost} lost) `
-      + `against the workspace's ${pct(ws.value)} over ${ws.sample_size} closures.`,
+      // "Last 365 days" is part of the claim: this is the projection's rate
+      // (closures with a recorded close time, trailing 365 days), NOT the
+      // dashboard's all-time won / (won + lost). Two different questions, so
+      // the window is named wherever this figure is shown (decided 2026-10-12).
+      `Winning ${pct(mine.value)} of deals closed in the last 365 days (${mine.won} won, ${mine.lost} lost) `
+      + `against the workspace's ${pct(ws.value)} over ${ws.sample_size} closures in the same window.`,
   };
 }
 

@@ -261,6 +261,8 @@ export interface DealsPageQuery {
   assigned_to_user_id?: string | number;
   /** Owner by NAME (resolved user or legacy free text). */
   assigned_to?: string;
+  /** Open / won / lost by stage TYPE, across pipelines (slice 5a). */
+  stage_type?: 'open' | 'won' | 'lost';
   sort?: 'created_at' | 'updated_at' | 'name' | 'value' | 'base_amount_usd' | 'probability' | 'expected_close_date' | 'stage';
   dir?: 'asc' | 'desc';
   limit?: number;
@@ -279,6 +281,36 @@ export async function fetchDealsPage(q: DealsPageQuery): Promise<DealsPage> {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.message || `Failed to load deals (HTTP ${res.status})`);
   return { deals: json.data ?? [], total: json.total ?? 0, limit: json.limit ?? 0, offset: json.offset ?? 0 };
+}
+
+/** A USD total: only trustworthy base amounts are summed; `unconverted` deals are counted, not added. */
+export interface UsdTotal { count: number; value_usd: number; unconverted: number }
+
+/**
+ * GET /deals/summary (slice 5a) — workspace-wide, all pipelines, test and
+ * archived excluded. Win rate is won / (won + lost), all time, with its sample;
+ * NOT the Sales Intelligence Guide's trailing-365-day figure.
+ */
+export interface DealsSummary {
+  as_of: string;
+  total: number;
+  /** Deals whose stage cannot be resolved; included in total, in no bucket. */
+  unstaged: number;
+  open: UsdTotal;
+  won: UsdTotal;
+  lost: { count: number };
+  win_rate: { value: number | null; won: number; lost: number; sample_size: number };
+  /** Open deals closing in the viewer's next `days` calendar days. */
+  closing_soon: UsdTotal & { days: number };
+  by_stage: (UsdTotal & { pipeline_id: string; pipeline_name: string; stage_id: string; slug: string; name: string; position: number; stage_type: 'open' | 'won' | 'lost' })[];
+}
+
+/** `today` is the VIEWER's local day (utils/dates.localDay). */
+export async function fetchDealsSummary(today: string): Promise<DealsSummary> {
+  const res = await fetch(`${API_BASE}/deals/summary?today=${encodeURIComponent(today)}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load deal totals (HTTP ${res.status})`);
+  return json.data as DealsSummary;
 }
 
 export interface StageSummaryRow {
