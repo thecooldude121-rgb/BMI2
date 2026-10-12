@@ -2501,28 +2501,26 @@ empty body, while an assertion that dumps `res.body` shows the envelope. That re
 failing `roundTrip.pipelineStages` "bulk: a selection spanning two pipelines…" on `POST /deals/bulk` expecting 200.
 The file passed 24/24 alone and the next full run 829/829; zero `rt-` tenants orphaned.
 
-**ROOT CAUSE FOUND, 2026-10-13 — a local-port collision on the developer machine, not the code and not the
-pool.** supertest calls `app.listen(0)`, which binds `::` (all interfaces) on a random port from macOS's range
-49152-65535, then requests `http://127.0.0.1:<port>`. On macOS a process bound to `127.0.0.1:<port>` itself takes
-that connection in preference to the `::` listener, so when the random port happens to equal a port another local
-app holds on 127.0.0.1, the request goes to THAT app. Proven directly, not inferred:
-  - the **VS Code helper** (`Code Helper`, 127.0.0.1:63830 at the time) answers ANY request with the exact
-    envelope `{"type":"error","error":{"type":"authentication_error",...},"request_id":null}` and status 401 —
-    every captured body;
-  - **pgAdmin 4** (127.0.0.1:49284) answers with an HTML 401 page, which a JSON client reads as `{}` — the
-    bodyless-401 variant;
-  - a throwaway Node server bound like supertest on 63830 / 49284 never received a 127.0.0.1 request (the other
-    app did), while `[::1]` reached it.
-This explains every odd property: an arbitrary test each time (whichever request drew the port), byte-identical
-bodies, only in long full runs (thousands of fresh ports drawn), passing on retry, following the suite across
-worktrees, and never in CI (no VS Code or pgAdmin there). Listeners that accept and never answer would also
+**ROOT CAUSE FOUND AND FIXED, 2026-10-13 (fix approved by Venkat).** A local-port collision on the
+developer machine, not the code and not the pool. supertest's `request(app)` with a bare Express app calls
+`app.listen(0)` per request — a random port bound on `::` — then requests `http://127.0.0.1:<port>`. On macOS
+a process already bound to `127.0.0.1:<port>` takes that connection: the VS Code helper (127.0.0.1:63830)
+answers with exactly the captured `authentication_error` envelope and a 401; pgAdmin 4 (127.0.0.1:49284)
+answers with an HTML 401 page, read as `{}` — the bodyless variant. Proven by binding a throwaway server the
+way supertest does on those ports: 127.0.0.1 requests reached VS Code / pgAdmin, `[::1]` reached it. That
+explains every property — an arbitrary test, byte-identical bodies, only in long runs, passing on retry,
+following the suite across worktrees, never in CI. Listeners that accept and never answer would also
 explain the ~30-second timeouts.
-**The fix (NOT yet applied — diagnosis only, as asked):** have the tests use ONE server per test file bound to
-`127.0.0.1` explicitly (`app.listen(0, '127.0.0.1')`, passed to supertest as `request(server)`), so the OS can
-only hand out a 127.0.0.1 port nobody else holds — or make supertest call the address the server actually bound.
-Either is a test-harness change in `src/__tests__/helpers.ts`; no production code is involved.
+**The fix: `src/__tests__/loopbackServer.ts`.** `helpers.app` (and tenantIsolation's own app) is ONE server per
+test file listening on `127.0.0.1:0`; supertest reuses it, and the OS cannot assign a 127.0.0.1 port another
+process holds. `roundTrip.loopbackServer.test.ts` pins the binding and the EADDRINUSE guarantee. Measured with
+1,000 decoy listeners answering the envelope on random 127.0.0.1 ports: `request(bareApp)` was answered by a
+decoy **5 times in 20,000** requests (the allocator mostly reuses a just-freed port — why it surfaced only now
+and then); the loopback server **0 in 20,000**. Three consecutive full runs with VS Code and pgAdmin holding
+their ports: 835/835 each, zero authentication failures.
+**If an unexplained 401 appears again, it is NOT this — debug it.** (Superseded guidance follows.)
 
-**Practical guidance until then: retry, do not debug.** A single unexplained 401 in a full run whose
+**Practical guidance (before the fix): retry, do not debug.** A single unexplained 401 in a full run whose
 file then passes alone is this, and re-running is the correct response. Do not add retries
 or timeouts to the suite to paper over it — that would mask a real auth regression later.
 Stop here unless it starts failing on re-run too, which would be a different bug.
