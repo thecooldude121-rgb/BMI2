@@ -177,10 +177,19 @@ export const getLeadSummary = async (req: AuthRequest, res: Response, next: Next
     );
     const weeklyLeads = week.rows.reduce((t, x) => t + x.n, 0);
     const top = week.rows[0];
+    // Every stage's count (slice 5b: the Reports funnel counted 500 leads in
+    // the browser). Only stages that occur appear; absent = 0.
+    const stages = await pool.query(
+      `SELECT l.stage, COUNT(*)::int AS n FROM leads l WHERE ${built.where} GROUP BY l.stage`,
+      built.params,
+    );
+    const by_stage: Record<string, number> = {};
+    for (const row of stages.rows) by_stage[row.stage ?? 'none'] = row.n;
     res.json({
       success: true,
       data: {
         ...r.rows[0],
+        by_stage,
         source_quality_week: {
           top_source: top ? top.source : null,
           top_source_avg_score: top ? Math.round(Number(top.avg)) : 0,

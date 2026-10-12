@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getUsers, deactivateUser, reactivateUser, changeUserRole, changeUserManager } from '../controllers/usersController';
 import { protect, requireRole, DESTRUCTIVE_ACTION_ROLES } from '../middleware/auth';
+import { getTeamPerformance } from '../controllers/teamPerformanceController';
 
 const router = Router();
 
@@ -8,6 +9,9 @@ router.use(protect);
 
 // Listing the workspace's people is not privileged — assignment pickers need it.
 router.get('/', getUsers);
+// Per-person deal rollups for the Team pages (slice 5c). Deals are workspace-
+// wide, like GET /deals; quotas stay behind GET /quotas and its read scoping.
+router.get('/performance', getTeamPerformance);
 
 // Changing someone's access is. Same requireRole as the rest of the API.
 router.post('/:id/deactivate', requireRole(...DESTRUCTIVE_ACTION_ROLES), deactivateUser);

@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchMembers, WorkspaceMember } from '../utils/usersApi';
-import {
-  fetchPipelines, buildStageLookup, outcomeOf, EMPTY_STAGE_LOOKUP, StageLookup,
-} from '../utils/pipelinesApi';
 
 /**
  * Per-person sales rollups for the Team pages.
@@ -18,6 +15,15 @@ import {
  *   - `users.manager_id`            — migration 041 (the reporting line)
  *   - `quotas.user_id`              — migration 042 (quotas keyed on a person)
  *   - `deals.assigned_to_user_id`   — migration 039 (ownership as a reference)
+ *
+ * SLICE 5c (2026-10-13): THE DEAL FIGURES ARE THE SERVER'S. This hook fetched
+ * the 500 newest deals and summed native amounts across currencies, so past
+ * 500 every person's numbers were silently partial — next to real employees'
+ * names. Now GET /users/performance returns each person's open / won / lost
+ * by stage_type, in trusted USD with the rest counted as "not in USD", and
+ * the win rate is won / (won + lost), all time (the 5a definition). Quotas
+ * still come from GET /quotas, whose reads are scoped to the reporting line;
+ * attainment is computed only for a USD quota, since won figures are USD.
  *
  * WHAT IT REFUSES TO DO
  * Every figure here is computed from a fetched row or is absent. There is no
@@ -38,47 +44,40 @@ function authHeaders(): HeadersInit {
   };
 }
 
-/**
- * High enough not to be reached at current volumes (25 deals), low enough not
- * to pull the table into the browser — the same value and the same reasoning as
- * `LIST_LIMIT` in useDashboardData.
- *
- * `truncated` below is what makes this honest rather than merely convenient,
- * and it matters MORE here than on the dashboard: these are per-person numbers
- * next to real employees' names, so a silently understated pipeline is a wrong
- * number in a review conversation. The real fix is a server-side aggregate
- * endpoint (`GET /users/performance`), which is a backend change and so a
- * different unit of work.
- */
-const DEAL_LIMIT = 500;
-
-export interface RawDeal {
-  id: string;
-  name?: string | null;
-  company_name?: string | null;
-  value: number | string | null;
-  stage: string | null;
-  pipeline_id?: string | null;
-  expected_close_date?: string | null;
-  probability?: number | null;
-  assigned_to_user_id?: number | string | null;
-  assigned_to?: string | null;
-}
-
 interface RawQuota {
   user_id: number | string;
   period_label: string;
   quota_amount: number | string;
+  currency?: string | null;
 }
+
+interface ServerTotals { count: number; value_usd: number; unconverted: number }
+interface ServerRollup {
+  open: ServerTotals; won: ServerTotals; lost: { count: number };
+  win_rate: { value: number | null; won: number; lost: number; sample_size: number };
+}
+
+/** "$12K", plus "+ N not in USD" when some deals had no USD amount. */
+export const withUnconverted = (usdText: string, unconverted: number): string =>
+  unconverted > 0 ? `${usdText} + ${unconverted} not in USD` : usdText;
+
+/** A quota in its own currency — "$" only when it IS USD. */
+export const quotaText = (quota: number, currency: string | null, usd: (n: number) => string): string =>
+  currency === 'USD' ? usd(quota)
+  : currency ? `${currency} ${quota.toLocaleString()}`
+  : `${quota.toLocaleString()} · currency not recorded`;
 
 /** One person's numbers. Every field is fetched-or-null; none is defaulted. */
 export interface MemberPerformance {
   member: WorkspaceMember;
-  /** Open deals owned by this person — count and summed value. */
+  /** Open deals owned by this person — count and summed TRUSTED USD value. */
   openCount: number;
   openValue: number;
+  /** Open deals whose amount is not in USD (counted, never added). */
+  openUnconverted: number;
   wonCount: number;
   wonValue: number;
+  wonUnconverted: number;
   lostCount: number;
   /**
    * won / (won + lost), or NULL when they have closed nothing at all. Null is
@@ -88,22 +87,16 @@ export interface MemberPerformance {
   winRate: number | null;
   /** NULL when no quota row exists for the period — not 0. */
   quota: number | null;
+  /** The quota's currency (ISO code), or null when not recorded. */
+  quotaCurrency: string | null;
   /**
    * wonValue / quota as a percentage, or NULL when there is no quota to measure
-   * against. Never Infinity: a zero quota yields null, because "attained
-   * infinitely" is not a number to show a person.
+   * against — or when the quota is not in USD, since wonValue is USD and this
+   * server holds no exchange rates. Never Infinity: a zero quota yields null.
    */
   attainment: number | null;
   /** Direct reports, resolved from the real `manager_id` column (041). */
   directReports: WorkspaceMember[];
-  /**
-   * This person's OWN deals, carried so the member detail page can list them
-   * instead of the invented `DEALS` fixture it used to render. Aggregates alone
-   * were not enough: a page that shows a count but invents the rows behind it
-   * is the hybrid case CLAUDE.md lesson 15 warns about — real headline numbers
-   * vouching for fabricated detail.
-   */
-  deals: RawDeal[];
 }
 
 export interface TeamPerformance {
@@ -113,7 +106,9 @@ export interface TeamPerformance {
     headcount: number;
     openCount: number;
     openValue: number;
+    openUnconverted: number;
     wonValue: number;
+    wonUnconverted: number;
     /** Team win rate over ALL closed deals, not a mean of per-rep rates. */
     winRate: number | null;
     /** Sum of entered quotas, or NULL when nobody has one. */
@@ -132,12 +127,10 @@ export interface TeamPerformance {
    * say why. That silent disagreement between two pages is the defect this
    * project has hit repeatedly; this is the honest version.
    */
-  unattributed: { count: number; value: number; names: string[] };
+  unattributed: { count: number; value: number; unconverted: number; names: string[] };
   loading: boolean;
   /** Distinguishes "backend unreachable" from "a genuinely empty workspace". */
   error: string | null;
-  /** True when a list came back exactly at its limit, so sums are lower bounds. */
-  truncated: boolean;
   /** The quota period these numbers are measured against, e.g. "Q3 2026". */
   period: string;
   reload: () => void;
@@ -187,12 +180,11 @@ export function useTeamPerformance(
   opts: TeamPerformanceOptions = {},
 ): TeamPerformance {
   const [members, setMembers]   = useState<WorkspaceMember[]>([]);
-  const [deals, setDeals]       = useState<RawDeal[]>([]);
+  const [rollups, setRollups]   = useState<Map<string, ServerRollup>>(new Map());
+  const [orphans, setOrphans]   = useState<(ServerRollup & { names: string[] }) | null>(null);
   const [quotas, setQuotas]     = useState<RawQuota[]>([]);
-  const [lookup, setLookup]     = useState<StageLookup>(() => EMPTY_STAGE_LOOKUP);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  const [truncated, setTruncated] = useState(false);
   const [token, setToken]       = useState(0);
 
   const reload = useCallback(() => setToken(n => n + 1), []);
@@ -211,16 +203,15 @@ export function useTeamPerformance(
       // allSettled, not all: one failing endpoint should degrade one column,
       // not blank the page. A partial page that says what failed is more
       // useful than an error screen.
-      const [membersRes, dealsRes, quotasRes, pipelinesRes] = await Promise.allSettled([
+      const [membersRes, perfRes, quotasRes] = await Promise.allSettled([
         // Reuse a roster the caller already has; only fetch when there is none.
         suppliedMembers ? Promise.resolve(suppliedMembers) : fetchMembers(true),
-        fetch(`${API_BASE}/deals?limit=${DEAL_LIMIT}`, { headers: authHeaders() })
-          .then(r => { if (!r.ok) throw new Error(`deals ${r.status}`); return r.json(); })
-          .then(j => (j.success ? asList<RawDeal>(j.data) : [])),
+        fetch(`${API_BASE}/users/performance`, { headers: authHeaders() })
+          .then(r => { if (!r.ok) throw new Error(`performance ${r.status}`); return r.json(); })
+          .then(j => (j && j.success && j.data ? j.data : { members: [], unattributed: null })),
         fetch(`${API_BASE}/quotas?period=${encodeURIComponent(period)}`, { headers: authHeaders() })
           .then(r => { if (!r.ok) throw new Error(`quotas ${r.status}`); return r.json(); })
           .then(j => (j.success ? asList<RawQuota>(j.data) : [])),
-        fetchPipelines(),
       ]);
 
       if (!active) return;
@@ -230,44 +221,14 @@ export function useTeamPerformance(
       if (membersRes.status === 'fulfilled') setMembers(asList<WorkspaceMember>(membersRes.value));
       else { setMembers([]); failed.push('the team roster'); }
 
-      if (dealsRes.status === 'fulfilled') {
-        setDeals(dealsRes.value);
-        setTruncated(dealsRes.value.length >= DEAL_LIMIT);
-      } else { setDeals([]); setTruncated(false); failed.push('deals'); }
+      if (perfRes.status === 'fulfilled') {
+        const rows = asList<ServerRollup & { user_id: number | string }>(perfRes.value.members);
+        setRollups(new Map(rows.map(r => [String(r.user_id), r])));
+        setOrphans(perfRes.value.unattributed ?? null);
+      } else { setRollups(new Map()); setOrphans(null); failed.push('deal totals'); }
 
       if (quotasRes.status === 'fulfilled') setQuotas(quotasRes.value);
       else { setQuotas([]); failed.push('quotas'); }
-
-      /*
-       * The stage lookup decides won/lost. Without it every deal classifies as
-       * open, which would silently zero every win rate — so a pipeline failure
-       * is reported rather than absorbed.
-       *
-       * BUILT EAGERLY, INSIDE THE TRY, and that is not a style choice. `setLookup`
-       * stores a function, so it must be set through a `() => value` wrapper —
-       * but React treats that wrapper as a lazy UPDATER and calls it during the
-       * state update. Building the lookup inside it therefore ran
-       * `buildStageLookup` inside React's reducer, where a throw escapes this
-       * error handling entirely and takes the whole page down instead of
-       * degrading one column. A malformed payload did exactly that.
-       *
-       * Found by TeamManagement's existing test suite when this hook was added
-       * to that page, not by review.
-       */
-      let nextLookup: StageLookup = EMPTY_STAGE_LOOKUP;
-      if (pipelinesRes.status === 'fulfilled') {
-        try {
-          nextLookup = buildStageLookup(asList(pipelinesRes.value));
-        } catch {
-          // A response that is not the expected shape. Unresolvable stages
-          // count as open, which understates a win rate rather than inflating
-          // one — the same direction `outcomeOf` already fails in.
-          failed.push('pipeline stages');
-        }
-      } else {
-        failed.push('pipeline stages');
-      }
-      setLookup(() => nextLookup);
 
       setError(failed.length ? `Could not load ${failed.join(', ')}.` : null);
       setLoading(false);
@@ -278,87 +239,72 @@ export function useTeamPerformance(
   }, [period, token, suppliedMembers]);
 
   return useMemo(() => {
-    const outcome = outcomeOf(lookup);
-
-    const quotaFor = (memberId: string): number | null => {
-      const row = quotas.find(q => String(q.user_id) === String(memberId));
-      return row ? num(row.quota_amount) : null;
-    };
+    const quotaFor = (memberId: string): RawQuota | null =>
+      quotas.find(q => String(q.user_id) === String(memberId)) ?? null;
 
     // Reports are resolved from the real column, and by id — never by matching
     // a manager's display name, which is what the deleted fixture did.
     const reportsOf = (memberId: string) =>
       members.filter(m => m.managerId != null && String(m.managerId) === String(memberId));
 
-    const byOwner = new Map<string, RawDeal[]>();
-    const orphans: RawDeal[] = [];
-    for (const d of deals) {
-      const owner = d.assigned_to_user_id;
-      if (owner == null || String(owner) === '') { orphans.push(d); continue; }
-      const key = String(owner);
-      const bucket = byOwner.get(key);
-      if (bucket) bucket.push(d); else byOwner.set(key, [d]);
-    }
-
     const rows: MemberPerformance[] = members.map(member => {
-      const mine = byOwner.get(String(member.id)) ?? [];
-
-      let openCount = 0, openValue = 0, wonCount = 0, wonValue = 0, lostCount = 0;
-      for (const d of mine) {
-        const v = num(d.value);
-        switch (outcome({ stage: d.stage, pipeline_id: d.pipeline_id })) {
-          case 'won':  wonCount++;  wonValue += v; break;
-          case 'lost': lostCount++;                break;
-          default:     openCount++; openValue += v;
-        }
-      }
-
-      const closed = wonCount + lostCount;
-      const quota  = quotaFor(member.id);
-
+      const r = rollups.get(String(member.id));
+      const q = quotaFor(member.id);
+      const quota = q ? num(q.quota_amount) : null;
+      const quotaCurrency = q?.currency ? String(q.currency).toUpperCase() : null;
+      const wonValue = r?.won.value_usd ?? 0;
       return {
         member,
-        openCount, openValue, wonCount, wonValue, lostCount,
+        openCount: r?.open.count ?? 0,
+        openValue: r?.open.value_usd ?? 0,
+        openUnconverted: r?.open.unconverted ?? 0,
+        wonCount: r?.won.count ?? 0,
+        wonValue,
+        wonUnconverted: r?.won.unconverted ?? 0,
+        lostCount: r?.lost.count ?? 0,
         // Null, not 0, when nothing has closed — see the interface.
-        winRate: closed > 0 ? Math.round((wonCount / closed) * 100) : null,
+        winRate: r && r.win_rate.value !== null ? Math.round(r.win_rate.value * 100) : null,
         quota,
-        // A zero quota yields null rather than Infinity or a huge percentage.
-        attainment: quota != null && quota > 0 ? Math.round((wonValue / quota) * 100) : null,
+        quotaCurrency,
+        // USD won against a USD quota only; a zero quota yields null.
+        attainment: quota != null && quota > 0 && quotaCurrency === 'USD' ? Math.round((wonValue / quota) * 100) : null,
         directReports: reportsOf(member.id),
-        deals: mine,
       };
     });
 
-    const openCount = rows.reduce((s, r) => s + r.openCount, 0);
-    const openValue = rows.reduce((s, r) => s + r.openValue, 0);
-    const wonValue  = rows.reduce((s, r) => s + r.wonValue, 0);
-    const wonCount  = rows.reduce((s, r) => s + r.wonCount, 0);
-    const lostCount = rows.reduce((s, r) => s + r.lostCount, 0);
+    const sum = (f: (r: MemberPerformance) => number) => rows.reduce((t, r) => t + f(r), 0);
+    const wonCount = sum(r => r.wonCount);
+    const lostCount = sum(r => r.lostCount);
+    const wonValue = sum(r => r.wonValue);
     const withQuota = rows.filter(r => r.quota != null);
-    // Null when nobody has a quota — summing to 0 would read as "target: zero".
-    const quotaSum  = withQuota.length ? withQuota.reduce((s, r) => s + (r.quota ?? 0), 0) : null;
+    // Team attainment only when every quota is in USD; null when nobody has one
+    // (summing to 0 would read as "target: zero").
+    const usdQuotas = withQuota.every(r => r.quotaCurrency === 'USD');
+    const quotaSum  = withQuota.length ? withQuota.reduce((t, r) => t + (r.quota ?? 0), 0) : null;
     const teamClosed = wonCount + lostCount;
 
     return {
       members: rows,
       totals: {
         headcount: members.length,
-        openCount, openValue, wonValue,
+        openCount: sum(r => r.openCount),
+        openValue: sum(r => r.openValue),
+        openUnconverted: sum(r => r.openUnconverted),
+        wonValue,
+        wonUnconverted: sum(r => r.wonUnconverted),
         winRate: teamClosed > 0 ? Math.round((wonCount / teamClosed) * 100) : null,
         quota: quotaSum,
-        attainment: quotaSum != null && quotaSum > 0 ? Math.round((wonValue / quotaSum) * 100) : null,
+        attainment: quotaSum != null && quotaSum > 0 && usdQuotas ? Math.round((wonValue / quotaSum) * 100) : null,
         membersWithQuota: withQuota.length,
       },
       unattributed: {
-        count: orphans.length,
-        value: orphans.reduce((s, d) => s + num(d.value), 0),
-        // The names carried on unowned deals, so the caption can say WHOSE
-        // attribution is missing rather than only how many.
-        names: Array.from(new Set(
-          orphans.map(d => (d.assigned_to ?? '').trim()).filter(Boolean),
-        )).sort(),
+        count: orphans ? orphans.open.count + orphans.won.count + orphans.lost.count : 0,
+        // Trusted USD over the unowned OPEN and WON deals (lost carries no value).
+        value: orphans ? orphans.open.value_usd + orphans.won.value_usd : 0,
+        unconverted: orphans ? orphans.open.unconverted + orphans.won.unconverted : 0,
+        names: orphans?.names ?? [],
       },
-      loading, error, truncated, period, reload,
+      loading, error, period, reload,
     };
-  }, [members, deals, quotas, lookup, loading, error, truncated, period, reload]);
+  }, [members, rollups, orphans, quotas, loading, error, period, reload]);
 }

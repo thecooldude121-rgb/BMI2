@@ -53,6 +53,23 @@ const DEALS = [
   },
 ];
 
+const T = (count: number, value_usd: number) => ({ count, value_usd, unconverted: 0 });
+type FixtureDeal = Omit<typeof DEALS[number], 'assigned_to_user_id'> & { assigned_to_user_id: number | null };
+const SUMMARY_FROM = (deals: FixtureDeal[]) => ({
+  period: 'Q', quarter_start: '', quarter_end: '', as_of: '', include_undated: true, top_per_category: 25,
+  categories: { pipeline: T(0, 0), 'best-case': T(0, 0), closed: T(0, 0),
+    commit: T(deals.length, deals.reduce((n, d) => n + Number(d.value), 0)) },
+  reps: deals.map(d => ({
+    key: d.assigned_to_user_id != null ? `id:${d.assigned_to_user_id}` : `name:${d.assigned_to}`,
+    label: d.assigned_to, user_id: d.assigned_to_user_id, unresolved: d.assigned_to_user_id == null,
+    pipeline: T(0, 0), best_case: T(0, 0), closed: T(0, 0), commit: T(1, Number(d.value)),
+    deal_count: 1, unconverted: 0, commit_overdue: 0,
+  })),
+  top_deals: { pipeline: [], 'best-case': [], closed: [], commit: deals.map(d => ({
+    id: d.id, name: d.name, company_name: null, stage: d.stage, owner: d.assigned_to, value: d.value,
+    currency: 'USD', base_amount_usd: d.value, expected_close_date: d.expected_close_date, category: 'commit' })) },
+});
+
 /**
  * @param visible  the ids GET /quotas says this viewer may SEE
  * @param quotas   the quota rows it actually returns (only ever visible ones)
@@ -60,7 +77,9 @@ const DEALS = [
 function server(visible: number[], quotas: { user_id: number; quota_amount: string }[]) {
   fetchMock = vi.fn(async (url: string) => {
     const u = String(url);
-    if (u.includes('/deals')) return ok({ success: true, data: DEALS });
+    // Slice 5c: the page reads the SERVER's forecast, not a deal list. The
+    // summary carries the two commit deals above as two reps.
+    if (u.includes('/forecast/summary')) return ok({ success: true, data: SUMMARY_FROM(DEALS) });
     if (u.includes('/quotas')) {
       return ok({
         success: true,
@@ -143,13 +162,13 @@ describe('ForecastPage — the gap banner compares like with like or says nothin
     // resolved owner, would never show one again.
     fetchMock = vi.fn(async (url: string) => {
       const u = String(url);
-      if (u.includes('/deals')) {
+      if (u.includes('/forecast/summary')) {
         return ok({
           success: true,
-          data: [
+          data: SUMMARY_FROM([
             DEALS[0],
             { ...DEALS[1], assigned_to: 'John Smith', assigned_to_user_id: null },
-          ],
+          ]),
         });
       }
       if (u.includes('/quotas')) {

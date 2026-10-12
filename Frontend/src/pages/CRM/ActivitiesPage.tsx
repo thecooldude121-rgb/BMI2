@@ -1,1196 +1,516 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  Plus, Search, Download, Upload, Phone, Mail, Video, CheckCircle, FileText, Clock, BarChart3, Users, Building2, Calendar, TrendingUp,
+} from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { fetchActivities, type ActivityRecord } from '../../utils/activitiesApi';
-import { useNavigate } from 'react-router-dom';
-import { Plus, MoreVertical, TrendingUp, Calendar, Users, BarChart3, Building2, Search, Download, Upload, Settings, Phone, Mail, Video, CheckCircle, Clock, FileText } from 'lucide-react';
-import { NotAvailableBadge } from '../../components/common/NotAvailable';
+import { Card } from '../../components/ui/Card';
+import { Badge, type BadgeTone } from '../../components/ui/Badge';
+import { Alert } from '../../components/ui/Alert';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Modal } from '../../components/ui/Modal';
+import { selectClass, inputClass } from '../../components/ui/Field';
+import PageHeader from '../../components/Layout/PageHeader';
+import LeadsPager from '../../components/Leads/LeadsPager';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
+import LogActivityModal from '../../components/CRM/LogActivityModal';
+import {
+  fetchActivitiesPage,
+  fetchActivitySummary,
+  updateActivity,
+  ACTIVITY_TYPES,
+  type ActivityRecord,
+  type ActivityFilters,
+  type ActivitySummary,
+  type ActivityParent,
+} from '../../utils/activitiesApi';
+import { fetchUsers, type WorkspaceUser } from '../../utils/usersApi';
+import { fetchContacts } from '../../utils/contactsApi';
+import { fetchAccounts } from '../../utils/accountsApi';
+import { fetchDeals } from '../../utils/dealsApi';
 import { groupActivities, groupingCoverage, type ActivityGroup, type ActivityGroupMode } from '../../utils/activityGrouping';
-
-interface Activity {
-  id: string;
-  // The live activities_type_check allows 12 values, not 5. getActivityIcon and
-  // getStatusBadge both take a string with a default case, so widening is safe.
-  type:
-    | 'meeting' | 'call' | 'email' | 'task' | 'note'
-    | 'sms' | 'whatsapp' | 'linkedin' | 'demo' | 'proposal' | 'document' | 'visit';
-  title: string;
-  time: string;
-  date: string;
-  relatedTo: {
-    account: string;
-    deal?: string;
-    dealAmount?: string;
-    contact?: string;
-  };
-  owner: string;
-  status: 'completed' | 'upcoming' | 'overdue' | 'sent';
-  duration?: string;
-  location?: string;
-  outcome?: 'positive' | 'neutral' | 'negative';
-  notes?: string;
-  source?: string;
-  emailTracking?: {
-    delivered: string;
-    opens: Array<{ time: string; number: number }>;
-    attachmentOpened?: string;
-    engagement: string;
-    reply?: {
-      time: string;
-      text: string;
-    };
-  };
-  aiSummary?: {
-    budget?: string;
-    timeline?: string;
-    concerns?: string[];
-    competitor?: string;
-    sentiment?: string;
-    actionItems?: Array<{ item: string; status: string; dueDate?: string }>;
-    talkingPoints?: string[];
-    crmUpdates?: Array<{ field: string; value: string }>;
-  };
-  aiInsight?: string;
-  riskAlert?: {
-    message: string;
-    healthDrop: string;
-    lossRate: string;
-    recommendation: string;
-  };
-}
+import { localDay } from '../../utils/dates';
 
 /**
- * The four view modes that have buttons and no renders. Listed here rather than
- * inline so the set is countable, and so adding a real view means DELETING a row
- * from this list — which is a smaller, more obvious edit than remembering to
- * remove a disabled button somewhere in the markup.
+ * Activities — Group A item 4, slice 4b (2026-10-12).
+ *
+ * The page loaded 200 activities once. Its Type / Date / Owner / Related /
+ * Status dropdowns and its search box set state that NOTHING read, so every
+ * "filter" left the list unchanged; the Owner list was three hardcoded names;
+ * the six tiles counted the loaded rows. Several buttons announced results
+ * that never happened — "Meeting cancelled", "Task marked as complete!", "Note
+ * shared with team!" — over an unchanged database. Now:
+ *   - one server page (25) under real filters, with a pager and the server's
+ *     total; the tiles are GET /activities/summary under the SAME filters;
+ *   - "today" / "this week" are the viewer's (local midnights, sent as
+ *     instants) — the decision taken for Tasks on 2026-10-11;
+ *   - Mark complete and Cancel are real saves (PUT /activities/:id), reported
+ *     only after the 2xx; actions with nothing behind them are gone or
+ *     "Coming soon";
+ *   - Log activity opens the real form, after choosing the record it belongs
+ *     to (an activity must hang off exactly one, enforced by the server);
+ *   - the grouped views regroup THIS PAGE and say so.
  */
-/** The grouped views, each backed by `utils/activityGrouping`. */
+
+const PAGE_SIZE = 25;
+
 const GROUPED_VIEWS: { mode: ActivityGroupMode; label: string; icon: React.ElementType }[] = [
-  { mode: 'type',    label: 'By Type',    icon: BarChart3 },
-  { mode: 'owner',   label: 'By Owner',   icon: Users },
-  { mode: 'account', label: 'By Account', icon: Building2 },
+  { mode: 'type', label: 'By type', icon: BarChart3 },
+  { mode: 'owner', label: 'By owner', icon: Users },
+  { mode: 'account', label: 'By account', icon: Building2 },
 ];
 
-/**
- * Still not built, and still disabled rather than left as a dead button.
- *
- * Calendar is not a regrouping of the rows already on the page — it needs a
- * month/week grid, a decision about which timestamp positions an activity
- * (`scheduled_at` for planned work, `completed_at` for done work, and they
- * disagree), and an answer for all-day and multi-day items. That is a design
- * task, not a `groupBy`.
- */
-const UNBUILT_VIEWS = [
-  { label: 'Calendar', icon: Calendar },
-] as const;
+type DateRange = '' | 'today' | 'yesterday' | 'week' | 'month';
+const DATE_LABEL: Record<Exclude<DateRange, ''>, string> = { today: 'Today', yesterday: 'Yesterday', week: 'This week', month: 'This month' };
+
+/** The viewer's local range as instants for ?occurred_after / ?occurred_before. */
+function rangeFor(r: DateRange, now = new Date()): { occurred_after?: string; occurred_before?: string } {
+  const d = (y: number, m: number, day: number) => new Date(y, m, day);
+  const y = now.getFullYear(); const m = now.getMonth(); const t = now.getDate();
+  switch (r) {
+    case 'today': return { occurred_after: d(y, m, t).toISOString(), occurred_before: d(y, m, t + 1).toISOString() };
+    case 'yesterday': return { occurred_after: d(y, m, t - 1).toISOString(), occurred_before: d(y, m, t).toISOString() };
+    case 'week': { const s = t - now.getDay(); return { occurred_after: d(y, m, s).toISOString(), occurred_before: d(y, m, s + 7).toISOString() }; }
+    case 'month': return { occurred_after: d(y, m, 1).toISOString(), occurred_before: d(y, m + 1, 1).toISOString() };
+    default: return {};
+  }
+}
+
+type StatusChoice = '' | 'completed' | 'upcoming' | 'overdue' | 'cancelled';
+const STATUS_FILTER: Record<Exclude<StatusChoice, ''>, Pick<ActivityFilters, 'status' | 'state'>> = {
+  completed: { status: 'completed' }, upcoming: { state: 'upcoming' }, overdue: { state: 'overdue' }, cancelled: { status: 'cancelled' },
+};
+
+const when = (r: ActivityRecord) => r.completed_at ?? r.scheduled_at ?? r.created_at;
+
+function displayStatus(r: ActivityRecord): { label: string; tone: BadgeTone } {
+  if (r.status === 'completed') return { label: 'Completed', tone: 'success' };
+  if (r.status === 'cancelled') return { label: 'Cancelled', tone: 'neutral' };
+  if (r.status === 'no_show') return { label: 'No show', tone: 'neutral' };
+  if (r.status === 'rescheduled') return { label: 'Rescheduled', tone: 'neutral' };
+  if (r.status === 'planned' && r.scheduled_at && new Date(r.scheduled_at) < new Date()) return { label: 'Overdue', tone: 'danger' };
+  if (r.status === 'planned') return { label: 'Upcoming', tone: 'brand' };
+  return { label: 'No status', tone: 'neutral' };
+}
+
+const ICON: Record<string, React.ElementType> = { meeting: Video, call: Phone, email: Mail, task: CheckCircle, note: FileText };
+const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+type RecordKind = 'contact' | 'company' | 'deal';
+const KIND_LABEL: Record<RecordKind, string> = { contact: 'Contact', company: 'Account', deal: 'Deal' };
 
 const ActivitiesPage: React.FC = () => {
   const navigate = useNavigate();
-  /**
-   * The modes that RENDER. Four buttons used to set modes with no render behind
-   * them at all, blanking the page; the union was narrowed to 'timeline' alone
-   * so a mode could not be reintroduced without its render, and it is widened
-   * here by exactly the three that now have one. Calendar is still absent from
-   * the union on purpose — `setViewMode('calendar')` remains a type error.
-   */
   const [viewMode, setViewMode] = useState<'timeline' | ActivityGroupMode>('timeline');
-  const [filterType, setFilterType] = useState('All');
-  const [filterDate, setFilterDate] = useState('All');
-  const [filterOwner, setFilterOwner] = useState('All');
-  const [filterRelated, setFilterRelated] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [quickFilters, setQuickFilters] = useState<string[]>([]);
+  const [filterType, setFilterType] = useState('');
+  const [filterDate, setFilterDate] = useState<DateRange>('');
+  const [filterOwner, setFilterOwner] = useState('');
+  const [filterLinked, setFilterLinked] = useState<'' | NonNullable<ActivityFilters['linked']>>('');
+  const [filterStatus, setFilterStatus] = useState<StatusChoice>('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey(k => k + 1), []);
 
-  // PHASE 2: the activity feed is real. Errors surface instead of collapsing
-  // into an empty timeline.
   const [records, setRecords] = useState<ActivityRecord[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<ActivitySummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  const loadActivities = useCallback(async () => {
-    setLoading(true);
-    try {
-      setRecords(await fetchActivities({ limit: 200 }));
-      setLoadError(null);
-    } catch (e: any) {
-      setLoadError(e?.message ?? 'Could not load activities');
-    } finally {
-      setLoading(false);
-    }
+  const [users, setUsers] = useState<WorkspaceUser[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<ActivityRecord | null>(null);
+
+  // Log activity: choose the record first (an activity hangs off exactly one).
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickKind, setPickKind] = useState<RecordKind>('contact');
+  const [pickId, setPickId] = useState('');
+  const [options, setOptions] = useState<Record<RecordKind, { id: string; label: string }[]> | null>(null);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [logParent, setLogParent] = useState<{ parent: ActivityParent; label: string } | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // The real roster for the Owner filter (it was three hardcoded names).
+  // activities.assigned_to holds a display name, so the filter sends the name.
+  useEffect(() => {
+    fetchUsers().then(setUsers).catch(() => setUsers([]));
   }, []);
 
-  useEffect(() => { void loadActivities(); }, [loadActivities]);
+  const filters = useMemo<ActivityFilters>(() => ({
+    type: filterType || undefined,
+    assigned_to: filterOwner || undefined,
+    linked: filterLinked || undefined,
+    search: search || undefined,
+    ...(filterStatus ? STATUS_FILTER[filterStatus] : {}),
+    ...rangeFor(filterDate),
+  }), [filterType, filterOwner, filterLinked, search, filterStatus, filterDate]);
 
-  // Check if any filters are active
-  const hasActiveFilters = () => {
-    return (
-      filterType !== 'All' ||
-      filterDate !== 'All' ||
-      filterOwner !== 'All' ||
-      filterRelated !== 'All' ||
-      filterStatus !== 'All' ||
-      searchQuery.length > 0 ||
-      quickFilters.length > 0
-    );
-  };
+  useEffect(() => { setPage(1); }, [filters]);
 
-  // Clear all filters
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchActivitiesPage({ ...filters, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })
+      .then(r => {
+        if (cancelled) return;
+        if (r.activities.length === 0 && r.total > 0 && page > 1) { setPage(Math.ceil(r.total / PAGE_SIZE)); return; }
+        setRecords(r.activities); setTotal(r.total); setLoadError(null);
+      })
+      .catch(e => { if (!cancelled) setLoadError(e?.message ?? 'Could not load activities'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    fetchActivitySummary(filters)
+      .then(r => { if (!cancelled) { setSummary(r); setSummaryError(null); } })
+      .catch(e => { if (!cancelled) setSummaryError(e?.message ?? 'Could not load the activity counts'); });
+    return () => { cancelled = true; };
+  }, [filters, page, reloadKey]);
+
+  useEffect(() => {
+    if (!pickerOpen || options) return;
+    Promise.all([fetchContacts({ limit: 200 }), fetchAccounts(200), fetchDeals(200)])
+      .then(([contacts, accounts, deals]) => {
+        setOptions({
+          contact: contacts.map(c => ({ id: c.id, label: c.name || c.email || c.id })),
+          company: accounts.map(a => ({ id: a.id, label: a.name || a.id })),
+          deal: deals.map((d: any) => ({ id: d.id, label: d.name || d.title || d.id })),
+        });
+        setOptionsError(null);
+      })
+      .catch(e => setOptionsError(e?.message ?? 'Could not load records'));
+  }, [pickerOpen, options]);
+
+  const activeFilters = !!(filterType || filterDate || filterOwner || filterLinked || filterStatus || search);
   const clearAllFilters = () => {
-    setFilterType('All');
-    setFilterDate('All');
-    setFilterOwner('All');
-    setFilterRelated('All');
-    setFilterStatus('All');
-    setSearchQuery('');
-    setQuickFilters([]);
+    setFilterType(''); setFilterDate(''); setFilterOwner(''); setFilterLinked(''); setFilterStatus(''); setSearchInput(''); setSearch('');
   };
 
-  // PHASE 2: these were the literals 247 / 45 / 32 / 18 / 12 / 15, two of them
-  // with invented "+12%" / "+45%" trends. Derived from the loaded activities now.
-  // The trends stay null: a period-over-period comparison needs a second query,
-  // and a made-up percentage is what Phase 0 removed everywhere else.
-  // `trend` is typed explicitly: every value is null today, and without the
-  // annotation TS narrows it to `never` and the render's stat.trend.startsWith
-  // stops compiling. Typed so a real period-over-period trend can be added
-  // without touching the render.
-  /**
-   * The KPI tiles.
-   *
-   * A FAILED FETCH MUST NOT RENDER A COUNT. With the API unreachable this page
-   * showed "0 Total · 0 Today · 0 This Week · 0 Overdue" — derived from an empty
-   * `records` array, so every tile was a confident zero about data that had never
-   * arrived. The timeline below already distinguished loading, failed and
-   * genuinely empty; the tiles above it did not, so the same screen said "we
-   * could not load this" and "you have none" at once.
-   *
-   * `—` is the repo's existing idiom for a figure with no source — AccountsPage
-   * renders `{dealStats ? kpis.totalDeals : '—'}` for exactly this reason — so it
-   * is reused rather than a new convention being invented.
-   *
-   * Loading counts as unknown too: zero rows fetched so far is not zero rows.
-   */
-  const stats = useMemo((): Array<{ label: string; value: string; trend: string | null; alert?: boolean }> => {
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfToday.getDay());
+  const markComplete = async (r: ActivityRecord) => {
+    setBusyId(r.id); setNotice(null); setActionError(null);
+    try {
+      await updateActivity(r.id, { status: 'completed' });
+      setNotice(`Marked “${r.subject}” complete.`);
+      reload();
+    } catch (e: any) {
+      setActionError(`“${r.subject}” was not updated — ${e?.message ?? 'the server refused'}`);
+    } finally { setBusyId(null); }
+  };
 
-    const when = (r: ActivityRecord) => r.completed_at ?? r.scheduled_at ?? r.created_at;
-    const inRange = (r: ActivityRecord, from: Date) => new Date(when(r)) >= from;
-    const isToday = (r: ActivityRecord) => inRange(r, startOfToday);
+  const confirmCancel = async () => {
+    const r = cancelling;
+    setCancelling(null);
+    if (!r) return;
+    setBusyId(r.id); setNotice(null); setActionError(null);
+    try {
+      await updateActivity(r.id, { status: 'cancelled' });
+      setNotice(`Cancelled “${r.subject}”.`);
+      reload();
+    } catch (e: any) {
+      setActionError(`“${r.subject}” was not cancelled — ${e?.message ?? 'the server refused'}`);
+    } finally { setBusyId(null); }
+  };
 
-    const unknown = Boolean(loadError) || loading;
-    const count = (n: number) => (unknown ? '—' : String(n));
-
-    return [
-      { label: 'Total', value: count(records.length), trend: null },
-      { label: 'Today', value: count(records.filter(isToday).length), trend: null },
-      { label: 'This Week', value: count(records.filter(r => inRange(r, startOfWeek)).length), trend: null },
-      {
-        label: 'Overdue',
-        value: count(records.filter(r =>
-          r.status === 'planned' && r.scheduled_at && new Date(r.scheduled_at) < now).length),
-        trend: null,
-        // An unknown count is not an alert. Tinting the tile orange around a
-        // dash would read as "overdue work exists and we cannot show it".
-        alert: !unknown,
-      },
-      { label: 'Meetings Today', value: count(records.filter(r => r.type === 'meeting' && isToday(r)).length), trend: null },
-      { label: 'Calls Today', value: count(records.filter(r => r.type === 'call' && isToday(r)).length), trend: null },
-    ];
-  }, [records, loadError, loading]);
-
-  /**
-   * PHASE 2: ~200 lines of inline fixture activities used to sit here. The
-   * activities table now has an API, so this maps the real rows onto the shape
-   * this page renders.
-   *
-   * The local Activity shape is much richer than the table: aiSummary,
-   * emailTracking, riskAlert and aiInsight have no columns and no
-   * data source. They are left ABSENT — every render site already guards with
-   * `activity.x && ...`, so those panels simply do not appear. Do not fill them
-   * with placeholders; that is what Phase 0 spent its time removing.
-   */
-  const activities: Activity[] = useMemo(() => records.map((r): Activity => {
-    const stamp = r.completed_at ?? r.scheduled_at ?? r.created_at;
-    const d = new Date(stamp);
-    const now = new Date();
-
-    // Local status vocabulary is completed | upcoming | overdue | sent, which is
-    // not the DB's. 'sent' is email-specific and not represented server-side.
-    let status: Activity['status'];
-    if (r.status === 'completed') status = 'completed';
-    else if (r.scheduled_at && new Date(r.scheduled_at) < now) status = 'overdue';
-    else status = 'upcoming';
-
-    return {
-      id: r.id,
-      type: (r.type ?? 'note') as Activity['type'],
-      title: r.subject,
-      time: d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
-      date: d.toLocaleDateString(),
-      relatedTo: {
-        // The server joins these, so no extra request per row.
-        account: r.company_name ?? '',
-        deal: r.deal_name ?? undefined,
-        contact: r.contact_name?.trim() || r.lead_name || undefined,
-      },
-      owner: r.assigned_to ?? 'Unassigned',
-      status,
-      duration: r.duration != null ? `${r.duration} min` : undefined,
-      // outcome is free text in the database; the local field is a
-      // positive/neutral/negative enum, so the text goes to notes rather than
-      // being coerced into a sentiment it does not express.
-      notes: [r.description, r.outcome].filter(Boolean).join(' — ') || undefined,
-    };
-  }), [records]);
-
-  /**
-   * Group activities by calendar day, newest day first, naming today and
-   * yesterday. Replaces four hardcoded date buckets.
-   */
-  const activityGroups = useMemo(() => {
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-
-    // Shaped as an ActivityGroup (plus a sortKey) so the timeline and the three
-    // grouped views are ONE type at the render site — otherwise the union leaks
-    // into `groupingCoverage` and every consumer needs a narrowing check.
-    const byDay = new Map<string, ActivityGroup<Activity> & { sortKey: number }>();
-
-    records.forEach((r, idx) => {
-      const activity = activities[idx];
-      if (!activity) return;
-      const when = new Date(r.completed_at ?? r.scheduled_at ?? r.created_at);
-      const dayStart = new Date(when.getFullYear(), when.getMonth(), when.getDate());
-      const key = dayStart.toISOString().slice(0, 10);
-
-      let label: string;
-      if (dayStart.getTime() === startOfToday.getTime()) {
-        label = `TODAY (${dayStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`;
-      } else if (dayStart.getTime() === startOfYesterday.getTime()) {
-        label = `YESTERDAY (${dayStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`;
-      } else {
-        label = dayStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-      }
-
-      const existing = byDay.get(key);
-      if (existing) existing.items.push(activity);
-      else byDay.set(key, { key, label, sortKey: dayStart.getTime(), items: [activity], isUnattributed: false });
-    });
-
-    return Array.from(byDay.values()).sort((a, b) => b.sortKey - a.sortKey);
-  }, [records, activities]);
-
-  /**
-   * The groups the active view renders. Timeline keeps its by-day grouping;
-   * the other three delegate to the pure module, which is where the bucketing
-   * rules and their reasoning live.
-   */
-  const visibleGroups = useMemo(
-    () => (viewMode === 'timeline' ? activityGroups : groupActivities(viewMode, records, activities)),
-    [viewMode, activityGroups, records, activities],
-  );
-
-  /**
-   * Rendered above a grouped view. By Account is expected to attribute very
-   * little — activities hang off exactly one parent, so a deal's activity has no
-   * `company_id` — and a view that groups a fraction of the rows while looking
-   * complete is the failure mode ReportsPage's UNBACKED_REPORTS exists to
-   * prevent. Null for the timeline, which attributes everything by definition.
-   */
-  const coverage = useMemo(
-    () => (viewMode === 'timeline' ? null : groupingCoverage(visibleGroups)),
-    [viewMode, visibleGroups],
-  );
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'meeting': return <Video className="w-5 h-5" />;
-      case 'call': return <Phone className="w-5 h-5" />;
-      case 'email': return <Mail className="w-5 h-5" />;
-      case 'task': return <CheckCircle className="w-5 h-5" />;
-      case 'note': return <FileText className="w-5 h-5" />;
-      default: return <FileText className="w-5 h-5" />;
+  /** Timeline: this page grouped by the viewer's local day, newest first. */
+  const dayGroups = useMemo((): ActivityGroup<ActivityRecord>[] => {
+    const today = localDay(new Date());
+    const yesterday = localDay(new Date(Date.now() - 86_400_000));
+    const map = new Map<string, ActivityGroup<ActivityRecord>>();
+    for (const r of records) {
+      const at = new Date(when(r));
+      const key = localDay(at);
+      const nice = at.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const label = key === today ? `Today (${nice})` : key === yesterday ? `Yesterday (${nice})` : nice;
+      const g = map.get(key);
+      if (g) g.items.push(r); else map.set(key, { key, label, items: [r], isUnattributed: false });
     }
+    return Array.from(map.values()).sort((a, b) => (a.key < b.key ? 1 : -1));
+  }, [records]);
+
+  const groups = useMemo(
+    () => (viewMode === 'timeline' ? dayGroups : groupActivities(viewMode, records, records)),
+    [viewMode, dayGroups, records],
+  );
+  const coverage = viewMode === 'timeline' ? null : groupingCoverage(groups);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const count = (k: keyof ActivitySummary) => (summary ? summary[k].toLocaleString() : '—');
+
+  const tiles: { label: string; key: keyof ActivitySummary; alert?: boolean }[] = [
+    { label: 'Total', key: 'total' },
+    { label: 'Today', key: 'today' },
+    { label: 'This week', key: 'this_week' },
+    { label: 'Overdue', key: 'overdue', alert: true },
+    { label: 'Meetings today', key: 'meetings_today' },
+    { label: 'Calls today', key: 'calls_today' },
+  ];
+
+  const relatedLinks = (r: ActivityRecord) => {
+    const out: { to: string; label: string; kind: string }[] = [];
+    if (r.company_id) out.push({ to: `/crm/accounts/${encodeURIComponent(r.company_id)}`, label: r.company_name || r.company_id, kind: 'Account' });
+    if (r.deal_id) out.push({ to: `/crm/deals/${encodeURIComponent(r.deal_id)}`, label: r.deal_name || r.deal_id, kind: 'Deal' });
+    if (r.contact_id) out.push({ to: `/crm/contacts/${encodeURIComponent(r.contact_id)}`, label: r.contact_name?.trim() || r.contact_id, kind: 'Contact' });
+    if (r.lead_id != null) out.push({ to: `/crm/leads/${r.lead_id}`, label: r.lead_name || `Lead ${r.lead_id}`, kind: 'Lead' });
+    return out;
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <span className="text-green-600 text-sm font-medium">✅ Completed</span>;
-      case 'upcoming':
-        return <span className="text-blue-600 text-sm font-medium">🟢 Upcoming</span>;
-      case 'overdue':
-        return <span className="text-red-600 text-sm font-medium">⚠️ Overdue</span>;
-      case 'sent':
-        return <span className="text-green-600 text-sm font-medium">✅ Sent & Opened</span>;
-      default:
-        return null;
-    }
-  };
-
-  const renderActivityCard = (activity: Activity) => {
+  const renderCard = (r: ActivityRecord) => {
+    const Icon = ICON[r.type ?? ''] ?? FileText;
+    const st = displayStatus(r);
+    const at = new Date(when(r));
+    const planned = r.status === 'planned';
     return (
-      <div key={activity.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
-        <div className="flex items-start gap-4">
-          <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-            {getActivityIcon(activity.type)}
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold text-gray-900">{activity.title}</h3>
-              <span className="text-sm text-gray-500">{activity.time}</span>
+      <Card key={r.id} data-testid={`activity-${r.id}`}>
+        <div className="flex items-start gap-3">
+          <div className="rounded-ctrl bg-brand-50 p-2 text-brand-700"><Icon className="h-5 w-5" aria-hidden="true" /></div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-base font-semibold text-ink">{r.subject}</h3>
+              <span className="text-xs text-ink-muted">
+                {r.type ? cap(r.type) : 'No type'} · {at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
             </div>
-
-            <div className="space-y-2 text-sm text-gray-600 mb-3">
-              <div>
-                <span className="font-medium">Related To:</span>{' '}
-                <button
-                  onClick={() => navigate('/crm/accounts')}
-                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                >
-                  {activity.relatedTo.account}
-                </button>
-                {activity.relatedTo.deal && (
-                  <>
-                    {' '}(
-                    <button
-                      onClick={() => navigate('/crm/deals')}
-                      className="text-green-600 hover:text-green-800 hover:underline font-medium"
-                    >
-                      {activity.relatedTo.deal}
-                    </button>)
-                  </>
-                )}
-                {activity.relatedTo.contact && (
-                  <>
-                    {' '}&gt;{' '}
-                    <button
-                      onClick={() => navigate('/crm/contacts')}
-                      className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                    >
-                      {activity.relatedTo.contact}
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {activity.duration && (
-                <div><span className="font-medium">Duration:</span> {activity.duration}</div>
-              )}
-
-              {activity.location && (
-                <div><span className="font-medium">Location:</span> {activity.location}</div>
-              )}
-
-              {activity.notes && (
-                <div className="italic text-gray-700">"{activity.notes}"</div>
-              )}
-            </div>
-
-            {activity.emailTracking && (
-              <div className="mb-3 p-3 bg-gray-50 rounded-lg space-y-1 text-sm">
-                <div className="font-semibold text-gray-900">📊 Email Tracking:</div>
-                <div>✅ Delivered: {activity.emailTracking.delivered}</div>
-                {activity.emailTracking.opens.map((open, idx) => (
-                  <div key={idx}>✅ Opened: {open.time}</div>
-                ))}
-                {activity.emailTracking.attachmentOpened && (
-                  <div>📎 Attachment opened: {activity.emailTracking.attachmentOpened}</div>
-                )}
-                {activity.emailTracking.reply && (
-                  <>
-                    <div>✅ Replied: {activity.emailTracking.reply.time}</div>
-                    <div className="mt-2 p-2 bg-white border border-gray-200 rounded italic text-gray-700">
-                      {activity.emailTracking.reply.text}
-                    </div>
-                  </>
-                )}
-                {!activity.emailTracking.reply && (
-                  <div className="mt-2 font-medium">Engagement: {activity.emailTracking.engagement}</div>
-                )}
-              </div>
+            <p className="text-sm text-ink-muted">
+              {relatedLinks(r).map((l, i) => (
+                <React.Fragment key={l.to}>
+                  {i > 0 && ' · '}
+                  {l.kind}: <Link to={l.to} className="font-medium text-brand-600 hover:underline">{l.label}</Link>
+                </React.Fragment>
+              ))}
+              {r.duration != null && <> · {r.duration} min</>}
+            </p>
+            {(r.description || r.outcome) && (
+              <p className="text-sm text-ink">{[r.description, r.outcome].filter(Boolean).join(' — ')}</p>
             )}
-
-            {activity.aiSummary && (
-              <div className="mb-3 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-                <div className="font-semibold text-purple-900 mb-3">🤖 AI MEETING SUMMARY</div>
-
-                <div className="mb-3">
-                  <div className="font-medium text-purple-900 mb-1">Key Points:</div>
-                  <div className="space-y-1 text-sm text-purple-800">
-                    {activity.aiSummary.budget && (
-                      <div>• Budget {activity.aiSummary.budget} ✅</div>
-                    )}
-                    {activity.aiSummary.timeline && (
-                      <div>• Timeline: {activity.aiSummary.timeline}</div>
-                    )}
-                    {activity.aiSummary.concerns && activity.aiSummary.concerns.length > 0 && (
-                      <div>• Concerns: {activity.aiSummary.concerns.join(', ')}</div>
-                    )}
-                    {activity.aiSummary.competitor && (
-                      <div>• Competitor: {activity.aiSummary.competitor}</div>
-                    )}
-                    {activity.aiSummary.sentiment && (
-                      <div>• CEO approval needed</div>
-                    )}
-                  </div>
-                </div>
-
-                {activity.aiSummary.sentiment && (
-                  <div className="mb-3 text-sm">
-                    <span className="font-medium text-purple-900">Sentiment:</span> 😊 {activity.aiSummary.sentiment}
-                  </div>
-                )}
-
-                {activity.aiSummary.actionItems && activity.aiSummary.actionItems.length > 0 && (
-                  <div className="mb-3">
-                    <div className="font-medium text-purple-900 mb-1">Action Items:</div>
-                    <div className="space-y-1 text-sm text-purple-800">
-                      {activity.aiSummary.actionItems.map((item, idx) => (
-                        <div key={idx}>
-                          {item.status === 'Done' ? '✅' : '⏳'} {item.item}
-                          {item.dueDate && ` - ${item.status === 'Done' ? 'Done' : 'Due'} ${item.dueDate}`}
-                          {!item.dueDate && item.status === 'Done' && ' - Completed'}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activity.aiSummary.talkingPoints && activity.aiSummary.talkingPoints.length > 0 && (
-                  <div className="mb-3">
-                    <div className="font-medium text-purple-900 mb-1">Next Meeting Talking Points:</div>
-                    <div className="space-y-1 text-sm text-purple-800">
-                      {activity.aiSummary.talkingPoints.map((point, idx) => (
-                        <div key={idx}>• {point}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {activity.aiSummary.crmUpdates && activity.aiSummary.crmUpdates.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-purple-200">
-                    <div className="font-medium text-purple-900 mb-1">CRM Auto-Updated:</div>
-                    <div className="space-y-1 text-sm text-purple-800">
-                      {activity.aiSummary.crmUpdates.map((update, idx) => (
-                        <div key={idx}>• {update.field}: {update.value} ✅</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
+              <div className="flex items-center gap-3 text-sm text-ink-muted">
+                <span>Owner: <span className="text-ink">{r.assigned_to || 'Unassigned'}</span></span>
+                <Badge tone={st.tone}>{st.label}</Badge>
               </div>
-            )}
-
-            {activity.riskAlert && (
-              <div className="mb-3 p-4 bg-red-50 rounded-lg border border-red-200">
-                <div className="font-semibold text-red-900 mb-2">🤖 AI RISK ALERT: {activity.riskAlert.message}</div>
-                <div className="space-y-1 text-sm text-red-800">
-                  <div>• No activity in 7 days (last: Nov 30)</div>
-                  <div>• Deal health: {activity.riskAlert.healthDrop}</div>
-                  <div>• Similar delays = {activity.riskAlert.lossRate}</div>
-                  <div>• RECOMMENDED: {activity.riskAlert.recommendation}</div>
-                </div>
-              </div>
-            )}
-
-            {activity.aiInsight && (
-              <div className="mb-3 p-2 bg-purple-50 rounded text-sm text-purple-900">
-                🤖 AI: {activity.aiInsight}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-              <div className="flex items-center gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Owner:</span> {activity.owner}
-                </div>
-                <div>
-                  <span className="font-medium">Status:</span> {getStatusBadge(activity.status)}
-                </div>
-                {activity.source && (
-                  <div>
-                    <span className="font-medium">Source:</span> {activity.source}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-2">
-                {activity.type === 'meeting' && activity.status === 'upcoming' && (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => navigate(`/crm/activities/${encodeURIComponent(r.id)}`)}>View details</Button>
+                {planned && (
                   <>
-                    <Button
-                      onClick={() => {
-                        if (activity.location?.includes('Zoom')) {
-                          window.open('https://zoom.us/start', '_blank');
-                        } else if (activity.location?.includes('Meet')) {
-                          window.open('https://meet.google.com/', '_blank');
-                        } else {
-                          alert(`Opening meeting: ${activity.location || 'Virtual'}`);
-                        }
-                      }}
-                      size="sm"
-                    >
-                      Join Meeting
+                    <Button onClick={() => void markComplete(r)} disabled={busyId === r.id}>
+                      {busyId === r.id ? 'Saving…' : 'Mark complete'}
                     </Button>
-                    <button
-                      onClick={() => navigate(`/crm/activities/${activity.id}`)}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      onClick={() => alert('Reschedule functionality coming soon')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Reschedule
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Cancel meeting: ${activity.title}?`)) {
-                          alert('Meeting cancelled');
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Cancel
-                    </button>
+                    <Button variant="secondary" onClick={() => setCancelling(r)} disabled={busyId === r.id}>Cancel</Button>
                   </>
                 )}
-
-                {activity.type === 'call' && activity.status === 'completed' && (
-                  <>
-                    <button
-                      onClick={() => navigate(`/crm/activities/${activity.id}`)}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      onClick={() => alert('Log Follow-up task functionality coming soon')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Log Follow-up
-                    </button>
-                    {activity.aiInsight && activity.aiInsight.includes('case study') && (
-                      <button
-                        onClick={() => alert('Opening email composer with case study attached...')}
-                        className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-medium"
-                      >
-                        Send Case Study Now
-                      </button>
-                    )}
-                  </>
-                )}
-
-                {activity.type === 'email' && activity.status === 'sent' && (
-                  <>
-                    <button
-                      onClick={() => navigate(`/crm/activities/${activity.id}`)}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      onClick={() => alert('Opening email composer...')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Send Follow-up
-                    </button>
-                    <button
-                      onClick={() => navigate('/crm/calendar')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Schedule Meeting
-                    </button>
-                  </>
-                )}
-
-                {activity.type === 'email' && activity.emailTracking?.reply && (
-                  <>
-                    <button
-                      onClick={() => alert('Opening email conversation thread...')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Conversation
-                    </button>
-                    <button
-                      onClick={() => navigate('/crm/calendar')}
-                      className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-medium"
-                    >
-                      Schedule Meeting
-                    </button>
-                    <button
-                      onClick={() => navigate('/crm/deals')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Deal
-                    </button>
-                  </>
-                )}
-
-                {activity.type === 'task' && activity.status === 'completed' && (
-                  <button
-                    onClick={() => navigate(`/crm/activities/${activity.id}`)}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                  >
-                    View Details
-                  </button>
-                )}
-
-                {activity.type === 'task' && activity.status === 'overdue' && (
-                  <>
-                    <button
-                      onClick={() => alert('Task marked as complete!')}
-                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-                    >
-                      Mark Complete
-                    </button>
-                    <button
-                      onClick={() => alert('Reschedule task functionality coming soon')}
-                      className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-sm font-medium"
-                    >
-                      Reschedule
-                    </button>
-                    <button
-                      onClick={() => navigate('/crm/contacts')}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium"
-                    >
-                      Contact Now
-                    </button>
-                    <button
-                      onClick={() => alert('Escalate task to manager')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Escalate
-                    </button>
-                  </>
-                )}
-
-                {activity.type === 'meeting' && activity.status === 'completed' && activity.aiSummary && (
-                  <>
-                    <button
-                      onClick={() => alert('Opening meeting transcript...')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Transcript
-                    </button>
-                    <button
-                      onClick={() => alert('Opening meeting recording...')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Play Recording
-                    </button>
-                    <button
-                      onClick={() => navigate('/crm/deals')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Deal
-                    </button>
-                  </>
-                )}
-
-                {activity.type === 'note' && (
-                  <>
-                    <button
-                      onClick={() => navigate(`/crm/activities/${activity.id}`)}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      onClick={() => alert('Edit note functionality coming soon')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Edit Note
-                    </button>
-                    <button
-                      onClick={() => alert('Note shared with team!')}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-                    >
-                      Share with Team
-                    </button>
-                  </>
+                {r.status === 'completed' && (
+                  <Button variant="secondary" onClick={() => navigate('/crm/tasks?new=1')}>Create follow-up task</Button>
                 )}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </Card>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-8 py-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              ⚡ Activities
-            </h1>
-            <p className="text-gray-600 mt-1">Track all customer interactions across your CRM</p>
-          </div>
-          <div className="flex gap-3">
-            <Button >
-              <Plus className="w-5 h-5" />
-              Log Activity
-            </Button>
-            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-              <MoreVertical className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-6 gap-4 mb-6">
-          {stats.map((stat, idx) => (
-            <div key={idx} className={`bg-white rounded-lg border p-4 ${stat.alert ? 'border-orange-200 bg-orange-50' : 'border-gray-200'}`}>
-              <div className={`text-3xl font-bold mb-1 ${stat.alert ? 'text-orange-600' : 'text-gray-900'}`}>
-                {stat.value}
-              </div>
-              <div className="text-sm text-gray-600 mb-1">{stat.label}</div>
-              {stat.trend && (
-                <div className={`text-xs font-medium ${stat.trend.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
-                  {stat.trend}
-                </div>
-              )}
-              {stat.alert && (
-                <div className="text-xs font-medium text-orange-600">⚠️</div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/*
-          PREVIEW PANEL — every figure below is a hardcoded literal.
-          "32 activities, up 45%" and "18 overdue" sit directly above stat cards
-          reading 0 Total and 0 Overdue, because `activities` has no rows. The
-          contradiction is the tell.
-
-          Labelled rather than removed or built, which is the treatment the owner
-          settled on for the gamification panel and the CRMDashboard panels: AI
-          features are Phase 2 per CLAUDE.md, so making these real is out of
-          scope, and an unlabelled invented metric is the defect this project has
-          spent several sessions removing. It became urgent when this page was
-          added to the sidebar — until then nothing linked here.
-        */}
-        <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-6 mb-6 text-white">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <TrendingUp className="w-6 h-6" />
-            <h2 className="text-xl font-bold">🤖 AI INSIGHTS</h2>
-            <span className="ml-1 rounded border border-white/40 bg-white/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide">
-              Preview · Sample content
-            </span>
-          </div>
-          <p className="mb-4 text-sm text-white/80">
-            These figures are examples, not calculated from your data. Your real activity
-            counts are in the cards above.
-          </p>
-
-          <div className="space-y-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold mb-1">📈 High engagement: 32 activities, up 45%</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium">
-                    View Activity Trends
-                  </button>
-                  <button className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium">
-                    View Breakdown
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold mb-1">⏰ 18 overdue - Oldest: Acme 5 days</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium">
-                    View Overdue
-                  </button>
-                  <button className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium">
-                    Bulk Reschedule
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* An "HRMS: 92% completion" row lived here — removed 2026-10-10. HRMS is a
-                separate product reached over SSO; sample data naming it encodes a
-                cross-product read, the reason ReportDetailView's HRMS fixture went. */}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-          <div className="grid grid-cols-5 gap-4 mb-4">
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option>Type: All</option>
-              <option>Meetings</option>
-              <option>Calls</option>
-              <option>Emails</option>
-              <option>Tasks</option>
-              <option>Notes</option>
-            </select>
-
-            <select
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option>Date: All</option>
-              <option>Today</option>
-              <option>Yesterday</option>
-              <option>This Week</option>
-              <option>This Month</option>
-              <option>Custom Range</option>
-            </select>
-
-            <select
-              value={filterOwner}
-              onChange={(e) => setFilterOwner(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option>Owner: All</option>
-              <option>Alex Rodriguez</option>
-              <option>Sarah Chen</option>
-              <option>Mike Johnson</option>
-            </select>
-
-            <select
-              value={filterRelated}
-              onChange={(e) => setFilterRelated(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option>Related: All</option>
-              <option>Accounts</option>
-              <option>Deals</option>
-              <option>Contacts</option>
-            </select>
-
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option>Status: All</option>
-              <option>Completed</option>
-              <option>Upcoming</option>
-              <option>Overdue</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex-1 relative">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search activities..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center gap-2">
-              <Upload className="w-4 h-4" />
-              Import
-            </button>
-            <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/*
-          * AccountsPage's pattern, applied verbatim: a view that exists gates the
-          * render; a view that does not is DISABLED and labelled, never left as a
-          * live button that changes nothing. CLAUDE.md states the rule — "a
-          * List/Grid/Kanban toggle that only restyles its buttons is a bug… if a
-          * view isn't built, disable the button and label it".
-          *
-          * By Type / By Owner / By Account are now built, and the questions that
-          * were open when they were disabled — what the buckets are, how they
-          * order, where unattributed rows go — are answered in
-          * `utils/activityGrouping`, not guessed at here. Calendar stays
-          * disabled; see UNBUILT_VIEWS for why it is not the same kind of work.
-          */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-          <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Activity view">
-            <button
-              type="button"
-              onClick={() => setViewMode('timeline')}
-              aria-pressed={viewMode === 'timeline'}
-              className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
-                viewMode === 'timeline'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Clock className="w-4 h-4" />
-              Timeline
-            </button>
-
-            {GROUPED_VIEWS.map(({ mode, label, icon: Icon }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setViewMode(mode)}
-                aria-pressed={viewMode === mode}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 font-medium ${
-                  viewMode === mode
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-              </button>
-            ))}
-
-            {UNBUILT_VIEWS.map(({ label, icon: Icon }) => (
-              <button
-                key={label}
-                type="button"
-                disabled
-                aria-disabled="true"
-                title={`${label} is not available yet`}
-                className="px-4 py-2 rounded-lg flex items-center gap-2 font-medium bg-gray-50 text-gray-400 cursor-not-allowed"
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-                <NotAvailableBadge label="Soon" />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* The "Quick Filters" bar that sat here is gone (2026-10-10): every button
-            carried a hardcoded count (8 / 18 / 12 / 32 and "HRMS Activities 27"),
-            none had a handler, and none was labelled sample. The real Today / This
-            Week / Overdue figures are the stat cards above. Only the working
-            control is kept. */}
-        {hasActiveFilters() && (
-          <div className="mb-6 flex justify-end">
-            <button
-              onClick={clearAllFilters}
-              className="px-3 py-1.5 text-gray-600 hover:text-gray-800 text-sm font-medium"
-            >
-              Clear Filters
-            </button>
-          </div>
-        )}
-
-        {/* Empty State - No Activities at All */}
-        {activities.length === 0 && !hasActiveFilters() && (
-          <div className="bg-white rounded-lg border border-gray-200 p-16 text-center">
-            <div className="text-gray-400 mb-6 text-6xl">
-              📭
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
-              No Activities Found
-            </h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              Get started by logging your first customer interaction or import from connected tools
-            </p>
-
-            <Button size="xl" className="mb-8">
-              <Plus className="w-5 h-5" />
-              Log Activity
-            </Button>
-
-            <div className="mb-8">
-              <div className="text-sm text-gray-500 mb-4 flex items-center gap-3 justify-center">
-                <div className="flex-1 h-px bg-gray-300 max-w-xs"></div>
-                <span>Or import from:</span>
-                <div className="flex-1 h-px bg-gray-300 max-w-xs"></div>
-              </div>
-              <div className="flex items-center justify-center gap-3">
-                <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  Google Calendar
-                </button>
-                <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-2">
-                  <Mail className="w-5 h-5" />
-                  Gmail
-                </button>
-                <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  CSV
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 rounded-lg p-6 max-w-lg mx-auto">
-              <div className="text-lg font-semibold text-blue-900 mb-3">💡 Quick Tips:</div>
-              <ul className="text-left text-sm text-blue-800 space-y-2">
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Log meetings to track customer conversations</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Connect your calendar to sync automatically</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-600 mt-0.5">•</span>
-                  <span>Import past activities to see full history</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {/* Filtered Empty State - No Results for Current Filters */}
-        {activities.length === 0 && hasActiveFilters() && (
-          <div className="bg-white rounded-lg border border-gray-200 p-16 text-center">
-            <div className="text-gray-400 mb-6 text-6xl">
-              🔍
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
-              No Activities Match Your Filters
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Try adjusting your filters or search query
-            </p>
-
-            <Button
-              onClick={clearAllFilters}
-              size="xl" className="mb-8"
-            >
-              Clear All Filters
-            </Button>
-
-            <div className="bg-gray-50 rounded-lg p-6 max-w-lg mx-auto">
-              <div className="text-sm font-semibold text-gray-700 mb-3">Active Filters:</div>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {filterType !== 'All' && (
-                  <span className="px-3 py-1 bg-white border border-gray-300 rounded-full text-sm text-gray-700 flex items-center gap-2">
-                    Type: {filterType}
-                    <button onClick={() => setFilterType('All')} className="text-gray-500 hover:text-gray-700">×</button>
-                  </span>
-                )}
-                {filterDate !== 'All' && (
-                  <span className="px-3 py-1 bg-white border border-gray-300 rounded-full text-sm text-gray-700 flex items-center gap-2">
-                    Date: {filterDate}
-                    <button onClick={() => setFilterDate('All')} className="text-gray-500 hover:text-gray-700">×</button>
-                  </span>
-                )}
-                {filterOwner !== 'All' && (
-                  <span className="px-3 py-1 bg-white border border-gray-300 rounded-full text-sm text-gray-700 flex items-center gap-2">
-                    Owner: {filterOwner}
-                    <button onClick={() => setFilterOwner('All')} className="text-gray-500 hover:text-gray-700">×</button>
-                  </span>
-                )}
-                {filterRelated !== 'All' && (
-                  <span className="px-3 py-1 bg-white border border-gray-300 rounded-full text-sm text-gray-700 flex items-center gap-2">
-                    Related: {filterRelated}
-                    <button onClick={() => setFilterRelated('All')} className="text-gray-500 hover:text-gray-700">×</button>
-                  </span>
-                )}
-                {filterStatus !== 'All' && (
-                  <span className="px-3 py-1 bg-white border border-gray-300 rounded-full text-sm text-gray-700 flex items-center gap-2">
-                    Status: {filterStatus}
-                    <button onClick={() => setFilterStatus('All')} className="text-gray-500 hover:text-gray-700">×</button>
-                  </span>
-                )}
-                {searchQuery && (
-                  <span className="px-3 py-1 bg-white border border-gray-300 rounded-full text-sm text-gray-700 flex items-center gap-2">
-                    Search: "{searchQuery}"
-                    <button onClick={() => setSearchQuery('')} className="text-gray-500 hover:text-gray-700">×</button>
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Loading, failed and genuinely empty are SHARED by all four views —
-            they describe the fetch, not the grouping. A failed fetch must not read
-            as "no activity" in any of them. */}
-        <>
-            {/* Three distinct states. A failed fetch must not read as "no activity". */}
-            {loadError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-6 py-4">
-                <p className="text-sm font-medium text-red-800">Could not load activities</p>
-                <p className="mt-1 text-sm text-red-700">{loadError}</p>
-              </div>
-            )}
-            {loading && !loadError && (
-              <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center text-sm text-gray-500">
-                Loading activities…
-              </div>
-            )}
-            {!loading && !loadError && activities.length === 0 && (
-              <div className="rounded-lg border border-gray-200 bg-white px-6 py-10 text-center">
-                <p className="text-sm font-medium text-gray-900">No activity logged yet</p>
-                <p className="mt-1 text-sm text-gray-600">
-                  Calls, emails and meetings logged against a lead, deal, contact or account appear here.
-                </p>
-              </div>
-            )}
-
-            {/* PHASE 2: the timeline used to be four hardcoded groups filtered by
-                the literal strings 'Today', 'Yesterday', 'Dec 5' and 'Dec 4',
-                with a footer reading "Showing 9 of 247". Real dates never match
-                those, so the feed would have rendered empty. Grouped by actual
-                day now, newest first, with Today/Yesterday named as such. */}
-            {!loading && !loadError && visibleGroups.length > 0 && (
-              <div className="space-y-6">
-                {/* What this grouping could NOT attribute, stated before the
-                    groups rather than discovered at the bottom of them. */}
-                {coverage && coverage.unattributed > 0 && (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
-                    {coverage.attributed} of {coverage.total}{' '}
-                    {coverage.total === 1 ? 'activity' : 'activities'} grouped into {coverage.buckets}{' '}
-                    {coverage.buckets === 1 ? 'group' : 'groups'}.{' '}
-                    {coverage.unattributed} {coverage.unattributed === 1 ? 'has' : 'have'} no{' '}
-                    {viewMode === 'account' ? 'account linked' : viewMode === 'owner' ? 'owner assigned' : 'type recorded'}
-                    {viewMode === 'account'
-                      ? ' — an activity logged against a deal, contact or lead carries no account of its own.'
-                      : '.'}
-                  </p>
-                )}
-                {visibleGroups.map(group => (
-                  <div key={group.key}>
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-gray-400 to-gray-400"></div>
-                      <h2 className={`text-base font-bold tracking-wider px-3 ${
-                        group.isUnattributed ? 'text-gray-500 italic' : 'text-gray-900'
-                      }`}>
-                        {group.label}
-                        {viewMode !== 'timeline' && (
-                          <span className="ml-2 text-sm font-semibold text-gray-500">{group.items.length}</span>
-                        )}
-                      </h2>
-                      <div className="flex-1 h-0.5 bg-gradient-to-l from-transparent via-gray-400 to-gray-400"></div>
-                    </div>
-                    <div className="space-y-4">
-                      {group.items.map(renderActivityCard)}
-                    </div>
-                  </div>
-                ))}
-                <div className="text-center py-6 text-sm text-gray-500">
-                  Showing {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
-                </div>
-              </div>
-            )}
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Engage"
+        title="Activities"
+        description="Calls, emails, meetings and notes logged against your leads, deals, contacts and accounts."
+        actions={
+          <>
+            <Button variant="secondary" disabled title="Export is coming soon"><Download className="h-4 w-4" aria-hidden="true" /> Export · Soon</Button>
+            <Button variant="secondary" disabled title="Import is coming soon"><Upload className="h-4 w-4" aria-hidden="true" /> Import · Soon</Button>
+            <Button onClick={() => { setPickId(''); setPickerOpen(true); }}><Plus className="h-4 w-4" aria-hidden="true" /> Log activity</Button>
           </>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-6" data-testid="activity-tiles">
+        {tiles.map(t => (
+          <Card key={t.key} padding="none" className="p-3.5">
+            <p className={`text-2xl font-bold leading-8 ${t.alert && summary && summary.overdue > 0 ? 'text-warning-700' : 'text-ink'}`} data-testid={`tile-${t.key}`}>
+              {count(t.key)}
+            </p>
+            <p className="text-xs text-ink-muted">{t.label}</p>
+          </Card>
+        ))}
       </div>
+      {summaryError && <Alert tone="danger" title="The activity counts could not load">{summaryError}</Alert>}
+
+      {/* PREVIEW PANEL — kept labelled (AI is Phase 2). Its four buttons did
+          nothing and are gone; the real figures are the tiles above. */}
+      <Card className="border-brand-200 bg-brand-50">
+        <div className="flex flex-wrap items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-brand-700" aria-hidden="true" />
+          <h2 className="text-base font-semibold text-ink-heading">AI insights</h2>
+          <Badge tone="warning">Preview · Sample content</Badge>
+        </div>
+        <p className="mt-1 text-sm text-ink-muted">
+          These figures are examples, not calculated from your data. Your real activity counts are in the tiles above.
+        </p>
+        <ul className="mt-2 space-y-1 text-sm text-ink">
+          <li>High engagement: 32 activities, up 45%</li>
+          <li>18 overdue — oldest: Acme, 5 days</li>
+        </ul>
+      </Card>
+
+      <Card className="space-y-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <select aria-label="Type" className={selectClass()} value={filterType} onChange={e => setFilterType(e.target.value)}>
+            <option value="">Type: All</option>
+            {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
+          </select>
+          <select aria-label="Date" className={selectClass()} value={filterDate} onChange={e => setFilterDate(e.target.value as DateRange)}>
+            <option value="">Date: All</option>
+            {(Object.keys(DATE_LABEL) as Exclude<DateRange, ''>[]).map(k => <option key={k} value={k}>{DATE_LABEL[k]}</option>)}
+          </select>
+          <select aria-label="Owner" className={selectClass()} value={filterOwner} onChange={e => setFilterOwner(e.target.value)}>
+            <option value="">Owner: All</option>
+            {users.map(u => <option key={u.id} value={u.displayName}>{u.displayName}</option>)}
+          </select>
+          <select aria-label="Related" className={selectClass()} value={filterLinked} onChange={e => setFilterLinked(e.target.value as typeof filterLinked)}>
+            <option value="">Related: All</option>
+            <option value="lead">Leads</option>
+            <option value="deal">Deals</option>
+            <option value="contact">Contacts</option>
+            <option value="company">Accounts</option>
+          </select>
+          <select aria-label="Status" className={selectClass()} value={filterStatus} onChange={e => setFilterStatus(e.target.value as StatusChoice)}>
+            <option value="">Status: All</option>
+            <option value="completed">Completed</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="overdue">Overdue</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative min-w-[220px] flex-1">
+            <span className="sr-only">Search activities</span>
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" aria-hidden="true" />
+            <input className={`${inputClass()} pl-8`} placeholder="Search activity subjects…" value={searchInput} onChange={e => setSearchInput(e.target.value)} />
+          </label>
+          {activeFilters && <Button variant="secondary" onClick={clearAllFilters}>Clear filters</Button>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Activity view">
+          <Button variant={viewMode === 'timeline' ? 'primary' : 'secondary'} aria-pressed={viewMode === 'timeline'} onClick={() => setViewMode('timeline')}>
+            <Clock className="h-4 w-4" aria-hidden="true" /> Timeline
+          </Button>
+          {GROUPED_VIEWS.map(({ mode, label, icon: Icon }) => (
+            <Button key={mode} variant={viewMode === mode ? 'primary' : 'secondary'} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>
+              <Icon className="h-4 w-4" aria-hidden="true" /> {label}
+            </Button>
+          ))}
+          <Button variant="secondary" disabled title="Calendar view is coming soon"><Calendar className="h-4 w-4" aria-hidden="true" /> Calendar · Soon</Button>
+        </div>
+      </Card>
+
+      {notice && <Alert tone="success" title={notice} action={<Button variant="link" onClick={() => setNotice(null)}>Dismiss</Button>} />}
+      {actionError && <Alert tone="danger" title={actionError} />}
+
+      {loadError && (
+        <EmptyState tone="error" title="Could not load activities" reason={loadError}
+          action={<Button variant="secondary" onClick={reload}>Try again</Button>} />
+      )}
+      {!loadError && loading && records.length === 0 && <p className="py-8 text-center text-sm text-ink-muted">Loading activities…</p>}
+      {!loadError && !loading && total === 0 && (
+        activeFilters
+          ? <EmptyState title="No activities match these filters" reason="Try a wider date range or clear the filters."
+              action={<Button variant="secondary" onClick={clearAllFilters}>Clear filters</Button>} />
+          : <EmptyState title="No activity logged yet"
+              reason="Calls, emails, meetings and notes logged against a lead, deal, contact or account appear here."
+              action={<Button onClick={() => { setPickId(''); setPickerOpen(true); }}>Log activity</Button>} />
+      )}
+
+      {!loadError && total > 0 && (
+        <div className="space-y-6" aria-busy={loading}>
+          {coverage && (
+            <p className="rounded-card border border-line bg-surface-panel px-4 py-2.5 text-sm text-ink" data-testid="grouping-note">
+              Grouped from the {records.length} {records.length === 1 ? 'activity' : 'activities'} on this page, of {total.toLocaleString()} in all.
+              {coverage.unattributed > 0 && (
+                <> {coverage.unattributed} {coverage.unattributed === 1 ? 'has' : 'have'} no{' '}
+                  {viewMode === 'account' ? 'account linked — an activity logged against a deal, contact or lead carries no account of its own.'
+                    : viewMode === 'owner' ? 'owner assigned.' : 'type recorded.'}</>
+              )}
+            </p>
+          )}
+          {groups.map(g => (
+            <section key={g.key} aria-label={g.label} className="space-y-3">
+              <h2 className={`text-sm font-semibold uppercase tracking-wide ${g.isUnattributed ? 'italic text-ink-secondary' : 'text-ink-heading'}`}>
+                {g.label}{viewMode !== 'timeline' && <span className="ml-2 text-ink-secondary">{g.items.length}</span>}
+              </h2>
+              <div className="space-y-3">{g.items.map(renderCard)}</div>
+            </section>
+          ))}
+          <Card padding="none">
+            <LeadsPager page={page} pageCount={pageCount} total={total} pageSize={PAGE_SIZE}
+              shown={records.length} loading={loading} onPage={setPage} noun="activities" />
+          </Card>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={cancelling !== null}
+        type="danger"
+        title="Cancel activity"
+        message={cancelling ? `Mark “${cancelling.subject}” as cancelled?` : ''}
+        confirmLabel="Cancel activity"
+        onCancel={() => setCancelling(null)}
+        onConfirm={() => { void confirmCancel(); }}
+      />
+
+      <Modal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title="Log activity"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPickerOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!pickId}
+              onClick={() => {
+                const label = options?.[pickKind].find(o => o.id === pickId)?.label ?? pickId;
+                const parent: ActivityParent = pickKind === 'contact' ? { contact_id: pickId } : pickKind === 'company' ? { company_id: pickId } : { deal_id: pickId };
+                setPickerOpen(false);
+                setLogParent({ parent, label: `${KIND_LABEL[pickKind]}: ${label}` });
+              }}
+            >
+              Continue
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-muted">An activity belongs to one record. Choose it first.</p>
+        <div className="mt-3 space-y-3">
+          <div>
+            <label htmlFor="log-record-kind" className="block text-sm font-medium text-ink">Record type</label>
+            <select id="log-record-kind" className={`${selectClass()} mt-1`} value={pickKind} onChange={e => { setPickKind(e.target.value as RecordKind); setPickId(''); }}>
+              {(Object.keys(KIND_LABEL) as RecordKind[]).map(k => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="log-record-id" className="block text-sm font-medium text-ink">{KIND_LABEL[pickKind]}</label>
+            <select id="log-record-id" className={`${selectClass()} mt-1`} value={pickId} onChange={e => setPickId(e.target.value)} disabled={!options}>
+              <option value="">{options ? `Choose a ${KIND_LABEL[pickKind].toLowerCase()}…` : 'Loading…'}</option>
+              {options?.[pickKind].map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </div>
+          {optionsError && <p className="text-sm text-danger-700" role="alert">{optionsError}</p>}
+          <p className="text-xs text-ink-muted">Leads have their own log-activity composer on the lead's page.</p>
+        </div>
+      </Modal>
+
+      {logParent && (
+        <LogActivityModal
+          isOpen
+          onClose={() => setLogParent(null)}
+          parent={logParent.parent}
+          parentLabel={logParent.label}
+          onLogged={a => { setLogParent(null); setNotice(`Logged “${a.subject}”.`); reload(); }}
+        />
+      )}
     </div>
   );
 };

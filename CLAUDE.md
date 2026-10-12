@@ -1641,6 +1641,123 @@ old constraint, which fails the shared-name test.
       Calendar 83:39194). The Figma connection dropped mid-slice; the structure (KPI cards with detail
       lines, related-record buttons, List/Kanban toggle, inline delete strip, the calendar rail cards and
       the undated note) was followed from saved frame metadata, which carries no text or colour.
+  - **SLICE 4b DONE (2026-10-12) — Activities on the server.** The page loaded 200 activities; its Type /
+    Date / Owner / Related / Status dropdowns and its search box set state NOTHING read (every "filter"
+    left the list unchanged), the Owner list was three hardcoded names, the six tiles counted the loaded
+    rows, and buttons announced results that never happened ("Meeting cancelled", "Task marked as
+    complete!", "Note shared with team!").
+    - **Server (`activitiesController`):** one shared FROM + WHERE (`activityFilter`) for the list and the
+      new `GET /activities/summary` (total, today, this week, overdue, meetings / calls today, under the
+      SAME filters). New filters `state=overdue|upcoming` (planned + scheduled time past / future) and
+      `linked=lead|deal|contact|company`; `occurred_after` / `occurred_before` are validated ISO instants
+      (garbage used to reach SQL as a masked 500). Day and week are the VIEWER'S local midnights, sent as
+      instants (activity times are timestamps) — the 2026-10-11 Tasks decision.
+    - **Page:** one server page (25) with the shared pager, every filter real on list AND tiles, Owner from
+      the roster (`fetchUsers`; assigned_to is still a display name), tiles "—" on failure. **Mark complete
+      and Cancel are real saves** (`PUT /activities/:id`, status completed / cancelled), reported after the
+      2xx. Gone: Join Meeting (no link is stored — it opened zoom.us / meet.google.com blank), the dead
+      `/crm/calendar` links, Reschedule / Escalate / Edit / Share / Transcript / Recording / Send follow-up,
+      the never-rendered AI summary / email-tracking / risk panels, the second empty state with its dead
+      Google Calendar / Gmail / CSV buttons, and the AI-insights panel's four dead buttons (the panel stays,
+      labelled sample). Export / Import / Calendar view are disabled "Coming soon". "Create follow-up task"
+      opens the real task form. **Log activity** now works: choose the record (contact / account / deal —
+      an activity must hang off exactly one) then the existing `LogActivityModal`. Related links go to the
+      RECORD (they went to the list pages). The timeline groups by the viewer's local day (it used a UTC
+      day key); the grouped views say they regroup this page "of N in all".
+    - Tests: `roundTrip.activityFilters.test.ts` (5, incl. the viewer-midnight boundary and 10,000 rows vs
+      SQL), `ActivitiesPage.test.tsx` (9; replaces the 1-test file, keeps its no-HRMS / no-Quick-Filters
+      assertion). Mutation-tested in the separate worktree: 5 backend + 5 frontend, all killed. E2E on
+      `bmi_crm_iso_test` via the real login and sidebar: tiles and every filter matched the seed, Mark
+      complete and Log activity confirmed in Postgres and surviving reload, no browser dialog fired; seed
+      removed and re-counted.
+    - **Still open:** the Activities frame (64:17786) side-by-side visual pass, with Tasks / Calendar's, when
+      Figma is reconnected (it remained disconnected on 2026-10-12); the record pickers here and on Tasks
+      still list the first 200 records (server search is slice 6).
+  - **SLICE 5 PLAN — APPROVED IN FULL by Venkat 2026-10-12.** 5a deals summary + main dashboard; 5b
+    Reports; 5c Forecast + Team performance; 5d REDIRECT /dashboard -> /crm/dashboard and /analytics ->
+    Reports (both confirmed duplicates; not rebuilt). Each sub-slice gated and reported separately.
+    **Decided with it:**
+    - **Currency:** sum only genuinely converted USD (`TRUSTED_USD`); count and label the rest "not in
+      USD"; no server-side exchange rates — the Deals / Accounts rule.
+    - **Win rate (5a and 5b): won / (won + lost), by stage_type, all pipelines, ALL TIME, computed on the
+      server, sample size shown** — the definition already in ReportsPage's stats comment. The Sales
+      Intelligence Guide's trailing-365-day figure stays SEPARATE and is labelled as such ("closed in the
+      last 365 days").
+    - **No weighted-forecast figure anywhere yet.** When one is built, deals with no probability are
+      EXCLUDED from the weighted value but still COUNTED in the deal count (the `weightedProbability` rule).
+  - **SLICE 5a DONE (2026-10-12) — `GET /deals/summary` + the main dashboard on server figures.**
+    - **`GET /deals/summary?today=`** (`dealsController.getDealsSummary`): total (incl. `unstaged`), open /
+      won (count, `value_usd`, `unconverted`) and lost by stage_type across every pipeline; `win_rate`
+      {value, won, lost, sample_size} (null when nothing is decided); `closing_soon` = open deals closing in
+      the viewer's next 7 calendar days (today .. today + 6); `by_stage` for every pipeline in pipeline
+      then position order. Test and archived excluded. `GET /deals` gained `stage_type=open|won|lost`.
+    - **`/crm/dashboard`**: tiles are the server totals (contacts total, accounts from the summary, deals and
+      open USD with "N not in USD"); Pipeline by Stage is the server breakdown (removing the stage-order memo
+      that went stale after pipelines loaded); win rate shown with its sample and "all time, all pipelines";
+      **Top Deals** = `GET /deals?stage_type=open&sort=base_amount_usd&dir=desc&limit=3` (a large OLD deal
+      was invisible past the newest 500); **Upcoming Meetings** = real meetings from the Meetings module, next
+      7 days (it searched the 20 newest activities); each panel loads and fails on its own, "—" never 0.
+      `SalesIntelligenceGuide`'s conversion evidence now names its window.
+    - **Live effect (read-only preview 2026-10-12):** Open Pipeline $1.15M -> $1.09M (the old figure added
+      native amounts as dollars), 0 open deals not in USD, win rate 50% (1 of 2 decided).
+    - Tests: `roundTrip.dealsSummary.test.ts` (8, incl. a second pipeline and 10,000 deals vs SQL),
+      `CRMDashboard.test.tsx` (7). Mutation-tested: 6 backend + 4 frontend, all killed. E2E on
+      `bmi_crm_iso_test` via the sidebar: 527 deals / 523 open / $5.5M + 1 not in USD / 75% (3 of 4) / the
+      400-day-old $5M deal first in Top Deals — all equal to SQL; seed removed and re-counted.
+    - **For 5d:** DataContext still fetches 500 of every table on every CRM page; its remaining readers are
+      Analytics (to be redirected), the dead CompaniesPage, an unused destructure in DealsKanbanPage and
+      `addDeal` in the deal form — so 5d can retire those loads.
+  - **SLICE 5b DONE (2026-10-12) — Reports on server totals.**
+    - **`GET /deals/report?today=&close_from=&close_to=&owner=`** (`dealsController.getDealsReport`): the totals
+      behind the eight cards — won / open by owner (`id:<user>` / `name:<text>` keys, unmatched names kept
+      separate, deterministic order), outcome, open by stage across pipelines, aging buckets from creation,
+      won by source (no-source row), high priority — plus `owners` (from ALL deals) and
+      `excluded_no_close_date`. The close range applies to every card but Aging (as `usesDateRange` declares);
+      the owner applies to all. Trusted USD only, the rest "not in USD". **`GET /leads/summary` gained
+      `by_stage`.**
+    - **Page:** headline tiles = `GET /deals/summary` (5a; unfiltered; win rate won / (won + lost), all time,
+      with its sample); cards FORMAT the report (`reportDefinitions` no longer computes over deals; the
+      browser-side grouping / filtering tests moved server-side); the "lower bound" banner is gone; a failed
+      report says so on every card, never an empty-data sentence.
+    - **Lead funnel Conversion now counts converted leads — DECIDED by Venkat 2026-10-12:**
+      (won + converted) / (won + converted + lost). **Disqualified is shown on its own row and is NOT in the
+      denominator — CONFIRMED by Venkat 2026-10-13.** Live is unchanged today (4 won, 2 lost, 0 converted -> 67%).
+    - Tests: `roundTrip.dealsReport.test.ts` (7, incl. 10,000 deals vs SQL and the id-vs-digits owner case),
+      `reportDefinitions.test.ts` rewritten (15), `ReportsPage.test.tsx` (4). Mutation-tested: 5 backend +
+      5 frontend, all killed (one survived first — a failed report computed over empty data — and the test
+      was tightened until it failed). E2E on `bmi_crm_iso_test`: 600 OLD wins the 500-newest page could not
+      see, $60K / 600 of 601 / $520K + 1 not in USD / Conversion 75% (9 of 12); filters reach the server and
+      Aging ignores the range; all equal to SQL; seed removed and re-counted.
+  - **SLICE 5c DONE (2026-10-13) — Forecast and Team performance on server totals (migration 069).**
+    - **Forecast:** `utils/forecastTotals.computeForecast` is the ONE implementation behind
+      `GET /forecast/summary?period=&today=` and `POST /forecast/snapshots`. The page's category rules run on
+      the server unchanged (`FORECAST_CATEGORY`: explicit forecast_category, else won -> closed / lost dropped
+      by stage_type, else negotiation -> commit, proposal -> best case, else pipeline); quarter by expected
+      close; undated deals only while the viewer's day is in the quarter and never as closed; trusted USD
+      with per-category and per-rep `unconverted`; the 25 biggest deals per category for the cards ("Showing
+      the 25 largest of N"). The page had fetched 500 deals with no warning past the cap.
+    - **Snapshots are SERVER-COMPUTED:** `POST /forecast/snapshots { period_label, today }` computes the
+      summary and upserts one row per rep (043's identity rules kept: user_id + rep_name, unattributed rows
+      recorded, shared display names separate, same-day overwrite, user delete -> SET NULL). **A body carrying
+      figures (`reps`) is REFUSED (400)** so an old client cannot store capped numbers; an empty quarter is a
+      409; the page says "saved" only after the 2xx (it toasted without checking). **Migration 069** adds
+      `forecast_snapshots.unconverted` — NULL = recorded before 2026-10-13 by the browser (3 live rows, kept as
+      recorded) and labelled "browser-summed" on the page.
+    - **Team performance:** `GET /users/performance` — per user open / won (trusted USD, unconverted) / lost,
+      win rate won / (won + lost) all time with its sample, plus `unattributed` deals with the names they
+      carry. `useTeamPerformance` keeps its interface and reads it; quotas still come from `GET /quotas` (read
+      scoping unchanged). The member page lists that person's deals from `GET /deals?assigned_to_user_id=`
+      with a pager (it showed the capped list) and now formats each deal in its OWN currency (every value was
+      shown as USD).
+    - **Default chosen while building, NOT ratified — ask:** attainment (won USD / quota) is computed ONLY for
+      a USD quota; a quota in another currency shows its amount in that currency and no percentage, and the
+      team attainment needs every quota in USD. (Live: the one quota is USD.)
+    - Tests: `roundTrip.forecastSnapshots.test.ts` rewritten (11), `roundTrip.teamPerformance.test.ts` (4),
+      `ForecastPage.serverTotals.test.tsx` (6), Team / Forecast fixtures moved to the server payloads (+2 Team
+      tests). Mutation-tested: 8 backend + 4 frontend, all killed (one survived first — attainment against an
+      INR quota — and the test was tightened). E2E on `bmi_crm_iso_test`: 600 TWO-YEAR-OLD commit deals the
+      500-newest page could not see, KPIs / cards / rep table / Team figures all as seeded, snapshot taken
+      twice through the UI -> 3 rows (no duplicates) equal to the summary, legacy row untouched; seed removed.
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary
@@ -2365,6 +2482,10 @@ full run, nothing orphaned. So the two shapes this file has tracked separately a
 phenomenon seen through two clients: supertest's `login.status !== 200` path stringifies an
 empty body, while an assertion that dumps `res.body` shows the envelope. That resolves the
 "part 2 could not be confirmed" caveat recorded on 2026-09-06.
+
+**FIFTH CAPTURE, 2026-10-12 (slice 5b gate), output saved as instructed.** Byte-identical envelope again,
+failing `roundTrip.pipelineStages` "bulk: a selection spanning two pipelines…" on `POST /deals/bulk` expecting 200.
+The file passed 24/24 alone and the next full run 829/829; zero `rt-` tenants orphaned.
 
 **Practical guidance: retry, do not debug.** A single unexplained 401 in a full run whose
 file then passes alone is this, and re-running is the correct response. Do not add retries

@@ -3,13 +3,13 @@ import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users, DollarSign, Calendar, Target, Activity, FileText, Download, ChevronRight, ChevronDown, ChevronUp, Star, Clock, Award, Building2, AlertCircle, Eye, Settings, MoreVertical, Plus, RefreshCw, Home, Edit } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
-import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
-import { useStageLookup } from '../../hooks/useStageLookup';
-import { isWonWith, isLostWith, isOpenWith, outcomeOf } from '../../utils/pipelinesApi';
 import {
-  reportsIn, dealsForReport, type ReportSection, type ReportData, type ReportDef,
+  reportsIn, usd, type ReportSection, type ReportData, type ReportDef,
 } from './reportDefinitions';
-import { ownerFilterOptions, ownerIdentityOf } from '../../utils/dealOwnership';
+import { fetchDealsReport, fetchDealsSummary, type DealsReport, type DealsSummary } from '../../utils/dealsApi';
+import { fetchLeadSummary, type LeadSummary } from '../../utils/leadsApi';
+import { fetchContactsPage } from '../../utils/contactsApi';
+import { localDay } from '../../utils/dates';
 
 
 /**
@@ -291,20 +291,29 @@ function dateRangeBounds(key: DateRangeKey, now = new Date()): { from: Date; to:
 
 const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
-  // Same hook the two dashboards read, so /crm/reports cannot drift from them.
-  const {
-    leads, deals, contacts, loading: dataLoading, error: dataError, reload,
-    /*
-     * CONSUMED NOW, and it was not before. Every figure on this page is summed
-     * from a list fetched with a limit, so when a list comes back exactly at
-     * that limit the totals are LOWER BOUNDS rather than facts. The hook has
-     * always reported this; the page destructured everything except it, so a
-     * pipeline total that silently omitted deals past the limit was
-     * indistinguishable from a complete one. The Team pages surface the same
-     * flag — this page was the outlier.
-     */
-    truncated,
-  } = useDashboardData();
+  /*
+   * SLICE 5b (2026-10-12): SERVER TOTALS, NOT THE 500 NEWEST DEALS. This page
+   * read useDashboardData(), summed every card in the browser, and showed a
+   * "lower bound" banner once a list hit its cap. Now:
+   *   - the four headline tiles are GET /deals/summary (5a) — whole workspace,
+   *     deliberately unfiltered, win rate won / (won + lost) all time with its
+   *     sample;
+   *   - the eight cards are GET /deals/report under the page's filters, the
+   *     funnel GET /leads/summary's stage counts, contacts the server total.
+   * A failure is never shown as zero.
+   */
+  const [summary, setSummary] = useState<DealsSummary | null>(null);
+  const [report, setReport] = useState<DealsReport | null>(null);
+  const [leadSummary, setLeadSummary] = useState<LeadSummary | null>(null);
+  const [contactsTotal, setContactsTotal] = useState<number | null>(null);
+  const [baseLoading, setBaseLoading] = useState(true);
+  const [reportLoading, setReportLoading] = useState(true);
+  const [baseError, setBaseError] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey(k => k + 1), []);
+  const dataLoading = baseLoading || reportLoading;
+  const dataError = baseError ?? reportError;
   const [selectedCategory, setSelectedCategory] = useState('all');
   /*
    * THE THREE FILTERS PHASE (b) REMOVED, BACK — and working this time.
@@ -324,7 +333,6 @@ const ReportsPage: React.FC = () => {
   // Modal states
 
   // Loading & Error states
-  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasNetworkError, setHasNetworkError] = useState(false);
 
@@ -403,71 +411,60 @@ const ReportsPage: React.FC = () => {
    * trend regardless of data. Real values were $55,000 / 1 / $1.56M / 50%. The
    * $2.4M was the same fabricated pipeline figure the CRM dashboard carried.
    */
-  const { lookup } = useStageLookup();
-
-  /*
-   * THE FILTERED DEAL SET every report computes from, plus what filtering
-   * excluded. Kept separate from `stats` on purpose: the four HEADLINE figures
-   * describe the whole workspace and are deliberately NOT filtered, so a
-   * narrowed report can always be compared against an unfiltered total.
-   */
   const dateBounds = useMemo(() => dateRangeBounds(dateRange), [dateRange]);
 
-  /**
-   * How many deals a date range has to drop for having no expected close date
-   * at all — 5 of the 24 live deals. Counted once; only reports that actually
-   * use the date filter are told about it.
-   */
-  const excludedNoCloseDate = useMemo(() => {
-    if (!dateBounds) return 0;
-    return deals.filter(d => {
-      if (!d.expected_close_date) return true;
-      // An unparseable date counts as missing, never as in-range.
-      return !Number.isFinite(new Date(d.expected_close_date).getTime());
-    }).length;
-  }, [deals, dateBounds]);
+  // Workspace-wide reads: not affected by the report filters.
+  React.useEffect(() => {
+    let cancelled = false;
+    setBaseLoading(true);
+    Promise.all([
+      fetchDealsSummary(localDay(new Date())),
+      fetchLeadSummary(),
+      fetchContactsPage({ limit: 1, offset: 0 }).then(r => r.total).catch(() => null),
+    ])
+      .then(([sm, l, c]) => { if (!cancelled) { setSummary(sm); setLeadSummary(l); setContactsTotal(c); setBaseError(null); } })
+      .catch(e => { if (!cancelled) setBaseError(e?.message ?? 'Could not load the totals.'); })
+      .finally(() => { if (!cancelled) setBaseLoading(false); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  // The report cards, under the filters (applied on the server; the close
+  // range skips Aging, exactly as its definition declares).
+  React.useEffect(() => {
+    let cancelled = false;
+    setReportLoading(true);
+    fetchDealsReport({
+      today: localDay(new Date()),
+      close_from: dateBounds ? localDay(dateBounds.from) : undefined,
+      close_to: dateBounds ? localDay(dateBounds.to) : undefined,
+      owner: ownerKey === 'all' ? undefined : ownerKey,
+    })
+      .then(r => { if (!cancelled) { setReport(r); setReportError(null); } })
+      .catch(e => { if (!cancelled) setReportError(e?.message ?? 'Could not load the reports.'); })
+      .finally(() => { if (!cancelled) setReportLoading(false); });
+    return () => { cancelled = true; };
+  }, [dateBounds, ownerKey, reloadKey]);
 
   /*
-   * Owner options built from the DEALS, not the roster — so a name that owns
-   * deals but is not a user ("John Smith", 15 of them) appears and is labelled
-   * as unmatched. The list this replaces named five colleagues, three of whom
-   * own nothing, and omitted him entirely.
+   * Owner options come from the server's grouping of ALL deals, not the
+   * roster — so a name that owns deals but is not a user appears and is
+   * labelled as unmatched.
    */
-  const ownerOptions = useMemo(() => ownerFilterOptions(deals), [deals]);
+  const ownerOptions = useMemo(
+    () => (report?.owners ?? []).map(o => ({ key: o.key, name: o.label, unresolved: o.unresolved, count: o.count })),
+    [report],
+  );
 
-  /*
-   * DATA PER REPORT, NOT ONE SET FOR ALL OF THEM.
-   *
-   * `usesDateRange` and `usesOwner` decide which filters a report actually
-   * RECEIVES — they are not just labels. Handing every card the fully filtered
-   * set was a live bug: Aging Pipeline declares `usesDateRange: false`, because
-   * age is measured from creation and a close-date range says nothing about it,
-   * yet its totals moved from 22 deals / $1.56M to 10 / $567K the moment a
-   * quarter was selected. The card was quietly answering a different question
-   * from the one its own definition claimed.
-   *
-   * Caught by reading the rendered numbers against the unfiltered ones, not by
-   * the type system — `usesDateRange` was consulted for the footnote and
-   * nowhere else, which type-checks perfectly.
-   */
-  const dataFor = useCallback((def: ReportDef): ReportData => {
-    const working = dealsForReport(def, deals, {
-      bounds: dateBounds,
-      ownerKey,
-      ownerKeyOf: (d) => ownerIdentityOf(d).key,
-    });
-
+  const dataFor = useCallback((def: ReportDef): ReportData | null => {
+    if (!report || !leadSummary) return null;
     return {
-      deals: working,
-      leads,
-      contactCount: contacts.length,
-      outcome: outcomeOf(lookup),
-      stageOf: lookup,
-      // Only meaningful for a report that is actually date-filtered.
-      excludedNoCloseDate: def.usesDateRange && dateBounds ? excludedNoCloseDate : 0,
+      report,
+      leadsTotal: leadSummary.total,
+      leadsByStage: leadSummary.by_stage ?? {},
+      contactCount: contactsTotal,
       dateFiltered: def.usesDateRange && dateBounds !== null,
     };
-  }, [deals, dateBounds, ownerKey, leads, contacts, lookup, excludedNoCloseDate]);
+  }, [report, leadSummary, contactsTotal, dateBounds]);
 
   /** Search matches a report's title; nothing else claims to be searched. */
   const matchesSearch = (r: ReportDef) =>
@@ -481,27 +478,19 @@ const ReportsPage: React.FC = () => {
       || u.title.toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
   const stats = useMemo(() => {
-    // The win rate below divides won by (won + lost). Classifying by the
-    // literal 'closed-won' meant a Renewals or Partnerships win landed in
-    // NEITHER bucket — it was counted as open — so the reported win rate was
-    // computed over the default pipeline alone while being labelled as the
-    // workspace's.
-    const won = deals.filter(isWonWith(lookup));
-    const lost = deals.filter(isLostWith(lookup));
-    const open = deals.filter(isOpenWith(lookup));
-    const decided = won.length + lost.length;
+    if (!summary) return null;
     return {
-      revenueWon: won.reduce((sum, d) => sum + dealValue(d), 0),
-      dealsWon: won.length,
-      dealsLost: lost.length,
-      openPipeline: open.reduce((sum, d) => sum + dealValue(d), 0),
-      openCount: open.length,
-      // Won as a share of DECIDED deals, not of all deals. Dividing by every
-      // deal gives a "win rate" that can only rise as open deals are added.
-      winRate: decided > 0 ? Math.round((won.length / decided) * 100) : null,
-      decided,
+      revenueWon: summary.won,
+      dealsWon: summary.won.count,
+      dealsLost: summary.lost.count,
+      openPipeline: summary.open,
+      openCount: summary.open.count,
+      // Won as a share of DECIDED deals, by stage type, every pipeline, all
+      // time — the server's definition (decided 2026-10-12).
+      winRate: summary.win_rate.value === null ? null : Math.round(summary.win_rate.value * 100),
+      decided: summary.win_rate.sample_size,
     };
-  }, [lookup, deals]);
+  }, [summary]);
 
   /*
    * The unbacked reports for a section, and an honest header count. The
@@ -554,7 +543,11 @@ const ReportsPage: React.FC = () => {
    */
   const renderReports = (section: ReportSection) =>
     visibleReports(section).map((def) => {
-      const result = def.compute(dataFor(def));
+      const data = dataFor(def);
+      // Before the server answers, or when it failed, a card says so — it is
+      // never computed over nothing and shown as zero.
+      const result = data ? def.compute(data)
+        : { unavailable: reportError ? `Could not load this report — ${reportError}` : 'Loading…' };
       return (
         <ReportCard
           key={def.id}
@@ -581,11 +574,6 @@ const ReportsPage: React.FC = () => {
       );
     });
 
-  const money = (n: number): string =>
-    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
-    : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
-    : `$${n.toLocaleString()}`;
-
   /*
    * The funnel memo that was here is now the `lead-funnel` entry in
    * reportDefinitions, computed the same way from the same fields. It moved so
@@ -596,10 +584,9 @@ const ReportsPage: React.FC = () => {
   // The skeleton below now tracks the REAL fetch. It used to be
   //   setTimeout(() => setIsLoading(false), 2000)
   // — a two-second animation that then revealed hardcoded numbers, which is
-  // what made them look freshly queried. `isLoading` is kept because other
-  // parts of the page read it; it follows the hook now.
+  // what made them look freshly queried. The skeleton now shows only until
+  // the server's totals arrive (and not at all after a failure).
   React.useEffect(() => {
-    setIsLoading(dataLoading);
     // Ends the manual-refresh spinner on the REAL fetch completing.
     if (!dataLoading) setIsRefreshing(false);
   }, [dataLoading]);
@@ -921,20 +908,10 @@ const ReportsPage: React.FC = () => {
           and it is the failure this page spent 107 hardcoded rows committing in
           the other direction.
         */}
-        {truncated && !dataError && (
-          <div
-            className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4"
-            role="alert"
-          >
-            <p className="text-sm text-amber-900">
-              More records exist than were loaded, so every total on this page is a
-              lower bound rather than an exact figure.
-            </p>
-          </div>
-        )}
-
+        {/* The "every total is a lower bound" banner is gone (slice 5b): no
+            figure on this page is summed from a capped list any more. */}
         {/* Quick Stats */}
-        {isLoading ? (
+        {!stats ? (baseError ? null :
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="bg-white rounded-lg border border-gray-200 p-6 animate-pulse">
@@ -954,7 +931,7 @@ const ReportsPage: React.FC = () => {
           <QuickStatCard
             icon={<DollarSign className="w-6 h-6 text-green-600" />}
             label="REVENUE WON"
-            value={money(stats.revenueWon)}
+            value={usd(stats.revenueWon)}
             change={`From ${stats.dealsWon} closed-won ${stats.dealsWon === 1 ? 'deal' : 'deals'}`}
             changeColor="text-gray-600"
             bgColor="bg-green-50"
@@ -976,7 +953,7 @@ const ReportsPage: React.FC = () => {
           <QuickStatCard
             icon={<TrendingUp className="w-6 h-6 text-purple-600" />}
             label="OPEN PIPELINE"
-            value={money(stats.openPipeline)}
+            value={usd(stats.openPipeline)}
             change={`${stats.openCount} open ${stats.openCount === 1 ? 'deal' : 'deals'}, excludes closed`}
             changeColor="text-gray-600"
             bgColor="bg-purple-50"

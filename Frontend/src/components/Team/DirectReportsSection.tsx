@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, ChevronRight, Mail } from 'lucide-react';
-import { MemberPerformance } from '../../hooks/useTeamPerformance';
+import { MemberPerformance, withUnconverted, quotaText } from '../../hooks/useTeamPerformance';
 
 /**
  * Direct reports, resolved from `users.manager_id` (migration 041).
@@ -116,10 +116,10 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
                     <td className="px-4 py-3 text-sm text-slate-700">{m.role}</td>
                     <td className="px-4 py-3 text-right text-sm text-slate-700">{r.openCount}</td>
                     <td className="px-4 py-3 text-right text-sm text-slate-700">
-                      {r.openValue > 0 ? money(r.openValue) : <span className="text-slate-400">—</span>}
+                      {r.openCount > 0 ? withUnconverted(money(r.openValue), r.openUnconverted) : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-slate-700">
-                      {r.wonCount > 0 ? `${r.wonCount} · ${money(r.wonValue)}` : <span className="text-slate-400">0</span>}
+                      {r.wonCount > 0 ? `${r.wonCount} · ${withUnconverted(money(r.wonValue), r.wonUnconverted)}` : <span className="text-slate-400">0</span>}
                     </td>
                     {/* Null win rate is "nothing closed", not 0%. */}
                     <td className="px-4 py-3 text-right text-sm">
@@ -132,7 +132,7 @@ export const DirectReportsSection: React.FC<DirectReportsSectionProps> = ({
                       {r.quota == null
                         ? <span className="text-slate-400 italic" title={`No quota entered for ${period}`}>Not set</span>
                         : <span className="text-slate-700">
-                            {money(r.quota)}
+                            {quotaText(r.quota, r.quotaCurrency, money)}
                             {r.attainment != null && (
                               <span className={`ml-2 text-xs font-semibold ${
                                 r.attainment >= 100 ? 'text-green-600' : 'text-slate-500'}`}>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, TrendingUp, Target, Trophy, Search, Download, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTeamPerformance, MemberPerformance } from '../../hooks/useTeamPerformance';
+import { useTeamPerformance, MemberPerformance, withUnconverted, quotaText } from '../../hooks/useTeamPerformance';
 
 /**
  * Team Performance — now computed from the workspace, not from a fixture.
@@ -36,7 +36,7 @@ export default function TeamPerformancePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    members, totals, unattributed, loading, error, truncated, period, reload,
+    members, totals, unattributed, loading, error, period, reload,
   } = useTeamPerformance();
 
   const [searchTerm, setSearchTerm]     = useState('');
@@ -75,14 +75,14 @@ export default function TeamPerformancePage() {
      * assert a quota or a win rate that was never entered.
      */
     const head = ['Member', 'Email', 'Role', 'Reports to', 'Status',
-                  'Open deals', 'Open pipeline', 'Won deals', 'Won value',
-                  `Quota (${period})`, 'Attainment %', 'Win rate %'];
+                  'Open deals', 'Open pipeline (USD)', 'Open not in USD', 'Won deals', 'Won value (USD)', 'Won not in USD',
+                  `Quota (${period})`, 'Quota currency', 'Attainment %', 'Win rate %'];
     const cell = (v: string | number | null) =>
       v == null ? '' : `"${String(v).replace(/"/g, '""')}"`;
     const rows = filtered.map(r => [
       r.member.name, r.member.email, r.member.role, r.member.managerName, r.member.status,
-      r.openCount, r.openValue, r.wonCount, r.wonValue,
-      r.quota, r.attainment, r.winRate,
+      r.openCount, r.openValue, r.openUnconverted, r.wonCount, r.wonValue, r.wonUnconverted,
+      r.quota, r.quotaCurrency, r.attainment, r.winRate,
     ].map(cell).join(','));
 
     const blob = new Blob([[head.join(','), ...rows].join('\n')], { type: 'text/csv' });
@@ -143,17 +143,8 @@ export default function TeamPerformancePage() {
           </div>
         )}
 
-        {/*
-          A sum computed from a truncated list is a lower bound, and saying so is
-          the whole point of the flag — an understated pipeline next to a real
-          person's name is the same class of untruth as an invented one.
-        */}
-        {truncated && (
-          <div role="alert" className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            More deals exist than were loaded, so every total below is a lower bound.
-          </div>
-        )}
-
+        {/* The "lower bound" banner is gone (slice 5c): these figures are the
+            server's rollup over every deal, not a sum of the 500 newest. */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <Stat
             icon={<Users className="w-5 h-5 text-blue-600" />}
@@ -170,14 +161,14 @@ export default function TeamPerformancePage() {
           <Stat
             icon={<Target className="w-5 h-5 text-blue-600" />}
             label="Open Pipeline"
-            value={loading ? null : money(totals.openValue)}
-            caption="Sum of open deal values"
+            value={loading ? null : withUnconverted(money(totals.openValue), totals.openUnconverted)}
+            caption="Open deals in USD; amounts not in USD are counted, not added"
           />
           <Stat
             icon={<Trophy className="w-5 h-5 text-yellow-600" />}
             label="Team Win Rate"
             value={loading || totals.winRate == null ? null : `${totals.winRate}%`}
-            caption={totals.winRate == null ? 'No deals closed yet' : 'Won / closed deals'}
+            caption={totals.winRate == null ? 'No deals closed yet' : 'Won / (won + lost), all time'}
           />
           {/*
             QUOTA IS THE ONE CARD THAT MUST NOT SHOW A ZERO. `quotas` has no
@@ -193,7 +184,9 @@ export default function TeamPerformancePage() {
               loading ? ''
               : totals.quota == null
                 ? 'No quota entered for this period'
-                : `${money(totals.wonValue)} won of ${money(totals.quota)} · ${totals.membersWithQuota} of ${totals.headcount} with a quota`
+                : totals.attainment == null
+                  ? `${totals.membersWithQuota} of ${totals.headcount} with a quota · attainment needs every quota in USD`
+                  : `${money(totals.wonValue)} won of ${money(totals.quota)} · ${totals.membersWithQuota} of ${totals.headcount} with a quota`
             }
           />
         </div>
@@ -211,7 +204,7 @@ export default function TeamPerformancePage() {
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" aria-hidden="true" />
               <div className="text-sm text-slate-700">
                 <span className="font-semibold">
-                  {unattributed.count} {unattributed.count === 1 ? 'deal' : 'deals'} worth {money(unattributed.value)} are not attributed to anyone
+                  {unattributed.count} {unattributed.count === 1 ? 'deal' : 'deals'} worth {withUnconverted(money(unattributed.value), unattributed.unconverted)} are not attributed to anyone
                 </span>
                 {' '}and are excluded from every per-person figure above and below.
                 {unattributed.names.length > 0 && (
@@ -377,10 +370,10 @@ export default function TeamPerformancePage() {
                         {row.openCount > 0 ? row.openCount : <span className="text-slate-400">0</span>}
                       </td>
                       <td className="px-6 py-4 text-right text-sm text-slate-700">
-                        {row.openValue > 0 ? money(row.openValue) : <span className="text-slate-400">—</span>}
+                        {row.openCount > 0 ? withUnconverted(money(row.openValue), row.openUnconverted) : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-6 py-4 text-right text-sm text-slate-700">
-                        {row.wonCount > 0 ? `${row.wonCount} · ${money(row.wonValue)}` : <span className="text-slate-400">0</span>}
+                        {row.wonCount > 0 ? `${row.wonCount} · ${withUnconverted(money(row.wonValue), row.wonUnconverted)}` : <span className="text-slate-400">0</span>}
                       </td>
                       {/* Null win rate is "nothing closed", not 0%. */}
                       <td className="px-6 py-4 text-right text-sm">
@@ -393,7 +386,7 @@ export default function TeamPerformancePage() {
                         {row.quota == null
                           ? <span className="text-slate-400 italic" title={`No quota entered for ${period}`}>Not set</span>
                           : <span className="text-slate-700">
-                              {money(row.quota)}
+                              {quotaText(row.quota, row.quotaCurrency, money)}
                               {row.attainment != null && (
                                 <span className={`ml-2 text-xs font-semibold ${
                                   row.attainment >= 100 ? 'text-green-600' : 'text-slate-500'}`}>

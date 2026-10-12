@@ -96,6 +96,57 @@ export async function fetchActivities(q: ActivityQuery = {}): Promise<ActivityRe
   return json.data ?? [];
 }
 
+/**
+ * Slice 4b — the Activities page reads one server page at a time, and its
+ * tiles from GET /activities/summary under the SAME filters. Day and week are
+ * the viewer's, sent as local-midnight INSTANTS (activity times are timestamps).
+ */
+export interface ActivityFilters {
+  type?: string;
+  status?: ActivityStatus;
+  /** planned + past / future scheduled time. */
+  state?: 'overdue' | 'upcoming';
+  /** Which kind of record the activity hangs off. */
+  linked?: 'lead' | 'deal' | 'contact' | 'company';
+  assigned_to?: string;
+  search?: string;
+  occurred_after?: string;
+  occurred_before?: string;
+}
+
+const activityQs = (q: object) => {
+  const params = new URLSearchParams();
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+  });
+  return params.toString();
+};
+
+export async function fetchActivitiesPage(
+  q: ActivityFilters & { limit: number; offset: number },
+): Promise<{ activities: ActivityRecord[]; total: number }> {
+  const json = await request<{ data: ActivityRecord[]; total: number }>(`/activities?${activityQs(q)}`);
+  return { activities: json.data ?? [], total: json.total ?? 0 };
+}
+
+export interface ActivitySummary {
+  total: number; today: number; this_week: number; overdue: number; meetings_today: number; calls_today: number;
+}
+
+/** The viewer's day and week as local-midnight instants (week starts Sunday, like the calendar). */
+export function viewerBounds(now: Date = new Date()): { day_from: string; day_to: string; week_from: string; week_to: string } {
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  const week = new Date(day.getFullYear(), day.getMonth(), day.getDate() - day.getDay());
+  const weekEnd = new Date(week.getFullYear(), week.getMonth(), week.getDate() + 7);
+  return { day_from: day.toISOString(), day_to: next.toISOString(), week_from: week.toISOString(), week_to: weekEnd.toISOString() };
+}
+
+export async function fetchActivitySummary(filters: ActivityFilters = {}, now: Date = new Date()): Promise<ActivitySummary> {
+  const json = await request<{ data: ActivitySummary }>(`/activities/summary?${activityQs({ ...filters, ...viewerBounds(now) })}`);
+  return json.data;
+}
+
 /** Returns null when the id does not exist, so callers can show a not-found state. */
 export async function fetchActivityById(id: string): Promise<ActivityRecord | null> {
   const res = await fetch(`${API_BASE}/activities/${encodeURIComponent(id)}`, {

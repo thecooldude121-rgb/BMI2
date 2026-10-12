@@ -3,7 +3,7 @@ import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
 import { foreignIdsInTenant, ScopedTable } from '../utils/tenantScope';
-import { pageParams, orderBy, listEnvelope, escapeLike } from '../utils/listQuery';
+import { pageParams, orderBy, listEnvelope, escapeLike, ListQueryError } from '../utils/listQuery';
 
 /** When an activity happened, or is planned to. */
 const OCCURRED = 'COALESCE(a.completed_at, a.scheduled_at, a.created_at)';
@@ -95,29 +95,28 @@ const resolveActorName = (req: AuthRequest): string => {
   return name || req.user?.email || 'Unknown';
 };
 
-/**
- * GET /api/v1/activities
- * Filters: lead_id | deal_id | contact_id | company_id, type, status,
- *          assigned_to, upcoming=true, limit, offset
- */
-export const getActivities = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    const tenantId = requireTenantId(req);
-    const { type, status, assigned_to, upcoming, search, occurred_after, occurred_before } = req.query;
-    const page = pageParams(req.query as Record<string, unknown>);
-    // Upcoming reads ascending (soonest first); history reads descending.
-    const order = orderBy(req.query as Record<string, unknown>, ACTIVITY_SORTS,
-      upcoming === 'true' ? 'a.scheduled_at ASC' : `${OCCURRED} DESC`, 'a.id');
+/** Planned and its time has passed / not yet come — the page's Overdue and Upcoming. */
+const STATE_SQL: Record<string, string> = {
+  overdue: `a.status = 'planned' AND a.scheduled_at < NOW()`,
+  upcoming: `a.status = 'planned' AND a.scheduled_at >= NOW()`,
+};
+/** ?linked= — which kind of record the activity hangs off. */
+const LINKED_COLUMN: Record<string, string> = { lead: 'a.lead_id', deal: 'a.deal_id', contact: 'a.contact_id', company: 'a.company_id' };
 
-    // Join the parent names so a timeline does not need N extra requests to
-    // render "Call with Acme Corp".
-    const selectPart = `
-      SELECT a.*,
-             c.first_name || ' ' || COALESCE(c.last_name, '') AS contact_name,
-             co.name  AS company_name,
-             d.name   AS deal_name,
-             l.name   AS lead_name`;
-    let query = `
+/** An ISO 8601 instant, or a 400 naming the field. Raw values used to reach SQL and come back a masked 500. */
+function instant(v: unknown, field: string): string {
+  const s = String(v ?? '');
+  if (!s || Number.isNaN(Date.parse(s))) throw new ListQueryError(`${field} must be an ISO 8601 timestamp`);
+  return s;
+}
+
+/**
+ * The FROM + WHERE every activity read shares (the list and the summary, slice
+ * 4b), so a tile's number and the list's total are computed over the same set.
+ */
+function activityFilter(req: AuthRequest, tenantId: string): { from: string; params: unknown[] } {
+  const { type, status, assigned_to, upcoming, search, occurred_after, occurred_before, state, linked } = req.query;
+  let from = `
       FROM activities a
       -- Every one of these four FKs references its parent's GLOBAL primary key,
       -- so an activity in this workspace can name a parent in another one. The
@@ -129,31 +128,100 @@ export const getActivities = async (req: AuthRequest, res: Response, next: NextF
       LEFT JOIN deals     d  ON a.deal_id    = d.id  AND d.tenant_id  = a.tenant_id
       LEFT JOIN leads     l  ON a.lead_id    = l.id  AND l.tenant_id  = a.tenant_id
       WHERE a.tenant_id = $1`;
-    const params: any[] = [tenantId];
-    let i = 2;
+  const params: unknown[] = [tenantId];
+  const add = (sql: string, v: unknown) => { params.push(v); from += ` AND ${sql.replace('?', `$${params.length}`)}`; };
 
-    for (const p of PARENTS) {
-      const v = req.query[p];
-      if (v) { query += ` AND a.${p} = $${i++}`; params.push(v); }
-    }
-    if (type)        { query += ` AND a.type = $${i++}`;        params.push(type); }
-    if (status)      { query += ` AND a.status = $${i++}`;      params.push(status); }
-    if (assigned_to) { query += ` AND a.assigned_to = $${i++}`; params.push(assigned_to); }
-    // Scheduled in the future and not yet done — the "what's next" view.
-    if (upcoming === 'true') {
-      query += ` AND a.scheduled_at >= NOW() AND a.status = 'planned'`;
-    }
-    if (search) { query += ` AND a.subject ILIKE $${i++}`; params.push(`%${escapeLike(String(search))}%`); }
-    // A time range over when it happened (or is planned) — slice 4's views.
-    if (occurred_after)  { query += ` AND ${OCCURRED} >= $${i++}`; params.push(occurred_after); }
-    if (occurred_before) { query += ` AND ${OCCURRED} <  $${i++}`; params.push(occurred_before); }
+  for (const p of PARENTS) {
+    const v = req.query[p];
+    if (v) add(`a.${p} = ?`, v);
+  }
+  if (type)        add('a.type = ?', type);
+  if (status)      add('a.status = ?', status);
+  if (assigned_to) add('a.assigned_to = ?', assigned_to);
+  // Scheduled in the future and not yet done — the "what's next" view.
+  if (upcoming === 'true') from += ` AND a.scheduled_at >= NOW() AND a.status = 'planned'`;
+  if (state !== undefined && state !== '') {
+    const sql = STATE_SQL[String(state)];
+    if (!sql) throw new ListQueryError(`state must be one of: ${Object.keys(STATE_SQL).join(', ')}`);
+    from += ` AND ${sql}`;
+  }
+  if (linked !== undefined && linked !== '') {
+    const col = LINKED_COLUMN[String(linked)];
+    if (!col) throw new ListQueryError(`linked must be one of: ${Object.keys(LINKED_COLUMN).join(', ')}`);
+    from += ` AND ${col} IS NOT NULL`;
+  }
+  if (search) add('a.subject ILIKE ?', `%${escapeLike(String(search))}%`);
+  // A time range over when it happened (or is planned). INSTANTS: the browser
+  // sends its own local midnights, because "today" is the viewer's day.
+  if (occurred_after)  add(`${OCCURRED} >= ?::timestamptz`, instant(occurred_after, 'occurred_after'));
+  if (occurred_before) add(`${OCCURRED} <  ?::timestamptz`, instant(occurred_before, 'occurred_before'));
+  return { from, params };
+}
 
-    const total = await pool.query(`SELECT COUNT(*)::int AS n ${query}`, params);
+/**
+ * GET /api/v1/activities
+ * Filters: lead_id | deal_id | contact_id | company_id, type, status,
+ *          assigned_to, state=overdue|upcoming, linked=lead|deal|contact|company,
+ *          search, occurred_after / occurred_before (ISO instants),
+ *          upcoming=true (legacy), sort, dir, limit, offset
+ */
+export const getActivities = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const page = pageParams(req.query as Record<string, unknown>);
+    // Upcoming reads ascending (soonest first); history reads descending.
+    const order = orderBy(req.query as Record<string, unknown>, ACTIVITY_SORTS,
+      req.query.upcoming === 'true' ? 'a.scheduled_at ASC' : `${OCCURRED} DESC`, 'a.id');
+
+    // Join the parent names so a timeline does not need N extra requests to
+    // render "Call with Acme Corp".
+    const selectPart = `
+      SELECT a.*,
+             c.first_name || ' ' || COALESCE(c.last_name, '') AS contact_name,
+             co.name  AS company_name,
+             d.name   AS deal_name,
+             l.name   AS lead_name`;
+    const { from, params } = activityFilter(req, tenantId);
+    const total = await pool.query(`SELECT COUNT(*)::int AS n ${from}`, params);
+    const n = params.length;
     const result = await pool.query(
-      `${selectPart} ${query} ORDER BY ${order} LIMIT $${i++} OFFSET $${i}`,
+      `${selectPart} ${from} ORDER BY ${order} LIMIT $${n + 1} OFFSET $${n + 2}`,
       [...params, page.limit, page.offset],
     );
     res.json(listEnvelope(result.rows, total.rows[0].n, page));
+  } catch (error) { next(error); }
+};
+
+/**
+ * GET /api/v1/activities/summary?day_from=&day_to=&week_from=&week_to= (+ the list filters)
+ *
+ * The Activities page's six tiles, counted by the server under the SAME filters
+ * as the list (slice 4b). They were counted from the 200 rows the page had
+ * loaded. The day and week are the VIEWER'S, sent as their local midnights
+ * (instants), the same decision as the Tasks buckets (Venkat, 2026-10-11);
+ * "overdue" is planned work whose scheduled instant has passed, which needs no
+ * calendar at all.
+ */
+export const getActivitiesSummary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const bounds = ['day_from', 'day_to', 'week_from', 'week_to'].map(f => instant(req.query[f], f));
+    const { from, params } = activityFilter(req, tenantId);
+    const base = params.length;
+    params.push(...bounds);
+    const [df, dt, wf, wt] = [1, 2, 3, 4].map(k => `$${base + k}::timestamptz`);
+    const today = `${OCCURRED} >= ${df} AND ${OCCURRED} < ${dt}`;
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE ${today})::int AS today,
+              COUNT(*) FILTER (WHERE ${OCCURRED} >= ${wf} AND ${OCCURRED} < ${wt})::int AS this_week,
+              COUNT(*) FILTER (WHERE ${STATE_SQL.overdue})::int AS overdue,
+              COUNT(*) FILTER (WHERE a.type = 'meeting' AND ${today})::int AS meetings_today,
+              COUNT(*) FILTER (WHERE a.type = 'call' AND ${today})::int AS calls_today
+         ${from}`,
+      params,
+    );
+    res.json({ success: true, data: r.rows[0] });
   } catch (error) { next(error); }
 };
 

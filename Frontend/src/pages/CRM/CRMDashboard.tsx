@@ -1,15 +1,45 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Users, TrendingUp, DollarSign, Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useDashboardData, dealValue } from '../../hooks/useDashboardData';
-import { useStageLookup } from '../../hooks/useStageLookup';
 import SalesIntelligenceGuide from '../../components/Dashboard/SalesIntelligenceGuide';
-import { isOpenWith } from '../../utils/pipelinesApi';
-import { sortActivitiesNewestFirst } from '../../utils/activitiesApi';
+import { fetchActivitiesPage, type ActivityRecord } from '../../utils/activitiesApi';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchPipelines, type ApiPipeline } from '../../utils/pipelinesApi';
-import { calendarDaysUntil } from '../../utils/dates';
+import { fetchDealsSummary, fetchDealsPage, type DealsSummary } from '../../utils/dealsApi';
+import { fetchContactsPage } from '../../utils/contactsApi';
+import { fetchAccountsSummary } from '../../utils/accountsApi';
+import { fetchMeetingsInWindow, type Meeting } from '../../utils/meetingsApi';
+import { formatAmountUSD } from '../../utils/currencyUtils';
+import { localDay } from '../../utils/dates';
+
+/** One independent server read per panel: its own loading, error and retry. */
+function useLoad<T>(load: () => Promise<T>): { data: T | null; error: string | null; reload: () => void } {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [key, setKey] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then(v => { if (!cancelled) { setData(v); setError(null); } })
+      .catch(e => { if (!cancelled) setError(e?.message ?? 'Could not load'); });
+    return () => { cancelled = true; };
+    // `load` is a stable module-level call per panel; `key` is the retry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return { data, error, reload: useCallback(() => setKey(k => k + 1), []) };
+}
+
+/** A row's base_amount_usd may be shown as USD (the server's TRUSTED_USD rule). */
+const trustedUsd = (d: { currency?: string | null; value?: unknown; base_amount_usd?: unknown }): number | null => {
+  if (d.base_amount_usd === null || d.base_amount_usd === undefined) return null;
+  const base = Number(d.base_amount_usd);
+  const usdCurrency = (d.currency ?? 'USD').toUpperCase() === 'USD';
+  return usdCurrency || base !== Number(d.value) ? base : null;
+};
+
+/** "$12K" plus, when some deals had no USD amount, "+ N not in USD". */
+const usdLabel = (value: number, unconverted: number) =>
+  `${formatAmountUSD(value)}${unconverted > 0 ? ` + ${unconverted} not in USD` : ''}`;
 
 /**
  * /crm/dashboard — the dashboard the sidebar actually links to.
@@ -31,28 +61,40 @@ import { calendarDaysUntil } from '../../utils/dates';
  *
  * Panels with no data source render honest empty states rather than invented
  * content — see each one below for what it needs.
+ *
+ * SLICE 5a (2026-10-12): every figure is a SERVER figure. The page read
+ * useDashboardData(), which loads at most 500 rows per table, so past 500 the
+ * tiles stopped counting, Top Deals missed any large deal older than the
+ * newest 500, and Upcoming Meetings looked for meetings inside the 20 newest
+ * activities. Now: GET /deals/summary (open / won / lost, USD, closing soon,
+ * stage breakdown across pipelines — in pipeline order from the server, which
+ * also removes the stage-order memo that went stale after pipelines loaded),
+ * the real contact and account totals, open deals by USD value, the newest
+ * activities, and real meetings from the Meetings module. Money follows the
+ * board's rule: only trustworthy USD is summed; the rest is "not in USD".
  */
 const CRMDashboard: React.FC = () => {
   const navigate = useNavigate();
   // useToast()'s only remaining callers were the gamification click handlers
   // ("Loading challenges...", "Loading Sarah's profile..."), deleted with the panel.
   const { user } = useAuth();
-  const { deals, contacts, accounts, activities, loading, error, truncated, reload } = useDashboardData();
-
-
-  // Get current date
   const today = new Date();
+  const deals = useLoad<DealsSummary>(() => fetchDealsSummary(localDay(new Date())));
+  const contacts = useLoad(() => fetchContactsPage({ limit: 1, offset: 0 }).then(r => r.total));
+  const accounts = useLoad(() => fetchAccountsSummary().then(r => r.accounts));
+  const topDeals = useLoad(() => fetchDealsPage({ stage_type: 'open', sort: 'base_amount_usd', dir: 'desc', limit: 3, offset: 0 }));
+  const recent = useLoad(() => fetchActivitiesPage({ limit: 5, offset: 0 }));
+  const meetings = useLoad<{ meetings: Meeting[]; total: number }>(() => {
+    const now = new Date();
+    return fetchMeetingsInWindow(now, new Date(now.getTime() + 7 * 86_400_000), 3);
+  });
+
   const dateString = today.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
-
-  // ── Derived from live data ────────────────────────────────────────────────
-  //
-  // Everything below replaces a literal. Where a figure needs data that does not
-  // exist, the figure is gone rather than guessed — see each note.
 
   /** Absolute date and time. The old copy hardcoded "Nov 15, 2:00 PM". */
   const formatWhen = (v: string | null | undefined): string => {
@@ -63,180 +105,66 @@ const CRMDashboard: React.FC = () => {
       : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
-  const money = (n: number): string =>
-    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M`
-    : n >= 1_000    ? `$${Math.round(n / 1_000)}K`
-    : `$${n}`;
-
-  // See Dashboard.tsx: a won deal outside the default pipeline counted as open.
-  const { lookup: outcomeLookup } = useStageLookup();
-  const openDeals = useMemo(() => deals.filter(isOpenWith(outcomeLookup)), [deals, outcomeLookup]);
-  const openPipeline = useMemo(
-    () => openDeals.reduce((sum, d) => sum + dealValue(d), 0),
-    [openDeals],
-  );
-
-  /** Deals whose expected close date falls in the next 7 days. A real count. */
-  const closingThisWeek = useMemo(() => {
-    // Calendar days (0 = closes today) — a DATE compared as a UTC-midnight
-    // instant dropped today's closes from 05:30 IST.
-    return openDeals.filter(d => {
-      const days = calendarDaysUntil(d.expected_close_date);
-      return days !== null && days >= 0 && days <= 7;
-    }).length;
-  }, [openDeals]);
-
-  const metrics = useMemo(() => [
+  const s = deals.data;
+  const soon = s?.closing_soon;
+  const metrics = [
     {
       label: 'Contacts',
-      value: String(contacts.length),
-      // The old sublabel was "+12 this week". A period-over-period figure needs
-      // a second query against the previous period and no endpoint offers one,
-      // so these are factual captions instead of invented deltas — the same
-      // decision made for the other dashboard's trend badges in 12/n.
-      caption: 'In your account',
+      // A period-over-period delta ("+12 this week") needs a second query
+      // against the previous period; these are factual captions instead.
+      value: contacts.data === null ? '—' : contacts.data.toLocaleString(),
+      caption: contacts.error ? 'Could not load' : 'In your account',
       icon: Users,
       color: 'blue',
     },
     {
       label: 'Deals',
-      value: String(deals.length),
-      caption: closingThisWeek === 1 ? '1 closing this week' : `${closingThisWeek} closing this week`,
+      value: s ? s.total.toLocaleString() : '—',
+      caption: deals.error ? 'Could not load'
+        : soon ? `${soon.count} closing in the next ${soon.days} days` : '',
       icon: TrendingUp,
       color: 'green',
     },
     {
       label: 'Open Pipeline',
-      // Renamed from "Pipeline": the literal $2.4M was a total with no rule
-      // behind it. This excludes closed-won and closed-lost, so it is a
-      // forward-looking number and says so.
-      value: money(openPipeline),
-      caption: 'Excludes closed deals',
+      value: s ? formatAmountUSD(s.open.value_usd) : '—',
+      caption: deals.error ? 'Could not load'
+        : s ? `${s.open.count} open deals${s.open.unconverted ? ` · ${s.open.unconverted} not in USD` : ''}` : '',
       icon: DollarSign,
       color: 'orange',
     },
     {
       label: 'Accounts',
-      // Replaces "Target 89%". There is no quota or attainment data reachable
-      // from here — quotas exist as a table but this page queries nothing — and
-      // a target percentage is exactly the kind of number that cannot be
-      // approximated. Accounts is a real CRM figure that agrees with /crm/accounts.
-      value: String(accounts.length),
-      caption: 'Companies on record',
+      // Replaces "Target 89%" — no attainment figure can be approximated here.
+      value: accounts.data === null ? '—' : accounts.data.toLocaleString(),
+      caption: accounts.error ? 'Could not load' : 'Companies on record',
       icon: Building2,
       color: 'indigo',
     },
-  ], [contacts.length, deals.length, openPipeline, closingThisWeek, accounts.length]);
+  ];
 
   /**
-   * Pipeline by stage, from the deals themselves.
-   *
-   * The literals were 45/23/15/8/4 deals per stage against a real 1/9/8/3/1.
-   * Stages are ordered by pipeline_stages.position where the deal's stage
-   * matches one, and any stage outside that list follows — deals.stage holds
-   * values like 'partner-evaluation' and 'renewal-quoted' that no pipeline stage
-   * covers, and dropping them would understate the pipeline.
-   *
-   * The bar is each stage's share of the largest stage, so the widest bar is the
-   * biggest stage. The old percentages (100/73/54/36/20) were fixed numbers
-   * unrelated to any count.
+   * Pipeline by stage, from the server, every pipeline, in the server's
+   * pipeline-then-position order. The bar is each stage's share of the
+   * largest stage. The literals here were once 45/23/15/8/4 deals per stage.
    */
-  /*
-   * Stage order from the workspace, across ALL its pipelines.
-   *
-   * This was a six-slug literal, so on the dashboard's pipeline bar every
-   * Renewals and Partnerships stage scored -1 and was pushed into the "unknown"
-   * bucket that sorts last and alphabetically — below Closed Lost. The deals
-   * were counted, but the chart implied they sat at the bottom of a funnel they
-   * are not in.
-   *
-   * The dashboard deliberately aggregates across pipelines, so the order is the
-   * concatenation of each pipeline's stages in its own order. That is honest
-   * about what the chart is: several funnels drawn on one axis. Splitting it per
-   * pipeline is a product decision, not a cutover one, and is left alone.
-   */
-  const [dashPipelines, setDashPipelines] = useState<ApiPipeline[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    // A failed load leaves STAGE_ORDER empty, which sorts every stage
-    // alphabetically rather than inventing a funnel order. The counts and values
-    // on the bar are real either way — only the ordering degrades.
-    fetchPipelines()
-      .then(list => { if (!cancelled) setDashPipelines(list); })
-      .catch(() => { /* order degrades to alphabetical; counts stay real */ });
-    return () => { cancelled = true; };
-  }, []);
-
-  const STAGE_ORDER = useMemo(
-    () => dashPipelines.flatMap(p => p.stages.map(st => st.slug)),
-    [dashPipelines],
-  );
   const pipelineStages = useMemo(() => {
-    const byStage = new Map<string, { count: number; value: number }>();
-    for (const d of deals) {
-      const key = (d.stage ?? 'unknown').toLowerCase();
-      const cur = byStage.get(key) ?? { count: 0, value: 0 };
-      byStage.set(key, { count: cur.count + 1, value: cur.value + dealValue(d) });
-    }
-    const rows = [...byStage.entries()].map(([stage, v]) => ({ stage, ...v }));
+    const rows = s?.by_stage ?? [];
     const maxCount = rows.reduce((m, r) => Math.max(m, r.count), 0);
-    return rows
-      .sort((a, b) => {
-        const ia = STAGE_ORDER.indexOf(a.stage);
-        const ib = STAGE_ORDER.indexOf(b.stage);
-        // Unknown stages sort after the known ones, then alphabetically.
-        if (ia === -1 && ib === -1) return a.stage.localeCompare(b.stage);
-        if (ia === -1) return 1;
-        if (ib === -1) return -1;
-        return ia - ib;
-      })
-      .map(r => ({
-        ...r,
-        label: r.stage.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-        percentage: maxCount > 0 ? Math.round((r.count / maxCount) * 100) : 0,
-      }));
-  }, [deals]);
+    const multiPipeline = new Set(rows.map(r => r.pipeline_id)).size > 1;
+    return rows.map(r => ({
+      key: r.stage_id,
+      label: multiPipeline ? `${r.pipeline_name} · ${r.name}` : r.name,
+      count: r.count,
+      value: usdLabel(r.value_usd, r.unconverted),
+      percentage: maxCount > 0 ? Math.round((r.count / maxCount) * 100) : 0,
+    }));
+  }, [s]);
 
-  /**
-   * Recent activity, newest first. The old block was four fixed entries — an
-   * "Acme Corp Product Demo" and a proposal "Sent to TechStart" — shown to
-   * everyone. The activities table is genuinely empty, and an empty feed is the
-   * correct output for a database with no logged activity.
-   */
-  const recentActivities = useMemo(
-    () => sortActivitiesNewestFirst(activities).slice(0, 5),
-    [activities],
-  );
-
-  /** Planned meetings in the future, soonest first. Real, from activities. */
-  const upcomingMeetings = useMemo(() => {
-    const now = Date.now();
-    return activities
-      .filter(a => a.type === 'meeting' && a.status === 'planned' && a.scheduled_at
-        && new Date(a.scheduled_at).getTime() >= now)
-      .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime())
-      .slice(0, 3);
-  }, [activities]);
-
-  /**
-   * Highest-value open deals. The old list was Acme/TechStart/BigCo with
-   * "score" values of 78/85/72 that no column produces — dropped rather than
-   * mapped onto `probability`, which is a manually entered stage default and not
-   * a health score. `next_step` is a real column and shown when set.
-   */
-  const topDeals = useMemo(
-    () => [...openDeals].sort((a, b) => dealValue(b) - dealValue(a)).slice(0, 3),
-    [openDeals],
-  );
-
-  // ── Not yet on real data ──────────────────────────────────────────────────
-  //
-  // `aiInsights` stood here: two fixed sentences rendered by the preview panel
-  // this dashboard no longer has. Deleted with it rather than left behind —
-  // an unused fixture is the next session's "why is this here", and TS6133
-  // would have reported it as noise.
-
-  // `gamificationData` lived here. Deleted with the panel below.
+  const recentActivities: ActivityRecord[] = recent.data?.activities ?? [];
+  const upcomingMeetings: Meeting[] = meetings.data?.meetings ?? [];
+  const loadErrors = [deals, contacts, accounts].filter(x => x.error);
+  const reloadAll = () => { deals.reload(); contacts.reload(); accounts.reload(); topDeals.reload(); recent.reload(); meetings.reload(); };
 
   // Navigation handlers
   const handleMetricClick = (metric: string) => {
@@ -290,14 +218,16 @@ const CRMDashboard: React.FC = () => {
       <div className="px-8 py-6" style={{ marginTop: '30px' }}>
         {/* A failed request must not render as a zero. The hook reports WHICH
             part failed, so a blank tile is never mistaken for "none". */}
-        {error && (
+        {loadErrors.length > 0 && (
           <div
             className="mb-6 flex items-start justify-between gap-4 rounded-lg border border-yellow-300 bg-yellow-50 p-4"
             role="alert"
           >
-            <p className="text-sm text-yellow-900">{error}</p>
+            <p className="text-sm text-yellow-900">
+              Some totals could not load — {loadErrors.map(x => x.error).join(' · ')}. Tiles showing “—” are unknown, not zero.
+            </p>
             <button
-              onClick={reload}
+              onClick={reloadAll}
               className="shrink-0 text-sm font-semibold text-yellow-900 underline hover:no-underline"
             >
               Retry
@@ -398,12 +328,12 @@ const CRMDashboard: React.FC = () => {
               </div>
               <div className="space-y-4 mb-6">
                 {pipelineStages.length === 0 && (
-                  <p className="text-sm text-gray-600">
-                    {loading ? 'Loading pipeline…' : 'No deals yet.'}
+                  <p className="text-sm text-gray-600" role={deals.error ? 'alert' : undefined}>
+                    {deals.error ? `The pipeline could not load — ${deals.error}` : s ? 'No deals yet.' : 'Loading pipeline…'}
                   </p>
                 )}
                 {pipelineStages.map(stage => (
-                  <div key={stage.stage}>
+                  <div key={stage.key} data-testid={`stage-${stage.key}`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700" style={{ fontSize: '14px' }}>
                         {stage.label}
@@ -415,7 +345,7 @@ const CRMDashboard: React.FC = () => {
                             Gen tool" tooltip is gone — deals carry a free-text
                             `source`, not a lead-gen attribution. */}
                         <span>{stage.count} {stage.count === 1 ? 'deal' : 'deals'}</span>
-                        <span className="font-semibold">{money(stage.value)}</span>
+                        <span className="font-semibold">{stage.value}</span>
                       </div>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
@@ -437,9 +367,17 @@ const CRMDashboard: React.FC = () => {
                   the one figure that is real. */}
               <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: '#f0f3ff', border: '1px solid #667eea' }}>
                 <p className="text-sm" style={{ color: '#333333', fontSize: '14px' }}>
-                  <strong>{openDeals.length} open {openDeals.length === 1 ? 'deal' : 'deals'}</strong>
-                  {' '}worth {money(openPipeline)}, excluding closed.
-                  {truncated && ' Showing the first 500 deals, so this is a lower bound.'}
+                  {s ? (
+                    <span data-testid="pipeline-summary">
+                      <strong>{s.open.count} open {s.open.count === 1 ? 'deal' : 'deals'}</strong>
+                      {' '}worth {usdLabel(s.open.value_usd, s.open.unconverted)}, excluding closed.{' '}
+                      Win rate{' '}
+                      {s.win_rate.value === null
+                        ? 'not yet measurable — no deal has been won or lost'
+                        : <strong>{Math.round(s.win_rate.value * 100)}%</strong>}
+                      {s.win_rate.value !== null && ` (${s.win_rate.won} won of ${s.win_rate.sample_size} decided, all time, all pipelines)`}.
+                    </span>
+                  ) : (deals.error ? 'Deal totals could not load.' : 'Loading…')}
                 </p>
               </div>
 
@@ -464,9 +402,9 @@ const CRMDashboard: React.FC = () => {
                   database with no logged activity. */}
               <div className="space-y-4 mb-4">
                 {recentActivities.length === 0 && (
-                  <p className="text-sm text-gray-600">
-                    {loading
-                      ? 'Loading activity…'
+                  <p className="text-sm text-gray-600" role={recent.error ? 'alert' : undefined}>
+                    {recent.error ? `Recent activity could not load — ${recent.error}`
+                      : !recent.data ? 'Loading activity…'
                       : 'No activity has been logged yet. Log a call, email or meeting from a contact to see it here.'}
                   </p>
                 )}
@@ -535,10 +473,10 @@ const CRMDashboard: React.FC = () => {
                   contact now puts a real row here. */}
               <div className="space-y-4 mb-4">
                 {upcomingMeetings.length === 0 && (
-                  <p className="text-sm text-gray-600">
-                    {loading
-                      ? 'Loading meetings…'
-                      : 'No meetings are scheduled. Use Schedule meeting on a contact to add one.'}
+                  <p className="text-sm text-gray-600" role={meetings.error ? 'alert' : undefined}>
+                    {meetings.error ? `Meetings could not load — ${meetings.error}`
+                      : !meetings.data ? 'Loading meetings…'
+                      : 'No meetings in the next 7 days. Meetings scheduled in the Meetings module appear here.'}
                   </p>
                 )}
                 {upcomingMeetings.map(meeting => (
@@ -548,26 +486,22 @@ const CRMDashboard: React.FC = () => {
                     style={{ borderRadius: '10px' }}
                   >
                     <p className="text-xs font-semibold text-gray-500 mb-1" style={{ fontSize: '11px' }}>
-                      {formatWhen(meeting.scheduled_at)}
+                      {formatWhen(meeting.date)}
                     </p>
-                    <p className="text-sm font-bold text-gray-900 mb-1" style={{ fontSize: '14px' }}>
-                      {meeting.subject}
+                    <p className="text-sm font-bold text-gray-900 mb-3" style={{ fontSize: '14px' }}>
+                      {meeting.title}
                     </p>
-                    {meeting.contact_name && (
-                      <p className="text-xs text-gray-600 mb-3" style={{ fontSize: '12px' }}>
-                        Contact: {meeting.contact_name}
-                      </p>
-                    )}
                     <button
-                      onClick={() => meeting.contact_id
-                        ? navigate(`/crm/contacts/${meeting.contact_id}`)
-                        : navigate('/crm/activities')}
+                      onClick={() => navigate(`/crm/meetings/${encodeURIComponent(meeting.id)}`)}
                       className="w-full py-2 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       View Details
                     </button>
                   </div>
                 ))}
+                {meetings.data && meetings.data.total > upcomingMeetings.length && (
+                  <p className="text-xs text-gray-600">Showing {upcomingMeetings.length} of {meetings.data.total} meetings in the next 7 days.</p>
+                )}
               </div>
               <button
                 onClick={() => navigate('/calendar')}
@@ -583,14 +517,16 @@ const CRMDashboard: React.FC = () => {
                 🎯 Top Deals to Focus On
               </h2>
               <div className="space-y-4">
-                {topDeals.length === 0 && (
-                  <p className="text-sm text-gray-600">
-                    {loading ? 'Loading deals…' : 'No open deals.'}
+                {(topDeals.data?.deals.length ?? 0) === 0 && (
+                  <p className="text-sm text-gray-600" role={topDeals.error ? 'alert' : undefined}>
+                    {topDeals.error ? `Top deals could not load — ${topDeals.error}` : !topDeals.data ? 'Loading deals…' : 'No open deals.'}
                   </p>
                 )}
-                {topDeals.map((deal, index) => (
+                {topDeals.data?.deals.map((deal: any, index: number) => {
+                  const usd = trustedUsd(deal);
+                  return (
                   <div
-                    key={index}
+                    key={deal.id}
                     className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-md transition-all"
                     style={{ borderRadius: '10px' }}
                   >
@@ -600,14 +536,11 @@ const CRMDashboard: React.FC = () => {
                           {index + 1}. {deal.name || deal.title || deal.company_name || deal.id}
                         </p>
                         <p className="text-lg font-bold" style={{ fontSize: '18px', color: '#667eea' }}>
-                          {money(dealValue(deal))}
+                          {usd !== null ? formatAmountUSD(usd) : `${deal.currency ?? ''} ${Number(deal.value).toLocaleString()} · not in USD`}
                         </p>
                       </div>
-                      {/* The "AI: 78/100" badge is gone. No model produces a deal
-                          score, and `probability` is a manually entered stage
-                          default — relabelling it as an AI score would be the
-                          same claim in a different place. Probability is shown as
-                          what it is. */}
+                      {/* Probability shown as what it is — a stage default or a
+                          rep's entry — never relabelled as an AI score. */}
                       {deal.probability != null && (
                         <div className="px-2 py-1 rounded" style={{ backgroundColor: '#e8eaf6' }}>
                           <span className="text-xs font-semibold" style={{ color: '#667eea', fontSize: '11px' }}>
@@ -634,7 +567,13 @@ const CRMDashboard: React.FC = () => {
                       View Deal
                     </button>
                   </div>
-                ))}
+                  );
+                })}
+                {topDeals.data && (
+                  <p className="text-xs text-gray-600">
+                    Ranked by USD value across {topDeals.data.total} open {topDeals.data.total === 1 ? 'deal' : 'deals'}; a deal with no USD amount ranks last.
+                  </p>
+                )}
               </div>
             </div>
           </div>

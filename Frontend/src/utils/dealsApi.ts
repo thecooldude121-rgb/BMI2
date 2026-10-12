@@ -261,6 +261,8 @@ export interface DealsPageQuery {
   assigned_to_user_id?: string | number;
   /** Owner by NAME (resolved user or legacy free text). */
   assigned_to?: string;
+  /** Open / won / lost by stage TYPE, across pipelines (slice 5a). */
+  stage_type?: 'open' | 'won' | 'lost';
   sort?: 'created_at' | 'updated_at' | 'name' | 'value' | 'base_amount_usd' | 'probability' | 'expected_close_date' | 'stage';
   dir?: 'asc' | 'desc';
   limit?: number;
@@ -279,6 +281,64 @@ export async function fetchDealsPage(q: DealsPageQuery): Promise<DealsPage> {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.message || `Failed to load deals (HTTP ${res.status})`);
   return { deals: json.data ?? [], total: json.total ?? 0, limit: json.limit ?? 0, offset: json.offset ?? 0 };
+}
+
+/** A USD total: only trustworthy base amounts are summed; `unconverted` deals are counted, not added. */
+export interface UsdTotal { count: number; value_usd: number; unconverted: number }
+
+/**
+ * GET /deals/summary (slice 5a) — workspace-wide, all pipelines, test and
+ * archived excluded. Win rate is won / (won + lost), all time, with its sample;
+ * NOT the Sales Intelligence Guide's trailing-365-day figure.
+ */
+export interface DealsSummary {
+  as_of: string;
+  total: number;
+  /** Deals whose stage cannot be resolved; included in total, in no bucket. */
+  unstaged: number;
+  open: UsdTotal;
+  won: UsdTotal;
+  lost: { count: number };
+  win_rate: { value: number | null; won: number; lost: number; sample_size: number };
+  /** Open deals closing in the viewer's next `days` calendar days. */
+  closing_soon: UsdTotal & { days: number };
+  by_stage: (UsdTotal & { pipeline_id: string; pipeline_name: string; stage_id: string; slug: string; name: string; position: number; stage_type: 'open' | 'won' | 'lost' })[];
+}
+
+/** `today` is the VIEWER's local day (utils/dates.localDay). */
+export async function fetchDealsSummary(today: string): Promise<DealsSummary> {
+  const res = await fetch(`${API_BASE}/deals/summary?today=${encodeURIComponent(today)}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load deal totals (HTTP ${res.status})`);
+  return json.data as DealsSummary;
+}
+
+/** A deal owner as Reports groups it: `id:<user>` resolved, `name:<text>` not. */
+export interface ReportOwnerRow extends UsdTotal { key: string; label: string; unresolved: boolean }
+
+/**
+ * GET /deals/report (slice 5b) — the totals behind the Reports cards, with the
+ * page's filters applied on the server (the close range skips aging).
+ */
+export interface DealsReport {
+  as_of: string;
+  filters: { close_from: string | null; close_to: string | null; owner: string | null };
+  excluded_no_close_date: number;
+  owners: { key: string; label: string; unresolved: boolean; count: number }[];
+  won_by_owner: ReportOwnerRow[];
+  open_by_owner: ReportOwnerRow[];
+  outcome: { won: number; lost: number };
+  open_by_stage: (UsdTotal & { pipeline_id: string; pipeline_name: string; stage_id: string; name: string; position: number })[];
+  aging: (UsdTotal & { bucket: 'under-30' | '30-60' | '60-90' | 'over-90' | 'undated' })[];
+  won_by_source: (UsdTotal & { source: string | null })[];
+  high_priority: { all: UsdTotal; open: UsdTotal; closing_7d: number; open_no_close: number };
+}
+
+export async function fetchDealsReport(q: { today: string; close_from?: string; close_to?: string; owner?: string }): Promise<DealsReport> {
+  const res = await fetch(`${API_BASE}/deals/report?${toQuery(q as Record<string, unknown>)}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load reports (HTTP ${res.status})`);
+  return json.data as DealsReport;
 }
 
 export interface StageSummaryRow {
