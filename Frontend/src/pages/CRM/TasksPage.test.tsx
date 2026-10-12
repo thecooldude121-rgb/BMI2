@@ -149,4 +149,35 @@ describe('Tasks — one server page, server counts', () => {
     renderPage('/crm/tasks?new=1&due=2026-10-20');
     expect(await screen.findByDisplayValue('2026-10-20')).toBeInTheDocument();
   });
+
+  it('Figma due-date treatments: Overdue · date, Today (no invented time), Completed · day it was done', async () => {
+    const past = localDay(new Date(Date.now() - 5 * 86_400_000));
+    api.fetchTasksPage.mockResolvedValue({ total: 4, tasks: [
+      task(1, { due_date: past }),
+      task(2, { due_date: TODAY }),
+      task(3, { status: 'completed', due_date: past, completed_at: new Date().toISOString() }),
+      task(4, { due_date: null, priority: 'medium' }),
+    ] });
+    renderPage();
+    const row = async (k: number) => (await screen.findByText(`Task ${k}`)).closest('tr')!;
+    expect(within(await row(1)).getByText(/^Overdue · /)).toBeInTheDocument();
+    expect(within(await row(2)).getByText('Today')).toBeInTheDocument();
+    expect(within(await row(2)).queryByText(/\d{1,2}:\d{2}/)).toBeNull();
+    expect(within(await row(3)).getByText(/^Completed · /)).toBeInTheDocument();
+    expect(screen.getByText('Task 3')).toHaveClass('line-through');
+    expect(within(await row(4)).getByText('No due date')).toBeInTheDocument();
+    // Title Case priority; Medium is neutral in the frame, not amber.
+    expect(within(await row(4)).getByText('Medium').className).not.toMatch(/warning/);
+  });
+
+  it('delete confirmation sits below the table and names what it leaves alone', async () => {
+    api.fetchTasksPage.mockResolvedValue({ total: 1, tasks: [task(1, { related_to_type: 'deal', related_to_id: 'D9' })] });
+    renderPage();
+    const row = (await screen.findByText('Task 1')).closest('tr')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Delete' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Delete task' });
+    expect(confirm).toHaveTextContent('This removes the task. The related deal remains unchanged.');
+    // DOM order: the table comes first.
+    expect(row.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

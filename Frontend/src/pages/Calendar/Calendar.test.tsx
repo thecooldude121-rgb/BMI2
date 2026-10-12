@@ -22,7 +22,8 @@ const first = new Date(now.getFullYear(), now.getMonth(), 1);
 const gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - first.getDay());
 const gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41);
 const TODAY = localDay(now);
-const MID = localDay(new Date(now.getFullYear(), now.getMonth(), 15));
+// Never today: the page opens with today selected, so clicking MID must change the selection.
+const MID = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() === 15 ? 16 : 15));
 
 const task = (id: string, title: string, due: string, status = 'pending') => ({
   id, title, description: null, type: 'call', priority: 'high', status, assigned_to: 'Dee',
@@ -94,8 +95,8 @@ describe('Calendar — exactly the visible weeks, from the server', () => {
 
   it('the rail uses server counts: due soon total, overdue, and undated tasks', async () => {
     renderCal();
-    expect(await screen.findByText('6 open')).toBeInTheDocument();
-    expect(screen.getByText('4 overdue tasks')).toBeInTheDocument();
+    expect(await screen.findByText('Next 7 days · 6 open')).toBeInTheDocument();
+    expect(screen.getByText('4 overdue')).toBeInTheDocument();
     expect(screen.getByTestId('undated-note')).toHaveTextContent('6 open tasks have no due date');
     expect(api.fetchTasksPage).toHaveBeenCalledWith(expect.objectContaining({ bucket: 'open', due_after: TODAY, sort: 'due_date' }));
     expect(api.fetchTaskSummary).toHaveBeenCalledWith(TODAY);
@@ -120,5 +121,14 @@ describe('Calendar — exactly the visible weeks, from the server', () => {
     expect(await screen.findByText('Tasks could not load for these weeks')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Call Kora')).toBeInTheDocument();
+  });
+
+  it('opens with TODAY selected (the frame never shows an empty day card)', async () => {
+    renderCal();
+    await screen.findByText('Call Kora');
+    expect(screen.getByTestId(`day-${TODAY}`)).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(api.fetchTasksPage).toHaveBeenCalledWith(expect.objectContaining({ due_after: TODAY, due_before: TODAY })));
+    expect(screen.getByRole('button', { name: /New Meeting · Soon/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Block Time · Soon/ })).toBeDisabled();
   });
 });
