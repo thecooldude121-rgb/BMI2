@@ -132,7 +132,7 @@ describe('Activities — server page, server counts, real filters', () => {
   it('a grouped view says it regroups THIS page, not every activity', async () => {
     renderPage();
     await ready();
-    await userEvent.click(screen.getByRole('button', { name: /By owner/ }));
+    await userEvent.click(screen.getByRole('button', { name: /By owner/i }));
     expect(screen.getByTestId('grouping-note')).toHaveTextContent('Grouped from the 25 activities on this page, of 60 in all.');
   });
 
@@ -156,5 +156,17 @@ describe('Activities — server page, server counts, real filters', () => {
     expect(screen.getByTestId('tile-total')).toHaveTextContent('—');
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await ready();
+  });
+
+  it('Figma layout: no AI-insights sample panel, coloured tiles with captions, Title Case views', async () => {
+    renderPage();
+    await ready();
+    expect(screen.queryByText(/AI insights/i)).toBeNull();
+    expect(screen.queryByText(/Sample content/i)).toBeNull();
+    expect(screen.getByTestId('tile-overdue').className).toMatch(/danger-700/);
+    expect(screen.getByText('Since Sunday')).toBeInTheDocument();
+    for (const v of ['Timeline', 'By Type', 'By Owner', 'By Account']) {
+      expect(screen.getByRole('button', { name: new RegExp(v) })).toBeInTheDocument();
+    }
   });
 });

@@ -50,12 +50,15 @@ function gridDays(month: Date): Date[] {
 
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const fmtDay = (day: string) => parseLocalDay(day)?.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) ?? day;
+/** "Saturday, 3 October" — the selected-day card's title in the frame. */
+const fmtLongDay = (day: string) => parseLocalDay(day)?.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) ?? day;
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
 const Calendar: React.FC = () => {
   const navigate = useNavigate();
   const [month, setMonth] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
-  const [selected, setSelected] = useState<string | null>(null);
+  // The frame opens with today selected, so the day card is never empty on arrival.
+  const [selected, setSelected] = useState<string | null>(() => localDay(new Date()));
   const today = localDay(new Date());
 
   const days = useMemo(() => gridDays(month), [month]);
@@ -136,19 +139,32 @@ const Calendar: React.FC = () => {
     [meetings, month],
   );
   const meetingsCapped = !!meetings && meetings.total > meetings.list.length;
+  /** Dated tasks due in the month on screen — the by-day totals, summed over its own days. */
+  const monthDatedTasks = useMemo(() => {
+    if (!taskDays) return null;
+    let n = 0;
+    for (const [day, td] of taskDays) {
+      const d = parseLocalDay(day);
+      if (d && d.getMonth() === month.getMonth() && d.getFullYear() === month.getFullYear()) n += td.total;
+    }
+    return n;
+  }, [taskDays, month]);
 
   const step = (n: number) => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
 
   return (
     <div className="space-y-6 pt-4 lg:pt-6">
       <PageHeader
-        eyebrow="Engage"
+        eyebrow="Task calendar"
         title="Calendar"
-        description="Tasks by due date and meetings by start time, in your own time zone."
+        description="Task-first view, with meetings at their start time in your time zone. Undated tasks do not appear on the grid."
         actions={
-          <Button onClick={() => navigate('/crm/tasks?new=1')}>
-            <Plus className="h-4 w-4" aria-hidden="true" /> New task
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => navigate('/crm/meetings')}>Go to Meetings</Button>
+            <Button onClick={() => navigate('/crm/tasks?new=1')}>
+              <Plus className="h-4 w-4" aria-hidden="true" /> New task
+            </Button>
+          </>
         }
       />
 
@@ -157,29 +173,29 @@ const Calendar: React.FC = () => {
           <Button variant="secondary" onClick={() => step(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4" aria-hidden="true" /></Button>
           <Button variant="secondary" onClick={() => { const n = new Date(); setMonth(new Date(n.getFullYear(), n.getMonth(), 1)); }}>Today</Button>
           <Button variant="secondary" onClick={() => step(1)} aria-label="Next month"><ChevronRight className="h-4 w-4" aria-hidden="true" /></Button>
-          <h2 className="ml-2 text-2xl font-semibold leading-8 text-ink-heading" data-testid="calendar-month">
+          <h2 className="text-2xl font-semibold leading-8 text-ink" data-testid="calendar-month">
             {MONTHS[month.getMonth()]} {month.getFullYear()}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-ctrl border border-line p-0.5 text-xs" role="group" aria-label="Calendar view">
-            <button type="button" aria-pressed="true" className="rounded px-3 py-1 font-semibold bg-brand-50 text-brand-700">Month</button>
-            <button type="button" disabled title="Week view is coming soon" className="cursor-not-allowed rounded px-3 py-1 text-ink-secondary">Week</button>
-            <button type="button" disabled title="Day view is coming soon" className="cursor-not-allowed rounded px-3 py-1 text-ink-secondary">Day</button>
+          <div className="inline-flex h-7 w-[220px] items-stretch overflow-hidden rounded-ctrl border border-line bg-white text-xs" role="group" aria-label="Calendar view">
+            <button type="button" aria-pressed="true" className="flex-1 bg-brand-100 font-semibold text-brand-700">Month</button>
+            <button type="button" disabled title="Week view is coming soon" className="flex-1 cursor-not-allowed border-l border-line text-ink-secondary">Week · Soon</button>
+            <button type="button" disabled title="Day view is coming soon" className="flex-1 cursor-not-allowed border-l border-line text-ink-secondary">Day · Soon</button>
           </div>
           <p className="text-xs text-ink-secondary">Week and day views are coming soon.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_360px]">
         <div className="space-y-3">
           {tasksError && (
             <EmptyState tone="error" title="Tasks could not load for these weeks" reason={tasksError}
               action={<Button variant="secondary" onClick={() => setTasksRetry(k => k + 1)}>Try again</Button>} />
           )}
           <Card padding="none" className="overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-line bg-surface-subtle">
-              {WEEKDAYS.map(d => <div key={d} className="p-2 text-center text-xs font-semibold text-ink-secondary">{d}</div>)}
+            <div className="grid grid-cols-7 border-b border-line bg-surface-sunken">
+              {WEEKDAYS.map(d => <div key={d} className="flex h-9 items-center justify-center text-xs font-semibold text-ink-secondary">{d}</div>)}
             </div>
             <div className="grid grid-cols-7" aria-busy={taskDays === null && !tasksError}>
               {days.map(date => {
@@ -189,6 +205,8 @@ const Calendar: React.FC = () => {
                 const dm = meetingsByDay.get(key) ?? [];
                 const moreTasks = td ? td.total - td.tasks.length : 0;
                 const isToday = key === today;
+                // The frame highlights the WHOLE cell for today and for the selection.
+                const marked = isToday || selected === key;
                 return (
                   <button
                     key={key}
@@ -197,15 +215,15 @@ const Calendar: React.FC = () => {
                     aria-pressed={selected === key}
                     aria-label={`${fmtDay(key)}: ${td?.total ?? 0} tasks, ${dm.length} meetings`}
                     data-testid={`day-${key}`}
-                    className={`flex min-h-[116px] flex-col gap-1 border-b border-r border-line p-2 text-left align-top focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 ${
-                      selected === key ? 'bg-brand-50' : inMonth ? 'bg-surface-panel hover:bg-surface-subtle' : 'bg-surface-subtle'
+                    className={`flex min-h-[116px] flex-col gap-[7px] border-b border-r border-line p-2 text-left align-top focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 ${
+                      marked ? 'bg-brand-100 shadow-[inset_0_0_0_1px_theme(colors.brand.600)]' : 'bg-surface-panel hover:bg-surface-subtle'
                     }`}
                   >
-                    <span className={`self-start text-xs font-semibold ${isToday ? 'rounded-full bg-brand-600 px-1.5 text-white' : inMonth ? 'text-ink' : 'text-ink-secondary'}`}>
+                    <span className={`self-start text-xs font-medium ${marked ? 'text-brand-600' : inMonth ? 'text-ink' : 'text-ink-secondary'}`}>
                       {date.getDate()}
                     </span>
                     {dm.slice(0, 2).map(m => (
-                      <span key={m.id} className="w-full truncate rounded px-1.5 py-0.5 text-xs bg-sky-50 text-sky-800" title={m.title}>
+                      <span key={m.id} className="line-clamp-2 w-full rounded-[5px] px-1.5 py-1 text-xs leading-4 bg-sky-50 text-sky-800" title={m.title}>
                         {m.date ? `${fmtTime(m.date)} ` : ''}{m.title}
                       </span>
                     ))}
@@ -217,7 +235,7 @@ const Calendar: React.FC = () => {
                         <span
                           key={t.id}
                           title={`${t.title}${t.assigned_to ? ` · ${t.assigned_to}` : ''}`}
-                          className={`w-full truncate rounded px-1.5 py-0.5 text-xs ${
+                          className={`line-clamp-2 w-full rounded-[5px] px-1.5 py-1 text-xs leading-4 ${
                             done ? 'bg-surface-sunken text-ink-secondary line-through' : overdue ? 'bg-danger-100 text-danger-700' : 'bg-brand-100 text-brand-700'
                           }`}
                         >
@@ -230,45 +248,47 @@ const Calendar: React.FC = () => {
                 );
               })}
             </div>
-          </Card>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-secondary">
-            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-brand-600" aria-hidden="true" />Open task</span>
-            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-danger-700" aria-hidden="true" />Overdue task</span>
-            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-ink-muted" aria-hidden="true" />Completed task</span>
-            <span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-sky-600" aria-hidden="true" />Meeting</span>
-            <span className="ml-auto">
+            {/* Legend: inside the grid card as its footer, as the frame draws it. */}
+            <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1 border-t border-line p-3 text-xs text-ink-muted">
+              <span><span className="text-brand-700" aria-hidden="true">● </span>Open task</span>
+              <span><span className="text-danger-700" aria-hidden="true">● </span>Overdue task</span>
+              <span><span className="text-ink-muted" aria-hidden="true">● </span>Completed task</span>
+              <span><span className="text-sky-700" aria-hidden="true">● </span>Meeting</span>
+              <span className="ml-auto">
               {meetingsError
                 ? `Meetings could not load — ${meetingsError}`
                 : meetingsCapped
                   ? `Showing the first ${meetings!.list.length} of ${meetings!.total.toLocaleString()} meetings in these weeks.`
                   : 'Meetings come from the Meetings module, at their start time in your time zone.'}
-            </span>
-          </div>
+              </span>
+            </div>
+          </Card>
         </div>
 
-        <aside className="space-y-4">
-          <Card>
-            <h3 className="text-xl font-semibold leading-7 text-ink-heading">Due in the next 7 days</h3>
+        <aside className="space-y-3">
+          <Card padding="none" className="p-3.5">
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">Tasks Due Soon</h3>
             {railError && <p className="mt-2 text-sm text-danger-700" role="alert">{railError}</p>}
             {!railError && (!dueSoon || !summary) && <p className="mt-2 text-sm text-ink-muted">Loading tasks…</p>}
             {dueSoon && summary && (
               <>
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge tone="brand">{dueSoon.total.toLocaleString()} open</Badge>
-                  <span className="text-xs text-ink-muted">{fmtDay(today)} – {fmtDay(localDay(addDays(new Date(), 6)))}</span>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  {summary.overdue > 0 && (
+                    <Link to="/crm/tasks?bucket=overdue" className="rounded-full hover:underline">
+                      <Badge tone="danger">{summary.overdue.toLocaleString()} overdue</Badge>
+                    </Link>
+                  )}
+                  <span className="text-xs text-ink-muted" title={`${fmtDay(today)} – ${fmtDay(localDay(addDays(new Date(), 6)))}`}>
+                    Next 7 days · {dueSoon.total.toLocaleString()} open
+                  </span>
                 </div>
-                {summary.overdue > 0 && (
-                  <Link to="/crm/tasks?bucket=overdue" className="mt-3 block rounded-card bg-danger-100 px-3 py-2 text-sm text-danger-700 hover:underline">
-                    {summary.overdue.toLocaleString()} overdue {summary.overdue === 1 ? 'task' : 'tasks'}
-                  </Link>
-                )}
                 {dueSoon.tasks.length === 0
                   ? <p className="mt-3 text-sm text-ink-muted">No open task is due in the next 7 days.</p>
                   : (
                     <ul className="mt-3 divide-y divide-line">
                       {dueSoon.tasks.map(t => (
                         <li key={t.id} className="py-2">
-                          <p className="text-sm font-medium text-ink">{t.title}</p>
+                          <p className="text-xs font-semibold text-ink">{t.title}</p>
                           <p className="text-xs text-ink-muted">{t.due_date ? fmtDay(t.due_date) : ''}{t.assigned_to ? ` · ${t.assigned_to}` : ''}</p>
                         </li>
                       ))}
@@ -281,8 +301,8 @@ const Calendar: React.FC = () => {
             )}
           </Card>
 
-          <Card>
-            <h3 className="text-xl font-semibold leading-7 text-ink-heading">Upcoming meetings</h3>
+          <Card padding="none" className="p-3.5">
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">Upcoming Meetings</h3>
             {upcomingError && <p className="mt-2 text-sm text-danger-700" role="alert">{upcomingError}</p>}
             {!upcomingError && upcoming === null && <p className="mt-2 text-sm text-ink-muted">Loading meetings…</p>}
             {upcoming && upcoming.length === 0 && (
@@ -302,32 +322,32 @@ const Calendar: React.FC = () => {
             <Button variant="secondary" className="mt-3" onClick={() => navigate('/crm/meetings')}>Open Meetings</Button>
           </Card>
 
-          <Card>
-            <h3 className="text-xl font-semibold leading-7 text-ink-heading">{MONTHS[month.getMonth()]} meetings</h3>
+          <Card padding="none" className="p-3.5">
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">This Month</h3>
             {meetings === null && !meetingsError && <p className="mt-2 text-sm text-ink-muted">Loading meetings…</p>}
             {meetings && (
               <>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <div>
-                    <p className="text-2xl font-bold text-ink" data-testid="month-meetings">{monthMeetings.length}</p>
-                    <p className="text-xs text-ink-muted">Scheduled</p>
+                    <p className="text-2xl font-bold text-brand-600" data-testid="month-meetings">{monthMeetings.length}</p>
+                    <p className="text-xs text-ink-muted">Actual meetings</p>
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-ink">{monthMeetings.filter(m => m.related_to_id).length}</p>
-                    <p className="text-xs text-ink-muted">Linked to a record</p>
+                    <p className="text-2xl font-bold text-brand-600" data-testid="month-dated-tasks">{monthDatedTasks === null ? '—' : monthDatedTasks.toLocaleString()}</p>
+                    <p className="text-xs text-ink-muted">Dated tasks</p>
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-ink-muted">
                   {meetingsCapped
                     ? `Counted from the first ${meetings.list.length} meetings loaded for these weeks — not every meeting.`
-                    : `Counted from meetings starting in ${MONTHS[month.getMonth()]}, in your time zone.`}
+                    : `${MONTHS[month.getMonth()]}, in your time zone. Undated tasks are not counted.`}
                 </p>
               </>
             )}
           </Card>
 
-          <Card>
-            <h3 className="text-xl font-semibold leading-7 text-ink-heading">{selected ? fmtDay(selected) : 'Select a day'}</h3>
+          <Card padding="none" className="p-3.5">
+            <h3 className="text-xl font-semibold leading-7 text-ink-heading">{selected ? fmtLongDay(selected) : 'Select a day'}</h3>
             {!selected && <p className="mt-2 text-sm text-ink-muted">Choose a day on the calendar to see everything due then.</p>}
             {selected && (
               <>
@@ -338,11 +358,11 @@ const Calendar: React.FC = () => {
                     <p className="mt-2 text-xs text-ink-muted" data-testid="selected-summary">
                       {dayTasks.total} {dayTasks.total === 1 ? 'task' : 'tasks'} · {(meetingsByDay.get(selected) ?? []).length} meetings
                     </p>
-                    <ul className="mt-2 divide-y divide-line">
+                    <ul className="mt-2 space-y-2">
                       {dayTasks.tasks.map(t => (
-                        <li key={t.id} className="py-2">
-                          <p className={`text-sm font-medium ${t.status === 'completed' ? 'text-ink-muted line-through' : 'text-ink'}`}>{t.title}</p>
-                          <p className="text-xs text-ink-muted">{[t.status, t.priority, t.assigned_to].filter(Boolean).join(' · ')}</p>
+                        <li key={t.id} className="rounded-ctrl bg-brand-100 p-2.5">
+                          <p className={`text-sm font-semibold ${t.status === 'completed' ? 'text-ink-muted line-through' : 'text-brand-700'}`}>{t.title}</p>
+                          <p className="text-xs text-ink-secondary">{[t.status, t.priority, t.assigned_to].filter(Boolean).join(' · ')}</p>
                         </li>
                       ))}
                     </ul>
@@ -353,7 +373,8 @@ const Calendar: React.FC = () => {
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button onClick={() => navigate(`/crm/tasks?new=1&due=${selected}`)}>New task</Button>
-                  <Button variant="secondary" onClick={() => navigate('/crm/meetings')}>Go to Meetings</Button>
+                  <Button variant="secondary" disabled title="Creating a meeting from the calendar is coming soon">New Meeting · Soon</Button>
+                  <Button variant="secondary" disabled title="Blocking time is coming soon">Block Time · Soon</Button>
                 </div>
                 <p className="mt-2 text-xs text-ink-muted">A new task opens with this day as its due date.</p>
               </>
@@ -363,10 +384,10 @@ const Calendar: React.FC = () => {
       </div>
 
       {summary && summary.no_date > 0 && (
-        <div className="flex items-center gap-2.5 rounded-card border border-line bg-surface-panel p-3 text-sm text-ink-muted" data-testid="undated-note">
+        <div className="flex items-center gap-2.5 rounded-card bg-warning-100 p-3 text-xs leading-[18px] text-warning-800" data-testid="undated-note">
           <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
-          {summary.no_date.toLocaleString()} open {summary.no_date === 1 ? 'task has' : 'tasks have'} no due date, so {summary.no_date === 1 ? 'it is' : 'they are'} not on the calendar.
-          <Link to="/crm/tasks" className="ml-auto text-brand-600 hover:underline">Open Tasks</Link>
+          {summary.no_date.toLocaleString()} open {summary.no_date === 1 ? 'task has' : 'tasks have'} no due date. {summary.no_date === 1 ? 'It is' : 'They are'} not assigned to a day and {summary.no_date === 1 ? 'does' : 'do'} not appear in the month grid.
+          <Link to="/crm/tasks" className="ml-auto font-semibold underline">Open Tasks</Link>
         </div>
       )}
     </div>

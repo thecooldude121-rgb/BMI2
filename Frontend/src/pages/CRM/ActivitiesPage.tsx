@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, Download, Upload, Phone, Mail, Video, CheckCircle, FileText, Clock, BarChart3, Users, Building2, Calendar, TrendingUp,
+  Plus, Search, Download, Upload, Phone, Mail, Video, CheckCircle, FileText, Clock, BarChart3, Users, Building2, Calendar,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -55,9 +55,9 @@ import { localDay } from '../../utils/dates';
 const PAGE_SIZE = 25;
 
 const GROUPED_VIEWS: { mode: ActivityGroupMode; label: string; icon: React.ElementType }[] = [
-  { mode: 'type', label: 'By type', icon: BarChart3 },
-  { mode: 'owner', label: 'By owner', icon: Users },
-  { mode: 'account', label: 'By account', icon: Building2 },
+  { mode: 'type', label: 'By Type', icon: BarChart3 },
+  { mode: 'owner', label: 'By Owner', icon: Users },
+  { mode: 'account', label: 'By Account', icon: Building2 },
 ];
 
 type DateRange = '' | 'today' | 'yesterday' | 'week' | 'month';
@@ -226,7 +226,7 @@ const ActivitiesPage: React.FC = () => {
       const at = new Date(when(r));
       const key = localDay(at);
       const nice = at.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-      const label = key === today ? `Today (${nice})` : key === yesterday ? `Yesterday (${nice})` : nice;
+      const label = key === today ? 'Today' : key === yesterday ? 'Yesterday' : nice;
       const g = map.get(key);
       if (g) g.items.push(r); else map.set(key, { key, label, items: [r], isUnattributed: false });
     }
@@ -241,14 +241,22 @@ const ActivitiesPage: React.FC = () => {
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const count = (k: keyof ActivitySummary) => (summary ? summary[k].toLocaleString() : '—');
 
-  const tiles: { label: string; key: keyof ActivitySummary; alert?: boolean }[] = [
-    { label: 'Total', key: 'total' },
-    { label: 'Today', key: 'today' },
-    { label: 'This week', key: 'this_week' },
-    { label: 'Overdue', key: 'overdue', alert: true },
-    { label: 'Meetings today', key: 'meetings_today' },
-    { label: 'Calls today', key: 'calls_today' },
+  // Label, then the coloured value, then a caption (Figma 64:17786). Captions
+  // say what each server count is; "this week" starts on SUNDAY here (the
+  // frame's "Mon–Sun" is a product call, not copied).
+  const tiles: { label: string; key: keyof ActivitySummary; tone: string; caption: string }[] = [
+    { label: 'Total', key: 'total', tone: 'text-brand-600', caption: activeFilters ? 'Matching these filters' : 'All logged activity' },
+    { label: 'Today', key: 'today', tone: 'text-brand-600', caption: 'Your local day' },
+    { label: 'This Week', key: 'this_week', tone: 'text-brand-600', caption: 'Since Sunday' },
+    { label: 'Overdue', key: 'overdue', tone: 'text-danger-700', caption: 'Planned, time has passed' },
+    { label: 'Meetings Today', key: 'meetings_today', tone: 'text-success-700', caption: 'Meetings on your local day' },
+    { label: 'Calls Today', key: 'calls_today', tone: 'text-success-700', caption: 'Calls on your local day' },
   ];
+
+  /** Figma's 32px filter select on the raised fill (see TasksPage's note on selectClass). */
+  const filterSelect =
+    'h-8 rounded-ctrl border border-line bg-white px-2.5 text-[13px] font-medium text-ink ' +
+    'focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30';
 
   const relatedLinks = (r: ActivityRecord) => {
     const out: { to: string; label: string; kind: string }[] = [];
@@ -267,46 +275,41 @@ const ActivitiesPage: React.FC = () => {
     return (
       <Card key={r.id} data-testid={`activity-${r.id}`}>
         <div className="flex items-start gap-3">
-          <div className="rounded-ctrl bg-brand-50 p-2 text-brand-700"><Icon className="h-5 w-5" aria-hidden="true" /></div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-base font-semibold text-ink">{r.subject}</h3>
-              <span className="text-xs text-ink-muted">
-                {r.type ? cap(r.type) : 'No type'} · {at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-              </span>
+          <div className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700">
+            <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Badge tone="brand">{r.type ? cap(r.type) : 'No type'}</Badge>
+                <h3 className="text-base font-semibold text-ink">{r.subject}</h3>
+              </div>
+              <span className="text-xs text-ink-muted">{at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
             </div>
-            <p className="text-sm text-ink-muted">
-              {relatedLinks(r).map((l, i) => (
-                <React.Fragment key={l.to}>
-                  {i > 0 && ' · '}
-                  {l.kind}: <Link to={l.to} className="font-medium text-brand-600 hover:underline">{l.label}</Link>
-                </React.Fragment>
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-ink-muted">
+              {relatedLinks(r).map(l => (
+                <span key={l.to}>{l.kind}: <Link to={l.to} className="font-medium text-brand-600 hover:underline">{l.label}</Link></span>
               ))}
-              {r.duration != null && <> · {r.duration} min</>}
-            </p>
-            {(r.description || r.outcome) && (
-              <p className="text-sm text-ink">{[r.description, r.outcome].filter(Boolean).join(' — ')}</p>
-            )}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
-              <div className="flex items-center gap-3 text-sm text-ink-muted">
-                <span>Owner: <span className="text-ink">{r.assigned_to || 'Unassigned'}</span></span>
-                <Badge tone={st.tone}>{st.label}</Badge>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => navigate(`/crm/activities/${encodeURIComponent(r.id)}`)}>View details</Button>
-                {planned && (
-                  <>
-                    <Button onClick={() => void markComplete(r)} disabled={busyId === r.id}>
-                      {busyId === r.id ? 'Saving…' : 'Mark complete'}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setCancelling(r)} disabled={busyId === r.id}>Cancel</Button>
-                  </>
-                )}
-                {r.status === 'completed' && (
-                  <Button variant="secondary" onClick={() => navigate('/crm/tasks?new=1')}>Create follow-up task</Button>
-                )}
-              </div>
+              <span>Owner: <span className="text-ink">{r.assigned_to || 'Unassigned'}</span></span>
+              {r.duration != null && <span>{r.duration} min</span>}
+              <Badge tone={st.tone}>{st.label}</Badge>
             </div>
+            {r.description && <p className="text-[13px] leading-5 text-ink">{r.description}</p>}
+            {r.outcome && <p className="text-xs leading-[18px] text-ink-muted">Outcome: {r.outcome}</p>}
+          </div>
+          <div className="flex shrink-0 flex-col items-stretch gap-2">
+            <Button variant="secondary" className="h-8" onClick={() => navigate(`/crm/activities/${encodeURIComponent(r.id)}`)}>View Details</Button>
+            {planned && (
+              <>
+                <Button className="h-8" onClick={() => void markComplete(r)} disabled={busyId === r.id}>
+                  {busyId === r.id ? 'Saving…' : 'Mark complete'}
+                </Button>
+                <Button variant="secondary" className="h-8" onClick={() => setCancelling(r)} disabled={busyId === r.id}>Cancel</Button>
+              </>
+            )}
+            {r.status === 'completed' && (
+              <Button variant="secondary" className="h-8" onClick={() => navigate('/crm/tasks?new=1')}>Create follow-up task</Button>
+            )}
           </div>
         </div>
       </Card>
@@ -314,98 +317,87 @@ const ActivitiesPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    // 24px under the top bar, as the frame and the Calendar have it.
+    <div className="space-y-6 pt-4 lg:pt-6">
       <PageHeader
-        eyebrow="Engage"
+        eyebrow={`Customer interactions · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`}
         title="Activities"
-        description="Calls, emails, meetings and notes logged against your leads, deals, contacts and accounts."
+        description="Track all customer interactions across your CRM"
         actions={
-          <>
-            <Button variant="secondary" disabled title="Export is coming soon"><Download className="h-4 w-4" aria-hidden="true" /> Export · Soon</Button>
-            <Button variant="secondary" disabled title="Import is coming soon"><Upload className="h-4 w-4" aria-hidden="true" /> Import · Soon</Button>
-            <Button onClick={() => { setPickId(''); setPickerOpen(true); }}><Plus className="h-4 w-4" aria-hidden="true" /> Log activity</Button>
-          </>
+          <Button onClick={() => { setPickId(''); setPickerOpen(true); }}><Plus className="h-4 w-4" aria-hidden="true" /> Log activity</Button>
         }
       />
 
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-6" data-testid="activity-tiles">
         {tiles.map(t => (
           <Card key={t.key} padding="none" className="p-3.5">
-            <p className={`text-2xl font-bold leading-8 ${t.alert && summary && summary.overdue > 0 ? 'text-warning-700' : 'text-ink'}`} data-testid={`tile-${t.key}`}>
-              {count(t.key)}
-            </p>
-            <p className="text-xs text-ink-muted">{t.label}</p>
+            <p className="text-xs font-semibold leading-[18px] text-ink-muted">{t.label}</p>
+            <p className={`mt-[5px] text-2xl font-bold leading-8 ${t.tone}`} data-testid={`tile-${t.key}`}>{count(t.key)}</p>
+            <p className="mt-[5px] text-xs leading-[18px] text-ink-muted">{t.caption}</p>
           </Card>
         ))}
       </div>
       {summaryError && <Alert tone="danger" title="The activity counts could not load">{summaryError}</Alert>}
 
-      {/* PREVIEW PANEL — kept labelled (AI is Phase 2). Its four buttons did
-          nothing and are gone; the real figures are the tiles above. */}
-      <Card className="border-brand-200 bg-brand-50">
+      <Card padding="none" className="space-y-2 rounded-[12px] p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-brand-700" aria-hidden="true" />
-          <h2 className="text-base font-semibold text-ink-heading">AI insights</h2>
-          <Badge tone="warning">Preview · Sample content</Badge>
-        </div>
-        <p className="mt-1 text-sm text-ink-muted">
-          These figures are examples, not calculated from your data. Your real activity counts are in the tiles above.
-        </p>
-        <ul className="mt-2 space-y-1 text-sm text-ink">
-          <li>High engagement: 32 activities, up 45%</li>
-          <li>18 overdue — oldest: Acme, 5 days</li>
-        </ul>
-      </Card>
-
-      <Card className="space-y-3">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <select aria-label="Type" className={selectClass()} value={filterType} onChange={e => setFilterType(e.target.value)}>
+          <select aria-label="Type" className={`${filterSelect} w-[120px]`} value={filterType} onChange={e => setFilterType(e.target.value)}>
             <option value="">Type: All</option>
             {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{cap(t)}</option>)}
           </select>
-          <select aria-label="Date" className={selectClass()} value={filterDate} onChange={e => setFilterDate(e.target.value as DateRange)}>
+          <select aria-label="Date" className={`${filterSelect} w-[130px]`} value={filterDate} onChange={e => setFilterDate(e.target.value as DateRange)}>
             <option value="">Date: All</option>
             {(Object.keys(DATE_LABEL) as Exclude<DateRange, ''>[]).map(k => <option key={k} value={k}>{DATE_LABEL[k]}</option>)}
           </select>
-          <select aria-label="Owner" className={selectClass()} value={filterOwner} onChange={e => setFilterOwner(e.target.value)}>
+          <select aria-label="Owner" className={`${filterSelect} w-[130px]`} value={filterOwner} onChange={e => setFilterOwner(e.target.value)}>
             <option value="">Owner: All</option>
             {users.map(u => <option key={u.id} value={u.displayName}>{u.displayName}</option>)}
           </select>
-          <select aria-label="Related" className={selectClass()} value={filterLinked} onChange={e => setFilterLinked(e.target.value as typeof filterLinked)}>
+          <select aria-label="Related" className={`${filterSelect} w-[165px]`} value={filterLinked} onChange={e => setFilterLinked(e.target.value as typeof filterLinked)}>
             <option value="">Related: All</option>
             <option value="lead">Leads</option>
             <option value="deal">Deals</option>
             <option value="contact">Contacts</option>
             <option value="company">Accounts</option>
           </select>
-          <select aria-label="Status" className={selectClass()} value={filterStatus} onChange={e => setFilterStatus(e.target.value as StatusChoice)}>
+          <select aria-label="Status" className={`${filterSelect} w-[135px]`} value={filterStatus} onChange={e => setFilterStatus(e.target.value as StatusChoice)}>
             <option value="">Status: All</option>
             <option value="completed">Completed</option>
             <option value="upcoming">Upcoming</option>
             <option value="overdue">Overdue</option>
             <option value="cancelled">Cancelled</option>
           </select>
+          <div className="ml-auto flex gap-2">
+            <Button variant="secondary" className="h-8" disabled title="Export is coming soon"><Download className="h-4 w-4" aria-hidden="true" /> Export · Soon</Button>
+            <Button variant="secondary" className="h-8" disabled title="Import is coming soon"><Upload className="h-4 w-4" aria-hidden="true" /> Import · Soon</Button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative min-w-[220px] flex-1">
             <span className="sr-only">Search activities</span>
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" aria-hidden="true" />
-            <input className={`${inputClass()} pl-8`} placeholder="Search activity subjects…" value={searchInput} onChange={e => setSearchInput(e.target.value)} />
+            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
+            {/* The server searches the SUBJECT only, so the placeholder says so (the frame's promises description and record too). */}
+            <input className={`${inputClass()} h-8 bg-white pl-8 text-[13px]`} placeholder="Search activity subjects…" value={searchInput} onChange={e => setSearchInput(e.target.value)} />
           </label>
-          {activeFilters && <Button variant="secondary" onClick={clearAllFilters}>Clear filters</Button>}
-        </div>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Activity view">
-          <Button variant={viewMode === 'timeline' ? 'primary' : 'secondary'} aria-pressed={viewMode === 'timeline'} onClick={() => setViewMode('timeline')}>
-            <Clock className="h-4 w-4" aria-hidden="true" /> Timeline
-          </Button>
-          {GROUPED_VIEWS.map(({ mode, label, icon: Icon }) => (
-            <Button key={mode} variant={viewMode === mode ? 'primary' : 'secondary'} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>
-              <Icon className="h-4 w-4" aria-hidden="true" /> {label}
-            </Button>
-          ))}
-          <Button variant="secondary" disabled title="Calendar view is coming soon"><Calendar className="h-4 w-4" aria-hidden="true" /> Calendar · Soon</Button>
+          {activeFilters && <Button variant="secondary" className="h-8" onClick={clearAllFilters}>Clear filters</Button>}
         </div>
       </Card>
+      {/* View switcher: one segmented control outside the filter card (Figma). */}
+      <div className="inline-flex h-8 max-w-full overflow-x-auto rounded-ctrl border border-line bg-white text-[13px] font-medium" role="group" aria-label="Activity view">
+        {[{ mode: 'timeline' as const, label: 'Timeline', icon: Clock }, ...GROUPED_VIEWS].map(({ mode, label, icon: Icon }, i) => (
+          <button
+            key={mode} type="button" aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 ${i > 0 ? 'border-l border-line' : ''} ${
+              viewMode === mode ? 'bg-brand-100 text-brand-700' : 'text-ink hover:bg-surface-sunken'
+            }`}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" /> {label}
+          </button>
+        ))}
+        <button type="button" disabled title="Calendar view is coming soon" className="inline-flex cursor-not-allowed items-center gap-1.5 whitespace-nowrap border-l border-line px-3 text-ink-secondary">
+          <Calendar className="h-4 w-4" aria-hidden="true" /> Calendar · Soon
+        </button>
+      </div>
 
       {notice && <Alert tone="success" title={notice} action={<Button variant="link" onClick={() => setNotice(null)}>Dismiss</Button>} />}
       {actionError && <Alert tone="danger" title={actionError} />}
@@ -438,9 +430,12 @@ const ActivitiesPage: React.FC = () => {
           )}
           {groups.map(g => (
             <section key={g.key} aria-label={g.label} className="space-y-3">
-              <h2 className={`text-sm font-semibold uppercase tracking-wide ${g.isUnattributed ? 'italic text-ink-secondary' : 'text-ink-heading'}`}>
-                {g.label}{viewMode !== 'timeline' && <span className="ml-2 text-ink-secondary">{g.items.length}</span>}
-              </h2>
+              <div className="flex items-end justify-between gap-3 border-b-2 border-ink pb-2">
+                <h2 className={`text-2xl font-semibold leading-8 ${g.isUnattributed ? 'italic text-ink-secondary' : 'text-ink-heading'}`}>{g.label}</h2>
+                <span className="text-xs text-ink-secondary">
+                  {g.items.length} shown{viewMode === 'timeline' ? ' · local day' : ''}
+                </span>
+              </div>
               <div className="space-y-3">{g.items.map(renderCard)}</div>
             </section>
           ))}
