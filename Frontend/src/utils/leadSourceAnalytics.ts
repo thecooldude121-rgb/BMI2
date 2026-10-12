@@ -31,10 +31,12 @@ export function computeSourceAnalytics(
   const stats: SourceStats[] = [];
   for (const [source, group] of groups) {
     const n = group.length;
-    let qualified = 0, conversionReady = 0, stale = 0, duplicate = 0, disqualified = 0, slaBreach = 0, scoreSum = 0;
+    let qualified = 0, conversionReady = 0, stale = 0, duplicate = 0, disqualified = 0, slaBreach = 0, scoreSum = 0, scored = 0;
 
     for (const l of group) {
-      scoreSum += l.ai_score ?? l.score;
+      // An unknown score is left OUT of the average, never averaged in as 0.
+      const sc = l.ai_score ?? l.score;
+      if (sc != null) { scoreSum += sc; scored++; }
       if (QUALIFIED_STATUSES.has(l.status))        qualified++;
       if (CONVERSION_READY_STATUSES.has(l.status)) conversionReady++;
       if (l.status === 'disqualified')              disqualified++;
@@ -54,7 +56,7 @@ export function computeSourceAnalytics(
       duplicateRate:       pct(duplicate),
       disqualifiedRate:    pct(disqualified),
       slaBreachRate:       pct(slaBreach),
-      avgScore:            n > 0 ? Math.round(scoreSum / n) : 0,
+      avgScore:            scored > 0 ? Math.round(scoreSum / scored) : 0,
     });
   }
 

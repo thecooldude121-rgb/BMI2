@@ -175,3 +175,24 @@ export async function downloadDocument(
     return { ok: false, message: 'Could not reach the server.' };
   }
 }
+
+/**
+ * Delete one document (DELETE /documents/:id — admin and manager; the server
+ * also removes the stored file). A refusal comes back with the server's own
+ * message, which the caller shows verbatim.
+ */
+export async function deleteDocument(id: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/documents/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { ok: false, message: body.message || `Could not delete (${res.status}).` };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, message: 'Could not reach the server.' };
+  }
+}

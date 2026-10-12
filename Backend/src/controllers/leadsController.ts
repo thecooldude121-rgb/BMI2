@@ -60,7 +60,8 @@ const VALID_STATUSES = ['active', 'inactive', 'nurturing'] as const;
  * from the constraint violation, which is what 'abc', -5, 150 and even 55.5
  * all produced on both create and update.
  *
- * omitted / null stay valid: createLead writes `score ?? 0`.
+ * omitted / null stay valid: createLead stores NULL — an UNKNOWN score, never a
+ * default (decided 2026-10-13: the create forms used to send a fabricated 50).
  */
 function scoreError(v: unknown): string | null {
   if (v === undefined || v === null) return null;
@@ -298,7 +299,7 @@ export const createLead = async (req: AuthRequest, res: Response, next: NextFunc
         industry || null,
         stage    || 'new',
         status   || 'active',   // lifecycle flag, not the pipeline stage
-        score    ?? 0,
+        score    ?? null,   // unknown, not 0 — nothing has measured a new lead
         source   || null,
         resolvedOwnerName,
         notes    || null,

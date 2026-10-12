@@ -34,7 +34,7 @@ const CRITERIA: Criterion[] = [
   {
     id:    'score',
     label: 'Lead score ≥ 40',
-    check: l => (l.ai_score ?? l.score) >= 40,
+    check: l => (l.ai_score ?? l.score ?? 0) >= 40, // unknown does not pass
     hard:  false,
   },
 ];

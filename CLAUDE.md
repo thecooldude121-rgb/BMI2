@@ -1815,6 +1815,47 @@ old constraint, which fails the shared-name test.
     `ReportDetailView` for the reason recorded there; (c) `POST /activities` refused a parentless
     call with no clear reason in the smoke seed — worth a look when slice 4 touches activities.
 
+- **DONE — H1, data loss and invented data (2026-10-13; order of work decided by Venkat the same day).**
+  Rule applied: a field with a real column is wired to the server; a field without one is REMOVED —
+  a field that cannot be saved is not collected.
+  - **A new lead's score is UNKNOWN (NULL), never a default.** `createLead` wrote `score ?? 0`;
+    Add Lead, Quick Add and the Import wizard all sent a hardcoded 50. The client's `Lead.score` is
+    `number | null` and reads "No stored score"; unknown scores are left out of averages and never
+    pass the advisory >= 40 check. **Live had ZERO leads scored 50** (all 38 are seed rows), so no
+    existing row needed a decision; had there been any, a creation-time 50 could NOT have been told
+    from a real 50 — nothing records a score's provenance.
+  - **Add Lead** sent `estimated_value` and `quick_notes` (never read — value and notes vanished),
+    collected an Address with no column, offered company sizes `201-1000` / `1001+` and an `urgent`
+    priority the server refuses (choosing one failed the save), and an owner picker of placeholder
+    queues. Now: `value` + `currency` (required together), `notes`, `priority` (no default), City /
+    Country (063 columns), and `assigned_to_user_id` from `GET /users`. The Import wizard's notes
+    use `notes` too.
+  - **"unassigned" was stored as an owner NAME** by all three create paths, and LeadContext injected
+    `owner_id: user.id`, which the server stored as the owner's name (a bare id). Both removed. (Live:
+    no affected rows.) **Still open, Group A item 8:** Quick Add and the Import wizard's owner pickers
+    still offer the `TEAM_MEMBERS` placeholder queues.
+  - **Edit Account** is rebuilt on the 13 `companies` columns. Removed: ~27 fields that went into a
+    `customFields` blob nothing sends; "Last Modified: Nov 16, 2025 by Alex Rodriguez"; "0 deals ·
+    0 contacts"; "Verified" ticks; the AI-suggestions panel (incl. an HRMS suggestion); "Save as Draft"
+    (it saved to the server); a "TechStart" placeholder; the eight `components/Accounts/Form/*` panels.
+    `validateURL` capped TLDs at 6 letters and refused `.education` / `.consulting` — fixed. A new
+    account's browser draft is offered inline, not by `window.confirm`.
+  - **Document detail** is rebuilt: description and tags save through `PUT /documents/:id` (success
+    after the reload), Delete is `DELETE /documents/:id` (admin / manager; a refusal shown verbatim;
+    navigation only after the 2xx), Share and Archive disabled "Coming soon". Removed: local-only
+    comments, replies, tags, sharing, version restore and activity log, and success toasts over
+    console.log.
+  - **Login rate limiting EXISTS on the server** (`middleware/rateLimit.ts`, express-rate-limit 8):
+    30 failed / 15 min per IP, 5 / 15 min per email, successes not counted, draft-8 headers, 429.
+    In-process memory only. Production needs `rate-limit-redis` + a Redis client (`redis` or
+    `ioredis`) — two new dependencies — plus a Redis server and `REDIS_URL`; and for the login page's
+    "attempts remaining" banner to read the server's count, CORS must expose `RateLimit` /
+    `RateLimit-Policy`. **Not built — reported for a decision.**
+  - Tests: `AddLeadPage.test.tsx` (5), `AccountFormPage.test.tsx` (6), `DocumentDetailPage.test.tsx`
+    (6, replacing the share-picker tests — that picker is gone), `roundTrip.addLeadPayload` (2); all
+    mutation-tested. E2E on `bmi_crm_iso_test` via the real login and sidebar, each write confirmed in
+    Postgres.
+
 - **Password reset — still its own separate, real gap, and NOT part of item 5.** It is
   detailed under "Known gaps in the auth shell" below and is blocked on a different
   decision entirely (a transactional email provider, sender domain, SPF/DKIM). The two

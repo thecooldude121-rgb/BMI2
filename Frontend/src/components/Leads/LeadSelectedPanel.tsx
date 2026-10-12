@@ -159,7 +159,7 @@ const LeadSelectedPanel: React.FC<LeadSelectedPanelProps> = ({
               <Row label="Phone">{lead.phone || '—'}</Row>
               <Row label="Source">{lead.source || '—'}</Row>
               <Row label="Owner">{lead.owner_name || 'Unassigned'}</Row>
-              <Row label="Stored score">{lead.score ?? 0} · stored CRM value, not an AI score</Row>
+              <Row label="Stored score">{lead.score == null ? 'None stored' : `${lead.score} · stored CRM value, not an AI score`}</Row>
               <Row label="Last contact">{lead.last_contact_date || 'No contact logged'}</Row>
               <Row label="Follow-up">{followUpStatus(lead.next_follow_up_date)?.label ?? 'None set'}</Row>
             </div>

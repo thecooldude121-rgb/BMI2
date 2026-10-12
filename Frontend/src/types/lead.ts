@@ -67,7 +67,8 @@ export interface Lead {
   status: LeadLifecycleStage;
   temperature: LeadTemperature;
   grade?: LeadGrade;
-  score: number;
+  /** The STORED score. NULL = unknown (nothing measured it); never shown as 0. */
+  score: number | null;
   ai_score?: number;
   manual_score_override?: number;
   pipeline_id?: string;

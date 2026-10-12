@@ -1,7 +1,16 @@
+/**
+ * A web address the browser can parse, with a dotted host. The regex this
+ * replaces capped the top-level domain at 6 letters, so it refused real sites
+ * on .education, .consulting, .international and similar.
+ */
 export const validateURL = (url: string): boolean => {
-  if (!url) return false;
-  const urlPattern = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
-  return urlPattern.test(url);
+  if (!url || /\s/.test(url.trim())) return false;
+  try {
+    const u = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
+    return /^[^.]+(\.[^.]+)+$/.test(u.hostname) && (u.protocol === 'https:' || u.protocol === 'http:');
+  } catch {
+    return false;
+  }
 };
 
 export const formatURL = (url: string): string => {

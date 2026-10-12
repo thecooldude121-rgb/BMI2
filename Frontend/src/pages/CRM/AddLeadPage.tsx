@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, User, Building, Mail, Phone, DollarSign, Tag, Globe, MapPin, AlertTriangle, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Save, User, Building, Mail, Phone, DollarSign, Tag, Globe, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLeads } from '../../contexts/LeadContext';
-import { suggestOwner, TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
+import { fetchUsers, type WorkspaceUser } from '../../utils/usersApi';
 import type { Lead } from '../../types/lead';
 
 // ── Source mode config ────────────────────────────────────────────────────────
@@ -16,6 +16,16 @@ const SOURCE_MODES: { id: SourceMode; icon: string; label: string; hint: string 
   { id: 'Lead Gen', icon: '🎯', label: 'Lead Gen', hint: 'Apollo, ZoomInfo, outbound list' },
   { id: 'Manual',   icon: '✍️', label: 'Manual',   hint: 'Direct entry, trade show, other' },
 ];
+
+/**
+ * The server's own vocabularies (Backend utils/leadProfileFields.ts). The form
+ * used to offer "201-1000", "1001+" and an "urgent" priority, none of which the
+ * server accepts — choosing one made the save fail.
+ */
+const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+'] as const;
+const PRIORITIES = ['low', 'medium', 'high'] as const;
+/** ISO 4217 codes for the markets this CRM serves; the server checks ^[A-Z]{3}$. */
+const CURRENCIES = ['INR', 'AED', 'SAR', 'QAR', 'USD', 'EUR', 'GBP', 'ZAR', 'NGN', 'KES', 'EGP'] as const;
 
 const SOURCE_REQUIRED_FIELDS: Record<SourceMode, string[]> = {
   Website:  [],
@@ -38,11 +48,17 @@ const INIT_FORM = {
   companySize:  '',
   department:   '',
   dealValue:    '',
-  priority:     'medium',
+  currency:     '',
+  // No default: a priority nobody chose is a classification the form invented.
+  priority:     '',
   linkedIn:     '',
-  address:      '',
+  // City and country are real columns (migration 063); the old free-text
+  // "Address" had no column and was collected, then never sent.
+  city:         '',
+  country:      '',
   tags:         '',
   notes:        '',
+  /** A workspace user's id (GET /users), or '' for unassigned. */
   ownerId:      '',
   // source-specific
   sourceDetail:  '',
@@ -59,19 +75,24 @@ export default function AddLeadPage() {
 
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [form, setForm] = useState<FormState>(INIT_FORM);
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'submit', string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'submit' | 'duplicate', string>>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [duplicate, setDuplicate] = useState<Lead | null>(null);
   const [overrideDuplicate, setOverrideDuplicate] = useState(false);
-  const [ownerTouched, setOwnerTouched] = useState(false);
   const [showExtra, setShowExtra] = useState(false);
 
-  // Auto-suggest owner when source mode changes (unless manually overridden)
+  // The owner picker is the workspace's real user list. It used to offer
+  // placeholder queues ("SDR Team", "HR Partner") that named nobody and were
+  // stored as free text.
+  const [users, setUsers] = useState<WorkspaceUser[] | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
   useEffect(() => {
-    if (ownerTouched || !sourceMode) return;
-    const s = suggestOwner(sourceMode);
-    setForm(f => ({ ...f, ownerId: s ? s.id : '' }));
-  }, [sourceMode, ownerTouched]);
+    let cancelled = false;
+    fetchUsers()
+      .then(u => { if (!cancelled) setUsers(u); })
+      .catch(e => { if (!cancelled) setUsersError(e?.message ?? 'Could not load the team'); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Client-side duplicate check
   useEffect(() => {
@@ -93,14 +114,8 @@ export default function AddLeadPage() {
     setErrors(prev => ({ ...prev, [name]: undefined }));
   }
 
-  function handleOwnerChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setOwnerTouched(true);
-    setForm(f => ({ ...f, ownerId: e.target.value }));
-  }
-
   function selectMode(mode: SourceMode) {
     setSourceMode(mode);
-    setOwnerTouched(false);
     // Pre-fill source-specific fields reset
     setForm(f => ({ ...f, sourceDetail: '', utmSource: '', utmMedium: '', utmCampaign: '', department: '', companySize: '' }));
     setErrors({});
@@ -113,6 +128,7 @@ export default function AddLeadPage() {
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Enter a valid email address';
     if (!form.company.trim()) errs.company = 'Company is required';
     if (sourceMode === 'Referral' && !form.sourceDetail.trim()) errs.sourceDetail = 'Referring contact is required';
+    if (form.dealValue && !form.currency) errs.currency = 'Choose the currency of the deal value';
     if (duplicate && !overrideDuplicate) errs.duplicate = 'Acknowledge the duplicate to continue';
     return errs;
   }
@@ -125,7 +141,9 @@ export default function AddLeadPage() {
 
     setIsLoading(true);
     try {
-      const result = await createLead({
+      // `value` is the API's column name; the frontend Lead type calls it
+      // estimated_value on READ, which is why this payload is typed loosely.
+      const payload: Partial<Lead> & { value?: number } = {
         first_name:    form.firstName.trim(),
         last_name:     form.lastName.trim(),
         full_name:     [form.firstName.trim(), form.lastName.trim()].filter(Boolean).join(' '),
@@ -141,16 +159,25 @@ export default function AddLeadPage() {
         utm_source:    form.utmSource.trim() || undefined,
         utm_medium:    form.utmMedium.trim() || undefined,
         utm_campaign:  form.utmCampaign.trim() || undefined,
-        owner_id:      form.ownerId || 'unassigned',
-        estimated_value: form.dealValue ? Number(form.dealValue) : 0,
+        // Every key below is one the server reads (createLead + leadProfileFields).
+        // It used to send estimated_value and quick_notes, which it does not, so
+        // the deal value and notes were silently dropped; owner_id 'unassigned',
+        // stored as an owner literally named "unassigned"; and score 50, a number
+        // nothing measured. A new lead's score is now UNKNOWN (NULL).
+        assigned_to_user_id: form.ownerId ? Number(form.ownerId) : undefined,
+        value:         form.dealValue ? Number(form.dealValue) : undefined,
+        currency:      form.dealValue ? form.currency || undefined : undefined,
+        priority:      (form.priority || undefined) as Lead['priority'],
+        city:          form.city.trim() || undefined,
+        country:       form.country.trim() || undefined,
         status:        'new',
-        score:         50,
         tags:          form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         linkedin_url:  form.linkedIn.trim() || undefined,
-        quick_notes:   form.notes.trim() || undefined,
+        notes:         form.notes.trim() || undefined,
         email_opt_in:  true,
         call_opt_in:   true,
-      });
+      };
+      const result = await createLead(payload);
 
       if (result) {
         navigate('/crm/leads');
@@ -172,7 +199,6 @@ export default function AddLeadPage() {
     }
   }
 
-  const ownerSuggestion = sourceMode ? suggestOwner(sourceMode) : null;
   const inputCls = (field: string) =>
     `w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
       errors[field as keyof typeof errors] ? 'border-red-300 bg-red-50' : 'border-gray-300'
@@ -368,11 +394,7 @@ export default function AddLeadPage() {
                     <select aria-label="Company Size" name="companySize" value={form.companySize} onChange={handleChange}
                       className={inputCls('companySize')}>
                       <option value="">Select size</option>
-                      <option value="1-10">1–10</option>
-                      <option value="11-50">11–50</option>
-                      <option value="51-200">51–200</option>
-                      <option value="201-1000">201–1,000</option>
-                      <option value="1001+">1,001+</option>
+                      {COMPANY_SIZES.map(sz => <option key={sz} value={sz}>{sz}</option>)}
                     </select>
                   </div>
                 </div>
@@ -381,29 +403,25 @@ export default function AddLeadPage() {
 
             {/* Owner with suggestion */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assignment</p>
-                {ownerSuggestion && !ownerTouched && (
-                  <div className="flex items-center gap-1.5">
-                    <Lightbulb className="h-3.5 w-3.5 text-blue-500" />
-                    <span className="text-xs text-blue-600">Suggested: <strong>{ownerSuggestion.label}</strong></span>
-                  </div>
-                )}
-              </div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assignment</p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To</label>
-                <select aria-label="Assigned To" value={form.ownerId} onChange={handleOwnerChange} className={inputCls('ownerId')}>
-                  <option value="">Unassigned</option>
-                  {TEAM_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                <select aria-label="Assigned To" name="ownerId" value={form.ownerId} onChange={handleChange}
+                  disabled={users === null && !usersError} className={inputCls('ownerId')}>
+                  <option value="">{users === null && !usersError ? 'Loading the team…' : 'Unassigned'}</option>
+                  {(users ?? []).map(u => <option key={u.id} value={String(u.id)}>{u.displayName}</option>)}
                 </select>
+                {usersError && (
+                  <p className="text-xs text-red-600 mt-1" role="alert">
+                    The team could not load ({usersError}). The lead can still be saved unassigned.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                 <select aria-label="Priority" name="priority" value={form.priority} onChange={handleChange} className={inputCls('priority')}>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
+                  <option value="">Not set</option>
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
                 </select>
               </div>
             </div>
@@ -436,11 +454,19 @@ export default function AddLeadPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Est. Deal Value</label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input name="dealValue" type="number" min="0" value={form.dealValue} onChange={handleChange}
-                          placeholder="25000" className={iconInputCls('dealValue')} />
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <input aria-label="Est. Deal Value" name="dealValue" type="number" min="0" value={form.dealValue} onChange={handleChange}
+                            placeholder="25000" className={iconInputCls('dealValue')} />
+                        </div>
+                        <select aria-label="Currency" name="currency" value={form.currency} onChange={handleChange}
+                          className={`${inputCls('currency')} w-28`}>
+                          <option value="">Currency</option>
+                          {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
                       </div>
+                      {errors.currency && <p className="text-xs text-red-600 mt-1">{errors.currency}</p>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">LinkedIn</label>
@@ -459,13 +485,16 @@ export default function AddLeadPage() {
                         placeholder="enterprise, hot-lead, decision-maker" className={iconInputCls('tags')} />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <textarea name="address" rows={2} value={form.address} onChange={handleChange}
-                        placeholder="123 Business Ave, City, State, ZIP"
-                        className={`${iconInputCls('address')} resize-none`} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                      <input aria-label="City" name="city" value={form.city} onChange={handleChange}
+                        placeholder="Bengaluru" className={inputCls('city')} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                      <input aria-label="Country" name="country" value={form.country} onChange={handleChange}
+                        placeholder="India" className={inputCls('country')} />
                     </div>
                   </div>
                   <div>

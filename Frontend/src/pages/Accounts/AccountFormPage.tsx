@@ -1,1204 +1,413 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Save, Building2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Save, X, Globe, Linkedin, Twitter, Building2 } from 'lucide-react';
+import { Card, SectionHeading } from '../../components/ui/Card';
+import { Alert } from '../../components/ui/Alert';
+import { Field, inputClass, selectClass, textareaClass } from '../../components/ui/Field';
+import PageHeader from '../../components/Layout/PageHeader';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { useAccounts } from '../../contexts/AccountsContext';
 import { useAccountById } from '../../hooks/useAccountById';
 import { fetchAccountsPage } from '../../utils/accountsApi';
-import type { EnhancedAccount } from '../../types/accounts';
-import { useToast } from '../../contexts/ToastContext';
 import { fetchIndustries } from '../../utils/industriesApi';
-import CRMNavigation from '../../components/CRM/CRMNavigation';
-import ConfirmationModal from '../../components/common/ConfirmationModal';
-import { validateURL, formatURL, formatLinkedInURL, formatPhoneNumber, calculateCompanyAge, calculateGrowthRate, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage } from '../../utils/accountFormUtils';
-import PreviewPanel from '../../components/Accounts/Form/PreviewPanel';
-import DataQualityPanel from '../../components/Accounts/Form/DataQualityPanel';
-import AISuggestionsPanel from '../../components/Accounts/Form/AISuggestionsPanel';
-import LocationSection from '../../components/Accounts/Form/LocationSection';
-import CompanyDetailsSection from '../../components/Accounts/Form/CompanyDetailsSection';
-import FundingSection from '../../components/Accounts/Form/FundingSection';
-import CRMSettingsSection from '../../components/Accounts/Form/CRMSettingsSection';
-import ValidationTipsPanel from '../../components/Accounts/Form/ValidationTipsPanel';
-
-export interface Office {
-  id: string;
-  location: string;
-  type: string;
-  employees: number;
-}
-
-export interface Founder {
-  id: string;
-  name: string;
-  role: string;
-}
-
-export interface FundingRound {
-  id: string;
-  roundName: string;
-  amount: number;
-  date: { month: string; year: number };
-  leadInvestor: string;
-  otherInvestors: string;
-  isRecent?: boolean;
-}
+import { useToast } from '../../contexts/ToastContext';
+import { validateURL, formatURL, formatPhoneNumber, saveToLocalStorage, loadFromLocalStorage, clearLocalStorage } from '../../utils/accountFormUtils';
+import type { EnhancedAccount } from '../../types/accounts';
 
 /**
- * Industry options are NOT listed here any more.
+ * Add / edit account — H1 (2026-10-13): EVERY FIELD HERE IS A COLUMN ON `companies`.
  *
- * This file used to hold a 16-value INDUSTRY_OPTIONS array while the unrouted
- * CompanyForm held a different 10, and `companies.industry` was free text that
- * agreed with neither. Migration 045 constrained the column, and the options now
- * come from GET /companies/industries — the same list the server validates and
- * the database enforces — so there is nothing here to drift.
+ * The form this replaces collected ~40 fields and saved 13. Legal / trade name,
+ * sub-industry, specialization, target market, offices, founders, founded date,
+ * employee growth, revenue history and currency, funding rounds, valuation,
+ * tech stack, owner, status, priority, tags, account source, an "HRMS
+ * connection" flag and notes all went into a `customFields` object that
+ * mapAccountToPayload never sends — typed, then lost on Save under "Account
+ * updated successfully". Decided: a field that cannot be saved is not
+ * collected. Also removed, because they were invented:
+ *   - "Last Modified: Nov 16, 2025 by Alex Rodriguez" — a literal on every account;
+ *   - a preview reading "0 deals · 0 contacts" for every account — literals;
+ *   - "Verified" ticks on name / industry / website — nothing verifies anything;
+ *   - an "AI suggestions" panel of canned advice with no evidence, including an
+ *     "HRMS opportunity" that crossed into another product;
+ *   - "Save as Draft", which SAVED TO THE SERVER under a draft label;
+ *   - a "Trade Name" placeholder of "TechStart" (a fixture name).
+ *
+ * Kept: the server-side duplicate-name check (slice 3b), the served industry
+ * vocabulary (migration 045), success only after the server's 2xx, and a
+ * browser-local draft for a NEW account (offered inline, never a browser dialog).
+ * The accounts that need the missing fields (source, founded year, funding,
+ * technology, lifecycle, owner, visibility, address line 2) are a schema
+ * decision, listed in the Figma comparison.
  */
 
+/** companies.size, as the database holds it. "1000+" is one band there. */
+const SIZE_OPTIONS: { value: NonNullable<EnhancedAccount['accountSize']>; label: string }[] = [
+  { value: '1-10', label: '1-10 employees' },
+  { value: '11-50', label: '11-50 employees' },
+  { value: '51-200', label: '51-200 employees' },
+  { value: '201-500', label: '201-500 employees' },
+  { value: '501-1000', label: '501-1000 employees' },
+  // mapAccountToPayload stores this as '1000+'. The old form also offered
+  // "5000+", which was stored as '1000+' too and read back as this band.
+  { value: '1001-5000', label: '1000+ employees' },
+];
+
 export interface AccountFormData {
-  companyName: string;
-  legalName: string;
-  tradeName: string;
+  name: string;
   industry: string;
-  subIndustry: string;
-  specialization: string;
-  targetMarket: string;
+  domain: string;
   website: string;
-  companyPhone: string;
-  linkedin: string;
-  twitter: string;
-  companyEmail: string;
-  addressLine1: string;
-  addressLine2: string;
+  phone: string;
+  description: string;
+  street: string;
   city: string;
   state: string;
   postalCode: string;
   country: string;
-  offices: Office[];
-  foundedMonth: string;
-  foundedYear: number;
-  founders: Founder[];
-  /** companies.size band. The free-number employeeCount it replaces had no
-   *  column and was silently discarded on save. */
   accountSize: EnhancedAccount['accountSize'] | '';
-  employeeGrowth: { [year: string]: number };
-  annualRevenue: number;
-  currency: string;
-  revenueYear: number;
-  isRevenueEstimated: boolean;
-  revenueGrowth: number;
-  revenueHistory: { [year: string]: number };
-  totalFunding: number;
-  fundingRounds: FundingRound[];
-  estimatedValuation: number;
-  isValuationEstimated: boolean;
-  infrastructure: string;
-  crmTools: string;
-  devTools: string;
-  accountOwner: string;
-  accountStatus: string;
-  priority: string;
-  tags: string[];
-  accountSource: string;
-  hasHRMSConnection: boolean;
-  notes: string;
+  /** companies.revenue (bigint). No currency column exists — see the help text. */
+  annualRevenue: string;
 }
+
+const EMPTY: AccountFormData = {
+  name: '', industry: '', domain: '', website: '', phone: '', description: '',
+  street: '', city: '', state: '', postalCode: '', country: '', accountSize: '', annualRevenue: '',
+};
+
+const fromAccount = (a: EnhancedAccount): AccountFormData => ({
+  name: a.name ?? '',
+  industry: a.industry ?? '',
+  domain: a.domain ?? '',
+  website: a.website ?? '',
+  phone: a.phone ?? '',
+  description: a.description ?? '',
+  street: a.billingAddress?.street ?? '',
+  city: a.billingAddress?.city ?? '',
+  state: a.billingAddress?.state ?? '',
+  postalCode: a.billingAddress?.postalCode ?? '',
+  country: a.billingAddress?.country ?? '',
+  accountSize: a.accountSize ?? '',
+  annualRevenue: a.annualRevenue ? String(a.annualRevenue) : '',
+});
+
+/** Exactly what mapAccountToPayload reads — nothing that would be dropped. */
+export function toAccountPayload(f: AccountFormData): Partial<EnhancedAccount> {
+  return {
+    name: f.name.trim(),
+    industry: f.industry,
+    domain: f.domain.trim(),
+    website: f.website.trim(),
+    phone: f.phone.trim(),
+    description: f.description.trim(),
+    billingAddress: {
+      street: f.street.trim(), city: f.city.trim(), state: f.state.trim(),
+      postalCode: f.postalCode.trim(), country: f.country.trim(),
+    },
+    accountSize: f.accountSize || undefined,
+    annualRevenue: f.annualRevenue.trim() ? Number(f.annualRevenue) : undefined,
+  } as Partial<EnhancedAccount>;
+}
+
+/** The fields counted by the completeness line, as the frame's "12 of 14 fields". */
+const COMPLETENESS: (keyof AccountFormData)[] = [
+  'name', 'industry', 'domain', 'website', 'phone', 'description',
+  'street', 'city', 'country', 'accountSize', 'annualRevenue',
+];
+
+type SaveAction = 'view' | 'contact' | 'deal' | 'another';
 
 const AccountFormPage: React.FC = () => {
   const { accountId } = useParams<{ accountId: string }>();
   const navigate = useNavigate();
   const { createAccount, updateAccount } = useAccounts();
+  const { showToast } = useToast();
 
   const isEditMode = !!accountId && accountId !== 'add';
-  // From the server by id (slice 3b) — the context held only the first 200, so
-  // editing account #201 prefilled nothing.
-  const { account: loadedAccount } = useAccountById(isEditMode ? accountId : undefined);
-  const existingAccount = isEditMode ? (loadedAccount ?? null) : null;
+  // By id from the server (slice 3b): the context held only the first 200.
+  const { account: existingAccount } = useAccountById(isEditMode ? accountId : undefined);
+  const draftKey = 'account-form-draft-v2-new';
 
-  // The served industry vocabulary (migration 045). Empty until it loads; a
-  // failure is shown rather than replaced with a guessed list the server
-  // might refuse.
-  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
-  const [industryLoadError, setIndustryLoadError] = useState<string | null>(null);
+  const [form, setForm] = useState<AccountFormData>(EMPTY);
+  const [errors, setErrors] = useState<Partial<Record<keyof AccountFormData, string>>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [draft, setDraft] = useState<AccountFormData | null>(null);
+
+  const [industries, setIndustries] = useState<string[]>([]);
+  const [industryError, setIndustryError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     fetchIndustries()
-      .then(list => { if (live) setIndustryOptions(list); })
-      .catch(e => { if (live) setIndustryLoadError(e instanceof Error ? e.message : 'Could not load the industry list'); });
+      .then(list => { if (live) setIndustries(list); })
+      .catch(e => { if (live) setIndustryError(e instanceof Error ? e.message : 'Could not load the industry list'); });
     return () => { live = false; };
   }, []);
 
-  const [formData, setFormData] = useState<AccountFormData>({
-    companyName: existingAccount?.name || '',
-    legalName: existingAccount?.name || '',
-    tradeName: '',
-    industry: existingAccount?.industry || '',
-    subIndustry: '',
-    specialization: '',
-    targetMarket: '',
-    website: existingAccount?.website || '',
-    companyPhone: existingAccount?.phone || '',
-    // `existingAccount.address` DOES NOT EXIST on EnhancedAccount — the field is
-    // `billingAddress`, and its postcode key is `postalCode`, not `zip`. Every
-    // one of these read undefined, so opening an account for editing showed a
-    // blank address even when the database held a full one. TypeScript reported
-    // all six as errors; they sat in the 228 "noise" pile.
-    //
-    // socialProfiles does not exist either. There is no column for it, so it is
-    // not read back — see the note on the save payload below.
-    linkedin: '',
-    twitter: '',
-    companyEmail: existingAccount?.email || '',
-    addressLine1: existingAccount?.billingAddress?.street || '',
-    addressLine2: '',
-    city: existingAccount?.billingAddress?.city || '',
-    state: existingAccount?.billingAddress?.state || '',
-    postalCode: existingAccount?.billingAddress?.postalCode || '',
-    country: existingAccount?.billingAddress?.country || 'United States',
-    offices: [],
-    foundedMonth: '',
-    foundedYear: 2018,
-    founders: [],
-    accountSize: existingAccount?.accountSize ?? '',
-    employeeGrowth: {},
-    annualRevenue: existingAccount?.annualRevenue || 0,
-    currency: 'USD',
-    revenueYear: 2025,
-    isRevenueEstimated: false,
-    revenueGrowth: 0,
-    revenueHistory: {},
-    totalFunding: 0,
-    fundingRounds: [],
-    estimatedValuation: 0,
-    isValuationEstimated: true,
-    infrastructure: '',
-    crmTools: '',
-    devTools: '',
-    accountOwner: existingAccount?.ownerId || '',
-    accountStatus: existingAccount?.status || 'Active',
-    priority: 'Medium',
-    tags: existingAccount?.tags || [],
-    accountSource: 'Manual',
-    hasHRMSConnection: false,
-    notes: '',
-  });
-
-  const [isSaving, setIsSaving] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [duplicateAccounts, setDuplicateAccounts] = useState<any[]>([]);
-  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-  // Computed below and never rendered — the panels that showed them are gone.
-  // Kept as write-only rather than deleted, because the effects that set them
-  // also validate the founded-date and revenue-history inputs.
-  const [, setCompanyAge] = useState('');
-  const [, setGrowthRate] = useState('');
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const { showToast } = useToast();
-  // Possible duplicates come from a SERVER search (slice 3b). They were matched
-  // against the list page's capped accounts — also narrowed by whatever search
-  // that page had active, so a real duplicate could be missed.
-  const [nameMatches, setNameMatches] = useState<EnhancedAccount[]>([]);
-
   useEffect(() => {
-    if (isEditMode && existingAccount) {
-      setFormData({
-        companyName: existingAccount.name || '',
-        legalName: existingAccount.name || '',
-        tradeName: existingAccount.customFields?.tradeName || '',
-        industry: existingAccount.industry || '',
-        subIndustry: existingAccount.customFields?.subIndustry || '',
-        specialization: existingAccount.customFields?.specialization || '',
-        targetMarket: existingAccount.customFields?.targetMarket || '',
-        website: existingAccount.website || '',
-        companyPhone: existingAccount.phone || '',
-        // Same six mismatches as the initial state above — this block is the
-        // reset effect and had drifted identically. billingAddress / postalCode.
-        linkedin: '',
-        twitter: '',
-        companyEmail: existingAccount.email || '',
-        addressLine1: existingAccount.billingAddress?.street || '',
-        addressLine2: '',
-        city: existingAccount.billingAddress?.city || '',
-        state: existingAccount.billingAddress?.state || '',
-        postalCode: existingAccount.billingAddress?.postalCode || '',
-        country: existingAccount.billingAddress?.country || 'United States',
-        offices: existingAccount.customFields?.offices || [],
-        foundedMonth: '',
-        foundedYear: 2018,
-        founders: existingAccount.customFields?.founders || [],
-        accountSize: existingAccount.accountSize ?? '',
-        employeeGrowth: existingAccount.customFields?.employeeGrowth || {},
-        annualRevenue: existingAccount.annualRevenue || 0,
-        currency: 'USD',
-        revenueYear: 2025,
-        isRevenueEstimated: false,
-        revenueGrowth: 0,
-        revenueHistory: existingAccount.customFields?.revenueHistory || {},
-        totalFunding: existingAccount.customFields?.totalFunding || 0,
-        fundingRounds: existingAccount.customFields?.fundingRounds || [],
-        estimatedValuation: existingAccount.customFields?.estimatedValuation || 0,
-        isValuationEstimated: true,
-        infrastructure: existingAccount.customFields?.techStack?.infrastructure || '',
-        crmTools: existingAccount.customFields?.techStack?.crmTools || '',
-        devTools: existingAccount.customFields?.techStack?.devTools || '',
-        accountOwner: existingAccount.ownerId || '',
-        accountStatus: existingAccount.status || 'Active',
-        priority: existingAccount.customFields?.priority || 'Medium',
-        tags: existingAccount.tags || [],
-        accountSource: existingAccount.customFields?.accountSource || 'Manual',
-        hasHRMSConnection: existingAccount.customFields?.hasHRMSConnection || false,
-        notes: existingAccount.customFields?.notes || '',
-      });
-    }
+    if (isEditMode && existingAccount) { setForm(fromAccount(existingAccount)); setDirty(false); }
   }, [isEditMode, existingAccount]);
 
+  // A NEW account's draft lives in this browser only. Offered inline — the old
+  // form raised a window.confirm() on load.
   useEffect(() => {
-    const storageKey = `account-form-draft-${accountId || 'new'}`;
-    const savedDraft = loadFromLocalStorage(storageKey);
-
-    if (savedDraft && !isEditMode) {
-      const shouldRestore = window.confirm('Found unsaved draft. Restore it?');
-      if (shouldRestore) {
-        setFormData(savedDraft);
-        showToast('info', 'Draft restored');
-      } else {
-        clearLocalStorage(storageKey);
-      }
-    }
-  }, []);
-
+    if (isEditMode) return;
+    const saved = loadFromLocalStorage(draftKey) as AccountFormData | null;
+    if (saved && typeof saved === 'object' && 'name' in saved) setDraft({ ...EMPTY, ...saved });
+  }, [isEditMode]);
+  const autosave = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (hasUnsavedChanges) {
-      const storageKey = `account-form-draft-${accountId || 'new'}`;
+    if (isEditMode || !dirty) return;
+    if (autosave.current) clearTimeout(autosave.current);
+    autosave.current = setTimeout(() => saveToLocalStorage(draftKey, form), 5000);
+    return () => { if (autosave.current) clearTimeout(autosave.current); };
+  }, [form, dirty, isEditMode]);
 
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-
-      autoSaveTimerRef.current = setTimeout(() => {
-        saveToLocalStorage(storageKey, formData);
-      }, 30000);
-    }
-
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-      }
-    };
-  }, [formData, hasUnsavedChanges, accountId]);
-
+  // Possible duplicates from a SERVER search (slice 3b).
+  const [nameMatches, setNameMatches] = useState<EnhancedAccount[]>([]);
   useEffect(() => {
-    const name = formData.companyName.trim();
+    const name = form.name.trim();
     if (name.length <= 2) { setNameMatches([]); return; }
     let cancelled = false;
     const t = setTimeout(() => {
       fetchAccountsPage({ search: name, limit: 5 })
-        .then(r => { if (!cancelled) setNameMatches(r.accounts); })
-        .catch(() => { if (!cancelled) setNameMatches([]); });   // no warning rather than a guessed one
+        .then(r => { if (!cancelled) setNameMatches(r.accounts.filter(a => a.id !== accountId)); })
+        .catch(() => { if (!cancelled) setNameMatches([]); });
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [formData.companyName]);
+  }, [form.name, accountId]);
 
   useEffect(() => {
-    const name = formData.companyName.trim().toLowerCase();
-    const duplicates = name.length > 2
-      ? nameMatches.filter(acc => acc.name.toLowerCase().includes(name) && acc.id !== accountId)
-      : [];
-    setDuplicateAccounts(duplicates);
-    setShowDuplicateWarning(duplicates.length > 0);
-  }, [nameMatches, formData.companyName, accountId]);
+    const onUnload = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', onUnload);
+    return () => window.removeEventListener('beforeunload', onUnload);
+  }, [dirty]);
 
-  useEffect(() => {
-    if (formData.foundedMonth && formData.foundedYear) {
-      const age = calculateCompanyAge(formData.foundedMonth, formData.foundedYear);
-      setCompanyAge(age);
-    } else {
-      setCompanyAge('');
-    }
-  }, [formData.foundedMonth, formData.foundedYear]);
-
-  useEffect(() => {
-    if (Object.keys(formData.employeeGrowth).length > 1) {
-      const rate = calculateGrowthRate(formData.employeeGrowth);
-      setGrowthRate(rate);
-    } else {
-      setGrowthRate('');
-    }
-  }, [formData.employeeGrowth]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave('view');
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        handleSave('view');
-      }
-      if (e.key === 'Escape' && showCancelModal) {
-        setShowCancelModal(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCancelModal]);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges]);
-
-  const handleInputChange = (field: keyof AccountFormData, value: any) => {
-    setHasUnsavedChanges(true);
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
+  const set = (field: keyof AccountFormData, value: string) => {
+    setForm(f => ({ ...f, [field]: value }));
+    setDirty(true);
+    if (errors[field]) setErrors(e => ({ ...e, [field]: undefined }));
   };
 
-  const addOffice = () => {
-    const newOffice: Office = {
-      id: Date.now().toString(),
-      location: '',
-      type: '',
-      employees: 0,
-    };
-    setFormData(prev => ({ ...prev, offices: [...prev.offices, newOffice] }));
+  const validate = (): boolean => {
+    const e: Partial<Record<keyof AccountFormData, string>> = {};
+    if (!form.name.trim()) e.name = 'Company name is required';
+    if (!form.industry) e.industry = 'Choose an industry';
+    if (form.website.trim() && !validateURL(form.website.trim())) e.website = 'Enter a full URL, for example https://example.com';
+    if (form.annualRevenue.trim() && !(Number(form.annualRevenue) >= 0)) e.annualRevenue = 'Enter a number of 0 or more';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const removeOffice = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      offices: prev.offices.filter(o => o.id !== id),
-    }));
-  };
-
-  const updateOffice = (id: string, field: keyof Office, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      offices: prev.offices.map(o => o.id === id ? { ...o, [field]: value } : o),
-    }));
-  };
-
-  const addFounder = () => {
-    const newFounder: Founder = {
-      id: Date.now().toString(),
-      name: '',
-      role: '',
-    };
-    setFormData(prev => ({ ...prev, founders: [...prev.founders, newFounder] }));
-  };
-
-  const removeFounder = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      founders: prev.founders.filter(f => f.id !== id),
-    }));
-  };
-
-  const updateFounder = (id: string, field: keyof Founder, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      founders: prev.founders.map(f => f.id === id ? { ...f, [field]: value } : f),
-    }));
-  };
-
-  const addFundingRound = () => {
-    const newRound: FundingRound = {
-      id: Date.now().toString(),
-      roundName: '',
-      amount: 0,
-      date: { month: 'January', year: 2024 },
-      leadInvestor: '',
-      otherInvestors: '',
-    };
-    setFormData(prev => ({ ...prev, fundingRounds: [...prev.fundingRounds, newRound] }));
-  };
-
-  const removeFundingRound = (id: string) => {
-    setFormData(prev => ({
-      ...prev,
-      fundingRounds: prev.fundingRounds.filter(r => r.id !== id),
-    }));
-  };
-
-  const updateFundingRound = (id: string, field: keyof FundingRound, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      fundingRounds: prev.fundingRounds.map(r => r.id === id ? { ...r, [field]: value } : r),
-    }));
-  };
-
-  const addTag = (tag: string) => {
-    if (tag && !formData.tags.includes(tag)) {
-      setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
-    }
-  };
-
-  const removeTag = (tag: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(t => t !== tag),
-    }));
-  };
-
-  const validateForm = (): boolean => {
-    const newErrors: { [key: string]: string } = {};
-
-    if (!formData.companyName.trim()) {
-      newErrors.companyName = 'This field is required';
-    }
-    if (!formData.industry) {
-      newErrors.industry = 'This field is required';
-    }
-    if (!formData.website.trim()) {
-      newErrors.website = 'This field is required';
-    } else if (!validateURL(formData.website)) {
-      newErrors.website = 'Invalid URL format. Example: https://example.com';
-    }
-    if (!formData.addressLine1.trim()) {
-      newErrors.addressLine1 = 'This field is required';
-    }
-    if (!formData.city.trim()) {
-      newErrors.city = 'This field is required';
-    }
-    if (!formData.state.trim()) {
-      newErrors.state = 'This field is required';
-    }
-    if (!formData.country) {
-      newErrors.country = 'This field is required';
-    }
-    // accountOwner and accountStatus are NOT required, and must not be:
-    // `companies` has no owner and no status column, and mapAccountToPayload
-    // sends neither, so both collect input that goes nowhere. Gating the save on
-    // them meant the form could refuse to submit over a value it would then
-    // discard.
-    //
-    // This also fixes a regression I introduced in the same pass: sourcing
-    // accountOwner from `existingAccount.ownerId` (the type's real field) made it
-    // '' — mapRowToAccount defaults ownerId to '' because there is no column —
-    // so validation failed on every save and the form became unusable. The
-    // previous code read a non-existent `.owner` and fell back to the literal
-    // 'Alex Rodriguez', which passed the check by accident.
-
-    setErrors(newErrors);
-
-    if (Object.keys(newErrors).length > 0) {
-      showToast('error', 'Please fix errors before saving');
-      const firstErrorField = Object.keys(newErrors)[0];
-      const errorElement = document.getElementsByName(firstErrorField)[0];
-      if (errorElement) {
-        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        errorElement.focus();
-      }
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleSave = async (action: 'view' | 'contact' | 'deal' | 'another' | 'draft' = 'view') => {
-    if (action !== 'draft' && !validateForm()) {
-      return;
-    }
-
+  const handleSave = async (action: SaveAction) => {
+    setSaveError(null);
+    if (!validate()) return;
     setIsSaving(true);
     try {
-      // A `await new Promise(r => setTimeout(r, 500))` sat here, padding every
-      // save with half a second of fake latency to make the spinner look busy.
-      // The request is real and takes as long as it takes.
-      const accountData = {
-        // No client-minted id. This built `ACC-${Date.now()}` for new accounts —
-        // the same "invent an id and send it as if the record existed" pattern
-        // that made lead conversion silently impossible, and the source of the
-        // `ACC-2024-0089` format that TechStartDetailView was routed on.
-        // `companies.id` is assigned server-side (C001, C002, ...);
-        // mapAccountToPayload never sent this field, so the minted id was only
-        // ever misleading.
-        name: formData.companyName,
-        industry: formData.industry,
-        website: formData.website,
-        phone: formData.companyPhone,
-        // `email` was sent here and dropped: `companies` has no email column,
-        // and mapAccountToPayload never read it. The input is removed rather
-        // than the field silently collected — see the note at that input.
-        // Was `address: { ..., zip }`. mapAccountToPayload reads ONLY
-        // `billingAddress` and its `postalCode` key, so nothing here reached the
-        // API: you could type a full address, press Save, be told "Account
-        // updated successfully", and no part of the address was sent. Two
-        // mismatches in one object — the wrapper name and the postcode key.
-        billingAddress: {
-          street: formData.addressLine1,
-          city: formData.city,
-          state: formData.state,
-          postalCode: formData.postalCode,
-          country: formData.country,
-        },
-        // employeeCount likewise had no column. accountSize maps to
-        // companies.size, which mapAccountToPayload DOES send.
-        accountSize: formData.accountSize || undefined,
-        annualRevenue: formData.annualRevenue,
-        // `owner` is not a field on EnhancedAccount (it is `ownerId`) and
-        // `status` is a constrained union, not the form's free-text
-        // "Active"/"Inactive". Neither reached the API either way —
-        // mapAccountToPayload sends name, domain, industry, size, revenue,
-        // website, phone, description and the billing address, and nothing else.
-        // Sending them was collecting input into nothing.
-        tags: formData.tags,
-        // socialProfiles removed from the payload: there is no such field on
-        // EnhancedAccount and no column on `companies`, so mapAccountToPayload
-        // dropped it silently. The inputs are marked in the form instead of
-        // being collected into nothing.
-        customFields: {
-          legalName: formData.legalName,
-          tradeName: formData.tradeName,
-          subIndustry: formData.subIndustry,
-          specialization: formData.specialization,
-          targetMarket: formData.targetMarket,
-          offices: formData.offices,
-          foundedDate: formData.foundedMonth && formData.foundedYear ? `${formData.foundedMonth} ${formData.foundedYear}` : '',
-          founders: formData.founders,
-          employeeGrowth: formData.employeeGrowth,
-          revenueHistory: formData.revenueHistory,
-          totalFunding: formData.totalFunding,
-          fundingRounds: formData.fundingRounds,
-          estimatedValuation: formData.estimatedValuation,
-          techStack: {
-            infrastructure: formData.infrastructure,
-            crmTools: formData.crmTools,
-            devTools: formData.devTools,
-          },
-          priority: formData.priority,
-          accountSource: formData.accountSource,
-          hasHRMSConnection: formData.hasHRMSConnection,
-          notes: formData.notes,
-        },
-      };
-
-      let savedAccountId: string;
-
+      const payload = toAccountPayload(form);
+      let id: string;
       if (isEditMode) {
-        await updateAccount(accountId, accountData);
-        savedAccountId = accountId;
-        showToast('success', 'Account updated successfully');
+        await updateAccount(accountId!, payload);
+        id = accountId!;
       } else {
-        const newAccount = await createAccount(accountData);
-        savedAccountId = newAccount.id;
-        showToast('success', 'Account created successfully');
+        id = (await createAccount(payload)).id;
       }
-
-      setHasUnsavedChanges(false);
-      const storageKey = `account-form-draft-${accountId || 'new'}`;
-      clearLocalStorage(storageKey);
-
-      switch (action) {
-        case 'view':
-          navigate(`/crm/accounts/${savedAccountId}`);
-          break;
-        case 'contact':
-          showToast('info', 'Navigating to add contact...');
-          setTimeout(() => {
-            navigate(`/crm/contacts/add?accountId=${savedAccountId}&accountName=${accountData.name}`);
-          }, 500);
-          break;
-        case 'deal':
-          showToast('info', 'Navigating to create deal...');
-          setTimeout(() => {
-            navigate(`/crm/deals/add?accountId=${savedAccountId}&accountName=${accountData.name}`);
-          }, 500);
-          break;
-        case 'another':
-          showToast('success', 'Ready to add another account');
-          setFormData({
-            companyName: '',
-            legalName: '',
-            tradeName: '',
-            industry: '',
-            subIndustry: '',
-            specialization: '',
-            targetMarket: '',
-            website: '',
-            companyPhone: '',
-            linkedin: '',
-            twitter: '',
-            companyEmail: '',
-            addressLine1: '',
-            addressLine2: '',
-            city: '',
-            state: '',
-            postalCode: '',
-            country: 'United States',
-            offices: [],
-            foundedMonth: '',
-            foundedYear: 2018,
-            founders: [],
-            accountSize: '',
-            employeeGrowth: {},
-            annualRevenue: 0,
-            currency: 'USD',
-            revenueYear: 2025,
-            isRevenueEstimated: false,
-            revenueGrowth: 0,
-            revenueHistory: {},
-            totalFunding: 0,
-            fundingRounds: [],
-            estimatedValuation: 0,
-            isValuationEstimated: true,
-            infrastructure: '',
-            crmTools: '',
-            devTools: '',
-            accountOwner: 'Alex Rodriguez',
-            accountStatus: 'Active',
-            priority: 'Medium',
-            tags: [],
-            accountSource: 'Manual',
-            hasHRMSConnection: false,
-            notes: '',
-          });
-          setErrors({});
-          setHasUnsavedChanges(false);
-          break;
-        case 'draft':
-          showToast('info', 'Draft saved');
-          break;
-      }
-    } catch (error) {
-      console.error('Error saving account:', error);
-      showToast('error', 'Failed to save account. Please try again.');
+      // Reached only after the server's 2xx.
+      showToast('success', isEditMode ? 'Account updated' : 'Account created');
+      setDirty(false);
+      clearLocalStorage(draftKey);
+      if (action === 'view') navigate(`/crm/accounts/${id}`);
+      if (action === 'contact') navigate(`/crm/contacts/add?accountId=${encodeURIComponent(id)}&accountName=${encodeURIComponent(payload.name ?? '')}`);
+      if (action === 'deal') navigate(`/crm/deals/add?accountId=${encodeURIComponent(id)}&accountName=${encodeURIComponent(payload.name ?? '')}`);
+      if (action === 'another') { setForm(EMPTY); setErrors({}); }
+    } catch (err) {
+      // The server's own message, and the input is kept.
+      setSaveError(err instanceof Error ? err.message : 'The account was not saved.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    if (hasUnsavedChanges) {
-      setShowCancelModal(true);
-    } else {
-      if (isEditMode) {
-        navigate(`/crm/accounts/${accountId}`);
-      } else {
-        navigate('/crm/accounts');
-      }
-    }
-  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); void handleSave('view'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
-  const confirmCancel = () => {
-    const storageKey = `account-form-draft-${accountId || 'new'}`;
-    clearLocalStorage(storageKey);
-    setShowCancelModal(false);
-    if (isEditMode) {
-      navigate(`/crm/accounts/${accountId}`);
-    } else {
-      navigate('/crm/accounts');
-    }
-  };
+  const leave = () => navigate(isEditMode ? `/crm/accounts/${accountId}` : '/crm/accounts');
+  const filled = useMemo(() => COMPLETENESS.filter(k => String(form[k] ?? '').trim() !== '').length, [form]);
 
-  // These two were written, never attached to an input, and reported by the
-  // compiler as unused for as long as they have existed — so URL and phone
-  // normalisation silently never ran. Wired to onBlur on the website and phone
-  // fields below rather than deleted: they are the intended behaviour, and
-  // formatURL/formatPhoneNumber are already imported and tested.
-  const handleURLBlur = (field: 'website' | 'linkedin') => {
-    if (formData[field]) {
-      const formatted = field === 'linkedin'
-        ? formatLinkedInURL(formData[field])
-        : formatURL(formData[field]);
-      handleInputChange(field, formatted);
-    }
-  };
-
-  const handlePhoneBlur = () => {
-    if (formData.companyPhone) {
-      const formatted = formatPhoneNumber(formData.companyPhone);
-      handleInputChange('companyPhone', formatted);
-    }
-  };
+  const location = [form.city, form.state, form.country].filter(s => s.trim()).join(', ');
+  const sizeLabel = SIZE_OPTIONS.find(o => o.value === form.accountSize)?.label;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <CRMNavigation />
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Account record"
+        title={isEditMode ? 'Edit Account' : 'Add New Account'}
+        description={isEditMode && existingAccount ? existingAccount.name : 'Only fields this CRM stores are shown.'}
+        actions={
+          <>
+            {dirty && <span className="rounded-full bg-warning-100 px-2 py-0.5 text-xs font-semibold text-warning-700">Unsaved changes</span>}
+            <Button variant="secondary" onClick={() => (dirty ? setShowCancel(true) : leave())}>Cancel</Button>
+            <Button onClick={() => void handleSave('view')} disabled={isSaving}>
+              <Save className="h-4 w-4" aria-hidden="true" /> {isSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        }
+      />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumb */}
-        <div className="mb-4">
-          <div className="flex items-center text-sm text-gray-600">
-            <button onClick={() => navigate('/crm/accounts')} className="hover:text-gray-900">
-              Accounts
-            </button>
-            <span className="mx-2">&gt;</span>
-            {isEditMode && existingAccount && (
-              <>
-                <button onClick={() => navigate(`/crm/accounts/${accountId}`)} className="hover:text-gray-900">
-                  {existingAccount.name}
-                </button>
-                <span className="mx-2">&gt;</span>
-              </>
-            )}
-            <span className="text-gray-900">
-              {isEditMode ? 'Edit Account' : 'Add New Account'}
+      {draft && (
+        <Alert
+          tone="info"
+          title="An unsaved draft of a new account is stored in this browser."
+          action={
+            <span className="flex gap-2">
+              <Button variant="secondary" onClick={() => { setForm(draft); setDirty(true); setDraft(null); }}>Restore</Button>
+              <Button variant="ghost" onClick={() => { clearLocalStorage(draftKey); setDraft(null); }}>Discard</Button>
             </span>
-          </div>
+          }
+        />
+      )}
+      {saveError && <Alert tone="danger" title="The account was not saved">{saveError}</Alert>}
+      {nameMatches.length > 0 && (
+        <Alert tone="warning" title="Similar accounts already exist">
+          <ul className="mt-1 space-y-1">
+            {nameMatches.slice(0, 3).map(a => (
+              <li key={a.id}>
+                <a href={`/crm/accounts/${a.id}`} target="_blank" rel="noreferrer" className="font-semibold underline">{a.name}</a>
+                {a.industry ? ` · ${a.industry}` : ''}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <Card className="space-y-4">
+            <SectionHeading title="Basic Information" />
+            <Field label="Company name" required error={errors.name}>
+              <input name="name" className={inputClass(!!errors.name)} value={form.name} onChange={e => set('name', e.target.value)} />
+            </Field>
+            <Field label="Industry" required error={errors.industry ?? (industryError ? `The industry list could not load — ${industryError}` : undefined)}>
+              <select name="industry" className={selectClass(!!errors.industry)} value={form.industry}
+                onChange={e => set('industry', e.target.value)} disabled={industries.length === 0 && !industryError}>
+                <option value="">{industries.length === 0 && !industryError ? 'Loading…' : 'Choose an industry'}</option>
+                {industries.map(i => <option key={i} value={i}>{i}</option>)}
+                {/* An existing value outside the list is shown, not silently blanked. */}
+                {form.industry && !industries.includes(form.industry) && <option value={form.industry}>{form.industry}</option>}
+              </select>
+            </Field>
+            <Field label="Description">
+              <textarea name="description" className={textareaClass()} value={form.description} onChange={e => set('description', e.target.value)} />
+            </Field>
+          </Card>
+
+          <Card className="space-y-4">
+            <SectionHeading title="Contact Details" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Website" error={errors.website}>
+                <input name="website" className={inputClass(!!errors.website)} value={form.website}
+                  onChange={e => set('website', e.target.value)}
+                  onBlur={() => form.website.trim() && set('website', formatURL(form.website.trim()))} placeholder="https://" />
+              </Field>
+              <Field label="Domain" help="Used to match contacts and leads to this account by email domain.">
+                <input name="domain" className={inputClass()} value={form.domain} onChange={e => set('domain', e.target.value)} placeholder="example.com" />
+              </Field>
+              <Field label="Phone">
+                <input name="phone" className={inputClass()} value={form.phone} onChange={e => set('phone', e.target.value)}
+                  onBlur={() => form.phone.trim() && set('phone', formatPhoneNumber(form.phone.trim()))} />
+              </Field>
+            </div>
+          </Card>
+
+          <Card className="space-y-4">
+            <SectionHeading title="Location" />
+            <Field label="Street address">
+              <input name="street" className={inputClass()} value={form.street} onChange={e => set('street', e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="City"><input name="city" className={inputClass()} value={form.city} onChange={e => set('city', e.target.value)} /></Field>
+              <Field label="State / region"><input name="state" className={inputClass()} value={form.state} onChange={e => set('state', e.target.value)} /></Field>
+              <Field label="Postal code"><input name="postalCode" className={inputClass()} value={form.postalCode} onChange={e => set('postalCode', e.target.value)} /></Field>
+              <Field label="Country"><input name="country" className={inputClass()} value={form.country} onChange={e => set('country', e.target.value)} /></Field>
+            </div>
+          </Card>
+
+          <Card className="space-y-4">
+            <SectionHeading title="Company Details" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Company size">
+                <select name="accountSize" className={selectClass()} value={form.accountSize ?? ''} onChange={e => set('accountSize', e.target.value)}>
+                  {/* Empty is a real choice: an unknown size stays unknown. */}
+                  <option value="">Not specified</option>
+                  {SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Annual revenue" error={errors.annualRevenue}
+                help="A number only — this CRM does not record the revenue's currency.">
+                <input name="annualRevenue" type="number" min="0" className={inputClass(!!errors.annualRevenue)}
+                  value={form.annualRevenue} onChange={e => set('annualRevenue', e.target.value)} />
+              </Field>
+            </div>
+          </Card>
         </div>
 
-        {/* Header */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center space-x-3">
-                {isEditMode ? (
-                  <span className="text-2xl">✏️</span>
-                ) : (
-                  <span className="text-2xl">➕</span>
-                )}
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {isEditMode ? `Edit Account: ${existingAccount?.name}` : 'Add New Account'}
-                </h1>
+        <aside className="space-y-4">
+          <Card className="space-y-2">
+            <SectionHeading title="Preview" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink-heading text-white">
+                <Building2 className="h-5 w-5" aria-hidden="true" />
               </div>
-              {isEditMode && (
-                <p className="text-sm text-gray-500 mt-2">
-                  Last Modified: Nov 16, 2025 by Alex Rodriguez
-                </p>
-              )}
-              {!isEditMode && (
-                <p className="text-sm text-gray-500 mt-2">
-                  Creating new account...
-                </p>
-              )}
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={handleCancel}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <Button
-                onClick={() => handleSave('view')}
-                disabled={isSaving}
-              >
-                <Save className="h-4 w-4" />
-                <span>{isSaving ? 'Saving...' : 'Save'}</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {showDuplicateWarning && duplicateAccounts.length > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div className="flex items-start space-x-3">
-              <span className="text-xl">⚠️</span>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-yellow-900 mb-2">Similar Account Exists</h3>
-                <div className="space-y-2">
-                  {duplicateAccounts.slice(0, 2).map(acc => (
-                    <div key={acc.id} className="flex items-center justify-between bg-white rounded border border-yellow-200 p-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{acc.name}</p>
-                        <p className="text-xs text-gray-600">{acc.industry} • Owner: {acc.owner}</p>
-                      </div>
-                      <button
-                        onClick={() => window.open(`/crm/accounts/${acc.id}`, '_blank')}
-                        className="text-xs text-blue-600 hover:text-blue-800"
-                      >
-                        View Account
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={() => setShowDuplicateWarning(false)}
-                className="text-yellow-600 hover:text-yellow-800"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Form */}
-          <div className="lg:col-span-2 space-y-6">
-            {/*
-              AIEnrichmentSection was here, and it was the most serious
-              fabrication found on the accounts feature — because it WROTE.
-
-              "Find company data with AI" ran a setTimeout(1500) to imitate a
-              lookup and then returned a hardcoded object: TechStart Inc,
-              FinTech, New York NY, 45 employees, $8,000,000 revenue,
-              techstart.com, sourced from "LinkedIn, Crunchbase, Clearbit". Its
-              onApplyData spread that object straight into this form's state —
-              `setFormData(prev => ({ ...prev, ...data }))` — so an "Apply all"
-              click followed by Save persisted an invented company into the
-              real `companies` table under whatever name the user was creating.
-
-              Every other fabrication in this codebase misleads inside the app.
-              This one put fabricated data into Postgres, where the next
-              session reads it back as real. There is no enrichment provider,
-              and enrichment is out of phase per CLAUDE.md, so the control is
-              deleted rather than labelled: a PREVIEW badge on a button that
-              writes is not a safeguard.
-            */}
-
-            {/* Basic Information */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <Building2 className="h-5 w-5 mr-2 text-blue-600" />
-                Basic Information
-              </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Name <span className="text-red-500">*</span>
-                  </label>
-                  <input aria-label="Company Name"
-                    type="text"
-                    value={formData.companyName}
-                    onChange={(e) => handleInputChange('companyName', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.companyName ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="TechStart Inc"
-                  />
-                  {errors.companyName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.companyName}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Legal Name
-                  </label>
-                  <input aria-label="Legal Name"
-                    type="text"
-                    value={formData.legalName}
-                    onChange={(e) => handleInputChange('legalName', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="TechStart Inc."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Trade Name
-                  </label>
-                  <input aria-label="Trade Name"
-                    type="text"
-                    value={formData.tradeName}
-                    onChange={(e) => handleInputChange('tradeName', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="TechStart"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Industry <span className="text-red-500">*</span>
-                  </label>
-                  <select aria-label="Industry"
-                    value={formData.industry}
-                    onChange={(e) => handleInputChange('industry', e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.industry ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select Industry</option>
-                    {/*
-                      This list was seven values: SaaS, FinTech, Healthcare,
-                      Manufacturing, Retail, Technology, Consulting. The database
-                      holds thirteen, and NINE OF FIFTEEN accounts had an
-                      industry that was not an option here — Education, Energy,
-                      Logistics, Automotive, E-Commerce, Travel, Finance, Real
-                      Estate, Food & Beverage.
-
-                      The consequence was not cosmetic. A stored value with no
-                      matching <option> makes the select fall back to "", and
-                      Industry is REQUIRED, so validateForm() failed on open and
-                      those nine accounts COULD NOT BE SAVED AT ALL — click Save,
-                      nothing happens, no request, and the only clue is a red
-                      asterisk further up the form. Found while verifying the
-                      Company Size select, which is what it was blocking.
-
-                      The options below now come from the server (GET
-                      /companies/industries, migration 045), which is also
-                      what the database constrains the column to. The extra option after it is the durable half of
-                      the fix: whatever the stored industry is, it is always
-                      selectable, so no future drift in this list can silently
-                      strip an account's industry on edit.
-                    */}
-                    {industryOptions.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                    {formData.industry && !industryOptions.includes(formData.industry) && (
-                      <option value={formData.industry}>{formData.industry}</option>
-                    )}
-                  </select>
-                  {errors.industry && (
-                    <p className="mt-1 text-sm text-red-600">{errors.industry}</p>
-                  )}
-                  {industryLoadError && (
-                    <p role="alert" className="mt-1 text-sm text-amber-700">
-                      The industry list could not be loaded ({industryLoadError}), so only this
-                      account&apos;s current industry can be shown. Reload to try again.
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sub-Industry
-                  </label>
-                  <input aria-label="Sub-Industry"
-                    type="text"
-                    value={formData.subIndustry}
-                    onChange={(e) => handleInputChange('subIndustry', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Banking Software, Payment Processing"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Specialization
-                  </label>
-                  <input aria-label="Specialization"
-                    type="text"
-                    value={formData.specialization}
-                    onChange={(e) => handleInputChange('specialization', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Banking APIs, Real-time payments"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Target Market
-                  </label>
-                  <input aria-label="Target Market"
-                    type="text"
-                    value={formData.targetMarket}
-                    onChange={(e) => handleInputChange('targetMarket', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Mid-size banks, Credit unions, FinTech startups"
-                  />
-                </div>
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-ink">{form.name.trim() || 'Company name'}</p>
+                <p className="truncate text-sm text-brand-600">{[form.industry, form.city].filter(Boolean).join(' · ') || 'Industry · City'}</p>
               </div>
             </div>
+            <dl className="space-y-1 text-sm">
+              {form.website && <div className="flex gap-2"><dt className="text-ink-muted">Website</dt><dd className="truncate text-ink">{form.website}</dd></div>}
+              {location && <div className="flex gap-2"><dt className="text-ink-muted">Location</dt><dd className="text-ink">{location}</dd></div>}
+              {sizeLabel && <div className="flex gap-2"><dt className="text-ink-muted">Size</dt><dd className="text-ink">{sizeLabel}</dd></div>}
+            </dl>
+          </Card>
 
-            {/* Contact Details - Continued in next file part */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <Globe className="h-5 w-5 mr-2 text-blue-600" />
-                Contact Details
-              </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Website <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="url"
-                      value={formData.website}
-                      onBlur={() => handleURLBlur('website')}
-                      onChange={(e) => handleInputChange('website', e.target.value)}
-                      className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        errors.website ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="https://www.techstart.com"
-                    />
-                    {formData.website && formData.website.match(/^https?:\/\/.+/) && (
-                      <a
-                        href={formData.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                      >
-                        <Globe className="h-5 w-5" />
-                      </a>
-                    )}
-                  </div>
-                  {errors.website && (
-                    <p className="mt-1 text-sm text-red-600">{errors.website}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Phone
-                  </label>
-                  <input aria-label="Company Phone"
-                    type="tel"
-                    value={formData.companyPhone}
-                    onBlur={handlePhoneBlur}
-                    onChange={(e) => handleInputChange('companyPhone', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="+1 (212) 555-0100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    LinkedIn
-                  </label>
-                  <div className="flex space-x-2">
-                    <div className="flex-1 flex items-center space-x-2">
-                      <Linkedin className="h-5 w-5 text-gray-400" />
-                      <input
-                        type="text"
-                        value={formData.linkedin}
-                        onChange={(e) => handleInputChange('linkedin', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="/company/techstart-inc"
-                      />
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Full URL will be added automatically
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Twitter
-                  </label>
-                  <div className="flex items-center space-x-2">
-                    <Twitter className="h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={formData.twitter}
-                      onChange={(e) => handleInputChange('twitter', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="@techstart"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Email
-                  </label>
-                  <input aria-label="Company Email"
-                    type="email"
-                    value={formData.companyEmail}
-                    onChange={(e) => handleInputChange('companyEmail', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="info@techstart.com"
-                  />
-                </div>
-              </div>
+          <Card className="space-y-2" data-testid="completeness">
+            <SectionHeading title="Data completeness" />
+            <p className="text-sm text-ink">{filled} of {COMPLETENESS.length} fields filled</p>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-sunken" aria-hidden="true">
+              <div className="h-full bg-brand-600" style={{ width: `${(filled / COMPLETENESS.length) * 100}%` }} />
             </div>
+            <p className="text-xs text-ink-muted">Counts filled fields only. Nothing here is checked against an outside source.</p>
+          </Card>
 
-            {/* Location Section */}
-            <LocationSection
-              formData={formData}
-              onChange={handleInputChange}
-              errors={errors}
-            />
-
-            {/* Company Details Section */}
-            <CompanyDetailsSection
-              formData={formData}
-              onChange={handleInputChange}
-              onAddOffice={addOffice}
-              onRemoveOffice={removeOffice}
-              onUpdateOffice={updateOffice}
-              onAddFounder={addFounder}
-              onRemoveFounder={removeFounder}
-              onUpdateFounder={updateFounder}
-            />
-
-            {/* Funding Section */}
-            <FundingSection
-              formData={formData}
-              onChange={handleInputChange}
-              onAddFundingRound={addFundingRound}
-              onRemoveFundingRound={removeFundingRound}
-              onUpdateFundingRound={updateFundingRound}
-            />
-
-            {/* Tech Stack & CRM Settings */}
-            <CRMSettingsSection
-              formData={formData}
-              onChange={handleInputChange}
-              onAddTag={addTag}
-              onRemoveTag={removeTag}
-            />
-          </div>
-
-          {/* Right Column - Preview & Panels */}
-          <div className="space-y-6">
-            <PreviewPanel formData={formData} />
-            <DataQualityPanel formData={formData} />
-            <AISuggestionsPanel formData={formData} onApplySuggestion={(field, value) => handleInputChange(field as keyof AccountFormData, value)} />
-            <ValidationTipsPanel />
-
-            {/* Save Options */}
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Save Options</h3>
-              <div className="space-y-2">
-                <Button
-                  onClick={() => handleSave('view')}
-                  disabled={isSaving}
-                  fullWidth
-                >
-                  Save & View Account
-                </Button>
-                <button
-                  onClick={() => handleSave('contact')}
-                  disabled={isSaving}
-                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50"
-                >
-                  Save & Add Contact
-                </button>
-                <button
-                  onClick={() => handleSave('deal')}
-                  disabled={isSaving}
-                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50"
-                >
-                  Save & Create Deal
-                </button>
-                {!isEditMode && (
-                  <button
-                    onClick={() => handleSave('another')}
-                    disabled={isSaving}
-                    className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm disabled:opacity-50"
-                  >
-                    Save & Add Another Account
-                  </button>
-                )}
-                <button
-                  onClick={handleCancel}
-                  className="w-full px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+          <Card className="space-y-2">
+            <SectionHeading title="Save Options" />
+            <Button className="w-full" onClick={() => void handleSave('view')} disabled={isSaving}>Save &amp; View</Button>
+            <Button variant="secondary" className="w-full" onClick={() => void handleSave('contact')} disabled={isSaving}>Save &amp; Add Contact</Button>
+            <Button variant="secondary" className="w-full" onClick={() => void handleSave('deal')} disabled={isSaving}>Save &amp; Create Deal</Button>
+            {!isEditMode && (
+              <Button variant="secondary" className="w-full" onClick={() => void handleSave('another')} disabled={isSaving}>Save &amp; Add Another</Button>
+            )}
+            <p className="text-xs text-ink-muted">Ctrl/⌘ + S saves and opens the account.</p>
+          </Card>
+        </aside>
       </div>
 
       <ConfirmationModal
-        isOpen={showCancelModal}
-        title="Unsaved Changes"
-        message="You have unsaved changes. Are you sure you want to discard them?"
-        confirmLabel="Discard"
-        cancelLabel="Keep Editing"
-        onConfirm={confirmCancel}
-        onCancel={() => setShowCancelModal(false)}
+        isOpen={showCancel}
         type="warning"
+        title="Discard changes?"
+        message="Your changes to this account have not been saved."
+        confirmLabel="Discard"
+        onCancel={() => setShowCancel(false)}
+        onConfirm={() => { clearLocalStorage(draftKey); setShowCancel(false); leave(); }}
       />
     </div>
   );
