@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../config/database';
 import { provisionDefaultPipeline, findStage } from '../utils/pipelineStages';
 import { createApp } from '../app';
+import { loopbackServer } from './loopbackServer';
 
 /**
  * TENANT ISOLATION — the #1 security requirement in CLAUDE.md.
@@ -41,7 +42,8 @@ import { createApp } from '../app';
  * above any guard written in this file.
  */
 
-const app = createApp();
+// Bound to 127.0.0.1 like every other suite — see loopbackServer.
+const app = loopbackServer(createApp());
 
 const WS_A = '11111111-1111-1111-1111-111111111111';
 const WS_B = '22222222-2222-2222-2222-222222222222';

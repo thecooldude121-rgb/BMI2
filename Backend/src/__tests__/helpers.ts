@@ -3,6 +3,7 @@ import request from 'supertest';
 import { pool } from '../config/database';
 import { provisionDefaultPipeline } from '../utils/pipelineStages';
 import { createApp } from '../app';
+import { loopbackServer } from './loopbackServer';
 
 /**
  * Shared machinery for the round-trip regression suite (Prompt C).
@@ -19,7 +20,9 @@ import { createApp } from '../app';
  * must still never collide on an id.
  */
 
-export const app = createApp();
+// A server listening on 127.0.0.1, not a bare Express app — see loopbackServer.
+// Every test passes this to supertest as `request(app)`, unchanged.
+export const app = loopbackServer(createApp());
 
 export interface TestWorkspace {
   tenantId: string;
