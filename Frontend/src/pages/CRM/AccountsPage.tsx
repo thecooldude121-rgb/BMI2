@@ -119,7 +119,7 @@ const AccountsPage: React.FC = () => {
         navigate('/crm/deals');
         break;
       case 'value':
-        navigate('/analytics');
+        navigate('/crm/reports');
         break;
     }
   };

@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateDeal, transitionDealStage, bulkUpdateDeals, fetchDealsPage, fetchDealStageSummary, deleteDealViaAPI, type DealsPageQuery, type StageSummaryRow } from '../../utils/dealsApi';
 import { useStalledConfig } from '../../hooks/useStalledConfig';
@@ -84,12 +83,11 @@ const uniqueById = <T extends { id: string }>(rows: T[]): T[] =>
 
 const DealsKanbanPage: React.FC = () => {
   const navigate = useNavigate();
-  const { deals: contextDeals } = useData();
   const { user } = useAuth();
   const { isStalled } = useStalledConfig();
   // Stable counter incremented only when a real data-mutating action occurs
   // (deal added, deleted, stage-changed). Using contextDeals.length directly
-  // caused refetch races during drag-and-drop because length can momentarily
+  // once caused refetch races during drag-and-drop because length can momentarily
   // change during optimistic-UI updates, triggering a stale API response to
   // overwrite the board state.
   const [refetchKey, setRefetchKey] = useState(0);
@@ -669,10 +667,10 @@ const DealsKanbanPage: React.FC = () => {
       case 'total':
         break;
       case 'value':
-        navigate('/analytics', { state: { view: 'revenue' } });
+        navigate('/crm/reports');
         break;
       case 'winRate':
-        navigate('/analytics', { state: { view: 'winRate' } });
+        navigate('/crm/reports');
         break;
       case 'closingWeek': {
         // Highlight the same deals counted by the KPI: active + due within 7 days or overdue.
@@ -696,7 +694,7 @@ const DealsKanbanPage: React.FC = () => {
         break;
       }
       case 'avgCycle':
-        navigate('/analytics', { state: { view: 'cycleTime' } });
+        navigate('/crm/reports');
         break;
     }
   };

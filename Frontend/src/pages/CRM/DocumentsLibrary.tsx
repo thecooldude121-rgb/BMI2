@@ -1544,7 +1544,7 @@ const DocumentsLibrary: React.FC = () => {
       <div className="bg-white px-8 py-3" style={{ borderBottom: '1px solid #e5e7eb' }}>
         <div className="flex items-center text-sm" style={{ color: '#6b7280' }}>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/crm/dashboard')}
             className="hover:text-[#667eea] transition-colors"
           >
             Dashboard

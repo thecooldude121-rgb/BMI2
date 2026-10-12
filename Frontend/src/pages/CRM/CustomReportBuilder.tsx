@@ -1040,7 +1040,7 @@ export default function CustomReportBuilder() {
       {/* Breadcrumbs */}
       <div className="bg-white border-b border-gray-200 px-4 md:px-6 py-3">
         <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600 mb-3">
-          <span className="hover:text-blue-600 cursor-pointer" onClick={() => navigate('/dashboard')}>
+          <span className="hover:text-blue-600 cursor-pointer" onClick={() => navigate('/crm/dashboard')}>
             Dashboard
           </span>
           <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
