@@ -558,7 +558,7 @@ const DocumentDetailPage: React.FC = () => {
   const handleBreadcrumbDashboard = (e: React.MouseEvent) => {
     e.preventDefault();
     showToast('success', 'Navigating to Dashboard');
-    setTimeout(() => navigate('/dashboard'), 1000);
+    setTimeout(() => navigate('/crm/dashboard'), 1000);
   };
 
   const handleBreadcrumbDocuments = (e: React.MouseEvent) => {
@@ -691,7 +691,7 @@ const DocumentDetailPage: React.FC = () => {
       <div className="max-w-[1600px] mx-auto px-8 py-8">
         <div className="mb-5">
           <nav className="flex items-center space-x-2 text-sm text-gray-600">
-            <a href="/dashboard" onClick={handleBreadcrumbDashboard} className="hover:text-blue-600 cursor-pointer">Dashboard</a>
+            <a href="/crm/dashboard" onClick={handleBreadcrumbDashboard} className="hover:text-blue-600 cursor-pointer">Dashboard</a>
             <ChevronRight className="w-4 h-4" />
             <a href="/crm/documents" onClick={handleBreadcrumbDocuments} className="hover:text-blue-600 cursor-pointer">Documents</a>
             <ChevronRight className="w-4 h-4" />

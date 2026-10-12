@@ -1749,15 +1749,29 @@ old constraint, which fails the shared-name test.
       scoping unchanged). The member page lists that person's deals from `GET /deals?assigned_to_user_id=`
       with a pager (it showed the capped list) and now formats each deal in its OWN currency (every value was
       shown as USD).
-    - **Default chosen while building, NOT ratified — ask:** attainment (won USD / quota) is computed ONLY for
-      a USD quota; a quota in another currency shows its amount in that currency and no percentage, and the
-      team attainment needs every quota in USD. (Live: the one quota is USD.)
+    - **Quota attainment is USD-only — CONFIRMED by Venkat 2026-10-13:** attainment (won USD / quota) only for
+      a USD quota; a quota in another currency shows its amount in that currency and no percentage; team
+      attainment needs every quota in USD; no exchange rates. Follows from storing non-USD amounts as unknown.
     - Tests: `roundTrip.forecastSnapshots.test.ts` rewritten (11), `roundTrip.teamPerformance.test.ts` (4),
       `ForecastPage.serverTotals.test.tsx` (6), Team / Forecast fixtures moved to the server payloads (+2 Team
       tests). Mutation-tested: 8 backend + 4 frontend, all killed (one survived first — attainment against an
       INR quota — and the test was tightened). E2E on `bmi_crm_iso_test`: 600 TWO-YEAR-OLD commit deals the
       500-newest page could not see, KPIs / cards / rep table / Team figures all as seeded, snapshot taken
       twice through the UI -> 3 rows (no duplicates) equal to the summary, legacy row untouched; seed removed.
+  - **SLICE 5d DONE (2026-10-13) — duplicates redirected, capped loaders removed.**
+    - **`/dashboard` -> `/crm/dashboard`, `/analytics` -> `/crm/reports`, and `/` -> `/crm/dashboard`**
+      (`routes/legacyRedirects.ts`, rendered by App; decided by Venkat: redirect, do not rebuild). **`/` used to
+      send every sign-in to the unlinked `/dashboard`.** Links that pointed at the old routes are repointed.
+    - **Removed, now unreachable:** `pages/Dashboard.tsx` and its five widgets, `pages/Analytics/Analytics.tsx`,
+      `hooks/useDashboardData.ts` (500 rows of six tables), and **`contexts/DataContext.tsx`**, which fetched 500
+      rows of six tables on EVERY CRM page for readers that no longer exist — plus the unrouted
+      `CompaniesPage` / `CompanyForm`, an unused destructure in DealsKanbanPage and a cache push nothing read in
+      the deal form. Browser check: no CRM page requests more than 200 rows.
+    - **Still present, deliberately left:** `AccountsContext.refreshAccounts` still contains 500-row loads but has
+      NO caller (it stopped running on mount in 3b); `LeadContext` fetches 50 leads on mount that the Leads page no
+      longer reads. Neither is a 500-row load that runs; each is its own small cleanup.
+    - Tests: `routes/legacyRedirects.test.tsx` (5, incl. "no redirect chains"); `Dashboard.test.tsx` (23) removed
+      with the widgets it tested. Mutation-tested (3, all killed). Typecheck 187 -> 184, no new errors (diffed).
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary
@@ -2487,7 +2501,28 @@ empty body, while an assertion that dumps `res.body` shows the envelope. That re
 failing `roundTrip.pipelineStages` "bulk: a selection spanning two pipelines…" on `POST /deals/bulk` expecting 200.
 The file passed 24/24 alone and the next full run 829/829; zero `rt-` tenants orphaned.
 
-**Practical guidance: retry, do not debug.** A single unexplained 401 in a full run whose
+**ROOT CAUSE FOUND, 2026-10-13 — a local-port collision on the developer machine, not the code and not the
+pool.** supertest calls `app.listen(0)`, which binds `::` (all interfaces) on a random port from macOS's range
+49152-65535, then requests `http://127.0.0.1:<port>`. On macOS a process bound to `127.0.0.1:<port>` itself takes
+that connection in preference to the `::` listener, so when the random port happens to equal a port another local
+app holds on 127.0.0.1, the request goes to THAT app. Proven directly, not inferred:
+  - the **VS Code helper** (`Code Helper`, 127.0.0.1:63830 at the time) answers ANY request with the exact
+    envelope `{"type":"error","error":{"type":"authentication_error",...},"request_id":null}` and status 401 —
+    every captured body;
+  - **pgAdmin 4** (127.0.0.1:49284) answers with an HTML 401 page, which a JSON client reads as `{}` — the
+    bodyless-401 variant;
+  - a throwaway Node server bound like supertest on 63830 / 49284 never received a 127.0.0.1 request (the other
+    app did), while `[::1]` reached it.
+This explains every odd property: an arbitrary test each time (whichever request drew the port), byte-identical
+bodies, only in long full runs (thousands of fresh ports drawn), passing on retry, following the suite across
+worktrees, and never in CI (no VS Code or pgAdmin there). Listeners that accept and never answer would also
+explain the ~30-second timeouts.
+**The fix (NOT yet applied — diagnosis only, as asked):** have the tests use ONE server per test file bound to
+`127.0.0.1` explicitly (`app.listen(0, '127.0.0.1')`, passed to supertest as `request(server)`), so the OS can
+only hand out a 127.0.0.1 port nobody else holds — or make supertest call the address the server actually bound.
+Either is a test-harness change in `src/__tests__/helpers.ts`; no production code is involved.
+
+**Practical guidance until then: retry, do not debug.** A single unexplained 401 in a full run whose
 file then passes alone is this, and re-running is the correct response. Do not add retries
 or timeouts to the suite to paper over it — that would mask a real auth regression later.
 Stop here unless it starts failing on re-run too, which would be a different bug.

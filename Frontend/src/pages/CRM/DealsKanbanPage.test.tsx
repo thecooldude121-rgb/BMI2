@@ -23,7 +23,6 @@ vi.mock('../../utils/pipelinesApi', async () => ({
     ],
   }]),
 }));
-vi.mock('../../contexts/DataContext', () => ({ useData: () => ({ deals: [] }) }));
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 7, name: 'Dee Admin', role: 'Admin' } }) }));
 
 // jsdom has no IntersectionObserver; the column's infinite scroll only observes.

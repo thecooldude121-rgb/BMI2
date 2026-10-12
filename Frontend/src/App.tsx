@@ -1,10 +1,10 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { LEGACY_REDIRECTS } from './routes/legacyRedirects';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CurrentUserProvider } from './contexts/CurrentUserContext';
 import RoleSwitcher from './components/Dev/RoleSwitcher';
-import { DataProvider } from './contexts/DataContext';
 import { LeadProvider } from './contexts/LeadContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -27,10 +27,8 @@ import Register from './pages/Auth/Register';
  * for the first paint either way, and a spinner in front of the login form is
  * worse than shipping it in the initial chunk.
  */
-const Dashboard = lazy(() => import('./pages/Dashboard'));
 const CRMModule = lazy(() => import('./pages/CRM/CRMModule'));
 const AccountsModule = lazy(() => import('./pages/Accounts'));
-const Analytics = lazy(() => import('./pages/Analytics/Analytics'));
 const Calendar = lazy(() => import('./pages/Calendar/Calendar'));
 // NO SettingsPage IMPORT. /settings redirects to /crm/settings (see the route
 // below), so the dead tree's hub is no longer routed. The file still exists as
@@ -138,7 +136,6 @@ const App = () => {
         {/* Inside AuthProvider: CurrentUserContext derives the signed-in user
             from it, so it cannot be mounted above the provider it reads. */}
         <CurrentUserProvider>
-          <DataProvider>
             <LeadProvider>
               <SettingsProvider>
                 <IntegrationsProvider>
@@ -146,11 +143,12 @@ const App = () => {
                   <Route path="/login" element={<RouteShell><Login /></RouteShell>} />
                   {/* Open, like /login: you cannot be signed in to create an account. */}
                   <Route path="/register" element={<RouteShell><Register /></RouteShell>} />
-                  <Route path="/" element={<RequireAuth><Layout><Navigate to="/dashboard" replace /></Layout></RequireAuth>} />
-                  <Route path="/dashboard" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />
+                  {/* Slice 5d: duplicates redirect to their real pages — see routes/legacyRedirects. */}
+                  {LEGACY_REDIRECTS.map(r => (
+                    <Route key={r.from} path={r.from} element={<RequireAuth><Navigate to={r.to} replace /></RequireAuth>} />
+                  ))}
                   <Route path="/crm/*" element={<RequireAuth><Layout><CRMModule /></Layout></RequireAuth>} />
                   <Route path="/accounts/*" element={<RequireAuth><Layout><AccountsModule /></Layout></RequireAuth>} />
-                  <Route path="/analytics" element={<RequireAuth><Layout><Analytics /></Layout></RequireAuth>} />
                   <Route path="/calendar" element={<RequireAuth><Layout><Calendar /></Layout></RequireAuth>} />
                   <Route path="/sequences" element={<RequireAuth><Layout><SequencesAutomationPage /></Layout></RequireAuth>} />
                   <Route path="/integrations" element={<RequireAuth><Layout><IntegrationsHub /></Layout></RequireAuth>} />
@@ -198,7 +196,6 @@ const App = () => {
                 </IntegrationsProvider>
               </SettingsProvider>
             </LeadProvider>
-          </DataProvider>
           {/* Dev-only role switcher. Inside CurrentUserProvider because it
               drives that context, and behind import.meta.env.DEV so the
               bundler drops it from a production build entirely. */}

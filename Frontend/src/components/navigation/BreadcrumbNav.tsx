@@ -20,7 +20,7 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({ items }) => {
   const generateBreadcrumbs = (): BreadcrumbItem[] => {
     const pathSegments = location.pathname.split('/').filter(Boolean);
     const breadcrumbs: BreadcrumbItem[] = [
-      { label: 'Home', href: '/dashboard' }
+      { label: 'Home', href: '/crm/dashboard' }
     ];
 
     let currentPath = '';
@@ -47,7 +47,7 @@ const BreadcrumbNav: React.FC<BreadcrumbNavProps> = ({ items }) => {
   return (
     <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-6">
       <Link
-        to="/dashboard"
+        to="/crm/dashboard"
         className="flex items-center hover:text-gray-900 transition-colors"
       >
         <Home className="h-4 w-4" />
