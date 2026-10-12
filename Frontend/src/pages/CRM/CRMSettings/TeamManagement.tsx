@@ -44,7 +44,7 @@ import { useToast } from '../../../contexts/ToastContext';
 import ForbiddenAccess from '../../../components/common/ForbiddenAccess';
 import UserActionsDropdown from '../../../components/Team/UserActionsDropdown';
 import { useNavigate } from 'react-router-dom';
-import { useTeamPerformance } from '../../../hooks/useTeamPerformance';
+import { useTeamPerformance, withUnconverted, quotaText } from '../../../hooks/useTeamPerformance';
 
 const TeamManagement: React.FC = () => {
   const { user } = useAuth();
@@ -69,7 +69,7 @@ const TeamManagement: React.FC = () => {
    * rollup hook does not carry. The hook is additive here — if it fails, the
    * roster and every management control still work, and only these figures go.
    */
-  const { members: perf, period: quotaPeriod, truncated: dealsTruncated } =
+  const { members: perf, period: quotaPeriod } =
     useTeamPerformance(undefined, { members: teamMembersState });
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[] | null>(null);
   /**
@@ -1042,13 +1042,13 @@ const TeamManagement: React.FC = () => {
                     <div className="rounded-lg bg-gray-50 px-3 py-2">
                       <div className="text-xs font-medium text-gray-600">Open pipeline</div>
                       <div className="text-lg font-semibold text-gray-900">
-                        {row.openValue > 0 ? money(row.openValue) : <span className="text-gray-400">—</span>}
+                        {row.openCount > 0 ? withUnconverted(money(row.openValue), row.openUnconverted) : <span className="text-gray-400">—</span>}
                       </div>
                     </div>
                     <div className="rounded-lg bg-gray-50 px-3 py-2">
                       <div className="text-xs font-medium text-gray-600">Won</div>
                       <div className="text-lg font-semibold text-gray-900">
-                        {row.wonCount > 0 ? `${row.wonCount} · ${money(row.wonValue)}` : <span className="text-gray-400">0</span>}
+                        {row.wonCount > 0 ? `${row.wonCount} · ${withUnconverted(money(row.wonValue), row.wonUnconverted)}` : <span className="text-gray-400">0</span>}
                       </div>
                     </div>
                     <div className="rounded-lg bg-gray-50 px-3 py-2">
@@ -1057,7 +1057,7 @@ const TeamManagement: React.FC = () => {
                         {row.quota == null
                           ? <span className="text-sm italic text-gray-400">Not set</span>
                           : <>
-                              {money(row.quota)}
+                              {quotaText(row.quota, row.quotaCurrency, money)}
                               {row.attainment != null && (
                                 <span className={`ml-2 text-xs font-semibold ${
                                   row.attainment >= 100 ? 'text-green-600' : 'text-gray-500'}`}>
@@ -1067,11 +1067,6 @@ const TeamManagement: React.FC = () => {
                             </>}
                       </div>
                     </div>
-                    {dealsTruncated && (
-                      <p role="alert" className="col-span-2 sm:col-span-4 text-xs text-amber-700">
-                        More deals exist than were loaded, so these totals are lower bounds.
-                      </p>
-                    )}
                   </div>
                 );
               })()}

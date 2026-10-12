@@ -20,16 +20,16 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useStageLookup } from '../../hooks/useStageLookup';
-import { outcomeOf, type StageLookup } from '../../utils/pipelinesApi';
-import { ownerIdentityOf, UNASSIGNED_LABEL } from '../../utils/dealOwnership';
+import { UNASSIGNED_LABEL } from '../../utils/dealOwnership';
+import { fetchForecastSummary, takeForecastSnapshot, type ForecastSummary, type ForecastTopDeal } from '../../utils/forecastApi';
+import { localDay } from '../../utils/dates';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ChevronLeft, ChevronRight, TrendingUp, DollarSign,
   CheckCircle2, Clock, AlertTriangle, Users, BarChart3, Info,
   ArrowRight, Camera, Pencil, Check, X, ChevronDown, ChevronUp, AlertCircle,
 } from 'lucide-react';
-import { daysFromNow, formatCloseDate, parseDateMs, normalizeDateField } from '../../utils/dateUtils';
+import { daysFromNow, formatCloseDate } from '../../utils/dateUtils';
 import { formatAmountUSD } from '../../utils/currencyUtils';
 
 const API_BASE = 'http://localhost:5001/api/v1';
@@ -49,7 +49,11 @@ interface ForecastDeal {
   owner: string;
   /** Resolved owner user id, or null when ownership is only a name (migration 039). */
   ownerUserId?: number | null;
+  /** Native amount, in `currency`. */
   value: number;
+  currency: string;
+  /** Trusted USD amount, or null when the deal has none (shown "not in USD"). */
+  valueUsd: number | null;
   stage: string;
   closeDate: string;
   category: ForecastCategory;
@@ -82,6 +86,11 @@ interface RepRow {
   commit: number;
   closed: number;
   dealCount: number;
+  /** This rep's deals with no USD amount — counted, never added (slice 5c). */
+  unconverted: number;
+  commitCount: number;
+  /** Commit deals whose expected close date has passed (server-counted). */
+  commitOverdue: number;
 }
 
 interface QuarterBounds {
@@ -116,6 +125,11 @@ interface SnapshotRow {
   best_case: number;
   commit: number;
   closed: number;
+  /**
+   * Deals left out of the USD sums (migration 069). NULL for a snapshot taken
+   * before 2026-10-13, which the browser summed and which may mix currencies.
+   */
+  unconverted: number | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -157,22 +171,9 @@ function getQuarterBounds(offset = 0): QuarterBounds {
  * pipelines would be inventing a rule nobody stated. An explicit
  * `forecast_category` on the deal overrides everything, as before.
  */
-function inferCategory(deal: any, lookup: StageLookup): ForecastCategory | null {
-  const explicit = (deal.forecast_category || '').toLowerCase().trim();
-  if (explicit === 'commit')                                return 'commit';
-  if (explicit === 'best case' || explicit === 'best-case') return 'best-case';
-  if (explicit === 'pipeline')                              return 'pipeline';
-  if (explicit === 'closed')                                return 'closed';
-
-  const outcome = outcomeOf(lookup)(deal);
-  if (outcome === 'won')  return 'closed';
-  if (outcome === 'lost') return null;
-
-  const stage = (deal.stage || '').toLowerCase();
-  if (stage === 'negotiation') return 'commit';
-  if (stage === 'proposal')    return 'best-case';
-  return 'pipeline';
-}
+// The category rules above now run on the SERVER (utils/forecastTotals.ts,
+// FORECAST_CATEGORY), unchanged, so the page and a saved snapshot cannot
+// classify a deal differently (slice 5c).
 
 const fmt = formatAmountUSD;
 
@@ -265,7 +266,7 @@ const DealRow: React.FC<{ deal: ForecastDeal; categoryTotal: number }> = ({ deal
 
   // P1: risk flags — overdue takes precedence over concentration
   const isOverdue      = daysLeft !== null && daysLeft < 0;
-  const isConcentrated = !isOverdue && categoryTotal > 0 && deal.value >= categoryTotal * 0.5;
+  const isConcentrated = !isOverdue && categoryTotal > 0 && deal.valueUsd != null && deal.valueUsd >= categoryTotal * 0.5;
 
   return (
     <div className="flex items-start justify-between py-2 px-3 hover:bg-gray-50 rounded-md transition-colors">
@@ -286,7 +287,9 @@ const DealRow: React.FC<{ deal: ForecastDeal; categoryTotal: number }> = ({ deal
         )}
       </div>
       <div className="flex-shrink-0 text-right">
-        <p className="text-[12px] font-semibold text-gray-900 tabular-nums">{fmt(deal.value)}</p>
+        <p className="text-[12px] font-semibold text-gray-900 tabular-nums">
+          {deal.valueUsd != null ? fmt(deal.valueUsd) : `${deal.currency} ${deal.value.toLocaleString()} · not in USD`}
+        </p>
         <p className={`text-[10px] ${urgency}`}>{formatCloseDate(deal.closeDate)}</p>
       </div>
     </div>
@@ -297,11 +300,11 @@ const DealRow: React.FC<{ deal: ForecastDeal; categoryTotal: number }> = ({ deal
 
 const ForecastPage: React.FC = () => {
   const navigate = useNavigate();
-  const { lookup: stageLookup } = useStageLookup();
-  const [rawDeals, setRawDeals]               = useState<any[]>([]);
+  const [summary, setSummary]                 = useState<ForecastSummary | null>(null);
+  const [fetchErrorText, setFetchErrorText]   = useState<string | null>(null);
+  const [snapshotError, setSnapshotError]     = useState<string | null>(null);
   const [loading, setLoading]                 = useState(true);
   const [refreshing, setRefreshing]           = useState(false);
-  const [fetchError, setFetchError]           = useState(false);
   const [quarterOffset, setQuarterOffset]     = useState(0);
   const [refreshKey, setRefreshKey]           = useState(0);
   const [explanationOpen, setExplanationOpen] = useState(false);
@@ -340,23 +343,25 @@ const ForecastPage: React.FC = () => {
   const [takingSnapshot, setTakingSnapshot] = useState(false);
   const [snapshotTaken, setSnapshotTaken]   = useState(false);
 
-  // ── Data fetch ─────────────────────────────────────────────────────────────
-  // P0: inline fetch with limit=500 and an explicit fetchError state so that
-  // "backend unreachable" is distinguishable from "empty quarter."
-  useEffect(() => {
-    setRefreshing(true);
-    setFetchError(false);
-    const token = localStorage.getItem('authToken');
-    fetch(`${API_BASE}/deals?limit=500`, {
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    })
-      .then(r => { if (!r.ok) throw new Error('API error'); return r.json(); })
-      .then(json => setRawDeals(json.success ? json.data : []))
-      .catch(() => { setRawDeals([]); setFetchError(true); })
-      .finally(() => { setLoading(false); setRefreshing(false); });
-  }, [refreshKey]);
-
   const quarter = useMemo(() => getQuarterBounds(quarterOffset), [quarterOffset]);
+
+  // ── Data fetch ─────────────────────────────────────────────────────────────
+  // SLICE 5c (2026-10-13): THE QUARTER'S FORECAST IS THE SERVER'S. This page
+  // fetched the 500 newest deals with no warning past the cap, classified and
+  // summed them here (native amounts across currencies), and saved those sums
+  // as snapshots. GET /forecast/summary now returns the categories and per-rep
+  // totals in trusted USD with "not in USD" counts, plus the biggest deals per
+  // category for the cards. A failed load is an error, never an empty quarter.
+  useEffect(() => {
+    let cancelled = false;
+    setRefreshing(true);
+    fetchForecastSummary(quarter.label, localDay(new Date()))
+      .then(sm => { if (!cancelled) { setSummary(sm); setFetchErrorText(null); } })
+      .catch(e => { if (!cancelled) { setSummary(null); setFetchErrorText(e?.message ?? 'Could not load the forecast'); } })
+      .finally(() => { if (!cancelled) { setLoading(false); setRefreshing(false); } });
+    return () => { cancelled = true; };
+  }, [quarter.label, refreshKey]);
+  const fetchError = fetchErrorText !== null;
 
   // P1: Quarter pacing — week number, days left, completion percentage
   const quarterPacing = useMemo(() => {
@@ -437,6 +442,7 @@ const ForecastPage: React.FC = () => {
             best_case: parseFloat(row.best_case) || 0,
             commit:    parseFloat(row.commit)    || 0,
             closed:    parseFloat(row.closed)    || 0,
+            unconverted: row.unconverted == null ? null : Number(row.unconverted),
           });
         }
       });
@@ -446,127 +452,74 @@ const ForecastPage: React.FC = () => {
 
   // ── Derived state ───────────────────────────────────────────────────────────
 
-  const forecastDeals = useMemo((): ForecastDeal[] => {
-    const nowMs            = Date.now();
-    const isCurrentQuarter = nowMs >= quarter.start.getTime() && nowMs <= quarter.end.getTime();
+  const toDeal = (d: ForecastTopDeal): ForecastDeal => {
+    const usd = d.base_amount_usd === null || d.base_amount_usd === undefined ? null : Number(d.base_amount_usd);
+    const currency = (d.currency || 'USD').toUpperCase();
+    const value = Number(d.value) || 0;
+    // The server's trusted-USD rule: a non-USD base equal to the native value
+    // is a native amount stored as USD, not a conversion.
+    const trusted = usd !== null && (currency === 'USD' || usd !== value) ? usd : null;
+    const coName = (d.company_name || '').trim();
+    return {
+      id: d.id,
+      name: (d.name || '').trim() || (coName ? coName : 'Unnamed Deal'),
+      company: coName,
+      owner: d.owner || UNASSIGNED_LABEL,
+      value, currency, valueUsd: trusted,
+      stage: d.stage || '',
+      closeDate: d.expected_close_date || '',
+      category: d.category,
+    };
+  };
 
-    return rawDeals
-      .map((d: any): ForecastDeal | null => {
-        const category = inferCategory(d, stageLookup);
-        if (!category) return null;
-
-        // P0 fix: keep the full ISO string rather than splitting on 'T'.
-        // Splitting truncates to the UTC date and shows IST dates one day early
-        // (e.g. DB stores 2026-06-30, API returns 2026-06-29T18:30:00Z,
-        //  split gives "2026-06-29" — one day wrong).
-        const closeDate = normalizeDateField(d.expected_close_date);
-
-        const rawName    = (d.name || d.title || '').trim();
-        const coName     = (d.company_name || '').trim();
-        const stageLabel = formatStageName(d.stage || '');
-        const resolvedName = rawName
-          || (coName && stageLabel ? `${coName} · ${stageLabel}`
-              : coName              ? coName
-              : stageLabel          ? `${stageLabel} Deal`
-              :                       'Unnamed Deal');
-
-        return {
-          id:       d.id,
-          name:     resolvedName,
-          company:  coName,
-          // Owner name comes RESOLVED from the server where ownership is a
-          // real user reference (migration 039 projects it from the joined
-          // user), and falls back to the legacy string otherwise. 'Unassigned'
-          // is a truthful label here: 20 of 25 live deals have no resolved
-          // owner, and this page groups by owner.
-          owner:    d.assigned_to || UNASSIGNED_LABEL,
-          ownerUserId: d.assigned_to_user_id ?? null,
-          value:    parseFloat(d.value) || 0,
-          stage:    d.stage || '',
-          closeDate,
-          category,
-        };
-      })
-      .filter((d): d is ForecastDeal => d !== null)
-      .filter(d => {
-        if (!d.closeDate) {
-          // P0 fix: undated deals are active-but-unscheduled. Show them only
-          // when the user is viewing the current quarter — not in past/future
-          // period navigation where they would appear as phantom data.
-          return d.category !== 'closed' && isCurrentQuarter;
-        }
-        const closeMs = parseDateMs(d.closeDate);
-        if (!isFinite(closeMs)) {
-          // Typo year (e.g. "262026-09-30") — treat like no date.
-          return d.category !== 'closed' && isCurrentQuarter;
-        }
-        return closeMs >= quarter.start.getTime() && closeMs <= quarter.end.getTime();
-      });
-  }, [rawDeals, quarter, stageLookup]);
-
+  /** The biggest deals per category (the server sends up to `top_per_category`). */
   const categorized = useMemo((): Record<ForecastCategory, ForecastDeal[]> => ({
-    pipeline:    forecastDeals.filter(d => d.category === 'pipeline'),
-    'best-case': forecastDeals.filter(d => d.category === 'best-case'),
-    commit:      forecastDeals.filter(d => d.category === 'commit'),
-    closed:      forecastDeals.filter(d => d.category === 'closed'),
-  }), [forecastDeals]);
+    pipeline:    (summary?.top_deals.pipeline ?? []).map(toDeal),
+    'best-case': (summary?.top_deals['best-case'] ?? []).map(toDeal),
+    commit:      (summary?.top_deals.commit ?? []).map(toDeal),
+    closed:      (summary?.top_deals.closed ?? []).map(toDeal),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [summary]);
+
+  /** Every deal in each category — the server's count, not the listed rows. */
+  const categoryCounts: Record<ForecastCategory, number> = {
+    pipeline: summary?.categories.pipeline.count ?? 0,
+    'best-case': summary?.categories['best-case'].count ?? 0,
+    commit: summary?.categories.commit.count ?? 0,
+    closed: summary?.categories.closed.count ?? 0,
+  };
+  const categoryUnconverted: Record<ForecastCategory, number> = {
+    pipeline: summary?.categories.pipeline.unconverted ?? 0,
+    'best-case': summary?.categories['best-case'].unconverted ?? 0,
+    commit: summary?.categories.commit.unconverted ?? 0,
+    closed: summary?.categories.closed.unconverted ?? 0,
+  };
 
   const totals = useMemo(() => ({
-    pipeline: categorized.pipeline.reduce((s, d) => s + d.value, 0),
-    bestCase: categorized['best-case'].reduce((s, d) => s + d.value, 0),
-    commit:   categorized.commit.reduce((s, d) => s + d.value, 0),
-    closed:   categorized.closed.reduce((s, d) => s + d.value, 0),
-  }), [categorized]);
+    pipeline: summary?.categories.pipeline.value_usd ?? 0,
+    bestCase: summary?.categories['best-case'].value_usd ?? 0,
+    commit:   summary?.categories.commit.value_usd ?? 0,
+    closed:   summary?.categories.closed.value_usd ?? 0,
+  }), [summary]);
 
-  const repRows = useMemo((): RepRow[] => {
-    /*
-     * GROUPED BY COALESCE(assigned_to_user_id, assigned_to) — A TRANSITION
-     * MEASURE, STATED AS SUCH. See the note on RepRow.key.
-     *
-     * Prefer the resolved user id; fall back to the owner NAME when there is
-     * none. Grouping by id alone today would collapse 20 of 25 deals — $1.39M,
-     * including 15 named "John Smith" — into one "Unassigned" row and remove
-     * lines a forecast reader currently relies on.
-     *
-     * The prefix on the key matters: without it a user id of 5 and a rep
-     * literally named "5" would collide. Cheap, and the kind of thing that is
-     * invisible until it is not.
-     */
-    const map = new Map<string, RepRow>();
-    forecastDeals.forEach(d => {
-      /*
-       * The key, the user id and the display name now come from
-       * `utils/dealOwnership.ts`, which was extracted FROM this block when the
-       * Reports page needed the same grouping. Only the forecast-category
-       * accumulation below is specific to this page.
-       *
-       * Behaviour is unchanged: same `id:` / `name:` prefixes, same fallback to
-       * the owner name, same Unassigned label. Verified by re-running this
-       * page's own suite after the repoint, not just the new tests.
-       */
-      const { key, userId, name } = ownerIdentityOf({
-        assigned_to_user_id: d.ownerUserId ?? null,
-        assigned_to: d.owner,
-      });
-      const existing = map.get(key) ?? {
-        key,
-        userId,
-        name,
-        pipeline: 0, bestCase: 0, commit: 0, closed: 0, dealCount: 0,
-      };
-      existing.dealCount += 1;
-      if (d.category === 'pipeline')  existing.pipeline += d.value;
-      if (d.category === 'best-case') existing.bestCase  += d.value;
-      if (d.category === 'commit')    existing.commit    += d.value;
-      if (d.category === 'closed')    existing.closed    += d.value;
-      map.set(key, existing);
-    });
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.name === UNASSIGNED_LABEL) return 1;
-      if (b.name === UNASSIGNED_LABEL) return -1;
-      return (b.commit + b.closed) - (a.commit + a.closed);
-    });
-  }, [forecastDeals]);
+  /**
+   * One row per owner, as the server groups them: the resolved user
+   * (`id:`) or, where ownership is only a name, that name (`name:`) — the
+   * transition measure described on RepRow.key, unchanged.
+   */
+  const repRows = useMemo((): RepRow[] => (summary?.reps ?? []).map(r => ({
+    key: r.key,
+    userId: r.user_id,
+    name: r.label,
+    pipeline: r.pipeline.value_usd,
+    bestCase: r.best_case.value_usd,
+    commit: r.commit.value_usd,
+    closed: r.closed.value_usd,
+    dealCount: r.deal_count,
+    unconverted: r.unconverted,
+    commitCount: r.commit.count,
+    commitOverdue: r.commit_overdue,
+  })), [summary]);
 
   const maxRepTotal = useMemo(
     () => Math.max(...repRows.map(r => r.pipeline + r.bestCase + r.commit + r.closed), 1),
@@ -583,17 +536,14 @@ const ForecastPage: React.FC = () => {
       if (quarterPacing.isCurrent && quarterPacing.pct > 50 && rep.commit === 0 && rep.bestCase > 0) {
         flags.push('no-commit');
       }
-      // Entire commit from a single deal — concentration risk
-      const commitDeals = categorized.commit.filter(d => d.owner === rep.name);
-      if (commitDeals.length === 1 && rep.commit > 0) flags.push('single-deal');
-      // Any commit deal has a past close date
-      if (commitDeals.some(d => { const dl = daysFromNow(d.closeDate); return dl !== null && dl < 0; })) {
-        flags.push('overdue');
-      }
+      // Entire commit from a single deal — concentration risk (server count)
+      if (rep.commitCount === 1 && rep.commit > 0) flags.push('single-deal');
+      // Any commit deal has a past close date (server count, viewer's day)
+      if (rep.commitOverdue > 0) flags.push('overdue');
       if (flags.length > 0) map.set(rep.name, flags);
     });
     return map;
-  }, [repRows, categorized, quarterPacing]);
+  }, [repRows, quarterPacing]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleRefresh = () => setRefreshKey(k => k + 1);
@@ -655,37 +605,24 @@ const ForecastPage: React.FC = () => {
     }
   };
 
+  /**
+   * THE SERVER BUILDS THE SNAPSHOT (slice 5c). This used to POST the per-rep
+   * sums this page had computed from the 500 newest deals — capped, native
+   * amounts across currencies — as permanent history, and toasted success
+   * without checking the response. Now it sends the period and the viewer's
+   * day; the server computes the totals the page shows and stores them, with
+   * the count of deals not in USD. Success only after a 2xx.
+   */
   const handleTakeSnapshot = async () => {
     setTakingSnapshot(true);
+    setSnapshotError(null);
     try {
-      /*
-       * SNAPSHOTS CARRY THE REFERENCE NOW (migration 043), closing the
-       * inconsistency this comment used to record as scheduled work.
-       *
-       * `user_id` is sent where ownership is resolved and omitted where it is
-       * not — 20 of the 24 live deals still carry only a name, and dropping
-       * those rows would take ~$1.39M of pipeline out of every snapshot. The
-       * server keeps `rep_name` required for exactly that reason and stores it
-       * as the name AS AT the snapshot date, so this send is unchanged in that
-       * respect.
-       */
-      const reps = repRows.map(r => ({
-        user_id:    r.userId ?? undefined,
-        rep_name:   r.name,
-        pipeline:   r.pipeline,
-        best_case:  r.bestCase,
-        commit:     r.commit,
-        closed:     r.closed,
-        deal_count: r.dealCount,
-      }));
-      await fetch(`${API_BASE}/forecast/snapshots`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ period_label: quarter.label, reps }),
-      });
+      await takeForecastSnapshot(quarter.label, localDay(new Date()));
       setSnapshotTaken(true);
       setTimeout(() => setSnapshotTaken(false), 3000);
       setRefreshKey(k => k + 1);
+    } catch (e: any) {
+      setSnapshotError(`The snapshot was not saved — ${e?.message ?? 'the server refused'}`);
     } finally {
       setTakingSnapshot(false);
     }
@@ -734,7 +671,7 @@ const ForecastPage: React.FC = () => {
                   ? 'Loading…'
                   : fetchError
                   ? 'Data unavailable'
-                  : `${forecastDeals.length} deal${forecastDeals.length !== 1 ? 's' : ''} · ${quarter.label}`}
+                  : (() => { const n = Object.values(categoryCounts).reduce((a, b) => a + b, 0); return `${n} deal${n !== 1 ? 's' : ''} · ${quarter.label}`; })()}
               </p>
             </div>
           </div>
@@ -830,7 +767,7 @@ const ForecastPage: React.FC = () => {
           <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
             <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
             <p className="text-[13px] text-red-700 flex-1">
-              Unable to load deal data — check that the backend server is running on port 5001.
+              The forecast could not load — {fetchErrorText}. Nothing below is a measurement.
             </p>
             <button
               onClick={handleRefresh}
@@ -841,23 +778,27 @@ const ForecastPage: React.FC = () => {
           </div>
         )}
 
+        {snapshotError && (
+          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-[13px] text-red-700">{snapshotError}</p>
+        )}
+
         {/* ── Summary KPIs ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {([
-            { key: 'pipeline',  label: 'Pipeline',   value: totals.pipeline, color: '#6366f1', count: categorized.pipeline.length   },
-            { key: 'best-case', label: 'Best Case',  value: totals.bestCase, color: '#f59e0b', count: categorized['best-case'].length },
-            { key: 'commit',    label: 'Commit',     value: totals.commit,   color: '#10b981', count: categorized.commit.length     },
-            { key: 'closed',    label: 'Closed Won', value: totals.closed,   color: '#64748b', count: categorized.closed.length     },
+            { key: 'pipeline',  label: 'Pipeline',   value: totals.pipeline, color: '#6366f1', count: categoryCounts.pipeline,     unconverted: categoryUnconverted.pipeline },
+            { key: 'best-case', label: 'Best Case',  value: totals.bestCase, color: '#f59e0b', count: categoryCounts['best-case'], unconverted: categoryUnconverted['best-case'] },
+            { key: 'commit',    label: 'Commit',     value: totals.commit,   color: '#10b981', count: categoryCounts.commit,       unconverted: categoryUnconverted.commit },
+            { key: 'closed',    label: 'Closed Won', value: totals.closed,   color: '#64748b', count: categoryCounts.closed,       unconverted: categoryUnconverted.closed },
           ] as const).map(stat => (
             <div key={stat.key} className="bg-white rounded-lg border border-gray-200 overflow-hidden flex">
               <div className="w-1 flex-shrink-0" style={{ backgroundColor: stat.color }} />
               <div className="flex-1 px-4 py-3">
                 <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider mb-1.5">{stat.label}</p>
                 <p className="text-[22px] font-semibold text-gray-900 tabular-nums leading-none mb-1">
-                  {loading ? '—' : fmt(stat.value)}
+                  {loading || fetchError ? '—' : fmt(stat.value)}
                 </p>
-                <p className="text-[11px] text-gray-400">
-                  {loading ? '—' : `${stat.count} deal${stat.count !== 1 ? 's' : ''}`}
+                <p className="text-[11px] text-gray-400" data-testid={`kpi-${stat.key}`}>
+                  {loading || fetchError ? '—' : `${stat.count} deal${stat.count !== 1 ? 's' : ''}${stat.unconverted ? ` · ${stat.unconverted} not in USD` : ''}`}
                 </p>
               </div>
             </div>
@@ -967,7 +908,10 @@ const ForecastPage: React.FC = () => {
             {CATEGORIES.map(cat => {
               const cfg   = CATEGORY_CONFIG[cat];
               const deals = categorized[cat];
-              const total = deals.reduce((s, d) => s + d.value, 0);
+              // The SERVER's totals for the whole category; the list below is
+              // its biggest deals, and says so when it is not all of them.
+              const total = totals[cat === 'best-case' ? 'bestCase' : cat];
+              const count = categoryCounts[cat];
 
               return (
                 <div key={cat} className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden">
@@ -978,10 +922,12 @@ const ForecastPage: React.FC = () => {
                         <span className="text-[12px] font-semibold">{cfg.label}</span>
                       </div>
                       <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${cfg.badgeClass}`}>
-                        {deals.length}
+                        {count}
                       </span>
                     </div>
-                    <p className="text-[18px] font-bold text-gray-900 tabular-nums">{fmt(total)}</p>
+                    <p className="text-[18px] font-bold text-gray-900 tabular-nums" data-testid={`cat-total-${cat}`}>
+                      {fmt(total)}{categoryUnconverted[cat] ? <span className="ml-1 text-[11px] font-medium text-gray-500">+ {categoryUnconverted[cat]} not in USD</span> : null}
+                    </p>
                     <p className="text-[10px] text-gray-400 mt-0.5 leading-snug">{cfg.description}</p>
                   </div>
 
@@ -1001,6 +947,11 @@ const ForecastPage: React.FC = () => {
                         {deals.map(deal => (
                           <DealRow key={deal.id} deal={deal} categoryTotal={total} />
                         ))}
+                        {count > deals.length && (
+                          <p className="px-3 py-2 text-[11px] text-gray-500">
+                            Showing the {deals.length} largest of {count} by USD value.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1102,7 +1053,11 @@ const ForecastPage: React.FC = () => {
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[10px] text-gray-400 mt-0.5">{rep.dealCount} deal{rep.dealCount !== 1 ? 's' : ''}</p>
+                              <p className="text-[10px] text-gray-400 mt-0.5" data-testid={`rep-deals-${rep.key}`}>
+                                {rep.dealCount} deal{rep.dealCount !== 1 ? 's' : ''}
+                                {/* A USD cell of "—" must not hide a deal that is simply not in USD. */}
+                                {rep.unconverted > 0 && <span className="text-gray-600"> · {rep.unconverted} not in USD</span>}
+                              </p>
                             </div>
                           </div>
                         </td>
@@ -1353,7 +1308,12 @@ const ForecastPage: React.FC = () => {
                     return (
                       <tr key={snap.user_id != null ? `id:${snap.user_id}` : `name:${snap.rep_name}`}
                           className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="px-4 py-2.5 text-[13px] font-medium text-gray-800">{snap.rep_name}</td>
+                        <td className="px-4 py-2.5 text-[13px] font-medium text-gray-800">
+                          {snap.rep_name}
+                          {snap.unconverted == null
+                            ? <span className="ml-1 text-[10px] font-normal text-gray-500" title="Taken before snapshots were computed by the server; may mix currencies">· browser-summed</span>
+                            : snap.unconverted > 0 ? <span className="ml-1 text-[10px] font-normal text-gray-500">· + {snap.unconverted} not in USD</span> : null}
+                        </td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-[12px] text-gray-500">{fmtCell(snap.commit)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-[12px] font-medium text-gray-800">{fmtCell(nowCommit)}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums">
@@ -1380,6 +1340,13 @@ const ForecastPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            {snapshots.some(sn => sn.unconverted == null) && (
+              <p className="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+                Rows marked “browser-summed” were taken before 13 Oct 2026, when this page added up the deals it had
+                loaded (at most 500) in their own currencies. They are kept as recorded; today’s snapshots are computed
+                by the server in USD.
+              </p>
+            )}
             {/* P2: roadmap notice for features that need more snapshots */}
             <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/40 flex items-center gap-2">
               <BarChart3 className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />

@@ -45,7 +45,10 @@ const rows = [
 
 let fetchMock: ReturnType<typeof vi.fn>;
 /** Requests made to a URL containing `part`. */
-const callsTo = (part: string) => fetchMock.mock.calls.filter((c) => String(c[0]).includes(part));
+// GET /users/performance (slice 5c, the deal rollups) is not a roster read,
+// so it never counts toward the "exactly one GET /users" guard.
+const callsTo = (part: string) => fetchMock.mock.calls.filter((c) =>
+  String(c[0]).includes(part) && !String(c[0]).includes('/users/performance'));
 
 function mockServer(overrides: Partial<{
   users: unknown;
@@ -69,6 +72,9 @@ function mockServer(overrides: Partial<{
 }> = {}) {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
+    if (method === 'GET' && url.includes('/users/performance')) {
+      return { ok: true, status: 200, json: async () => ({ success: true, data: { members: [], unattributed: null } }) } as Response;
+    }
     if (method === 'GET' && url.includes('/users')) {
       return { ok: true, status: 200, json: async () => ({
         success: true,

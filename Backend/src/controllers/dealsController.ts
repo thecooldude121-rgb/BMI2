@@ -9,6 +9,7 @@ import { workspaceDefaultCurrency } from './workspaceController';
 import { notifyOwnerChange, notifyDealStageChange } from '../utils/notifications';
 import { pageParams, orderBy, listEnvelope, escapeLike, ListQueryError } from '../utils/listQuery';
 import { TRUSTED_USD } from '../utils/accountRollups';
+import { OWNER_KEY, OWNER_LABEL } from '../utils/dealOwnerSql';
 import { usdBase } from '../utils/baseAmount';
 
 /** GET /deals ?sort= keys -> SQL (allowlist; see utils/listQuery). */
@@ -267,13 +268,6 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
     res.json(listEnvelope(result.rows, total.rows[0].n, page));
   } catch (error) { next(error); }
 };
-
-/** A deal's owner as the Reports page groups it: `id:<user>` when resolved, `name:<text>` when not. */
-const OWNER_KEY = `CASE WHEN d.assigned_to_user_id IS NOT NULL THEN 'id:' || d.assigned_to_user_id
-  ELSE 'name:' || COALESCE(NULLIF(btrim(d.assigned_to), ''), 'Unassigned') END`;
-const OWNER_LABEL = `CASE WHEN d.assigned_to_user_id IS NOT NULL
-  THEN COALESCE(NULLIF(btrim(au.first_name || ' ' || au.last_name), ''), NULLIF(btrim(d.assigned_to), ''), 'User ' || d.assigned_to_user_id)
-  ELSE COALESCE(NULLIF(btrim(d.assigned_to), ''), 'Unassigned') END`;
 
 const isDay = (v: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))

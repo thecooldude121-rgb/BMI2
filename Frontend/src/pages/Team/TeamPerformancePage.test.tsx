@@ -56,11 +56,28 @@ const PIPELINES = [{
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
+/*
+ * SLICE 5c: the page reads GET /users/performance — the SERVER's per-person
+ * totals (trusted USD, "not in USD" counted) — instead of summing raw deals.
+ * These helpers build that payload; the server's arithmetic is pinned in
+ * roundTrip.teamPerformance.
+ */
+const T = (count: number, value_usd: number, unconverted = 0) => ({ count, value_usd, unconverted });
+const rollup = (o: { open?: [number, number, number?]; won?: [number, number, number?]; lost?: number } = {}) => {
+  const won = o.won ?? [0, 0]; const lost = o.lost ?? 0;
+  return {
+    open: T(...((o.open ?? [0, 0]) as [number, number, number?])), won: T(...(won as [number, number, number?])), lost: { count: lost },
+    win_rate: { value: won[0] + lost > 0 ? won[0] / (won[0] + lost) : null, won: won[0], lost, sample_size: won[0] + lost },
+  };
+};
+const perf = (members: Array<{ user_id: number } & ReturnType<typeof rollup>> = [], unattributed = { ...rollup(), names: [] as string[] }) =>
+  ({ members, unattributed });
+
 function mockServer(opts: {
-  users?: unknown[]; deals?: unknown[]; quotas?: unknown[];
+  users?: unknown[]; performance?: ReturnType<typeof perf>; quotas?: unknown[];
 } = {}) {
   const users  = opts.users  ?? USERS;
-  const deals  = opts.deals  ?? [];
+  const performance = opts.performance ?? perf();
   const quotas = opts.quotas ?? [];
 
   fetchMock = vi.fn(async (url: string) => {
@@ -70,7 +87,7 @@ function mockServer(opts: {
 
     if (u.includes('/pipelines')) return json(PIPELINES);
     if (u.includes('/quotas'))    return json(quotas);
-    if (u.includes('/deals'))     return json(deals);
+    if (u.includes('/users/performance')) return json(performance);
     if (u.includes('/users'))     return json(users);
     throw new Error(`unexpected fetch: ${u}`);
   });
@@ -129,7 +146,7 @@ describe('TeamPerformancePage — computed from the workspace', () => {
     // The live state: quotas is empty. A zero here would assert a target of
     // nothing and total failure against it.
     mockServer({
-      deals: [{ id: 'D1', value: 50000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: 1 }],
+      performance: perf([{ user_id: 1, ...rollup({ open: [1, 50000] }) }]),
       quotas: [],
     });
     render(<TeamPerformancePage />);
@@ -143,7 +160,7 @@ describe('TeamPerformancePage — computed from the workspace', () => {
 
   it('NO CLOSED DEALS means no win rate — not 0%', async () => {
     mockServer({
-      deals: [{ id: 'D1', value: 50000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: 1 }],
+      performance: perf([{ user_id: 1, ...rollup({ open: [1, 50000] }) }]),
     });
     render(<TeamPerformancePage />);
 
@@ -153,12 +170,8 @@ describe('TeamPerformancePage — computed from the workspace', () => {
 
   it('computes win rate and attainment from real rows once they exist', async () => {
     mockServer({
-      deals: [
-        { id: 'D1', value: 100000, stage: 'won',      pipeline_id: 'sales', assigned_to_user_id: 1 },
-        { id: 'D2', value:  50000, stage: 'lost',     pipeline_id: 'sales', assigned_to_user_id: 1 },
-        { id: 'D3', value:  25000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: 1 },
-      ],
-      quotas: [{ user_id: 1, period_label: 'Q3 2026', quota_amount: 200000 }],
+      performance: perf([{ user_id: 1, ...rollup({ won: [1, 100000], lost: 1, open: [1, 25000] }) }]),
+      quotas: [{ user_id: 1, period_label: 'Q3 2026', quota_amount: 200000, currency: 'USD' }],
     });
     render(<TeamPerformancePage />);
 
@@ -170,11 +183,10 @@ describe('TeamPerformancePage — computed from the workspace', () => {
 
   it('ANNOUNCES deals that belong to nobody, and names the owner string', async () => {
     mockServer({
-      deals: [
-        { id: 'D1', value: 100000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: 1 },
-        { id: 'D2', value: 300000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: null, assigned_to: 'John Smith' },
-        { id: 'D3', value:  50000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: null, assigned_to: null },
-      ],
+      performance: perf(
+        [{ user_id: 1, ...rollup({ open: [1, 100000] }) }],
+        { ...rollup({ open: [2, 350000] }), names: ['John Smith'] },
+      ),
     });
     render(<TeamPerformancePage />);
 
@@ -183,6 +195,25 @@ describe('TeamPerformancePage — computed from the workspace', () => {
     ).toBeInTheDocument());
     // It says WHOSE attribution is missing, not merely how many.
     expect(screen.getByText(/"John Smith"/)).toBeInTheDocument();
+  });
+
+  it('money is the server\'s USD; deals with no USD amount are stated, not added', async () => {
+    mockServer({ performance: perf([{ user_id: 1, ...rollup({ open: [3, 40000, 2] }) }]) });
+    render(<TeamPerformancePage />);
+    await waitFor(() => expect(screen.getAllByText('$40K + 2 not in USD').length).toBeGreaterThan(0));
+  });
+
+  it('a quota in another currency gets no attainment — won figures are USD', async () => {
+    mockServer({
+      performance: perf([{ user_id: 1, ...rollup({ won: [1, 100000] }) }]),
+      quotas: [{ user_id: 1, period_label: 'Q3 2026', quota_amount: 5000000, currency: 'INR' }],
+    });
+    render(<TeamPerformancePage />);
+    await waitFor(() => expect(screen.getByText('INR 5,000,000')).toBeInTheDocument());
+    expect(screen.getByText(/attainment needs every quota in USD/)).toBeInTheDocument();
+    // The person's row shows no attainment either: $100K against INR 5,000,000
+    // would read "2%" if dollars were divided by rupees.
+    expect(screen.getByText('INR 5,000,000').parentElement).not.toHaveTextContent('%');
   });
 
   it('role filter options come from the roster, not a fabricated title list', async () => {
@@ -211,14 +242,14 @@ describe('TeamPerformancePage — computed from the workspace', () => {
     // from a genuinely empty pipeline unless the page says so.
     fetchMock = vi.fn(async (url: string) => {
       const u = String(url);
-      if (u.includes('/deals')) return { ok: false, status: 500, json: async () => ({}) };
+      if (u.includes('/users/performance')) return { ok: false, status: 500, json: async () => ({}) };
       const data = u.includes('/pipelines') ? PIPELINES : u.includes('/users') ? USERS : [];
       return { ok: true, status: 200, json: async () => ({ success: true, data }) };
     });
     vi.stubGlobal('fetch', fetchMock);
 
     render(<TeamPerformancePage />);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Could not load deals/));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Could not load deal totals/));
   });
 
   it('does not link a deal count to a filter the Deals page cannot apply', async () => {
@@ -226,7 +257,7 @@ describe('TeamPerformancePage — computed from the workspace', () => {
     // DealsKanbanPage reads no query params, so the old links navigated
     // nowhere useful while appearing to filter.
     mockServer({
-      deals: [{ id: 'D1', value: 100000, stage: 'proposal', pipeline_id: 'sales', assigned_to_user_id: 1 }],
+      performance: perf([{ user_id: 1, ...rollup({ open: [1, 100000] }) }]),
     });
     render(<TeamPerformancePage />);
     await waitFor(() => expect(screen.getByText('Alex Rodriguez')).toBeInTheDocument());

@@ -1721,14 +1721,43 @@ old constraint, which fails the shared-name test.
       report says so on every card, never an empty-data sentence.
     - **Lead funnel Conversion now counts converted leads — DECIDED by Venkat 2026-10-12:**
       (won + converted) / (won + converted + lost). **Disqualified is shown on its own row and is NOT in the
-      denominator — a default chosen while building, NOT ratified; ask.** Live is unchanged today (4 won,
-      2 lost, 0 converted -> 67%).
+      denominator — CONFIRMED by Venkat 2026-10-13.** Live is unchanged today (4 won, 2 lost, 0 converted -> 67%).
     - Tests: `roundTrip.dealsReport.test.ts` (7, incl. 10,000 deals vs SQL and the id-vs-digits owner case),
       `reportDefinitions.test.ts` rewritten (15), `ReportsPage.test.tsx` (4). Mutation-tested: 5 backend +
       5 frontend, all killed (one survived first — a failed report computed over empty data — and the test
       was tightened until it failed). E2E on `bmi_crm_iso_test`: 600 OLD wins the 500-newest page could not
       see, $60K / 600 of 601 / $520K + 1 not in USD / Conversion 75% (9 of 12); filters reach the server and
       Aging ignores the range; all equal to SQL; seed removed and re-counted.
+  - **SLICE 5c DONE (2026-10-13) — Forecast and Team performance on server totals (migration 069).**
+    - **Forecast:** `utils/forecastTotals.computeForecast` is the ONE implementation behind
+      `GET /forecast/summary?period=&today=` and `POST /forecast/snapshots`. The page's category rules run on
+      the server unchanged (`FORECAST_CATEGORY`: explicit forecast_category, else won -> closed / lost dropped
+      by stage_type, else negotiation -> commit, proposal -> best case, else pipeline); quarter by expected
+      close; undated deals only while the viewer's day is in the quarter and never as closed; trusted USD
+      with per-category and per-rep `unconverted`; the 25 biggest deals per category for the cards ("Showing
+      the 25 largest of N"). The page had fetched 500 deals with no warning past the cap.
+    - **Snapshots are SERVER-COMPUTED:** `POST /forecast/snapshots { period_label, today }` computes the
+      summary and upserts one row per rep (043's identity rules kept: user_id + rep_name, unattributed rows
+      recorded, shared display names separate, same-day overwrite, user delete -> SET NULL). **A body carrying
+      figures (`reps`) is REFUSED (400)** so an old client cannot store capped numbers; an empty quarter is a
+      409; the page says "saved" only after the 2xx (it toasted without checking). **Migration 069** adds
+      `forecast_snapshots.unconverted` — NULL = recorded before 2026-10-13 by the browser (3 live rows, kept as
+      recorded) and labelled "browser-summed" on the page.
+    - **Team performance:** `GET /users/performance` — per user open / won (trusted USD, unconverted) / lost,
+      win rate won / (won + lost) all time with its sample, plus `unattributed` deals with the names they
+      carry. `useTeamPerformance` keeps its interface and reads it; quotas still come from `GET /quotas` (read
+      scoping unchanged). The member page lists that person's deals from `GET /deals?assigned_to_user_id=`
+      with a pager (it showed the capped list) and now formats each deal in its OWN currency (every value was
+      shown as USD).
+    - **Default chosen while building, NOT ratified — ask:** attainment (won USD / quota) is computed ONLY for
+      a USD quota; a quota in another currency shows its amount in that currency and no percentage, and the
+      team attainment needs every quota in USD. (Live: the one quota is USD.)
+    - Tests: `roundTrip.forecastSnapshots.test.ts` rewritten (11), `roundTrip.teamPerformance.test.ts` (4),
+      `ForecastPage.serverTotals.test.tsx` (6), Team / Forecast fixtures moved to the server payloads (+2 Team
+      tests). Mutation-tested: 8 backend + 4 frontend, all killed (one survived first — attainment against an
+      INR quota — and the test was tightened). E2E on `bmi_crm_iso_test`: 600 TWO-YEAR-OLD commit deals the
+      500-newest page could not see, KPIs / cards / rep table / Team figures all as seeded, snapshot taken
+      twice through the UI -> 3 rows (no duplicates) equal to the summary, legacy row untouched; seed removed.
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary

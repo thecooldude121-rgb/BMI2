@@ -7,7 +7,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { PreviewBanner } from '../../components/common/PreviewBanner';
 import { NotAvailable } from '../../components/common/NotAvailable';
 import { DirectReportsSection } from '../../components/Team/DirectReportsSection';
-import { useTeamPerformance } from '../../hooks/useTeamPerformance';
+import { useTeamPerformance, withUnconverted, quotaText } from '../../hooks/useTeamPerformance';
+import { fetchDealsPage } from '../../utils/dealsApi';
+import LeadsPager from '../../components/Leads/LeadsPager';
 import { TeamEmailComposerModal } from '../../components/Team/TeamEmailComposerModal';
 import { ScheduleCallModal } from '../../components/Team/ScheduleCallModal';
 import { ScheduleMeetingModal } from '../../components/Team/ScheduleMeetingModal';
@@ -143,8 +145,26 @@ export default function TeamMemberDetailPage() {
    * whole workspace roster (it is deliberately ungated so assignment pickers
    * can read it), so the person is found in a list that is already loaded.
    */
-  const { members, loading, error, period, truncated } = useTeamPerformance();
+  const { members, loading, error, period } = useTeamPerformance();
   const row = members.find((r) => String(r.member.id) === String(id));
+
+  /*
+   * THIS PERSON'S DEALS, ONE SERVER PAGE AT A TIME (slice 5c). They came from
+   * the hook's 500 newest deals, so an older deal never appeared in anyone's
+   * list. Now GET /deals?assigned_to_user_id= with the server's total.
+   */
+  const DEALS_PAGE = 25;
+  const [dealsPage, setDealsPage] = useState(1);
+  const [ownDeals, setOwnDeals] = useState<{ deals: any[]; total: number } | null>(null);
+  const [ownDealsError, setOwnDealsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    fetchDealsPage({ assigned_to_user_id: id, sort: 'expected_close_date', dir: 'asc', limit: DEALS_PAGE, offset: (dealsPage - 1) * DEALS_PAGE })
+      .then(r => { if (!cancelled) { setOwnDeals({ deals: r.deals, total: r.total }); setOwnDealsError(null); } })
+      .catch(e => { if (!cancelled) setOwnDealsError(e?.message ?? 'Could not load deals'); });
+    return () => { cancelled = true; };
+  }, [id, dealsPage]);
 
   /*
    * The identity fields, mapped from the roster row. Fields with NO COLUMN in
@@ -881,11 +901,6 @@ export default function TeamMemberDetailPage() {
             <span className="text-xs text-slate-500">Quota period {period}</span>
           </div>
 
-          {truncated && (
-            <p role="alert" className="mb-3 text-xs text-amber-700">
-              More deals exist than were loaded, so these totals are lower bounds.
-            </p>
-          )}
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div className="bg-slate-50 rounded-lg p-4">
@@ -903,9 +918,11 @@ export default function TeamMemberDetailPage() {
                 <h3 className="text-sm font-semibold text-slate-700">Open Pipeline</h3>
               </div>
               <div className="text-3xl font-bold text-slate-800 mb-1">
-                {row.openValue > 0 ? metricMoney(row.openValue) : '—'}
+                {row.openCount > 0 ? metricMoney(row.openValue) : '—'}
               </div>
-              <div className="text-xs text-slate-400">Sum of open deal values</div>
+              <div className="text-xs text-slate-400">
+                {row.openUnconverted > 0 ? `USD · + ${row.openUnconverted} not in USD` : 'Open deals, in USD'}
+              </div>
             </div>
 
             <div className="bg-slate-50 rounded-lg p-4">
@@ -915,7 +932,7 @@ export default function TeamMemberDetailPage() {
               </div>
               <div className="text-3xl font-bold text-slate-800 mb-1">{row.wonCount}</div>
               <div className="text-xs text-slate-400">
-                {row.wonValue > 0 ? `${metricMoney(row.wonValue)} closed` : 'Nothing closed yet'}
+                {row.wonCount > 0 ? `${withUnconverted(metricMoney(row.wonValue), row.wonUnconverted)} closed` : 'Nothing closed yet'}
               </div>
             </div>
 
@@ -931,7 +948,7 @@ export default function TeamMemberDetailPage() {
               <div className="text-xs text-slate-400">
                 {row.winRate == null
                   ? 'No deals closed yet'
-                  : `${row.wonCount} won of ${row.wonCount + row.lostCount} closed`}
+                  : `${row.wonCount} won of ${row.wonCount + row.lostCount} decided, all time`}
               </div>
             </div>
 
@@ -944,12 +961,14 @@ export default function TeamMemberDetailPage() {
               {row.quota == null
                 ? <div className="text-2xl font-bold text-slate-300 mb-1">—</div>
                 : <div className="text-3xl font-bold text-slate-800 mb-1">
-                    {row.attainment != null ? `${row.attainment}%` : metricMoney(row.quota)}
+                    {row.attainment != null ? `${row.attainment}%` : quotaText(row.quota, row.quotaCurrency, metricMoney)}
                   </div>}
               <div className="text-xs text-slate-400">
                 {row.quota == null
                   ? `No quota entered for ${period}`
-                  : `${metricMoney(row.wonValue)} of ${metricMoney(row.quota)}`}
+                  : row.attainment != null
+                    ? `${metricMoney(row.wonValue)} of ${metricMoney(row.quota)}`
+                    : 'Attainment is shown for a USD quota only'}
               </div>
             </div>
 
@@ -1025,7 +1044,7 @@ export default function TeamMemberDetailPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <Briefcase className="w-6 h-6 text-blue-600" />
-              Assigned Deals ({row?.deals.length ?? 0})
+              Assigned Deals ({ownDeals ? ownDeals.total.toLocaleString() : '—'})
             </h2>
             <button
               onClick={handleViewAllDeals}
@@ -1035,13 +1054,13 @@ export default function TeamMemberDetailPage() {
             </button>
           </div>
 
-          {truncated && (
-            <p role="alert" className="mb-3 text-xs text-amber-700">
-              More deals exist than were loaded, so this list may be incomplete.
-            </p>
+          {ownDealsError && (
+            <p role="alert" className="mb-3 text-sm text-red-700">Deals could not load — {ownDealsError}</p>
           )}
 
-          {(row?.deals.length ?? 0) === 0 ? (
+          {!ownDeals ? (
+            !ownDealsError && <p className="text-sm text-slate-500">Loading deals…</p>
+          ) : ownDeals.total === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
               <Briefcase className="w-8 h-8 text-slate-300 mx-auto mb-3" aria-hidden="true" />
               <p className="text-sm font-semibold text-slate-700">No deals are assigned to this person</p>
@@ -1061,7 +1080,7 @@ export default function TeamMemberDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {row?.deals.map((deal) => (
+                  {ownDeals.deals.map((deal: any) => (
                     <tr key={deal.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3">
                         <button
@@ -1078,8 +1097,10 @@ export default function TeamMemberDetailPage() {
                         {deal.stage || <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-medium text-slate-800">
+                        {/* In the deal's OWN currency — this formatted every
+                            value as USD, so INR 125,000 read as $125,000. */}
                         {Number(deal.value ?? 0).toLocaleString(undefined, {
-                          style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+                          style: 'currency', currency: (deal.currency || 'USD').toUpperCase(), maximumFractionDigits: 0,
                         })}
                       </td>
                       {/* No close date is a real state — 8 live deals have none. */}
@@ -1092,6 +1113,8 @@ export default function TeamMemberDetailPage() {
                   ))}
                 </tbody>
               </table>
+              <LeadsPager page={dealsPage} pageCount={Math.max(1, Math.ceil(ownDeals.total / DEALS_PAGE))} total={ownDeals.total}
+                pageSize={DEALS_PAGE} shown={ownDeals.deals.length} onPage={setDealsPage} noun="deals" />
             </div>
           )}
         </div>
