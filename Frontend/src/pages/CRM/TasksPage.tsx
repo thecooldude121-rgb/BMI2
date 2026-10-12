@@ -7,7 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Alert } from '../../components/ui/Alert';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Card } from '../../components/ui/Card';
-import { inputClass } from '../../components/ui/Field';
+import { inputClass, filterSelectClass } from '../../components/ui/Field';
 import PageHeader from '../../components/Layout/PageHeader';
 import LeadsPager from '../../components/Leads/LeadsPager';
 import {
@@ -120,15 +120,6 @@ function dueCell(task: TaskRecord, asOf: string): { text: string; className: str
 
 const titleCase = (s: string) => s.replace(/(^|[-\s])(\w)/g, (_m, sep, c) => `${sep === '-' ? ' ' : sep}${c.toUpperCase()}`);
 
-/**
- * Filter selects: Figma's 32px control on the raised (white) fill. Not the
- * shared selectClass — its `read-only:` rule matches every <select> (a select
- * is :read-only by spec), so it paints them as read-only fields. The shared
- * fix is proposed separately; it touches every select in the app.
- */
-const filterSelect =
-  'h-8 w-full rounded-ctrl border border-line bg-white px-2.5 text-[13px] font-medium text-ink ' +
-  'focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30';
 
 const TasksPage: React.FC = () => {
   const { user } = useAuth();
@@ -300,9 +291,7 @@ const TasksPage: React.FC = () => {
   ];
 
   return (
-    // Figma's content area is inset 24px from the top bar; the shell's <main>
-    // has no top padding, so the page adds it (as the Calendar already does).
-    <div className="space-y-6 pt-4 lg:pt-6">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Work queue"
         title="Tasks"
@@ -391,15 +380,15 @@ const TasksPage: React.FC = () => {
               value={searchInput} onChange={e => setSearchInput(e.target.value)}
             />
           </label>
-          <div className="w-36"><select aria-label="Priority" className={filterSelect} value={priority} onChange={e => setPriority(e.target.value)}>
+          <div className="w-36"><select aria-label="Priority" className={`${filterSelectClass()} w-full`} value={priority} onChange={e => setPriority(e.target.value)}>
             <option value="">Any priority</option>
             {TASK_PRIORITIES.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
           </select></div>
-          <div className="w-36"><select aria-label="Type" className={filterSelect} value={type} onChange={e => setType(e.target.value)}>
+          <div className="w-36"><select aria-label="Type" className={`${filterSelectClass()} w-full`} value={type} onChange={e => setType(e.target.value)}>
             <option value="">Any type</option>
             {TASK_TYPES.map(t => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}
           </select></div>
-          <div className="w-60"><select aria-label="Sort" className={filterSelect} value={sortId} onChange={e => setSortId(e.target.value)}>
+          <div className="w-60"><select aria-label="Sort" className={`${filterSelectClass()} w-full`} value={sortId} onChange={e => setSortId(e.target.value)}>
             {SORTS.map(s => <option key={s.id || 'default'} value={s.id}>{s.label}</option>)}
           </select></div>
           <Button variant="secondary" className="h-8" disabled={!filtered} onClick={clearFilters}>Clear filters</Button>
@@ -466,7 +455,7 @@ const TasksPage: React.FC = () => {
                           aria-label={`Status of ${task.title}`}
                           onChange={e => { void handleStatusChange(task, e.target.value as TaskStatus); }}
                           disabled={rs?.state === 'saving'}
-                          className={`h-8 w-[116px] rounded-ctrl border bg-[#F9FAFB] px-2 text-xs text-ink focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30 ${rs?.state === 'error' ? 'border-danger-700' : 'border-line'}`}
+                          className={`h-8 w-[116px] rounded-ctrl border bg-surface-input px-2 text-xs text-ink focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30 ${rs?.state === 'error' ? 'border-danger-700' : 'border-line'}`}
                         >
                           <option value="pending">Pending</option>
                           <option value="in-progress">In progress</option>

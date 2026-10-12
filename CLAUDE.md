@@ -591,8 +591,8 @@ designer later adds variables, re-derive from those and treat any disagreement a
 > core light value extracted below MATCHES its named variable exactly. Decisions (Venkat,
 > 2026-10-11): the ~50 further light variables (hover / input / raised / track surfaces, sky
 > and violet accents, disabled text …) are added to Tailwind as their own small no-visible-change
-> slice; **`ink-secondary` `#6B645A` STAYS** — Figma's `text/secondary` is still `#756E63`, which
-> is under AA on the tinted surfaces, so the app's value is correct, not a gap; the **dark theme
+> slice; ~~`ink-secondary` `#6B645A` STAYS~~ — **superseded 2026-10-13: Figma's `text/secondary` is
+> now `#665F55`, which passes AA, and was adopted (see below)**; the **dark theme
 > is its own project, AFTER Group A**; Forecast "Reps & quota" / "Snapshots" (206:18094,
 > 206:18563) are compared when the Forecast screen comes up; the ⌘K palette frame (206:34290) is
 > applied next time Leads is touched; the ⌘J Copilot drawer (206:34802) stays "Coming soon".
@@ -600,25 +600,42 @@ designer later adds variables, re-derive from those and treat any disagreement a
 **Tokens** (`Frontend/tailwind.config.js` — use the token names, never the hex):
 - Primary `brand-600` `#4F46E5`, hover `brand-700` `#4338CA`, selected tint `brand-100`
   `#E7E7FF` / `brand-50` `#EEF2FF`. Headings `ink-heading` `#312E81`.
-- Text `ink` `#111827`; secondary `ink-muted` `#756E63`.
+- Text `ink` `#111827`; secondary `ink-muted` **`#665F55`** (Figma `text/secondary`; was `#756E63`
+  until 2026-10-13 — see below).
 - Surfaces (warm parchment): `surface-canvas` `#F5F1E8` (app background), `surface-subtle`
   `#FAF7F0`, `surface-panel` `#FFFEFB` (cards), `surface-sunken` `#F0ECE3`. Borders `line`
   `#DED8CC`.
-- Semantic, as the frames use them: warning `#B45309` on `#FEF3C7`, success `#047857`,
-  danger `#B91C1C`.
+- Semantic, as the frames use them: warning TEXT `warning-700` **`#A14A07`** (Figma
+  `text/warning`; was `#B45309`, which is still Figma's `border/warning` / `status/warning`) on
+  `#FEF3C7`, `warning-800` `#78350F` (`text/warning-strong`), success `#047857`, danger `#B91C1C`.
+- Accent: `sky-accent` `#0284C7` (Figma `accent/sky` = `border/sky`) — calendar meeting chips.
+  **4.10:1 on white, so it is a border / bar / dot colour, NEVER small text.** `surface-input`
+  `#F9FAFB` (Figma `surface/input`) for in-table controls.
 - Radius: controls 6px (`rounded-ctrl`), cards 8px (`rounded-card`), pills full.
-- **CONTRAST CAVEAT, measured not assumed:** `ink-muted` is 4.47:1 on `surface-canvas` and
-  4.27:1 on `surface-sunken`; warning amber is 4.45:1 / 4.26:1 — all just UNDER WCAG AA's
-  4.5:1 for body text. Both pass on `surface-panel` (5.0 / 4.98) and `surface-subtle`. So put
-  small muted or amber text on panels, not directly on the canvas, until the designer decides
-  whether to darken them. That is the designer's call, not a silent hex change in code.
+- **COLOURS ADOPTED FROM FIGMA'S VARIABLES — decided by Venkat 2026-10-13.** The earlier caveat
+  here (`#756E63` 4.17-4.47:1 and `#B45309` 4.16-4.45:1 on the tinted surfaces, just under AA) is
+  RESOLVED by the frame's own variables, measured against every surface token rather than assumed:
 
-- **`ink-secondary` `#6B645A` is NOT a Figma value** (Phase 2, 2026-10-05): an AA stand-in
-  for small muted text on the sidebar / sunken / canvas surfaces, where Figma's `#756E63`
-  measures 4.17-4.47:1. It passes there (4.83-5.18). Phase 1 shipped the sidebar "More"
-  label and the top bar's "Soon" pill in the failing grey; both now use it. Swap it for
-  whatever the designer decides. Read-only field values use `ink` on `surface-readonly`
-  rather than the frame's muted-at-75%-opacity (3.9:1 or lower).
+  | on | canvas | subtle | panel | sunken | sidebar | readonly | white | brand-100 | warning-100 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | `ink-muted` #665F55 | 5.59 | 5.89 | 6.25 | 5.34 | 5.21 | 4.88 | 6.30 | 5.18 | 5.66 |
+  | `warning-700` #A14A07 | 5.33 | 5.61 | 5.95 | 5.09 | 4.97 | 4.65 | 6.00 | 4.94 | 5.39 |
+
+  AA (4.5:1) everywhere. White on `bg-warning-700` rises from 5.02 to 6.00.
+- **`ink-secondary` is now an ALIAS of `ink-muted` (#665F55).** It was the AA stand-in `#6B645A`
+  (Phase 2, 2026-10-05) while Figma's grey failed; the new grey passes everywhere the stand-in was
+  needed. Its 43 call sites were left as they are — fold them into `ink-muted` when those files
+  are next touched. Read-only field values still use `ink` on `surface-readonly`.
+- **Dropdowns (fixed 2026-10-13):** `ui/Field`'s `read-only:` fill matched EVERY `<select>` (a
+  select is `:read-only` by spec), painting all dropdowns as read-only fields. It is now
+  `[&:read-only:not(select)]`. Filter-row dropdowns use `filterSelectClass()` (32px, white,
+  content-sized — no `w-full`, which a call site's `w-auto` could not reliably override).
+- **The shell's `<main>` is `p-4 lg:p-6`, top included** (2026-10-13), so every page's eyebrow sits
+  24px under the top bar as the frames draw it. Do not add per-page top padding.
+- **Weeks start on MONDAY everywhere — decided by Venkat 2026-10-13.** Calendar grid,
+  `activitiesApi.viewerBounds` (the Activities "This Week" tile), the Activities date filter, and
+  the Leads `imported_this_week` count (`date_trunc('week', CURRENT_DATE)`, which is Monday in
+  Postgres). Rolling windows are labelled as rolling ("Next 7 days"), never "this week".
 
 **Shared components (Phase 2) — use these, do not hand-roll:** `ui/Button` (34px Figma
 action button; primary / secondary / danger / ghost / link), `ui/Badge` (status pill, five

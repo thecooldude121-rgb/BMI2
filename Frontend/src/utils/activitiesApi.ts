@@ -133,11 +133,11 @@ export interface ActivitySummary {
   total: number; today: number; this_week: number; overdue: number; meetings_today: number; calls_today: number;
 }
 
-/** The viewer's day and week as local-midnight instants (week starts Sunday, like the calendar). */
+/** The viewer's day and week as local-midnight instants (week starts MONDAY, like the calendar — decided 2026-10-13). */
 export function viewerBounds(now: Date = new Date()): { day_from: string; day_to: string; week_from: string; week_to: string } {
   const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-  const week = new Date(day.getFullYear(), day.getMonth(), day.getDate() - day.getDay());
+  const week = new Date(day.getFullYear(), day.getMonth(), day.getDate() - ((day.getDay() + 6) % 7));
   const weekEnd = new Date(week.getFullYear(), week.getMonth(), week.getDate() + 7);
   return { day_from: day.toISOString(), day_to: next.toISOString(), week_from: week.toISOString(), week_to: weekEnd.toISOString() };
 }

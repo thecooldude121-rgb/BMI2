@@ -277,9 +277,10 @@ const DealsGridView: React.FC<DealsGridViewProps> = ({ stages, onDealClick, onSt
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
+              {/* Rolling windows, not calendar periods — labelled as what they filter. */}
+              <option value="week">Next 7 days</option>
+              <option value="month">Next 30 days</option>
+              <option value="quarter">Next 90 days</option>
             </select>
           </div>
 

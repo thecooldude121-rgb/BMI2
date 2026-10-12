@@ -19,12 +19,25 @@ const CONTROL_BASE =
   'w-full rounded-ctrl border bg-surface-panel px-2.5 text-sm leading-[22px] text-ink ' +
   'placeholder:text-ink-muted transition-colors focus:border-brand-600 focus:outline-none ' +
   'focus:ring-2 focus:ring-brand-600/30 disabled:cursor-not-allowed disabled:bg-surface-readonly ' +
-  'read-only:bg-surface-readonly';
+  // NOT plain read-only: — a <select> matches :read-only by spec (it is never
+  // "mutable text"), so that rule painted every dropdown in the app as a
+  // read-only field. Inputs and textareas only.
+  '[&:read-only:not(select)]:bg-surface-readonly';
 
 /** Class strings, exported so a call site that cannot use <Field> still matches. */
 export const inputClass = (invalid = false) =>
   `${CONTROL_BASE} h-9 ${invalid ? 'border-danger-700' : 'border-line'}`;
 export const selectClass = inputClass;
+/**
+ * A filter-row dropdown (Figma: 32px, raised white fill, 13px medium). Sized to
+ * its content — no w-full, which a call site's `w-auto` could not reliably
+ * override (both are width utilities; stylesheet order, not class order, wins).
+ * Give it a width class where the frame fixes one.
+ */
+export const filterSelectClass = () =>
+  'h-8 rounded-ctrl border border-line bg-white px-2.5 text-[13px] font-medium text-ink ' +
+  'transition-colors focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/30 ' +
+  'disabled:cursor-not-allowed disabled:bg-surface-readonly';
 export const textareaClass = (invalid = false) =>
   `${CONTROL_BASE} min-h-[88px] py-2 ${invalid ? 'border-danger-700' : 'border-line'}`;
 

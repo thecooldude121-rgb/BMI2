@@ -54,18 +54,20 @@ export default {
           900: '#312e81',
         },
         // Text. `ink` body, `ink-heading` page and card titles, `ink-muted`
-        // secondary copy (the warm grey the frames use everywhere).
+        // secondary copy — Figma's text/secondary variable.
         ink: {
           DEFAULT: '#111827',
           heading: '#312e81',
-          muted:   '#756e63',
-          // NOT a Figma value — an accessibility stand-in, pending the designer.
-          // Figma's #756E63 fails WCAG AA for small text on the tinted surfaces
-          // (4.17:1 on the sidebar, 4.27 on sunken, 4.47 on canvas). This
-          // slightly darker warm grey passes on all of them (4.83 / 4.95 / 5.18)
-          // and is used ONLY for small muted text sitting on those surfaces;
-          // on panels and inputs `ink-muted` passes and stays.
-          secondary: '#6b645a',
+          // Figma text/secondary, adopted 2026-10-13 (Venkat). It replaced
+          // #756e63, which measured under WCAG AA on the tinted surfaces
+          // (4.17-4.47:1). #665f55, measured against every surface token:
+          // canvas 5.59, subtle 5.89, panel 6.25, sunken 5.34, sidebar 5.21,
+          // readonly 4.88, brand-100 5.18, warning-100 5.66 — AA everywhere.
+          muted:   '#665f55',
+          // Was the AA stand-in #6b645a while Figma's grey failed. The new grey
+          // passes where it did, so this is now an ALIAS of `muted` (43 call
+          // sites); fold it into `ink-muted` when those files are next touched.
+          secondary: '#665f55',
         },
         // Warm parchment surfaces, from the frames.
         surface: {
@@ -75,6 +77,7 @@ export default {
           sunken: '#f0ece3', // inset / hover
           sidebar: '#efe9de', // the app sidebar (Figma Settings frames)
           readonly: '#e7e2d8', // read-only form fields (Figma Settings "Role")
+          input: '#f9fafb', // Figma surface/input (in-table controls)
         },
         // Hairline borders and dividers.
         line: {
@@ -90,9 +93,17 @@ export default {
           50: '#ecfdf5', 100: '#d1fae5', 300: '#6ee7b7',
           500: '#10b981', 600: '#059669', 700: '#047857', 800: '#065f46',
         },
+        // 700 is Figma text/warning (#a14a07, adopted 2026-10-13; was #b45309):
+        // 5.09-5.95:1 on the parchment surfaces, 5.39 on warning-100, 6.0 as
+        // the fill under white text. 800 is Figma text/warning-strong.
         warning: {
           50: '#fffbeb', 100: '#fef3c7', 300: '#fcd34d',
-          500: '#f59e0b', 600: '#d97706', 700: '#b45309', 800: '#92400e',
+          500: '#f59e0b', 600: '#d97706', 700: '#a14a07', 800: '#78350f',
+        },
+        // Figma accent/sky (= border/sky). 4.10:1 on white — UNDER AA for text,
+        // so it is an accent (border, bar, dot), never small text.
+        sky: {
+          accent: '#0284c7',
         },
       },
       // The four sizes that actually exist. Counted from every bg-blue-600

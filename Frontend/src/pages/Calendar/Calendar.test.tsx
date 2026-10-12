@@ -19,7 +19,7 @@ import { localDay } from '../../utils/dates';
 
 const now = new Date();
 const first = new Date(now.getFullYear(), now.getMonth(), 1);
-const gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - first.getDay());
+const gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - ((first.getDay() + 6) % 7)); // Monday first
 const gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41);
 const TODAY = localDay(now);
 // Never today: the page opens with today selected, so clicking MID must change the selection.
@@ -71,7 +71,7 @@ describe('Calendar — exactly the visible weeks, from the server', () => {
     await screen.findByText('Call Kora');
     await userEvent.click(screen.getByRole('button', { name: 'Next month' }));
     const nf = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const ns = new Date(nf.getFullYear(), nf.getMonth(), 1 - nf.getDay());
+    const ns = new Date(nf.getFullYear(), nf.getMonth(), 1 - ((nf.getDay() + 6) % 7));
     await waitFor(() => expect(api.fetchTasksByDay).toHaveBeenLastCalledWith(localDay(ns), expect.any(String)));
   });
 
@@ -130,5 +130,14 @@ describe('Calendar — exactly the visible weeks, from the server', () => {
     await waitFor(() => expect(api.fetchTasksPage).toHaveBeenCalledWith(expect.objectContaining({ due_after: TODAY, due_before: TODAY })));
     expect(screen.getByRole('button', { name: /New Meeting · Soon/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: /Block Time · Soon/ })).toBeDisabled();
+  });
+
+  it('the grid starts on MONDAY (weeks run Monday–Sunday everywhere)', async () => {
+    renderCal();
+    await screen.findByText('Call Kora');
+    const headers = screen.getAllByText(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/).map(e => e.textContent);
+    expect(headers.slice(0, 7)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(api.fetchTasksByDay.mock.calls[0][0]).toBe(localDay(gridStart));
+    expect(gridStart.getDay()).toBe(1);
   });
 });
