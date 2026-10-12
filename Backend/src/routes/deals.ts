@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getDealStageSummary,
   getDealsSummary,
+  getDealsReport,
   getDeals,
   getDealById,
   createDeal,
@@ -27,6 +28,7 @@ router.use(protect);
 // Before '/:id', or Express reads "stage-summary" as a deal id.
 router.get('/stage-summary', getDealStageSummary);
 router.get('/summary', getDealsSummary);
+router.get('/report', getDealsReport);
 router.get('/:id', getDealById);
 router.post('/', createDeal);
 router.put('/:id', updateDeal);

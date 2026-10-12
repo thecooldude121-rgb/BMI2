@@ -313,6 +313,34 @@ export async function fetchDealsSummary(today: string): Promise<DealsSummary> {
   return json.data as DealsSummary;
 }
 
+/** A deal owner as Reports groups it: `id:<user>` resolved, `name:<text>` not. */
+export interface ReportOwnerRow extends UsdTotal { key: string; label: string; unresolved: boolean }
+
+/**
+ * GET /deals/report (slice 5b) — the totals behind the Reports cards, with the
+ * page's filters applied on the server (the close range skips aging).
+ */
+export interface DealsReport {
+  as_of: string;
+  filters: { close_from: string | null; close_to: string | null; owner: string | null };
+  excluded_no_close_date: number;
+  owners: { key: string; label: string; unresolved: boolean; count: number }[];
+  won_by_owner: ReportOwnerRow[];
+  open_by_owner: ReportOwnerRow[];
+  outcome: { won: number; lost: number };
+  open_by_stage: (UsdTotal & { pipeline_id: string; pipeline_name: string; stage_id: string; name: string; position: number })[];
+  aging: (UsdTotal & { bucket: 'under-30' | '30-60' | '60-90' | 'over-90' | 'undated' })[];
+  won_by_source: (UsdTotal & { source: string | null })[];
+  high_priority: { all: UsdTotal; open: UsdTotal; closing_7d: number; open_no_close: number };
+}
+
+export async function fetchDealsReport(q: { today: string; close_from?: string; close_to?: string; owner?: string }): Promise<DealsReport> {
+  const res = await fetch(`${API_BASE}/deals/report?${toQuery(q as Record<string, unknown>)}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `Failed to load reports (HTTP ${res.status})`);
+  return json.data as DealsReport;
+}
+
 export interface StageSummaryRow {
   stage_id: string; slug: string; name: string; position: number;
   stage_type: string; archived_at: string | null;

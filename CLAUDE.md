@@ -1707,6 +1707,28 @@ old constraint, which fails the shared-name test.
     - **For 5d:** DataContext still fetches 500 of every table on every CRM page; its remaining readers are
       Analytics (to be redirected), the dead CompaniesPage, an unused destructure in DealsKanbanPage and
       `addDeal` in the deal form — so 5d can retire those loads.
+  - **SLICE 5b DONE (2026-10-12) — Reports on server totals.**
+    - **`GET /deals/report?today=&close_from=&close_to=&owner=`** (`dealsController.getDealsReport`): the totals
+      behind the eight cards — won / open by owner (`id:<user>` / `name:<text>` keys, unmatched names kept
+      separate, deterministic order), outcome, open by stage across pipelines, aging buckets from creation,
+      won by source (no-source row), high priority — plus `owners` (from ALL deals) and
+      `excluded_no_close_date`. The close range applies to every card but Aging (as `usesDateRange` declares);
+      the owner applies to all. Trusted USD only, the rest "not in USD". **`GET /leads/summary` gained
+      `by_stage`.**
+    - **Page:** headline tiles = `GET /deals/summary` (5a; unfiltered; win rate won / (won + lost), all time,
+      with its sample); cards FORMAT the report (`reportDefinitions` no longer computes over deals; the
+      browser-side grouping / filtering tests moved server-side); the "lower bound" banner is gone; a failed
+      report says so on every card, never an empty-data sentence.
+    - **Lead funnel Conversion now counts converted leads — DECIDED by Venkat 2026-10-12:**
+      (won + converted) / (won + converted + lost). **Disqualified is shown on its own row and is NOT in the
+      denominator — a default chosen while building, NOT ratified; ask.** Live is unchanged today (4 won,
+      2 lost, 0 converted -> 67%).
+    - Tests: `roundTrip.dealsReport.test.ts` (7, incl. 10,000 deals vs SQL and the id-vs-digits owner case),
+      `reportDefinitions.test.ts` rewritten (15), `ReportsPage.test.tsx` (4). Mutation-tested: 5 backend +
+      5 frontend, all killed (one survived first — a failed report computed over empty data — and the test
+      was tightened until it failed). E2E on `bmi_crm_iso_test`: 600 OLD wins the 500-newest page could not
+      see, $60K / 600 of 601 / $520K + 1 not in USD / Conversion 75% (9 of 12); filters reach the server and
+      Aging ignores the range; all equal to SQL; seed removed and re-counted.
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary
@@ -2431,6 +2453,10 @@ full run, nothing orphaned. So the two shapes this file has tracked separately a
 phenomenon seen through two clients: supertest's `login.status !== 200` path stringifies an
 empty body, while an assertion that dumps `res.body` shows the envelope. That resolves the
 "part 2 could not be confirmed" caveat recorded on 2026-09-06.
+
+**FIFTH CAPTURE, 2026-10-12 (slice 5b gate), output saved as instructed.** Byte-identical envelope again,
+failing `roundTrip.pipelineStages` "bulk: a selection spanning two pipelines…" on `POST /deals/bulk` expecting 200.
+The file passed 24/24 alone and the next full run 829/829; zero `rt-` tenants orphaned.
 
 **Practical guidance: retry, do not debug.** A single unexplained 401 in a full run whose
 file then passes alone is this, and re-running is the correct response. Do not add retries

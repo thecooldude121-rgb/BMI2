@@ -213,6 +213,8 @@ export interface LeadSummary {
   ready_to_convert: number;
   /** Leads with an open follow-up task due before today (Group B item 11). */
   overdue_follow_ups: number;
+  /** Every lead stage's count (slice 5b, the Reports funnel). Absent = 0. */
+  by_stage?: Record<string, number>;
   source_quality_week: { top_source: string | null; top_source_avg_score: number; top_source_count: number; weekly_leads: number };
 }
 

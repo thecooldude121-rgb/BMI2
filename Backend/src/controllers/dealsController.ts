@@ -268,6 +268,121 @@ export const getDeals = async (req: AuthRequest, res: Response, next: NextFuncti
   } catch (error) { next(error); }
 };
 
+/** A deal's owner as the Reports page groups it: `id:<user>` when resolved, `name:<text>` when not. */
+const OWNER_KEY = `CASE WHEN d.assigned_to_user_id IS NOT NULL THEN 'id:' || d.assigned_to_user_id
+  ELSE 'name:' || COALESCE(NULLIF(btrim(d.assigned_to), ''), 'Unassigned') END`;
+const OWNER_LABEL = `CASE WHEN d.assigned_to_user_id IS NOT NULL
+  THEN COALESCE(NULLIF(btrim(au.first_name || ' ' || au.last_name), ''), NULLIF(btrim(d.assigned_to), ''), 'User ' || d.assigned_to_user_id)
+  ELSE COALESCE(NULLIF(btrim(d.assigned_to), ''), 'Unassigned') END`;
+
+const isDay = (v: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
+  && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+
+/**
+ * GET /api/v1/deals/report?today=&close_from=&close_to=&owner= — the totals
+ * behind the Reports page's eight computed cards (Group A item 4, slice 5b).
+ * They were computed in the browser from the 500 newest deals.
+ *
+ * Filters, as the page's own definitions declare them:
+ *   - close_from / close_to (calendar days, inclusive) on expected_close_date:
+ *     applied to every card EXCEPT aging (age is from creation) — a deal with
+ *     no close date is excluded and COUNTED in excluded_no_close_date;
+ *   - owner (an `id:` / `name:` key from `owners`): applied to every card.
+ * Money: trusted USD only, the rest counted as unconverted (the 5a rule).
+ * Outcomes by stage_type, every pipeline. Test and archived excluded.
+ */
+export const getDealsReport = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const today = String(req.query.today ?? '');
+    if (!isDay(today)) throw new ListQueryError('today must be a calendar date in YYYY-MM-DD format');
+    const from = req.query.close_from ? String(req.query.close_from) : null;
+    const to = req.query.close_to ? String(req.query.close_to) : null;
+    if ((from && !isDay(from)) || (to && !isDay(to))) throw new ListQueryError('close_from / close_to must be calendar dates in YYYY-MM-DD format');
+    if ((from === null) !== (to === null)) throw new ListQueryError('close_from and close_to go together');
+    const owner = req.query.owner ? String(req.query.owner) : null;
+    if (owner && !/^(id:\d+|name:.+)$/.test(owner)) throw new ListQueryError('owner must be an id:<user> or name:<text> key');
+
+    const params: unknown[] = [tenantId, today];
+    const base = `
+      FROM deals d
+      JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.tenant_id = d.tenant_id
+      JOIN pipelines p ON p.id = ps.pipeline_id AND p.tenant_id = ps.tenant_id
+      LEFT JOIN users au ON au.id = d.assigned_to_user_id AND au.tenant_id = d.tenant_id
+     WHERE d.tenant_id = $1 AND d.is_test = false AND d.is_archived = false`;
+    // Every query below carries today ($2), referenced or not: Postgres refuses
+    // a parameter it cannot type, so the queries that do not use it say so.
+    const typed = ` AND $2::date IS NOT NULL`;
+    let ownerSql = '';
+    if (owner) { params.push(owner); ownerSql = ` AND ${OWNER_KEY} = $${params.length}`; }
+    let dateSql = '';
+    if (from && to) { params.push(from, to); dateSql = ` AND d.expected_close_date BETWEEN $${params.length - 1}::date AND $${params.length}::date`; }
+    const dated = `${base}${typed}${ownerSql}${dateSql}`;   // most cards
+    const undated = `${base}${typed}${ownerSql}`;           // aging, and the exclusion count
+    const usd = `COALESCE(sum(d.base_amount_usd) FILTER (WHERE ${TRUSTED_USD('d')}), 0)::float8 AS value_usd,
+                 (count(*) FILTER (WHERE NOT ${TRUSTED_USD('d')}))::int AS unconverted, count(*)::int AS count`;
+
+    const [byOwner, outcome, byStage, aging, bySource, high, excluded, owners] = await Promise.all([
+      pool.query(`SELECT ps.stage_type, ${OWNER_KEY} AS key, ${OWNER_LABEL} AS label, (d.assigned_to_user_id IS NULL) AS unresolved, ${usd}
+                    ${dated} AND ps.stage_type IN ('won', 'open') GROUP BY 1, 2, 3, 4`, params),
+      pool.query(`SELECT (count(*) FILTER (WHERE ps.stage_type = 'won'))::int AS won,
+                         (count(*) FILTER (WHERE ps.stage_type = 'lost'))::int AS lost ${dated}`, params),
+      pool.query(`SELECT p.slug AS pipeline_id, p.name AS pipeline_name, ps.id AS stage_id, ps.name, ps.position, ${usd}
+                    ${dated} AND ps.stage_type = 'open'
+                   GROUP BY p.slug, p.name, p.is_default, p.created_at, ps.id, ps.name, ps.position
+                   ORDER BY p.is_default DESC, p.created_at, p.slug, ps.position`, params),
+      pool.query(`SELECT CASE WHEN d.created_at IS NULL THEN 'undated'
+                              WHEN d.created_at > NOW() - interval '30 days' THEN 'under-30'
+                              WHEN d.created_at > NOW() - interval '60 days' THEN '30-60'
+                              WHEN d.created_at > NOW() - interval '90 days' THEN '60-90'
+                              ELSE 'over-90' END AS bucket, ${usd}
+                    ${undated} AND ps.stage_type = 'open' GROUP BY 1`, params.slice(0, owner ? 3 : 2)),
+      pool.query(`SELECT NULLIF(btrim(d.source), '') AS source, ${usd}
+                    ${dated} AND ps.stage_type = 'won' GROUP BY 1`, params),
+      pool.query(`SELECT ${usd},
+                         (count(*) FILTER (WHERE ps.stage_type = 'open'))::int AS open_count,
+                         COALESCE(sum(d.base_amount_usd) FILTER (WHERE ps.stage_type = 'open' AND ${TRUSTED_USD('d')}), 0)::float8 AS open_value_usd,
+                         (count(*) FILTER (WHERE ps.stage_type = 'open' AND NOT ${TRUSTED_USD('d')}))::int AS open_unconverted,
+                         (count(*) FILTER (WHERE ps.stage_type = 'open' AND d.expected_close_date BETWEEN $2::date AND $2::date + 6))::int AS closing_7d,
+                         (count(*) FILTER (WHERE ps.stage_type = 'open' AND d.expected_close_date IS NULL))::int AS open_no_close
+                    ${dated} AND lower(btrim(coalesce(d.priority, ''))) = 'high'`, params),
+      from ? pool.query(`SELECT count(*)::int AS n ${undated} AND d.expected_close_date IS NULL`, params.slice(0, owner ? 3 : 2))
+           : Promise.resolve({ rows: [{ n: 0 }] }),
+      pool.query(`SELECT ${OWNER_KEY} AS key, ${OWNER_LABEL} AS label, (d.assigned_to_user_id IS NULL) AS unresolved, count(*)::int AS count
+                    ${base} GROUP BY 1, 2, 3 ORDER BY 4 DESC, 2`, [tenantId]),
+    ]);
+
+    const owned = (type: string) => byOwner.rows.filter(r => r.stage_type === type)
+      .map(({ stage_type: _t, ...r }) => r)
+      .sort((a, b) => (a.label === 'Unassigned' ? 1 : b.label === 'Unassigned' ? -1
+        // Deterministic: count, then USD value, then name.
+        : b.count - a.count || b.value_usd - a.value_usd || String(a.label).localeCompare(String(b.label))));
+    const h = high.rows[0];
+    res.json({
+      success: true,
+      data: {
+        as_of: today,
+        filters: { close_from: from, close_to: to, owner },
+        excluded_no_close_date: excluded.rows[0].n,
+        owners: owners.rows,
+        won_by_owner: owned('won'),
+        open_by_owner: owned('open'),
+        outcome: outcome.rows[0],
+        open_by_stage: byStage.rows,
+        aging: aging.rows,
+        won_by_source: bySource.rows.sort((a, b) => (a.source === null ? 1 : b.source === null ? -1 : b.value_usd - a.value_usd)),
+        high_priority: {
+          all: { count: h.count, value_usd: h.value_usd, unconverted: h.unconverted },
+          open: { count: h.open_count, value_usd: h.open_value_usd, unconverted: h.open_unconverted },
+          closing_7d: h.closing_7d,
+          open_no_close: h.open_no_close,
+        },
+      },
+    });
+  } catch (error) { next(error); }
+};
+
 /**
  * GET /api/v1/deals/summary?today=YYYY-MM-DD — workspace-wide deal totals
  * (Group A item 4, slice 5a). The dashboards and Reports counted these in the
