@@ -24,6 +24,7 @@ import { followUpStatus } from '../../utils/leadFollowUp';
 import { useLeads } from '../../contexts/LeadContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLeadDuplicateCandidates } from '../../hooks/useLeadDuplicateCandidates';
 import { useLeadActions } from '../../hooks/useLeadActions';
 import { usePermissions } from '../../hooks/usePermissions';
 import {
@@ -110,13 +111,17 @@ const TIMELINE_ICON: Record<string, React.ReactNode> = {
 const LeadDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { updateLead, deleteLead, leads: allLeads, lastWriteErrorRef } = useLeads();
+  const { updateLead, deleteLead, lastWriteErrorRef } = useLeads();
   const actions = useLeadActions(updateLead);
   const { showToast } = useToast();
   const { user } = useAuth();
   const { can } = usePermissions();
 
   const [lead, setLead] = useState<Lead | null>(null);
+  // Duplicate candidates from the SERVER (slice 6b) — every lead in the workspace,
+  // not the 50 LeadContext had loaded. Called before any early return (lesson 13).
+  const { pool: dupPool, error: dupError } = useLeadDuplicateCandidates(lead);
+  const allLeads = dupPool ?? [];
   const [leadState, setLeadState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading');
   const [leadError, setLeadError] = useState<string | null>(null);
   const [history, setHistory] = useState<Source<LeadStageHistoryRow>>(loadingSource);
@@ -405,6 +410,9 @@ const LeadDetailPage: React.FC = () => {
         </Alert>
       )}
 
+      {dupError && (
+        <p className="text-xs text-ink-muted" role="status">The duplicate check could not run ({dupError}) — this is unknown, not clear.</p>
+      )}
       {/* Possible duplicates */}
       {duplicateCandidates.length > 0 && (
         <Alert tone="warning"
@@ -415,7 +423,7 @@ const LeadDetailPage: React.FC = () => {
             if (!other) return null;
             return <p key={c.leadId}><strong>{leadDisplayName(other)}</strong>{other.company ? ` · ${other.company}` : ''} — {c.signals[0]?.reason}</p>;
           })}
-          <p>Checked against the leads loaded in this browser, not every lead in the workspace.</p>
+          <p>Checked against every lead in this workspace.</p>
         </Alert>
       )}
 

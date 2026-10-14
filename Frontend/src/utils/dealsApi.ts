@@ -71,6 +71,8 @@ export interface DealPayload {
   next_step?: string;
   notes?: string;
   company_name?: string;
+  /** The real account link (companies.id); null clears it on update. */
+  company_id?: string | null;
   contact_name?: string;
   contact_email?: string;
   contact_title?: string;
@@ -258,6 +260,8 @@ export interface DealsPageQuery {
   /** Deals in pipeline_id that belong to none of its stages. */
   unplaced?: boolean;
   search?: string;
+  /** Deals linked to this account (the server pins it to the workspace). */
+  company_id?: string;
   assigned_to_user_id?: string | number;
   /** Owner by NAME (resolved user or legacy free text). */
   assigned_to?: string;

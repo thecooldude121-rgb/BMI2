@@ -513,7 +513,9 @@ export const LeadProvider: React.FC<LeadProviderProps> = ({ children }) => {
 
   useEffect(() => {
     if (user) {
-      fetchLeads();
+      // No lead preload (slice 6b). It fetched 50 leads on every CRM page; the
+      // Leads page pages on the server, and the duplicate checks that read
+      // these 50 now ask the server. `leads` fills only via applyFilters.
       fetchViews();
       fetchPipelines();
       fetchTags();

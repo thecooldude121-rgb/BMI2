@@ -187,6 +187,8 @@ export interface ContactsPageQuery {
   search?: string;
   status?: string;
   buying_role?: string;
+  /** Exact phone match on digits only (7-20), for the duplicate check. */
+  phone_digits?: string;
   sort?: 'created_at' | 'updated_at' | 'name' | 'email' | 'company';
   dir?: 'asc' | 'desc';
   limit?: number;

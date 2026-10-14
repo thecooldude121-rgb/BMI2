@@ -4,6 +4,7 @@ import {
   transitionLeadStage, getLeadStageHistory,
 } from '../controllers/leadsController';
 import { convertLead } from '../controllers/leadConversionController';
+import { checkLeadDuplicates } from '../controllers/leadDuplicateController';
 import {
   getActivities, createActivity, updateActivity,
   getNotes, createNote, updateNote, deleteNote,
@@ -24,6 +25,8 @@ router.use(protect);
 router.get('/',    getLeads);
 // Before '/:id', or 'summary' would be read as a lead id.
 router.get('/summary', getLeadSummary);
+// Before the /:id routes. Matches candidate rows against every lead in the workspace (slice 6b).
+router.post('/duplicate-check', checkLeadDuplicates);
 router.post('/',   createLead);
 router.get('/:id', getLeadById);
 router.put('/:id', updateLead);

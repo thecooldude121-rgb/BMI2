@@ -1,5 +1,4 @@
-import { fetchPipelines, buildStageLookup, isOpenWith } from '../utils/pipelinesApi';
-import React, { createContext, useContext, useState, useRef, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 import {
   EnhancedAccount,
   AccountActivity,
@@ -17,13 +16,10 @@ import {
   AccountWorkflow
 } from '../types/accounts';
 import {
-  fetchAccounts,
   createAccountViaAPI,
   updateAccountViaAPI,
   deleteAccountViaAPI,
 } from '../utils/accountsApi';
-import { fetchContacts } from '../utils/contactsApi';
-import { fetchDeals } from '../utils/dealsApi';
 
 interface AccountsContextType {
   accounts: EnhancedAccount[];
@@ -50,7 +46,6 @@ interface AccountsContextType {
    */
   lastLoadedAt: number | null;
   error: string | null;
-  refreshAccounts: () => Promise<void>;
   filteredAccounts: EnhancedAccount[];
   selectedAccountIds: string[];
   currentFilter: AccountFilter;
@@ -144,16 +139,12 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
    * 25 real deals existed. An honest-looking zero is still a wrong answer.
    */
   const [accounts, setAccounts] = useState<EnhancedAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  /**
-   * Whether a load has ever succeeded. A REF, not state: `refreshAccounts` must
-   * read it without depending on it, or the callback is recreated on every load
-   * and the mount effect that calls it fires again — forever.
-   */
-  const hasLoadedRef = useRef(false);
+  // Nothing in this context loads a list any more (slice 6b removed the last
+  // loader), so these are constants kept for the context's existing shape.
+  const loading = false;
+  const refreshing = false;
+  const lastLoadedAt: number | null = null;
+  const error: string | null = null;
 
   // No API for account-level activities, notes or documents as first-class
   // account records. The account detail page reads the REAL /activities and
@@ -161,8 +152,8 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
   const [activities, setActivities] = useState<AccountActivity[]>([]);
   const [notes, setNotes] = useState<AccountNote[]>([]);
   const [documents, setDocuments] = useState<AccountDocument[]>([]);
-  // The account<->contact link is contacts.company_id, a real FK, resolved in
-  // refreshAccounts below rather than through this list.
+  // The account<->contact link is contacts.company_id, a real FK; screens read it
+  // from the server (GET /companies roll-ups, GET /contacts?company_id=).
   const [accountContacts, setAccountContacts] = useState<AccountContact[]>([]);
   // The account<->deal link is deals.company_id (migration 027). getAccountDeals
   // now reads it; this list survives only for linkDeal/unlinkDeal, which are
@@ -221,132 +212,22 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
    * almost every account, which is why the "Active Deals" KPI read 0 while a
    * hardcoded twin next to it read 23.
    */
-  const [dealStats, setDealStats] = useState<{ openCount: number; openValue: number } | null>(null);
+  // Was filled by the removed loader; no screen reads it from here any more.
+  const [dealStats] = useState<{ openCount: number; openValue: number } | null>(null);
 
   const [currentFilter, setCurrentFilter] = useState<AccountFilter>({});
   const [currentView, setCurrentView] = useState<AccountView | null>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
 
-  const refreshAccounts = useCallback(async (): Promise<void> => {
-    // First load blocks and shows a skeleton; every later one revalidates
-    // underneath the data already on screen.
-    if (hasLoadedRef.current) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      // Accounts, their contacts and the deal pipeline together. allSettled so a
-      // failing contacts or deals request costs the counts, not the whole list.
-      const [accountsRes, contactsRes, dealsRes] = await Promise.allSettled([
-        fetchAccounts(),
-        fetchContacts({ limit: 500 }),
-        fetchDeals(500),
-      ]);
-
-      if (accountsRes.status === 'rejected') {
-        // Surface the failure. Returning [] here is what hid the broken lead
-        // endpoints for so long — an error must not look like an empty list.
-        throw accountsRes.reason;
-      }
-      const loaded = accountsRes.value;
-
-      // contacts.company_id is a REAL foreign key, so this join is exact. It is
-      // the join that was missing entirely: nothing ever linked the two, which is
-      // why every row read "0 contacts" with 20 contacts pointing at those very
-      // accounts.
-      let contactsByAccount: Map<string, AccountContact[]> | null = null;
-      if (contactsRes.status === 'fulfilled') {
-        contactsByAccount = new Map<string, AccountContact[]>();
-        for (const c of contactsRes.value) {
-          if (!c.companyId) continue;
-          const list = contactsByAccount.get(c.companyId) ?? [];
-          list.push({
-            id: c.id,
-            accountId: c.companyId,
-            name: c.name,
-            role: c.position || undefined,
-            email: c.email,
-            phone: c.phone,
-            isPrimary: c.isPrimary,
-          });
-          contactsByAccount.set(c.companyId, list);
-        }
-      }
-
-      // Deals only carry a company NAME. Matched case-insensitively on the
-      // trimmed name — the best available and deliberately reported as "matched"
-      // rather than "belonging to".
-      // Deals now group by the REAL foreign key, deals.company_id (migration
-      // 027), not by matching company_name text. The name match this replaces
-      // was documented as "matched rather than belonging to", and it was worse
-      // than that caveat implied: of 25 deals exactly one name matched a
-      // company row, so it attributed 1 deal and missed everything else.
-      //
-      // An unlinked deal (22 of 25) is now correctly attributed to NO account,
-      // rather than to whichever account happened to share its spelling.
-      let dealsByAccount: Map<string, AccountDeal[]> | null = null;
-      if (dealsRes.status === 'fulfilled') {
-        dealsByAccount = new Map();
-        let openCount = 0;
-        let openValue = 0;
-        // Outcome from the workspace's own stages. These two literals belong to
-        // the default pipeline, so every closed Renewals and Partnerships deal
-        // was counted as OPEN — inflating both the open-deal count and the
-        // open pipeline value on every account.
-        const stageLookup = buildStageLookup(await fetchPipelines().catch(() => []));
-        const stillOpen = isOpenWith(stageLookup);
-        for (const d of dealsRes.value) {
-          if (!stillOpen(d)) continue;
-          const value = Number(d.value) || 0;
-          // Pipeline-wide totals count every open deal, linked or not — the
-          // pipeline exists regardless of whether anyone has attributed it.
-          openCount += 1;
-          openValue += value;
-          const key = String(d.company_id ?? '').trim();
-          if (!key) continue;
-          const list = dealsByAccount.get(key) ?? [];
-          list.push({
-            id: d.id,
-            accountId: key,
-            name: d.name || d.title || d.id,
-            amount: value,
-            stage: d.stage ?? undefined,
-            closeDate: d.expected_close_date ?? undefined,
-            probability: d.probability ?? undefined,
-          });
-          dealsByAccount.set(key, list);
-        }
-        setDealStats({ openCount, openValue });
-      } else {
-        setDealStats(null);
-      }
-
-      setAccounts(loaded.map(a => ({
-        ...a,
-        // undefined, not [], when the lookup did not run — see the type comment.
-        relatedContacts: contactsByAccount ? (contactsByAccount.get(a.id) ?? []) : undefined,
-        relatedDeals: dealsByAccount ? (dealsByAccount.get(a.id) ?? []) : undefined,
-      })));
-
-      // Only a SUCCESSFUL load stamps the clock. A failed revalidation leaves
-      // the previous timestamp standing, which is the truth: the data on screen
-      // really is from then, and moving the stamp would relabel stale figures as
-      // fresh — the same defect as the "Figures are live" badge.
-      hasLoadedRef.current = true;
-      setLastLoadedAt(Date.now());
-    } catch (e: any) {
-      setError(e?.message ?? 'Could not load accounts');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+  // refreshAccounts is GONE (slice 6b). It requested every account plus 500
+  // contacts and 500 deals to join in the browser, and nothing called it since
+  // the Accounts list moved to server paging (slice 3b).
 
   // NO LOAD ON MOUNT any more (Group A item 4, slice 3b). This fetched 200
   // accounts, 500 contacts and 500 deals every time the CRM module mounted —
   // for the Accounts list, which now pages on the server, and for detail / edit /
   // merge, which now load their account by id. The remaining consumers use only
   // createAccount / updateAccount / deleteAccount, which call the API directly.
-  // refreshAccounts stays available for any caller that wants the lists.
 
   const filterAccounts = useCallback((filter: AccountFilter): EnhancedAccount[] => {
     return accounts.filter(account => {
@@ -901,7 +782,6 @@ export const AccountsProvider: React.FC<AccountsProviderProps> = ({ children }) 
         refreshing,
         lastLoadedAt,
     error,
-    refreshAccounts,
     filteredAccounts,
     selectedAccountIds,
     currentFilter,

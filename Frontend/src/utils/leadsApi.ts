@@ -688,3 +688,26 @@ export async function enrichLeadViaAPI(leadId: string): Promise<LeadEnrichmentRe
   if (!res.ok) throw new Error(await errorMessage(res, 'enrichLeadViaAPI', json));
   return json.data;
 }
+
+/** An existing lead a candidate row matches (POST /leads/duplicate-check). */
+export interface LeadDuplicateMatch {
+  id: number; first_name: string | null; last_name: string | null; email: string | null;
+  phone: string | null; company: string | null; stage: string | null;
+  matched_on: 'email' | 'phone' | 'company_last_name';
+}
+export interface LeadDuplicateRow { email?: string; phone?: string; company?: string; last_name?: string }
+
+/**
+ * Match 1..1000 candidate rows against EVERY lead in the workspace — slice 6b.
+ * Returns one entry per row, in order (null = no match). THROWS on a non-2xx:
+ * "could not check" must never read as "no duplicates".
+ */
+export async function checkLeadDuplicates(rows: LeadDuplicateRow[], excludeId?: string | number): Promise<(LeadDuplicateMatch | null)[]> {
+  const res = await fetch(`${API_BASE}/leads/duplicate-check`, {
+    method: 'POST', headers: getAuthHeaders(),
+    body: JSON.stringify({ rows, exclude_id: excludeId ?? undefined }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || `The duplicate check failed (HTTP ${res.status})`);
+  return (json.data ?? []).map((d: { match: LeadDuplicateMatch | null }) => d.match);
+}

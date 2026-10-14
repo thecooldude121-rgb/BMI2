@@ -17,7 +17,7 @@ import { PostSaveModal, PostSaveAction } from '../../components/Deal/DealForm/Po
 import { EmailToDealPanel } from '../../components/Deal/DealForm/EmailToDealPanel';
 import { TipsHelpPanel } from '../../components/Deal/DealForm/TipsHelpPanel';
 import { DuplicateCheckPanel } from '../../components/Deal/DealForm/DuplicateCheckPanel';
-import { createDeal, updateDeal, fetchDeals, getDeal } from '../../utils/dealsApi';
+import { createDeal, updateDeal, fetchDealsPage, getDeal } from '../../utils/dealsApi';
 import { parseAmountInput, convertToBaseCurrency, validateDealValue } from '../../utils/currencyUtils';
 import { BASE_CURRENCY_CODE } from '../../config/currencies';
 import { generateDealName } from '../../utils/dealNameGenerator';
@@ -140,7 +140,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   });
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
-  const [allDeals, setAllDeals] = useState<any[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   // true = user has manually typed a deal name → never auto-overwrite
   // false = name is empty or was auto-generated → safe to overwrite
@@ -160,7 +159,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   // Fetch all deals once on mount — used for both duplicate deal check and account warning
   useEffect(() => {
-    fetchDeals().then(setAllDeals).catch(() => {});
   }, []);
 
   // Load deal data if editing
@@ -225,14 +223,15 @@ export const ComprehensiveDealFormPage: React.FC = () => {
 
   // Check for duplicates when account/contact changes (debounced)
   useEffect(() => {
-    if (formData.accountName && formData.dealValue) {
+    if (formData.accountId) {
       const timer = setTimeout(() => {
         checkForDuplicates();
-      }, 1000);
+      }, 300);
 
       return () => clearTimeout(timer);
     }
-  }, [formData.accountName, formData.dealValue]);
+    setDuplicateDeals([]);
+  }, [formData.accountId]);
 
   // Mark as unsaved on any form change
   useEffect(() => {
@@ -277,6 +276,7 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         dealType: deal.deal_type || DEFAULT_DEAL_TYPE.id,
         stage: deal.stage || pipeline?.stages[0]?.slug || '',
         probability: deal.probability ?? 0,
+        accountId: deal.company_id ?? '',
         accountName: deal.company_name ?? '',
         primaryContactId: primary?.id ?? '',
         primaryContactName: deal.contact_name ?? primary?.name ?? '',
@@ -315,9 +315,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         setWinProbOverrideReason(deal.win_prob_override_reason);
       }
 
-      if (deal.company_name) {
+      if (deal.company_id) {
         setSelectedAccount({
-          id: deal.company_name,
+          id: deal.company_id,
           type: 'account',
           name: deal.company_name,
           industry: deal.account_industry ?? undefined,
@@ -342,13 +342,15 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     }
   };
 
+  /**
+   * Existing deals on the PICKED account, asked of the server (slice 6b). It
+   * scanned the first 50 deals for a company NAME containing the typed text.
+   */
   const checkForDuplicates = async () => {
-    if (!formData.accountName.trim()) { setDuplicateDeals([]); return; }
+    if (!formData.accountId) { setDuplicateDeals([]); return; }
     try {
-      const all = allDeals.length ? allDeals : await fetchDeals();
-      const q = formData.accountName.toLowerCase();
-      const matches = all
-        .filter((d: any) => (d.company_name || d.name || '').toLowerCase().includes(q))
+      const page = await fetchDealsPage({ company_id: formData.accountId, sort: 'updated_at', dir: 'desc', limit: 6, offset: 0 });
+      const matches = page.deals
         .filter((d: any) => !isEditMode || d.id !== id) // exclude self in edit mode
         .slice(0, 5)
         .map((d: any) => ({
@@ -363,6 +365,12 @@ export const ComprehensiveDealFormPage: React.FC = () => {
     } catch {
       setDuplicateDeals([]);
     }
+  };
+
+  /** The picker's choice: a real account, or none (slice 6b). */
+  const handleAccountPick = (account: { id: string; label: string; detail?: string } | null) => {
+    setSelectedAccount(account ? { id: account.id, type: 'account', name: account.label, industry: account.detail } : null);
+    setFormData(prev => ({ ...prev, accountId: account?.id ?? '', accountName: account?.label ?? '' }));
   };
 
   const handleAccountSelect = (account: any) => {
@@ -399,9 +407,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       primaryContactId: contact.id,
       primaryContactName: contact.name,
       contactEmail: contact.email || '',
-      // If no account is linked yet, auto-fill company from the contact so
-      // the deal name generator has enough context to fire
-      ...(!prev.accountName && contact.company ? { accountName: contact.company } : {}),
+      // It used to copy the contact's company NAME into the account field. An
+      // account is linked only by picking it (slice 6b, no linking by name).
       sourceJourney: {
         type: 'contact',
         name: contact.name,
@@ -486,9 +493,6 @@ export const ComprehensiveDealFormPage: React.FC = () => {
         if (!value) return 'Deal type is required';
         return null;
 
-      case 'accountName':
-        if (!value || value.trim().length === 0) return 'Account is required';
-        return null;
 
       case 'primaryContactName':
         if (!value || value.trim().length === 0) return 'Primary contact is required';
@@ -665,7 +669,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
   };
 
   const validateForm = () => {
-    const required = ['dealName', 'dealValue', 'closeDate', 'dealType', 'stage', 'accountName', 'primaryContactName', 'owner', 'source'];
+    // Account is OPTIONAL: pick a real one or leave it empty (decided 2026-10-14).
+    const required = ['dealName', 'dealValue', 'closeDate', 'dealType', 'stage', 'primaryContactName', 'owner', 'source'];
     const missing = required.filter(field => !formData[field as keyof typeof formData]);
     return missing.length === 0;
   };
@@ -696,6 +701,9 @@ export const ComprehensiveDealFormPage: React.FC = () => {
       close_date_is_past: isCloseDatePast(formData.closeDate),
       close_date_override_reason: formData.closeDateOverrideReason?.trim() || undefined,
       assigned_to: formData.owner || undefined,
+      // The REAL link. company_name stays as the display copy; with no account
+      // picked, an existing deal's legacy name is kept, never matched to one.
+      company_id: formData.accountId || (isEditMode ? null : undefined),
       company_name: formData.accountName || undefined,
       contact_name: formData.primaryContactName || undefined,
       contact_email: formData.contactEmail || undefined,
@@ -1069,9 +1077,8 @@ export const ComprehensiveDealFormPage: React.FC = () => {
               onChange={handleFieldChange}
               selectedAccount={selectedAccount}
               selectedContact={selectedContact}
-              onSearchAccount={() => setShowSmartSearch(true)}
+              onAccountPick={handleAccountPick}
               validationErrors={validationErrors}
-              allDeals={allDeals}
             />
 
             <DealFormOwnership
