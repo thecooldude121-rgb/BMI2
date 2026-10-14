@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock, Sparkles, Rocket, Shield, Award, Zap } from 'lucide-react';
+import { Building2, Eye, EyeOff, AlertCircle, CheckCircle, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 /**
@@ -201,18 +201,10 @@ const Login: React.FC = () => {
     }
   };
 
-  // SSO handlers
-  const handleGoogleSSO = () => {
-    setErrors({ general: 'Google SSO is not configured yet.' });
-  };
-
-  const handleMicrosoftSSO = () => {
-    setErrors({ general: 'Microsoft SSO is not configured yet.' });
-  };
-
-  const handleForgotPassword = () => {
-    setErrors({ general: 'Password reset functionality will be available soon.' });
-  };
+  // Single sign-on and password reset do not exist (password reset is blocked on
+  // a transactional-email decision — CLAUDE.md "Known gaps in the auth shell").
+  // Their controls are DISABLED and labelled, as the Figma frame draws them;
+  // they used to look live and answer a click with an error message.
 
   // Load remembered email
   useEffect(() => {
@@ -224,106 +216,25 @@ const Login: React.FC = () => {
     }
   }, []);
 
-  const uspItems = [
-    {
-      icon: Sparkles,
-      title: 'Intuitive, Modern User Experience',
-      description: 'Designed with simplicity in mind, BMI offers a clean, modern interface that reduces training time and boosts team productivity from day one.'
-    },
-    {
-      icon: Zap,
-      title: 'Fully Customizable & Modular CRM',
-      description: 'Tailor every module to your workflow. Add, remove, or configure features without developer support—BMI adapts to your business, not the other way around.'
-    },
-    {
-      icon: Rocket,
-      title: 'Advanced Automation & Intelligence',
-      description: 'Leverage AI-driven insights and smart automation to eliminate repetitive tasks, predict customer behavior, and close deals faster.'
-    },
-    {
-      icon: Shield,
-      title: 'Transparent, Actionable Insights',
-      description: 'Real-time dashboards and analytics provide clear visibility into your sales pipeline, team performance, and growth opportunities at a glance.'
-    },
-    {
-      icon: Award,
-      title: 'Built to Outperform Leading CRMs',
-      description: 'BMI combines the power of Salesforce, the usability of HubSpot, and the affordability of Zoho—delivering enterprise-grade capabilities at a fraction of the cost.'
-    }
-  ];
-
-  const trustedPartners = [
-    'Salesforce', 'HubSpot', 'Zoho', 'Microsoft Dynamics', 'Pipedrive', 'Zendesk'
-  ];
-
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Left Section - About BMI */}
       <div className="lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white p-8 lg:p-12 flex flex-col justify-center">
         <div className="max-w-xl mx-auto w-full">
-          {/* Logo and Branding */}
-          <div className="mb-8 lg:mb-12">
-            <div className="flex items-center space-x-3 mb-4">
-              <Building2 className="h-12 w-12 text-white" strokeWidth={2.5} />
-              <div>
-                <h1 className="text-4xl font-bold tracking-tight">BMI Platform</h1>
-                <p className="text-blue-100 text-lg mt-1">Billboard Management Intelligence</p>
-              </div>
+          {/* Factual copy only. This panel used to claim AI-driven predictions, a
+              "Built to Outperform Leading CRMs" comparison, a "Trusted by Industry
+              Leaders" row of other vendors' names and "enterprise-grade security
+              & compliance" — none of which is true of this product — under an OOH
+              billboard description of a different business. */}
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3">
+              <Building2 className="h-12 w-12 text-white" strokeWidth={2.5} aria-hidden="true" />
+              <h1 className="text-4xl font-bold tracking-tight">BMI Platform</h1>
             </div>
             <p className="text-blue-50 text-lg leading-relaxed">
-              Transform your OOH advertising operations with our AI-powered platform designed for global digital billboard networks and media owners.
+              Leads, accounts, contacts, deals and the activity around them, in one workspace.
             </p>
-          </div>
-
-          {/* USPs */}
-          <div className="mb-8 lg:mb-12">
-            <h2 className="text-2xl font-bold mb-6 flex items-center">
-              <Zap className="h-6 w-6 mr-2" />
-              Why Choose BMI Platform?
-            </h2>
-            <div className="space-y-4">
-              {uspItems.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={index}
-                    className="flex items-start space-x-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 hover:bg-white/15 transition-all duration-200"
-                  >
-                    <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
-                      <Icon className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg mb-1">{item.title}</h3>
-                      <p className="text-blue-100 text-sm">{item.description}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Trusted Partners */}
-          <div>
-            <h3 className="text-lg font-semibold mb-4 flex items-center">
-              <Award className="h-5 w-5 mr-2" />
-              Trusted by Industry Leaders
-            </h3>
-            <div className="flex flex-wrap gap-3">
-              {trustedPartners.map((partner, index) => (
-                <div
-                  key={index}
-                  className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-sm font-medium hover:bg-white/20 transition-colors"
-                >
-                  {partner}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Security Badge */}
-          <div className="mt-8 lg:mt-12 flex items-center space-x-2 text-blue-100">
-            <Shield className="h-5 w-5" />
-            <span className="text-sm">Enterprise-grade security & compliance</span>
+            <p className="text-blue-100 text-sm">Sign in to your assigned workspace. Access is by invitation from your workspace admin.</p>
           </div>
         </div>
       </div>
@@ -511,10 +422,11 @@ const Login: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={handleForgotPassword}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                disabled
+                title="Password reset is coming soon"
+                className="text-sm font-medium text-gray-500 cursor-not-allowed"
               >
-                Forgot password?
+                Forgot password? · Coming soon
               </button>
             </div>
 
@@ -602,8 +514,8 @@ const Login: React.FC = () => {
           <div className="mt-6 grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={handleGoogleSSO}
-              disabled={loading}
+              disabled
+              title="Google sign-in is not configured"
               className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
@@ -612,12 +524,12 @@ const Login: React.FC = () => {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              Google
+              Google · not configured
             </button>
             <button
               type="button"
-              onClick={handleMicrosoftSSO}
-              disabled={loading}
+              disabled
+              title="Microsoft sign-in is not configured"
               className="flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 23 23">
@@ -627,14 +539,10 @@ const Login: React.FC = () => {
                 <path fill="#05a6f0" d="M1 12h10v10H1z"/>
                 <path fill="#ffba08" d="M12 12h10v10H12z"/>
               </svg>
-              Microsoft
+              Microsoft · not configured
             </button>
           </div>
 
-          {/* Footer */}
-          <div className="mt-8 text-center text-xs text-gray-500">
-            © 2024 BMI Platform. All rights reserved.
-          </div>
         </div>
       </div>
     </div>

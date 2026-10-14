@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { useNavigate } from 'react-router-dom';
 import ImportWizard from '../../components/Leads/ImportWizard';
-import { Upload, Check, Settings, Calendar, TrendingUp, Zap, Download, AlertCircle, X, ArrowLeft, Loader2 } from 'lucide-react';
+import { Upload, Check, Calendar, TrendingUp, Download, AlertCircle, X, ArrowLeft } from 'lucide-react';
 
 interface Integration {
   id: string;
@@ -35,27 +35,10 @@ interface ImportHistory {
 
 const ImportLeadsPage: React.FC = () => {
   const navigate = useNavigate();
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
-  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [showImportDetailsModal, setShowImportDetailsModal] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [selectedImport, setSelectedImport] = useState<ImportHistory | null>(null);
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
-  const [importSuccess, setImportSuccess] = useState(false);
-  const [importedCount, setImportedCount] = useState(0);
   const [showFullHistory, setShowFullHistory] = useState(false);
-
-  const [configForm, setConfigForm] = useState({
-    assignedTo: 'Alex Rodriguez (You)',
-    defaultStatus: 'New',
-    tags: 'Lead Gen, Apollo',
-    syncFrequency: 'Every 6 hours',
-    aiScoring: true
-  });
 
   const integrations: Integration[] = [
     {
@@ -66,44 +49,24 @@ const ImportLeadsPage: React.FC = () => {
       name: 'Apollo.io',
       status: 'not-connected',
       logo: '🚀',
-      benefits: [
-        'B2B contact database',
-        'Email sequences',
-        'Contact enrichment'
-      ]
     },
     {
       id: 'zoominfo',
       name: 'ZoomInfo',
       status: 'not-connected',
       logo: '🔍',
-      benefits: [
-        'Access to 100M+ B2B contacts',
-        'Advanced company intelligence',
-        'Direct dial phone numbers'
-      ]
     },
     {
       id: 'linkedin',
       name: 'LinkedIn Sales Navigator',
       status: 'not-connected',
       logo: '💼',
-      benefits: [
-        'Advanced LinkedIn search',
-        'InMail capabilities',
-        'Lead recommendations'
-      ]
     },
     {
       id: 'lusha',
       name: 'Lusha',
       status: 'not-connected',
       logo: '📞',
-      benefits: [
-        'Contact enrichment',
-        'Email finder',
-        'Phone number lookup'
-      ]
     }
   ];
 
@@ -111,82 +74,6 @@ const ImportLeadsPage: React.FC = () => {
   // value splits). No import from an external provider has ever run; CSV
   // imports are not recorded as history either. Emptied 2026-10-03.
   const importHistory: ImportHistory[] = [];
-
-  const handleImportNow = (integration: Integration) => {
-    setSelectedIntegration(integration);
-    setImportSuccess(false);
-    setImportProgress(0);
-    setShowImportModal(true);
-  };
-
-  const handleConfigure = (integration: Integration) => {
-    setSelectedIntegration(integration);
-    setConfigForm({
-      assignedTo: integration.assignedTo || 'Alex Rodriguez (You)',
-      defaultStatus: integration.leadStatus || 'New',
-      tags: integration.tags?.join(', ') || '',
-      syncFrequency: integration.frequency || 'Every 6 hours',
-      aiScoring: integration.aiScoring || false
-    });
-    setShowConfigModal(true);
-  };
-
-  const handleConnect = (integration: Integration) => {
-    setSelectedIntegration(integration);
-    setShowConnectModal(true);
-  };
-
-  const handleDisconnectClick = (integration: Integration) => {
-    setSelectedIntegration(integration);
-    setShowDisconnectModal(true);
-  };
-
-  const handleConfirmDisconnect = () => {
-    setShowDisconnectModal(false);
-    setTimeout(() => {
-      alert(`Disconnecting ${selectedIntegration?.name} is not available yet — nothing was disconnected and no sync was stopped.`);
-    }, 100);
-  };
-
-  const handleStartImport = () => {
-    setImporting(true);
-    setImportProgress(0);
-
-    const interval = setInterval(() => {
-      setImportProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setImporting(false);
-          setImportSuccess(true);
-          // PHASE 0: was setImportedCount(25) — a literal, reported as
-          // "Successfully imported 25 new leads" for any integration. Nothing
-          // is fetched or created; there is no integration backend at all.
-          setImportedCount(0);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 300);
-  };
-
-  const handleImportComplete = () => {
-    setShowImportModal(false);
-    navigate('/crm/leads?filter=just-imported');
-  };
-
-  const handleSaveConfig = () => {
-    setShowConfigModal(false);
-    setTimeout(() => {
-      alert('Saving integration configuration is not available yet — nothing was saved.');
-    }, 100);
-  };
-
-  const handleCompleteConnection = () => {
-    setShowConnectModal(false);
-    setTimeout(() => {
-      alert(`Connecting ${selectedIntegration?.name} is not available yet — there is no OAuth flow behind this, so nothing was connected.`);
-    }, 100);
-  };
 
   const handleViewTheseLeads = (importItem: ImportHistory) => {
     navigate(`/crm/leads?filter=import-${importItem.id}&date=${importItem.date}`);
@@ -289,84 +176,14 @@ const ImportLeadsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {integration.status === 'connected' ? (
-                  <div className="space-y-3 mb-4">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Last sync:</span>
-                      <span className="font-medium text-gray-900">{integration.lastSync}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Total imported:</span>
-                      <span className="font-medium text-gray-900">{integration.totalImported?.toLocaleString()} leads</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Auto-sync:</span>
-                      <span className="flex items-center font-medium text-green-600">
-                        <Zap className="h-3 w-3 mr-1" />
-                        Enabled ({integration.frequency})
-                      </span>
-                    </div>
-                    <div className="pt-2 border-t border-gray-200">
-                      <div className="text-xs text-gray-600 mb-2">Settings:</div>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">
-                          Auto-assign: {integration.assignedTo}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 rounded text-xs">
-                          Status: {integration.leadStatus}
-                        </span>
-                        {integration.tags?.map(tag => (
-                          <span key={tag} className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2 mb-4">
-                    <p className="text-sm text-gray-600 font-medium mb-2">Benefits:</p>
-                    {integration.benefits?.map((benefit, idx) => (
-                      <div key={idx} className="flex items-start space-x-2 text-sm text-gray-600">
-                        <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <span>{benefit}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  {integration.status === 'connected' ? (
-                    <>
-                      <Button
-                        onClick={() => handleImportNow(integration)}
-                        fullWidth
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Import Now
-                      </Button>
-                      <button
-                        onClick={() => handleConfigure(integration)}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
-                      >
-                        <Settings className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDisconnectClick(integration)}
-                        className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm"
-                      >
-                        Disconnect
-                      </button>
-                    </>
-                  ) : (
-                    <Button
-                      onClick={() => handleConnect(integration)}
-                      fullWidth
-                    >
-                      Connect {integration.name}
-                    </Button>
-                  )}
-                </div>
+                {/* No provider is wired: there is no OAuth flow and no sync behind
+                    any of these. The card used to list the provider's marketing
+                    claims ("Access to 100M+ B2B contacts") and a live Connect button
+                    whose modal ended in an alert. Provider sourcing is the Lead
+                    Generation product's job; here it stays "Coming soon". */}
+                <Button disabled fullWidth title={`Connecting ${integration.name} is coming soon`}>
+                  Connect · Coming soon
+                </Button>
               </div>
             ))}
           </div>
@@ -515,360 +332,7 @@ const ImportLeadsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* How It Works */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">How It Works</h2>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-            <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
-              <span className="mr-2">🔄</span>
-              Automatic Lead Import Process
-            </h3>
-            <div className="space-y-6">
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                  1
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Connect Your Tool</h4>
-                  <p className="text-gray-600">Link Apollo.io, ZoomInfo, or other tools</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                  2
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Auto-Sync Enabled</h4>
-                  <p className="text-gray-600">New leads automatically flow into your CRM</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                  3
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">AI Scoring</h4>
-                  <p className="text-gray-600">🤖 Every lead is scored automatically (1-100)</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                  4
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Auto-Assignment</h4>
-                  <p className="text-gray-600">Leads assigned to team members based on rules</p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">
-                  5
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">Ready to Contact</h4>
-                  <p className="text-gray-600">Start selling immediately</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
       </div>
-
-      {/* Import Progress Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            {!importSuccess ? (
-              <>
-                <div className="text-center mb-6">
-                  <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                    {importing ? (
-                      <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-                    ) : (
-                      <Upload className="h-8 w-8 text-blue-600" />
-                    )}
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    {importing ? 'Importing Leads...' : 'Ready to Import'}
-                  </h3>
-                  <p className="text-gray-600">
-                    {importing
-                      ? 'Please wait while we import your leads from ' + selectedIntegration?.name
-                      : 'Import leads from ' + selectedIntegration?.name
-                    }
-                  </p>
-                </div>
-
-                {importing && (
-                  <div className="mb-6">
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className="bg-brand-600 h-3 rounded-full transition-all duration-300"
-                        style={{ width: `${importProgress}%` }}
-                      />
-                    </div>
-                    <p className="text-sm text-gray-600 text-center mt-2">{importProgress}% complete</p>
-                  </div>
-                )}
-
-                {!importing && (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowImportModal(false)}
-                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <Button
-                      onClick={handleStartImport}
-                      fullWidth
-                    >
-                      Start Import
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="text-center mb-6">
-                  <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                    <Check className="h-8 w-8 text-green-600" />
-                  </div>
-                  {/* PHASE 0: said "Import Complete! Successfully imported 25 new
-                      leads" off a fake progress bar. There is no integration
-                      backend, so nothing was fetched or created. The working CSV
-                      importer on this page is the separate ImportWizard below. */}
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    Nothing was imported
-                  </h3>
-                  <p className="text-gray-600 mb-4">
-                    Importing from {selectedIntegration?.name} is not available yet — this screen
-                    cannot connect to it. To load leads from a file, use <span className="font-semibold">Import from CSV</span> instead.
-                  </p>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowImportModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                  >
-                    Close
-                  </button>
-                  <Button
-                    onClick={handleImportComplete}
-                    fullWidth
-                  >
-                    View Imported Leads
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Configure Settings Modal */}
-      {showConfigModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                Configure {selectedIntegration?.name} Settings
-              </h3>
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Auto-assign to
-                </label>
-                <select aria-label="Auto-assign to"
-                  value={configForm.assignedTo}
-                  onChange={(e) => setConfigForm({...configForm, assignedTo: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option>Alex Rodriguez (You)</option>
-                  <option>Sarah Johnson</option>
-                  <option>Mike Chen</option>
-                  <option>Round Robin</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Default Lead Status
-                </label>
-                <select aria-label="Default Lead Status"
-                  value={configForm.defaultStatus}
-                  onChange={(e) => setConfigForm({...configForm, defaultStatus: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option>New</option>
-                  <option>Contacted</option>
-                  <option>Qualified</option>
-                  <option>Unqualified</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tags (comma-separated)
-                </label>
-                <input aria-label="Tags (comma-separated)"
-                  type="text"
-                  value={configForm.tags}
-                  onChange={(e) => setConfigForm({...configForm, tags: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Lead Gen, Apollo, Outbound"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Auto-sync Frequency
-                </label>
-                <select aria-label="Auto-sync Frequency"
-                  value={configForm.syncFrequency}
-                  onChange={(e) => setConfigForm({...configForm, syncFrequency: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option>Every 1 hour</option>
-                  <option>Every 3 hours</option>
-                  <option>Every 6 hours</option>
-                  <option>Every 12 hours</option>
-                  <option>Daily</option>
-                  <option>Manual only</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900">AI-Powered Lead Scoring</p>
-                  <p className="text-sm text-gray-600">Automatically score leads using AI</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={configForm.aiScoring}
-                    onChange={(e) => setConfigForm({...configForm, aiScoring: e.target.checked})}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
-                </label>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <Button
-                onClick={handleSaveConfig}
-                fullWidth
-              >
-                Save Settings
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Disconnect Confirmation Modal */}
-      {showDisconnectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertCircle className="h-6 w-6 text-red-600" />
-              </div>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2 text-center">
-              Disconnect {selectedIntegration?.name}?
-            </h3>
-            <p className="text-gray-600 text-center mb-6">
-              Are you sure you want to disconnect this integration? Auto-sync will be stopped and you won't receive new leads automatically.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDisconnectModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDisconnect}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-              >
-                Yes, Disconnect
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Connect Integration Modal */}
-      {showConnectModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                Connect {selectedIntegration?.name}
-              </h3>
-              <button
-                onClick={() => setShowConnectModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <p className="text-gray-600 mb-4">
-                Enter your {selectedIntegration?.name} API key to connect and start importing leads.
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  API Key
-                </label>
-                <input aria-label="API Key"
-                  type="password"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your API key"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                You can find your API key in {selectedIntegration?.name} settings
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConnectModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <Button
-                onClick={handleCompleteConnection}
-                fullWidth
-              >
-                Connect
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Import Details Modal */}
       {showImportDetailsModal && selectedImport && (
