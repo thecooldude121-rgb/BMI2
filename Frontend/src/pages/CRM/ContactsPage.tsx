@@ -276,10 +276,6 @@ const ContactsPage: React.FC = () => {
     navigate(`/crm/contacts/${contactId}`);
   };
 
-  const handleViewDeal = (dealId: string) => {
-    navigate(`/crm/deals/${dealId}`);
-  };
-
   const handleReengage = (contact: Contact) => {
     setReengageContact(contact);
     setShowReengagementModal(true);
@@ -750,21 +746,9 @@ const ContactsPage: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Active Deal */}
-                            {contact.activeDeal && (
-                              <div className="flex items-center space-x-2 text-sm">
-                                <span className="text-green-600 font-semibold">💼 Active Deal:</span>
-                                <span
-                                  onClick={() => handleViewDeal(contact.id)}
-                                  className="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer underline decoration-2 transition-colors"
-                                >
-                                  {contact.activeDeal.title} ({contact.activeDeal.stage})
-                                </span>
-                                <span className="text-gray-500">•</span>
-                                <span className="text-sm font-bold text-green-700">${contact.activeDeal.value.toLocaleString()}</span>
-                              </div>
-                            )}
-
+                            {/* An "Active Deal" block was here. Nothing ever set
+                                contact.activeDeal, and it would have printed every
+                                deal's value with "$" whatever its currency (H2). */}
                             {/* Last Contact */}
                             <div className="flex items-center space-x-2 text-sm">
                               <span className="text-gray-600 font-medium">Last contact:</span>

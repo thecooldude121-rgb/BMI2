@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { isReservedRecordSegment } from '../../utils/reservedRouteSegments';
 import {
-  getDeal, updateDeal, createDeal,
+  getDeal, updateDeal, createDeal, deleteDealViaAPI,
   transitionDealStage, fetchDealStageHistory,
 } from '../../utils/dealsApi';
 import { buildStageSpans, type DealStageSpan } from '../../utils/dealStageHistory';
@@ -31,6 +31,7 @@ import {
   DuplicateDealModal,
 } from '../../components/Deal/DealModals';
 import { useToast } from '../../contexts/ToastContext';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
 import { useAuth } from '../../contexts/AuthContext';
 import type { DealValueHistoryEntry } from '../../types/dealManagement';
 // computeMomentum / MomentumInput imports removed in Phase 0 — the engine is
@@ -96,6 +97,23 @@ const DealDetail: React.FC = () => {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showTopMoreActions, setShowTopMoreActions] = useState(false);
   const [showDuplicateDeal, setShowDuplicateDeal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteDeal = async () => {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await deleteDealViaAPI(id);
+      setConfirmDelete(false);
+      showToast('Deal deleted', 'success');   // only after the server's 2xx
+      navigate('/crm/deals');
+    } catch (e: any) {
+      setConfirmDelete(false);
+      showToast(e?.message ?? 'The deal was not deleted.', 'error');   // e.g. a 403 for sales, verbatim
+    } finally {
+      setDeleting(false);
+    }
+  };
   const [isDuplicating, setIsDuplicating] = useState(false);
   // Only read now. handleViewBattleCard used to set it from the AI panel's
   // "View Battle Card" action; DealDetailsPanel expands cards on its own.
@@ -394,9 +412,6 @@ const DealDetail: React.FC = () => {
           break;
         case 'm':
           setShowMeetingScheduler(true);
-          break;
-        case 'p':
-          showToast('Proposal creator coming soon', 'info');
           break;
         case 's':
           if (deal.stageNumber < deal.totalStages) setShowStageChange(true);
@@ -775,9 +790,6 @@ const DealDetail: React.FC = () => {
       case 'clone':
         setShowDuplicateDeal(true);
         break;
-      case 'merge':
-        showToast('Merge Deal feature coming soon', 'info');
-        break;
       case 'change-owner':
         showToast('Use the "Assign Owner" button on the owner card', 'info');
         break;
@@ -842,21 +854,12 @@ const DealDetail: React.FC = () => {
         }
         break;
       }
-      case 'archive':
-        showToast('Deal archived', 'info');
-        break;
       case 'delete':
-        if (confirm('Are you sure you want to delete this deal?')) {
-          showToast('Deal deleted', 'success');
-          navigate('/crm/deals');
-        }
+        // It confirmed, toasted "Deal deleted" and navigated away — and never
+        // called the API, so the deal was still there. Now a real DELETE.
+        setConfirmDelete(true);
         break;
-      case 'export-pdf':
-        showToast('Exporting deal as PDF...', 'success');
-        break;
-      case 'share':
-        showToast('Share link copied to clipboard', 'success');
-        break;
+      // archive / export-pdf / share are disabled "Coming soon" in the menu.
     }
   };
 
@@ -1144,7 +1147,6 @@ const DealDetail: React.FC = () => {
         onEmail={() => handleSendEmail(primaryStakeholder?.email ?? '', '', '')}
         onCall={() => setShowCallLog(true)}
         onMeeting={() => setShowMeetingScheduler(true)}
-        onProposal={() => showToast('Proposal creator coming soon', 'info')}
         onMoveStage={() => setShowStageChange(true)}
         onUpdateAmount={() => setShowUpdateAmount(true)}
         onAssignOwner={handleAssignOwner}
@@ -1462,6 +1464,15 @@ const DealDetail: React.FC = () => {
         onUpdate={handleUpdateAmount}
       />
 
+      <ConfirmationModal
+        isOpen={confirmDelete}
+        type="danger"
+        title="Delete deal"
+        message={`Delete “${deal?.name ?? 'this deal'}”? This cannot be undone.`}
+        confirmLabel={deleting ? 'Deleting…' : 'Delete deal'}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => { void deleteDeal(); }}
+      />
       <DuplicateDealModal
         isOpen={showDuplicateDeal}
         onClose={() => setShowDuplicateDeal(false)}

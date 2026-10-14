@@ -279,7 +279,7 @@ const DocumentsLibrary: React.FC = () => {
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedOwners, setSelectedOwners] = useState<string[]>([]);
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'name-asc' | 'name-desc' | 'size-desc' | 'size-asc' | 'views' | 'downloads'>('recent');
+  const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'name-asc' | 'name-desc' | 'size-desc' | 'size-asc'>('recent');
   const [listSortColumn, setListSortColumn] = useState<'name' | 'category' | 'size' | 'owner' | 'uploaded'>('uploaded');
   const [listSortDirection, setListSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
@@ -810,10 +810,6 @@ const DocumentsLibrary: React.FC = () => {
       docs.sort((a, b) => b.file_size - a.file_size);
     } else if (sortBy === 'size-asc') {
       docs.sort((a, b) => a.file_size - b.file_size);
-    } else if (sortBy === 'views') {
-      docs.sort((a, b) => (b.view_count || b.access_count || 0) - (a.view_count || a.access_count || 0));
-    } else if (sortBy === 'downloads') {
-      docs.sort((a, b) => (b.download_count || 0) - (a.download_count || 0));
     }
 
     return docs;
@@ -1166,21 +1162,23 @@ const DocumentsLibrary: React.FC = () => {
     showToast(`Filtering by source: ${source}`, 'success');
   };
 
+  // "View" opens the document's page. For PDFs and images it used to show
+  // "Opening preview for …" and open nothing (H2, 2026-10-14).
   const handleViewDocument = (doc: Document) => {
-    if (doc.file_type.toLowerCase().includes('pdf') || doc.file_type.toLowerCase().includes('image') || doc.file_type.toLowerCase().includes('jpg') || doc.file_type.toLowerCase().includes('png')) {
-      showToast(`Opening preview for ${doc.document_name}`, 'info');
-    } else {
-      handleDownloadDocument(doc);
-    }
+    if (doc.id) navigate(`/crm/documents/${encodeURIComponent(doc.id)}`);
   };
 
-  const handleDownloadDocument = (doc: Document) => {
-    setDocuments(prev => prev.map(d =>
-      d.document_id === doc.document_id
-        ? { ...d, download_count: (d.download_count || 0) + 1 }
-        : d
-    ));
-    showToast(`Downloading ${doc.document_name}`, 'success');
+  // A REAL download (GET /documents/:id/content, as the bulk download does). It
+  // bumped a browser-side "downloads" counter and toasted "Downloading …"
+  // without fetching anything (H2, 2026-10-14).
+  const handleDownloadDocument = async (doc: Document) => {
+    if (!doc.id) return;
+    try {
+      await documentsService.downloadDocument(doc.id);
+      showToast(`Downloaded ${doc.document_name}`, 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'The download failed.', 'error');
+    }
   };
 
   const handleShareDocument = (doc: Document) => {
@@ -1284,8 +1282,16 @@ const DocumentsLibrary: React.FC = () => {
     setPreviewModalOpen(true);
   };
 
-  const handleRecentDownload = (doc: any) => {
-    showToast(`Downloading: ${doc.document_name}`, 'success');
+  // A real download. It only toasted "Downloading: <name>" (with name undefined).
+  const handleRecentDownload = async (doc: { id: string; name: string }): Promise<boolean> => {
+    try {
+      await documentsService.downloadDocument(doc.id);
+      showToast(`Downloaded ${doc.name}`, 'success');
+      return true;
+    } catch (e: any) {
+      showToast(e?.message ?? 'The download failed.', 'error');
+      return false;
+    }
   };
 
   const handleClosePreviewModal = () => {
@@ -1294,8 +1300,7 @@ const DocumentsLibrary: React.FC = () => {
   };
 
   const handlePreviewDownload = (doc: any) => {
-    showToast(`Downloading: ${doc.document_name}`, 'success');
-    handleDownloadDocument(doc);
+    void handleDownloadDocument(doc);
   };
 
   const handlePreviewViewDetails = (doc: any) => {
@@ -1799,8 +1804,6 @@ const DocumentsLibrary: React.FC = () => {
                           {sortBy === 'name-desc' && 'Name (Z-A)'}
                           {sortBy === 'size-desc' && 'Largest Size'}
                           {sortBy === 'size-asc' && 'Smallest Size'}
-                          {sortBy === 'views' && 'Most Viewed'}
-                          {sortBy === 'downloads' && 'Most Downloaded'}
                         </span>
                         <ChevronDown className="w-4 h-4" style={{ color: '#6b7280' }} />
                       </button>
@@ -1823,8 +1826,8 @@ const DocumentsLibrary: React.FC = () => {
                                 { value: 'name-desc', label: 'Name (Z-A)' },
                                 { value: 'size-desc', label: 'Largest Size' },
                                 { value: 'size-asc', label: 'Smallest Size' },
-                                { value: 'views', label: 'Most Viewed' },
-                                { value: 'downloads', label: 'Most Downloaded' }
+                                // "Most Viewed" / "Most Downloaded" are gone: views and
+                                // downloads are not recorded, so those sorts sorted nothing.
                               ].map(option => (
                                 <button
                                   key={option.value}
@@ -2216,16 +2219,9 @@ const DocumentsLibrary: React.FC = () => {
                             <span>{formatFileSize(doc.file_size)}</span>
                           </div>
 
-                          <div className="flex items-center gap-3 mb-3" style={{ fontSize: '13px', color: '#6b7280' }}>
-                            <div className="flex items-center gap-1">
-                              <Eye className="w-3 h-3" />
-                              <span>{doc.view_count || 0} views</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Download className="w-3 h-3" />
-                              <span>{doc.download_count || 0} downloads</span>
-                            </div>
-                          </div>
+                          {/* "N views · N downloads" was here — a fabricated 0 for counts
+                              nothing records (CLAUDE.md: document telemetry needs an
+                              events table). */}
 
                           <div className="mb-4 pt-3" style={{ borderTop: '1px solid #e5e7eb' }}>
                             <p style={{ fontSize: '13px', color: '#6b7280' }} className="mb-2">Related to:</p>

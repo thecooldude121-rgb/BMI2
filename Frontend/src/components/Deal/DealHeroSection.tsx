@@ -1117,7 +1117,7 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
 
               {/* Item 12: solid filled amber CTA buttons */}
               <div className="flex items-center gap-2 shrink-0">
-                {priorityAction.ctas.slice(0, 2).map(cta => (
+                {priorityAction.ctas.filter(c => onProposal || !c.toLowerCase().includes('proposal')).slice(0, 2).map(cta => (
                   <button
                     key={cta}
                     onClick={() => handleBannerCTA(cta)}
@@ -1173,10 +1173,12 @@ export const DealHeroSection: React.FC<DealHeroSectionProps> = ({
               Meeting
               <KbdBadge char="M" />
             </button>
-            <button title="Proposal (P)" onClick={onProposal} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-orange-500 hover:bg-orange-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
+            {/* No proposal feature exists: without a handler this is a disabled
+                "Coming soon" (it was a live orange button that only toasted). */}
+            <button title={onProposal ? 'Proposal (P)' : 'Proposals are coming soon'} onClick={onProposal} disabled={!onProposal}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap flex-shrink-0 transition-colors ${onProposal ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'cursor-not-allowed bg-gray-200 text-gray-500'}`}>
               <FileText className="h-3.5 w-3.5" />
-              Proposal
-              <KbdBadge char="P" />
+              {onProposal ? <>Proposal<KbdBadge char="P" /></> : 'Proposal · Coming soon'}
             </button>
             <button title="Note (N)" onClick={() => onMoreAction('add-note')} className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap flex-shrink-0">
               <StickyNote className="h-3.5 w-3.5" />

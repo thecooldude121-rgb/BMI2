@@ -300,9 +300,6 @@ const AccountDetail: React.FC = () => {
     }
   };
 
-  // Accounts have no is_archived column (deals gained one in migration 018;
-  // companies did not). Say so rather than claim it happened.
-  const notBuilt = (what: string) => () => alert(`${what} is not available yet.`);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -435,16 +432,16 @@ const AccountDetail: React.FC = () => {
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                         <GitMerge className="h-4 w-4" /> Merge account
                       </button>
-                      {/* These three say plainly that nothing happened. They used
-                          to alert "will be implemented with backend integration"
-                          and navigate away as though the action had worked. */}
-                      <button onClick={() => { notBuilt('Duplicating an account')(); setShowActionsMenu(false); }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-400 hover:bg-gray-50 flex items-center gap-2">
-                        <Copy className="h-4 w-4" /> Duplicate
+                      {/* Not built, so disabled and labelled (H2, 2026-10-14) — they were
+                          clickable and answered with an alert. Accounts have no
+                          is_archived column, and no duplicate path exists. */}
+                      <button disabled title="Duplicating an account is coming soon"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
+                        <Copy className="h-4 w-4" /> Duplicate · Coming soon
                       </button>
-                      <button onClick={() => { notBuilt('Archiving accounts')(); setShowActionsMenu(false); }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-400 hover:bg-gray-50 flex items-center gap-2">
-                        <Archive className="h-4 w-4" /> Archive
+                      <button disabled title="Archiving accounts is coming soon"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-400 cursor-not-allowed flex items-center gap-2">
+                        <Archive className="h-4 w-4" /> Archive · Coming soon
                       </button>
                       <div className="border-t border-gray-100 my-1" />
                       <button onClick={() => { handleDeleteAccount(); setShowActionsMenu(false); }}

@@ -31,7 +31,8 @@ interface RecentDocumentsSectionProps {
   recentDocuments: RecentDocument[];
   onViewAll: () => void;
   onPreview: (doc: RecentDocument) => void;
-  onDownload: (doc: RecentDocument) => void;
+  /** Resolves true only when the file was actually downloaded. */
+  onDownload: (doc: RecentDocument) => Promise<boolean>;
   isRecentFilterActive?: boolean;
   onClearRecentFilter?: () => void;
   isLoading?: boolean;
@@ -132,19 +133,19 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
-  const handleDownload = (doc: RecentDocument, e: React.MouseEvent) => {
+  // "Downloaded" shows only after the real download resolves. It used to flip
+  // to "Downloaded" after a fixed 800 ms whether or not anything was fetched.
+  const handleDownload = async (doc: RecentDocument, e: React.MouseEvent) => {
     e.stopPropagation();
 
     setDownloadingDocs(prev => new Set(prev).add(doc.id));
-
-    onDownload(doc);
-
-    setTimeout(() => {
-      setDownloadingDocs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(doc.id);
-        return newSet;
-      });
+    const ok = await onDownload(doc);
+    setDownloadingDocs(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(doc.id);
+      return newSet;
+    });
+    if (ok) {
       setDownloadedDocs(prev => new Set(prev).add(doc.id));
 
       setTimeout(() => {
@@ -154,7 +155,7 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
           return newSet;
         });
       }, 2000);
-    }, 800);
+    }
   };
 
   const handleScroll = () => {
