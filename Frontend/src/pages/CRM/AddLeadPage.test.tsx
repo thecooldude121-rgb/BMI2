@@ -10,17 +10,19 @@ import { MemoryRouter } from 'react-router-dom';
  * placeholder owner queues, and offer company sizes / a priority the server
  * refuses.
  */
-const ctx = vi.hoisted(() => ({ createLead: vi.fn(), fetchUsers: vi.fn() }));
+const ctx = vi.hoisted(() => ({ createLead: vi.fn(), fetchUsers: vi.fn(), checkLeadDuplicates: vi.fn() }));
 vi.mock('../../contexts/LeadContext', () => ({
   useLeads: () => ({ createLead: ctx.createLead, leads: [], lastWriteErrorRef: { current: null } }),
 }));
 vi.mock('../../utils/usersApi', () => ({ fetchUsers: ctx.fetchUsers }));
+vi.mock('../../utils/leadsApi', async () => ({ ...(await vi.importActual<object>('../../utils/leadsApi')), checkLeadDuplicates: ctx.checkLeadDuplicates }));
 
 import AddLeadPage from './AddLeadPage';
 
 beforeEach(() => {
   vi.clearAllMocks();
   ctx.createLead.mockResolvedValue({ id: '1' });
+  ctx.checkLeadDuplicates.mockResolvedValue([null]);
   ctx.fetchUsers.mockResolvedValue([
     { id: 7, first_name: 'Dee', last_name: 'Admin', displayName: 'Dee Admin', email: 'd@x', role: 'admin', department: null },
     { id: 9, first_name: 'Ravi', last_name: 'Rep', displayName: 'Ravi Rep', email: 'r@x', role: 'sales', department: null },
@@ -101,5 +103,19 @@ describe('Add Lead — the payload is what the server stores', () => {
     await user.click(screen.getByRole('button', { name: /Save Lead/ }));
     expect(ctx.createLead).not.toHaveBeenCalled();
     expect(screen.getByText('Choose the currency of the deal value')).toBeInTheDocument();
+  });
+
+  it('the duplicate check asks the SERVER (every lead), and a match blocks the save until acknowledged', async () => {
+    ctx.checkLeadDuplicates.mockResolvedValue([{ id: 777, first_name: 'Asha', last_name: 'Old', email: 'asha@kora.example', phone: null, company: 'Kora', stage: 'new', matched_on: 'email' }]);
+    const user = userEvent.setup();
+    renderPage();
+    await fillCore(user);
+    expect(await screen.findByText(/A lead with this email already exists/)).toBeInTheDocument();
+    expect(ctx.checkLeadDuplicates).toHaveBeenLastCalledWith([{ email: 'asha@kora.example', phone: undefined }]);
+    await user.click(screen.getByRole('button', { name: /Save Lead/ }));
+    expect(ctx.createLead).not.toHaveBeenCalled();
+    await user.click(screen.getByLabelText(/Still add as a separate lead/));
+    await user.click(screen.getByRole('button', { name: /Save Lead/ }));
+    expect(ctx.createLead).toHaveBeenCalledTimes(1);
   });
 });

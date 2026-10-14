@@ -24,6 +24,9 @@ import type { ConversionContact, LeadConversionResult } from '../../utils/leadsA
 import { useLeads } from '../../contexts/LeadContext';
 import { findDuplicates, computeRisk } from '../../utils/leadDuplicates';
 import { getPlaybook } from '../../utils/leadSourcePlaybook';
+import RecordPicker from '../common/RecordPicker';
+import { useLeadDuplicateCandidates } from '../../hooks/useLeadDuplicateCandidates';
+import type { RecordOption } from '../../utils/recordSearch';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,8 +71,6 @@ const WARN_TEXT: Partial<Record<ConversionReadinessState, string>> = {
   ready_for_contact:   'Only a contact record can be created — company info is missing for an account.',
 };
 
-// Static mock accounts — used for "link to existing" dropdown.
-// TODO: replace with live account search when search API exists.
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
 function defaultPath(state: ConversionReadinessState, source?: string): WizardPath {
@@ -216,7 +217,10 @@ function CheckRow({ label, met }: { label: string; met: boolean }) {
 export default function LeadConversionWizard({
   lead, readiness, isOpen, onClose, onConverted,
 }: LeadConversionWizardProps) {
-  const { leads: allLeads, convertLead } = useLeads();
+  const { convertLead } = useLeads();
+  // Server candidates (slice 6b) — every lead in the workspace, not the 50 loaded.
+  const { pool: dupPool, error: dupError } = useLeadDuplicateCandidates(lead, isOpen);
+  const allLeads = dupPool;
 
   // ── Duplicate detection (for Step 2 high-risk gating) ─────────────────────
   const leadDuplicateCandidates = useMemo(
@@ -246,6 +250,8 @@ export default function LeadConversionWizard({
   // Step 4
   const [result,     setResult]     = useState<ConversionResult | null>(null);
   const [converting, setConverting] = useState(false);
+  const [linkContact, setLinkContact] = useState<RecordOption | null>(null);
+  const [linkAccount, setLinkAccount] = useState<RecordOption | null>(null);
 
   // Reset everything when modal opens/closes
   useEffect(() => {
@@ -256,6 +262,8 @@ export default function LeadConversionWizard({
       setDupDismissed(false);
       setConvertError(null);
       setExistingContact(null);
+      setLinkContact(null);
+      setLinkAccount(null);
       setDealName(defaultDealName(lead));
       setDealValue('');
       setResult(null);
@@ -275,6 +283,9 @@ export default function LeadConversionWizard({
   const includesAccount = path === 'contact_account' || path === 'contact_account_deal';
   const includesDeal    = path === 'contact_account_deal';
   const isLinkExisting  = path === 'link_existing';
+  // "Link to existing" (on 2026-10-14, slice 6b): real records picked by server
+  // search. At least one must be chosen; an unpicked contact is created from the lead.
+  const linkReady = !isLinkExisting || !!linkContact || (!isNoDealPath && !!linkAccount);
 
   const dealValueNumber = dealValue.trim() === '' ? NaN : Number(dealValue);
   const dealValueValid  = Number.isFinite(dealValueNumber) && dealValueNumber >= 0;
@@ -293,7 +304,9 @@ export default function LeadConversionWizard({
     try {
       const res = await convertLead(lead.id, {
         contact,
-        company: includesAccount ? { mode: 'create' } : { mode: 'none' },
+        company: isLinkExisting
+          ? (linkAccount && !isNoDealPath ? { mode: 'link', company_id: linkAccount.id } : { mode: 'none' })
+          : includesAccount ? { mode: 'create' } : { mode: 'none' },
         deal: includesDeal ? { name: dealName.trim(), value: dealValueNumber } : null,
       });
       setExistingContact(null);
@@ -317,9 +330,12 @@ export default function LeadConversionWizard({
     } finally {
       setConverting(false);
     }
-  }, [convertLead, lead.id, includesAccount, includesDeal, dealName, dealValueNumber, onConverted]);
+  }, [convertLead, lead.id, includesAccount, includesDeal, dealName, dealValueNumber, onConverted, isLinkExisting, linkAccount, isNoDealPath]);
 
-  const handleConvert = useCallback(() => submitConversion({ mode: 'create' }), [submitConversion]);
+  const handleConvert = useCallback(
+    () => submitConversion(isLinkExisting && linkContact ? { mode: 'link', contact_id: linkContact.id } : { mode: 'create' }),
+    [submitConversion, isLinkExisting, linkContact],
+  );
 
   if (!isOpen) return null;
 
@@ -458,8 +474,6 @@ export default function LeadConversionWizard({
                     selected={path === 'link_existing'}
                     recommended={false}
                     onClick={() => setPath('link_existing')}
-                    disabled
-                    disabledNote="Needs contact and account search against the database — not built yet."
                   />
                 </div>
               </div>
@@ -470,30 +484,31 @@ export default function LeadConversionWizard({
           {step === 2 && (
             <>
               {isLinkExisting ? (
-                /* Link to existing — UNAVAILABLE. The contact picker read
-                   DataContext (sample-seeded, never networked) and the account
-                   picker read a MOCK_ACCOUNTS array in this file. Removing the
-                   fiction leaves nothing real to offer, so the path is disabled
-                   and labelled rather than populated — the same treatment as a
-                   dead view toggle. Needs contact/account search endpoints. */
+                /* Link to existing — real records by SERVER search (slice 6b). This
+                   was disabled: its pickers had listed sample data. */
                 <div className="space-y-4">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     Find Existing Records
                   </p>
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2">
-                    <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700 mb-1">Existing contact</p>
+                    <RecordPicker kinds={['contact']} value={linkContact} onChange={setLinkContact} label="Search contacts" />
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {linkContact ? 'The lead is linked to this contact.' : 'None picked: a new contact is created from the lead.'}
+                    </p>
+                  </div>
+                  {!isNoDealPath && (
                     <div>
-                      <p className="text-xs font-semibold text-amber-800">
-                        Linking to existing records is not available yet
-                      </p>
-                      <p className="text-[11px] text-amber-700 mt-1">
-                        This needs contact and account search against the database. The
-                        pickers here previously listed sample data, so anything selected
-                        would not have referred to a real record. Choose one of the other
-                        paths on the previous step.
+                      <p className="text-xs font-semibold text-gray-700 mb-1">Existing account</p>
+                      <RecordPicker kinds={['company']} value={linkAccount} onChange={setLinkAccount} label="Search accounts" />
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {linkAccount ? 'The lead is linked to this account.' : 'None picked: no account is linked.'}
                       </p>
                     </div>
-                  </div>
+                  )}
+                  {!linkReady && (
+                    <p className="text-[11px] text-amber-700">Pick an existing contact{isNoDealPath ? '' : ' or account'} to continue, or go back and choose another path.</p>
+                  )}
                 </div>
               ) : (
                 /* Real lead-vs-lead duplicate detection */
@@ -529,16 +544,24 @@ export default function LeadConversionWizard({
                       at the top of this file. What remains is the real thing:
                       lead-vs-lead duplicate detection from utils/leadDuplicates,
                       whose high-risk result gates this step just above. */}
-                  {leadDuplicateRisk !== 'high' && (
+                  {dupPool === null && !dupError && (
+                    <p className="py-6 text-center text-sm text-gray-500">Checking for duplicate leads…</p>
+                  )}
+                  {dupError && (
+                    <p className="py-6 text-center text-sm text-amber-700" role="status">
+                      The duplicate check could not run ({dupError}) — this is unknown, not clear.
+                    </p>
+                  )}
+                  {dupPool !== null && !dupError && leadDuplicateRisk !== 'high' && (
                     <div className="py-6 text-center">
                       <CheckCircle className="h-8 w-8 text-green-300 mx-auto mb-2" />
                       <p className="text-sm text-gray-500 font-medium">
                         No high-confidence duplicate leads
                       </p>
                       <p className="text-xs text-gray-400 mt-1">
-                        Checked against your existing leads on email, phone, company domain
-                        and name. Matching against existing contacts and accounts needs
-                        search endpoints that are not built yet.
+                        Checked against every lead in this workspace on email, phone, company
+                        domain and name. To attach this lead to an existing contact or account,
+                        use “Link to Existing”.
                       </p>
                     </div>
                   )}
@@ -774,7 +797,8 @@ export default function LeadConversionWizard({
                   onClick={() => setStep(prev => (prev + 1) as WizardStep)}
                   disabled={
                     (step === 1 && step1Disabled) ||
-                    (step === 2 && leadDuplicateRisk === 'high' && !dupDismissed)
+                    (step === 2 && !isLinkExisting && leadDuplicateRisk === 'high' && !dupDismissed) ||
+                    (step === 2 && !linkReady)
                   }
                   size="lg" className="font-semibold rounded-xl disabled:opacity-40"
                 >
@@ -783,7 +807,7 @@ export default function LeadConversionWizard({
               ) : (
                 <button
                   onClick={() => void handleConvert()}
-                  disabled={converting || !dealReady || existingContact !== null}
+                  disabled={converting || !dealReady || !linkReady || existingContact !== null}
                   className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 disabled:opacity-60 transition-colors"
                 >
                   {converting ? (

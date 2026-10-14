@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Plus, Link2, AlertCircle, Search } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 import { Button } from '../../components/ui/Button';
 import NewMeetingModal from '../../components/Meeting/NewMeetingModal';
+import LeadsPager from '../../components/Leads/LeadsPager';
 import {
-  fetchMeetings, MEETING_TYPES, RELATED_TYPE_LABEL,
+  fetchMeetingsPage, fetchMeetingSummary, MEETING_TYPES, MEETINGS_PAGE_SIZE, RELATED_TYPE_LABEL,
   type Meeting, type MeetingType,
 } from '../../utils/meetingsApi';
 import { formatDisplayDate } from '../../utils/dateUtils';
@@ -23,8 +24,10 @@ import { formatDisplayDate } from '../../utils/dateUtils';
  *
  * ─── WHAT THE STATS ARE NOW, AND WHAT THEY ARE NOT ─────────────────────────
  *
- * Two counts, both derived from the rows actually fetched: how many meetings
- * there are, and how many are not yet linked to a record. There is deliberately
+ * Two counts, both from GET /meetings/summary over EVERY meeting in the
+ * workspace: how many there are, and how many are not yet linked to a record.
+ * (Slice 6c. They used to count the first 50 rows, which was also all the list
+ * could search or filter — meeting #51 was unreachable.) There is deliberately
  * no "recorded", no "live now" and no "AI processed" tile — recording and
  * transcription are explicitly out of scope for this module, so a tile counting
  * them would be counting a feature that does not exist. A tile that always
@@ -47,39 +50,60 @@ type Filter = 'all' | 'unlinked' | MeetingType;
 const MeetingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [summary, setSummary] = useState<{ total: number; unlinked: number } | null>(null);
+  const [summaryFailed, setSummaryFailed] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const [showNew, setShowNew] = useState(false);
+  const seq = useRef(0);
+
+  // Search runs on the server, 250 ms after typing stops; a narrower query
+  // starts again at page 1. Only a CHANGED query resets the page — the mount
+  // used to fire this too, 250 ms in, undoing a quick click on Next.
+  useEffect(() => {
+    const next = search.trim();
+    if (next === query) return;
+    const t = setTimeout(() => { setQuery(next); setPage(1); }, 250);
+    return () => clearTimeout(t);
+  }, [search, query]);
+
+  const choose = (f: Filter) => { setFilter(f); setPage(1); };
 
   const load = useCallback(() => {
+    const mine = ++seq.current;
     setError(null);
-    fetchMeetings()
-      .then(setMeetings)
+    setLoading(true);
+    fetchMeetingsPage({
+      search: query || undefined,
+      type: filter !== 'all' && filter !== 'unlinked' ? filter : undefined,
+      linked: filter === 'unlinked' ? 'no' : undefined,
+      limit: MEETINGS_PAGE_SIZE,
+      offset: (page - 1) * MEETINGS_PAGE_SIZE,
+    })
+      .then(r => { if (mine === seq.current) { setMeetings(r.meetings); setTotal(r.total); } })
       // A failed load is NOT an empty list. An empty list says "no meetings
       // yet", which is a claim this page cannot make when the request failed.
-      .catch((e: Error) => { setMeetings(null); setError(e.message); });
-  }, []);
+      .catch((e: Error) => { if (mine === seq.current) { setMeetings(null); setError(e.message); } })
+      .finally(() => { if (mine === seq.current) setLoading(false); });
+  }, [query, filter, page]);
 
   useEffect(load, [load]);
 
-  const visible = useMemo(() => {
-    if (!meetings) return [];
-    const q = search.trim().toLowerCase();
-    return meetings.filter(m => {
-      if (filter === 'unlinked' && m.related_to_type !== null) return false;
-      if (filter !== 'all' && filter !== 'unlinked' && m.type !== filter) return false;
-      if (!q) return true;
-      return m.title.toLowerCase().includes(q)
-        || (m.notes ?? '').toLowerCase().includes(q)
-        || (m.attendees ?? '').toLowerCase().includes(q);
-    });
-  }, [meetings, filter, search]);
+  useEffect(() => {
+    fetchMeetingSummary()
+      .then(s => { setSummary(s); setSummaryFailed(false); })
+      .catch(() => { setSummary(null); setSummaryFailed(true); });
+  }, []);
 
-  const unlinkedCount = useMemo(
-    () => (meetings ?? []).filter(m => m.related_to_type === null).length,
-    [meetings],
-  );
+  const pageCount = Math.max(1, Math.ceil(total / MEETINGS_PAGE_SIZE));
+  const narrowed = filter !== 'all' || query !== '';
+  // "No meeting notes yet" only when the unfiltered list is genuinely empty.
+  const workspaceEmpty = meetings !== null && total === 0 && !narrowed;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -111,18 +135,22 @@ const MeetingsPage: React.FC = () => {
         )}
 
         {/*
-          * Two counts, both from the fetched rows. "Needs linking" earns its
-          * place because it is the one number that points at an action a user
-          * can take — an unlinked note cannot carry an activity to a deal.
+          * Two counts over every meeting (GET /meetings/summary). "Needs
+          * linking" earns its place because it is the one number that points at
+          * an action a user can take — an unlinked note cannot carry an activity
+          * to a deal. A failed summary shows "—", never 0.
           */}
-        {meetings !== null && meetings.length > 0 && (
+        {!workspaceEmpty && (summary || summaryFailed) && (
           <div className="flex flex-wrap gap-4 mb-6">
             <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
               <p className="text-[11px] text-gray-500">Meetings</p>
-              <p className="text-[20px] font-semibold text-gray-900 tabular-nums">{meetings.length}</p>
+              <p className="text-[20px] font-semibold text-gray-900 tabular-nums" data-testid="meetings-total">
+                {summary ? summary.total.toLocaleString() : '—'}
+              </p>
             </div>
             <button
-              onClick={() => setFilter(filter === 'unlinked' ? 'all' : 'unlinked')}
+              onClick={() => choose(filter === 'unlinked' ? 'all' : 'unlinked')}
+              aria-pressed={filter === 'unlinked'}
               className={`rounded-lg border px-4 py-3 text-left transition-colors ${
                 filter === 'unlinked'
                   ? 'border-amber-300 bg-amber-50'
@@ -130,8 +158,11 @@ const MeetingsPage: React.FC = () => {
               }`}
             >
               <p className="text-[11px] text-gray-500">Not linked to a record</p>
-              <p className="text-[20px] font-semibold text-gray-900 tabular-nums">{unlinkedCount}</p>
+              <p className="text-[20px] font-semibold text-gray-900 tabular-nums" data-testid="meetings-unlinked">
+                {summary ? summary.unlinked.toLocaleString() : '—'}
+              </p>
             </button>
+            {summaryFailed && <p className="self-center text-[12px] text-red-700">Couldn&rsquo;t load the counts.</p>}
           </div>
         )}
 
@@ -149,7 +180,8 @@ const MeetingsPage: React.FC = () => {
             {(['all', ...MEETING_TYPES] as Filter[]).map(f => (
               <button
                 key={f}
-                onClick={() => setFilter(f)}
+                onClick={() => choose(f)}
+                aria-pressed={filter === f}
                 className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
                   filter === f
                     ? 'bg-indigo-600 text-white'
@@ -166,7 +198,7 @@ const MeetingsPage: React.FC = () => {
           <p className="text-[12px] text-gray-400">Loading meetings&hellip;</p>
         )}
 
-        {meetings !== null && meetings.length === 0 && (
+        {workspaceEmpty && (
           /* A real EmptyState that says why it is empty and offers the action. */
           <div className="rounded-xl border border-gray-200 bg-white p-10 text-center">
             <Calendar className="h-8 w-8 text-gray-300 mx-auto mb-3" aria-hidden="true" />
@@ -182,17 +214,19 @@ const MeetingsPage: React.FC = () => {
           </div>
         )}
 
-        {meetings !== null && meetings.length > 0 && visible.length === 0 && (
+        {meetings !== null && total === 0 && narrowed && (
           <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
             <p className="text-[13px] text-gray-600">
-              None of your {meetings.length} meetings match this filter.
+              {summary
+                ? `None of your ${summary.total.toLocaleString()} meetings match this filter.`
+                : 'No meetings match this filter.'}
             </p>
           </div>
         )}
 
-        {visible.length > 0 && (
+        {meetings !== null && meetings.length > 0 && (
           <ul className="space-y-2">
-            {visible.map(m => (
+            {meetings.map(m => (
               <li key={m.id}>
                 <button
                   onClick={() => navigate(`/crm/meetings/${m.id}`)}
@@ -230,6 +264,15 @@ const MeetingsPage: React.FC = () => {
               </li>
             ))}
           </ul>
+        )}
+
+        {meetings !== null && total > 0 && (
+          <div className="mt-3">
+            <LeadsPager
+              page={page} pageCount={pageCount} total={total} pageSize={MEETINGS_PAGE_SIZE}
+              shown={meetings.length} loading={loading} onPage={setPage} noun="meetings"
+            />
+          </div>
         )}
       </div>
 

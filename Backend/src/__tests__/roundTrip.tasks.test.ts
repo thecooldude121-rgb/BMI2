@@ -98,8 +98,11 @@ describe('Tasks — round trip', () => {
   });
 
   it('bucket inputs: server-side overdue=true matches CURRENT_DATE and excludes completed tasks', async () => {
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    // Days from the DATABASE's calendar, which is what overdue=true compares
+    // against. A UTC slice of the JS clock is a different day for 5.5 hours of
+    // every IST night.
+    const { yesterday, tomorrow } = (await pool.query(
+      `SELECT (CURRENT_DATE - 1)::text AS yesterday, (CURRENT_DATE + 1)::text AS tomorrow`)).rows[0];
 
     const overdueOpen = await request(app).post('/api/v1/tasks').set(auth(ws)).send({ title: 'Overdue open', due_date: yesterday });
     const overdueDone = await request(app).post('/api/v1/tasks').set(auth(ws)).send({ title: 'Overdue but done', due_date: yesterday });

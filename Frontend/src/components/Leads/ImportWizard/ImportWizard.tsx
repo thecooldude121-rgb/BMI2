@@ -4,7 +4,8 @@ import { X, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useLeads } from '../../../contexts/LeadContext';
 import { DEFAULT_RULES as DEFAULT_RULES_VALUE } from './types';
 import { buildInitialMappings } from './columnMapper';
-import { buildValidatedRows } from './importValidator';
+import { buildValidatedRows, applyServerDuplicates } from './importValidator';
+import { checkLeadDuplicates, type LeadDuplicateMatch } from '../../../utils/leadsApi';
 import Step1Upload from './Step1Upload';
 import Step2Mapping from './Step2Mapping';
 import Step3Validation from './Step3Validation';
@@ -31,7 +32,9 @@ type Props = {
 // ── Wizard ────────────────────────────────────────────────────────────────────
 
 export default function ImportWizard({ onClose }: Props) {
-  const { leads: contextLeads, createLead } = useLeads();
+  const { createLead } = useLeads();
+  /** 'checking' while the server matches the file against every lead (slice 6b). */
+  const [dupCheck, setDupCheck] = useState<{ state: 'idle' | 'checking' | 'done' } | { state: 'error'; message: string }>({ state: 'idle' });
 
   const [step, setStep] = useState<ImportStep>(1);
   const [parsed, setParsed] = useState<ParsedCSV | null>(null);
@@ -65,11 +68,26 @@ export default function ImportWizard({ onClose }: Props) {
   }
 
   // Step 2 → 3: build validated rows
-  function handleMappingNext() {
+  // Duplicates are matched on the SERVER against every lead in the workspace,
+  // in chunked requests for the whole file (slice 6b). They were matched against the
+  // 50 leads LeadContext had loaded.
+  async function handleMappingNext() {
     if (!parsed) return;
-    const rows = buildValidatedRows(parsed, mappings, contextLeads ?? []);
+    const rows = buildValidatedRows(parsed, mappings, []);
     setValidatedRows(rows);
     setStep(3);
+    setDupCheck({ state: 'checking' });
+    try {
+      // checkLeadDuplicates sends the rows in body-sized chunks.
+      const matches: (LeadDuplicateMatch | null)[] = await checkLeadDuplicates(rows.map(r => ({
+        email: r.mapped.email?.trim() || undefined, phone: r.mapped.phone?.trim() || undefined,
+        company: r.mapped.company?.trim() || undefined, last_name: r.mapped.last_name?.trim() || undefined,
+      })));
+      setValidatedRows(applyServerDuplicates(rows, matches));
+      setDupCheck({ state: 'done' });
+    } catch (e: any) {
+      setDupCheck({ state: 'error', message: e?.message ?? 'The duplicate check failed' });
+    }
   }
 
   // Step 5 → 6: run the real import loop
@@ -266,6 +284,13 @@ export default function ImportWizard({ onClose }: Props) {
               mappings={mappings}
               onMappingsChange={setMappings}
             />
+          )}
+          {step === 3 && dupCheck.state !== 'done' && dupCheck.state !== 'idle' && (
+            <p className={`mb-3 rounded-lg px-3 py-2 text-xs ${dupCheck.state === 'error' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-600'}`} role="status">
+              {dupCheck.state === 'checking'
+                ? 'Checking every row against the leads in this workspace…'
+                : `The duplicate check could not run (${'message' in dupCheck ? dupCheck.message : ''}). Rows are not marked as duplicates — that is unknown, not clear.`}
+            </p>
           )}
           {step === 3 && (
             <Step3Validation

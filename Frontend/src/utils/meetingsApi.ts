@@ -1,7 +1,8 @@
 /**
  * Meetings API client — Meeting Agent, migration 049.
  *
- *   GET    /meetings?related_to_type=&related_to_id=   list, optionally by record
+ *   GET    /meetings?search=&type=&linked=&limit=&offset=   one page + total
+ *   GET    /meetings/summary                          total + not-linked counts
  *   GET    /meetings/:id                              meeting + its tasks + activities
  *   POST   /meetings                                  create
  *   PATCH  /meetings/:id                              edit (NOT the relation)
@@ -103,15 +104,48 @@ export interface MeetingDetail extends Meeting {
   activities: MeetingActivity[];
 }
 
-export async function fetchMeetings(filter?: {
-  related_to_type?: RelatedType;
-  related_to_id?: string;
-}): Promise<Meeting[]> {
+/** Rows per page on the Meetings list (slice 6c). */
+export const MEETINGS_PAGE_SIZE = 25;
+
+export interface MeetingsPageQuery {
+  /** Title, notes or attendees; the server escapes LIKE wildcards. */
+  search?: string;
+  type?: MeetingType;
+  /** 'no' = not yet pushed to a record. */
+  linked?: 'yes' | 'no';
+  limit?: number;
+  offset?: number;
+}
+
+function meetingParams(q: MeetingsPageQuery): URLSearchParams {
   const qs = new URLSearchParams();
-  if (filter?.related_to_type) qs.set('related_to_type', filter.related_to_type);
-  if (filter?.related_to_id) qs.set('related_to_id', filter.related_to_id);
+  if (q.search?.trim()) qs.set('search', q.search.trim());
+  if (q.type) qs.set('type', q.type);
+  if (q.linked) qs.set('linked', q.linked);
+  return qs;
+}
+
+/**
+ * One server page of meetings, newest first (slice 6c). `total` is the
+ * server's count of EVERY meeting matching the filters — the list used to load
+ * the first 50 and search, filter and count those in the browser.
+ */
+export async function fetchMeetingsPage(q: MeetingsPageQuery = {}): Promise<{ meetings: Meeting[]; total: number }> {
+  const qs = meetingParams(q);
+  qs.set('limit', String(q.limit ?? MEETINGS_PAGE_SIZE));
+  qs.set('offset', String(q.offset ?? 0));
+  const res = await fetch(`${API_BASE}/meetings?${qs}`, { headers: getAuthHeaders() });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new MeetingsApiError(json?.message || `Request failed (${res.status})`, res.status);
+  if (typeof json.total !== 'number') throw new MeetingsApiError('The server did not say how many meetings match', res.status);
+  return { meetings: json.data ?? [], total: json.total };
+}
+
+/** GET /meetings/summary — every meeting in the workspace, and how many are not linked. */
+export async function fetchMeetingSummary(q: Omit<MeetingsPageQuery, 'linked' | 'limit' | 'offset'> = {}): Promise<{ total: number; unlinked: number }> {
+  const qs = meetingParams(q);
   const suffix = qs.toString() ? `?${qs}` : '';
-  return unwrap<Meeting[]>(await fetch(`${API_BASE}/meetings${suffix}`, { headers: getAuthHeaders() }));
+  return unwrap<{ total: number; unlinked: number }>(await fetch(`${API_BASE}/meetings/summary${suffix}`, { headers: getAuthHeaders() }));
 }
 
 /**

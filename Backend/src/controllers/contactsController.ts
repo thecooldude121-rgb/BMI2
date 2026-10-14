@@ -171,7 +171,7 @@ async function foreignRefError(
 export const getContacts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { account_id, company_id, search, status, buying_role } = req.query;
+    const { account_id, company_id, search, status, buying_role, phone_digits } = req.query;
     const page = pageParams(req.query as Record<string, unknown>);
     const order = orderBy(req.query as Record<string, unknown>, CONTACT_SORTS, 'c.is_primary DESC, c.created_at DESC', 'c.id');
     let where = `WHERE c.tenant_id = $1`;
@@ -183,6 +183,14 @@ export const getContacts = async (req: AuthRequest, res: Response, next: NextFun
     if (status) { where += ` AND c.status = $${i++}`; params.push(status); }
     if (buying_role) { where += ` AND c.buying_role = $${i++}`; params.push(buying_role); }
     if (search) { where += ` AND (c.first_name ILIKE $${i} OR c.last_name ILIKE $${i} OR c.email ILIKE $${i} OR co.name ILIKE $${i})`; params.push(`%${escapeLike(String(search))}%`); i++; }
+    // An exact phone match on DIGITS only ("+91 80-1234 5678" = "918012345678"),
+    // for the duplicate check (slice 6b) — which used to scan a preloaded 500.
+    // At least 7 digits; anything else is a 400, never silently ignored.
+    if (phone_digits !== undefined) {
+      const d = String(phone_digits);
+      if (!/^\d{7,20}$/.test(d)) { res.status(400).json({ success: false, message: 'phone_digits must be 7 to 20 digits' }); return; }
+      where += ` AND regexp_replace(COALESCE(c.phone, ''), '\\D', '', 'g') = $${i++}`; params.push(d);
+    }
     // TOTAL over the same FROM + WHERE (the filtered set, not the page).
     const total = await pool.query(`SELECT COUNT(*)::int AS n ${FROM_JOINS} ${where}`, params);
     const result = await pool.query(

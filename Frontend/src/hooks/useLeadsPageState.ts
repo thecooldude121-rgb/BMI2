@@ -249,7 +249,6 @@ export function useLeadsPageState(): LeadsPageState {
   const { can, canViewLead } = usePermissions();
 
   const {
-    leads: contextLeads,
     fetchLeads,
     views,
     fetchViews,
@@ -372,7 +371,7 @@ export function useLeadsPageState(): LeadsPageState {
   // The "own leads" display filter now runs on the SERVER (assigned_to_user_id),
   // so the total matches the rows. (canViewLead compared lead.owner_id, which
   // the API never set — sales users saw no leads at all.)
-  void canViewLead; void contextLeads;
+  void canViewLead;
 
   // ── Sorted saved views (pinned first, then view_order) ───────────────────
   const savedViews = useMemo(

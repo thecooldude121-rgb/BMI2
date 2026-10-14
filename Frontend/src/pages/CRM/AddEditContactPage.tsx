@@ -10,10 +10,11 @@ import { Modal } from '../../components/ui/Modal';
 import { NotAvailable, NotAvailableBadge } from '../../components/common/NotAvailable';
 import { useToast } from '../../contexts/ToastContext';
 import {
-  createContactViaAPI, fetchContactById, fetchContacts, updateContactViaAPI,
+  createContactViaAPI, fetchContactById, updateContactViaAPI,
 } from '../../utils/contactsApi';
 import { getUsers, searchCompanies } from '../../utils/dealsApi';
-import { findDuplicateMatches, computeRisk } from '../../utils/leadDuplicates';
+import { computeRisk } from '../../utils/leadDuplicates';
+import { findContactDuplicates } from '../../utils/contactDuplicates';
 import type { DuplicateMatch, DuplicateRisk } from '../../utils/leadDuplicates';
 import type { Contact, ContactSource, ContactStatus } from '../../types/contact';
 
@@ -190,10 +191,14 @@ const AddEditContactPage: React.FC = () => {
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [showCompanyOptions, setShowCompanyOptions] = useState(false);
 
-  // The pool the duplicate engine compares against, and what it found.
-  const [contactPool, setContactPool] = useState<Contact[]>([]);
+  // Possible duplicates, found by asking the SERVER (slice 6b) with the contact
+  // page's rule. It preloaded 500 contacts, and — unlike the page — reported a
+  // shared email domain on its own (colleagues) as a duplicate.
+  const [dupById, setDupById] = useState<Map<string, Contact>>(new Map());
   const [poolError, setPoolError] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
+  const [dupChecked, setDupChecked] = useState(false);
+  const [domainOnly, setDomainOnly] = useState(0);
   const [newTag, setNewTag] = useState('');
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -250,50 +255,35 @@ const AddEditContactPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // Pool for duplicate detection. Fetched once — re-fetching per keystroke
-  // would be a request per character.
-  useEffect(() => {
-    let cancelled = false;
-    fetchContacts({ limit: 500 })
-      .then(rows => { if (!cancelled) { setContactPool(rows); setPoolError(null); } })
-      .catch(e => { if (!cancelled) setPoolError(e instanceof Error ? e.message : 'Could not check for duplicates'); });
-    return () => { cancelled = true; };
-  }, []);
-
-  // ── Duplicate detection (the real engine, shared with leads) ──────────────
+  // ── Duplicate detection: server candidates, the shared engine, one rule ───
 
   const debounceRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     window.clearTimeout(debounceRef.current);
-    // Levenshtein over the whole pool on every keystroke is wasteful and
-    // visibly janky past a few hundred rows, hence the debounce.
+    const hasIdentity = formData.email.trim() || formData.lastName.trim() || formData.phone.trim();
+    if (!hasIdentity) { setDuplicates([]); setDupChecked(false); setDomainOnly(0); return; }
+    let cancelled = false;
     debounceRef.current = window.setTimeout(() => {
-      const hasIdentity = formData.email.trim() || formData.firstName.trim() || formData.phone.trim();
-      if (!hasIdentity || contactPool.length === 0) { setDuplicates([]); return; }
-      setDuplicates(findDuplicateMatches(
-        {
-          // In edit mode the record itself is in the pool and must not match
-          // itself — findDuplicateMatches excludes by id.
-          id: id ?? '__new__',
-          email: formData.email.trim() || undefined,
-          phone: formData.phone.trim() || undefined,
-          company: formData.company.trim() || undefined,
-          first_name: formData.firstName.trim() || undefined,
-          last_name: formData.lastName.trim() || undefined,
-        },
-        contactPool.map(c => ({
-          id: c.id, email: c.email, phone: c.phone, company: c.company, full_name: c.name,
-        })),
-      ));
-    }, 350);
-    return () => window.clearTimeout(debounceRef.current);
-  }, [formData.email, formData.phone, formData.company, formData.firstName, formData.lastName, contactPool, id]);
+      findContactDuplicates({
+        // In edit mode the record itself may come back and must not match itself.
+        id: id ?? undefined,
+        email: formData.email.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+        company: formData.company.trim() || undefined,
+        first_name: formData.firstName.trim() || undefined,
+        last_name: formData.lastName.trim() || undefined,
+      })
+        .then(r => { if (!cancelled) { setDuplicates(r.matches); setDupById(r.byId); setDomainOnly(r.domainOnly); setDupChecked(true); setPoolError(null); } })
+        .catch(e => { if (!cancelled) { setDuplicates([]); setDupChecked(false); setPoolError(e instanceof Error ? e.message : 'Could not check for duplicates'); } });
+    }, 400);
+    return () => { cancelled = true; window.clearTimeout(debounceRef.current); };
+  }, [formData.email, formData.phone, formData.company, formData.firstName, formData.lastName, id]);
 
   const duplicateRisk = useMemo(
     () => (duplicates.length ? computeRisk(duplicates) : null),
     [duplicates],
   );
-  const poolById = useMemo(() => new Map(contactPool.map(c => [c.id, c])), [contactPool]);
+  const poolById = dupById;
 
   // ── Company lookup (real /companies search) ───────────────────────────────
 
@@ -407,9 +397,8 @@ const AddEditContactPage: React.FC = () => {
     setFormData(EMPTY_FORM);
     setErrors({});
     setDuplicates([]);
-    // The new contact belongs in the pool, or creating two duplicates in a row
-    // would go unflagged.
-    setContactPool(prev => [saved, ...prev]);
+    setDupChecked(false);
+    // The next check asks the server, which already has the contact just saved.
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -869,9 +858,10 @@ const AddEditContactPage: React.FC = () => {
 
               {!poolError && duplicates.length === 0 && (
                 <p className="text-sm text-gray-600">
-                  {contactPool.length === 0
-                    ? 'Checking against your existing contacts…'
-                    : `No likely duplicates among ${contactPool.length} existing contacts.`}
+                  {!dupChecked
+                    ? 'Enter an email, phone or last name to check for existing contacts.'
+                    : 'No likely duplicates in this workspace.'}
+                  {dupChecked && domainOnly > 0 && ` ${domainOnly} ${domainOnly === 1 ? 'colleague shares' : 'colleagues share'} the email domain — not counted as duplicates.`}
                 </p>
               )}
 

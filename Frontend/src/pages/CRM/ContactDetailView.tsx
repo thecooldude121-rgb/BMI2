@@ -10,13 +10,14 @@ import { Button } from '../../components/ui/Button';
 import { NotAvailable, NotAvailableBadge } from '../../components/common/NotAvailable';
 import LogActivityModal from '../../components/CRM/LogActivityModal';
 import { useToast } from '../../contexts/ToastContext';
-import { deleteContactViaAPI, fetchContactById, fetchContacts, updateContactViaAPI } from '../../utils/contactsApi';
+import { deleteContactViaAPI, fetchContactById, updateContactViaAPI } from '../../utils/contactsApi';
 import { fetchAccountById } from '../../utils/accountsApi';
 import { fetchDealsForContact } from '../../utils/dealsApi';
 import type { RelatedDeal } from '../../utils/dealsApi';
 import { fetchActivities, sortActivitiesNewestFirst, activityTimestamp } from '../../utils/activitiesApi';
 import type { ActivityRecord, ActivityType } from '../../utils/activitiesApi';
-import { findDuplicateMatches, computeRisk } from '../../utils/leadDuplicates';
+import { computeRisk } from '../../utils/leadDuplicates';
+import { findContactDuplicates } from '../../utils/contactDuplicates';
 import type { DuplicateMatch } from '../../utils/leadDuplicates';
 import { toCsv } from '../../utils/csv';
 import { CONTACT_ROLES, findContactRole, roleChipClasses } from '../../config/contactRoles';
@@ -125,8 +126,9 @@ const ContactDetailView: React.FC = () => {
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [account, setAccount] = useState<EnhancedAccount | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
-  const [duplicatePool, setDuplicatePool] = useState<Contact[]>([]);
+  // From the SERVER (slice 6b); it preloaded 500 contacts. null = not checked.
+  const [dupResult, setDupResult] = useState<{ matches: DuplicateMatch[]; byId: Map<string, Contact>; domainOnly: number } | null>(null);
+  const [dupError, setDupError] = useState(false);
 
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [logType, setLogType] = useState<ActivityType | null>(null);
@@ -181,27 +183,15 @@ const ContactDetailView: React.FC = () => {
   }, [contact?.companyId]);
 
   useEffect(() => {
+    if (!contact) return;
     let cancelled = false;
-    fetchContacts({ limit: 500 })
-      .then(rows => { if (!cancelled) setDuplicatePool(rows); })
-      // A failed pool means no duplicate check ran. The panel says so rather
-      // than reporting a clean result it never computed.
-      .catch(() => { if (!cancelled) setDuplicatePool([]); });
+    setDupError(false);
+    findContactDuplicates({ id: contact.id, email: contact.email, phone: contact.phone, company: contact.company, full_name: contact.name, last_name: contact.name?.split(' ').slice(-1)[0] })
+      .then(r => { if (!cancelled) setDupResult(r); })
+      // A failed check is stated, not reported as a clean result it never computed.
+      .catch(() => { if (!cancelled) { setDupResult(null); setDupError(true); } });
     return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (!contact || duplicatePool.length === 0) { setDuplicates([]); return; }
-    setDuplicates(findDuplicateMatches(
-      {
-        id: contact.id, email: contact.email, phone: contact.phone,
-        company: contact.company, full_name: contact.name,
-      },
-      duplicatePool.map(c => ({
-        id: c.id, email: c.email, phone: c.phone, company: c.company, full_name: c.name,
-      })),
-    ));
-  }, [contact, duplicatePool]);
+  }, [contact]);
 
   /**
    * A shared corporate email domain, on its own, describes COLLEAGUES — not the
@@ -220,17 +210,15 @@ const ContactDetailView: React.FC = () => {
    * leadDuplicates has tests asserting exactly that behaviour. Narrowing the
    * engine would change the Leads page silently.
    */
-  const corroborated = useMemo(
-    () => duplicates.filter(m => m.signals.some(s => s.type !== 'domain')),
-    [duplicates],
-  );
-  const domainOnlyCount = duplicates.length - corroborated.length;
+  // The rule now lives in utils/contactDuplicates and is shared with the form.
+  const corroborated = useMemo(() => dupResult?.matches ?? [], [dupResult]);
+  const domainOnlyCount = dupResult?.domainOnly ?? 0;
 
   const duplicateRisk = useMemo(
     () => (corroborated.length ? computeRisk(corroborated) : null),
     [corroborated],
   );
-  const poolById = useMemo(() => new Map(duplicatePool.map(c => [c.id, c])), [duplicatePool]);
+  const poolById = useMemo(() => dupResult?.byId ?? new Map<string, Contact>(), [dupResult]);
 
   const timeline = useMemo(() => sortActivitiesNewestFirst(activities), [activities]);
 
@@ -781,13 +769,15 @@ const ContactDetailView: React.FC = () => {
               {/* Replaces a "Similar Contacts" panel that listed the same two
                   invented people, with invented similarity percentages, on every
                   contact in the database. */}
-              {duplicatePool.length === 0 ? (
+              {dupError ? (
                 <p className="text-sm text-gray-600">
                   Could not check for duplicates, so this is unknown rather than clear.
                 </p>
+              ) : !dupResult ? (
+                <p className="text-sm text-gray-600">Checking for duplicates…</p>
               ) : corroborated.length === 0 ? (
                 <div className="text-sm text-gray-600 space-y-2">
-                  <p>No likely duplicates among {duplicatePool.length} contacts.</p>
+                  <p>No likely duplicates in this workspace.</p>
                   {/* Say what was excluded and why, so a user who can see three
                       colleagues in the list does not read this as a miss. */}
                   {domainOnlyCount > 0 && (

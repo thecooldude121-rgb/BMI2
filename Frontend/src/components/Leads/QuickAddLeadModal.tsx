@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { X, User, Mail, Phone, Building, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useLeads } from '../../contexts/LeadContext';
 import { useLeadOwnerOptions } from '../../hooks/useLeadOwnerOptions';
+import { findLeadDuplicateCandidates } from '../../utils/leadDuplicateCandidates';
 import type { Lead } from '../../types/lead';
 import { findDuplicates, computeRisk } from '../../utils/leadDuplicates';
 import type { DuplicateRisk } from '../../utils/leadDuplicates';
@@ -27,7 +28,7 @@ type FormState = {
 const INIT: FormState = { firstName: '', lastName: '', email: '', phone: '', company: '', source: '', ownerId: '' };
 
 export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
-  const { createLead, leads } = useLeads();
+  const { createLead } = useLeads();
   const [form, setForm] = useState<FormState>(INIT);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState | 'submit', string>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -43,10 +44,9 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
   // placeholder queues (SDR Team, HR Partner) and is gone with them.
   const { options: owners, error: ownersError } = useLeadOwnerOptions();
 
-  // Client-side duplicate detection — 4-signal engine
+  // Duplicate detection — the same 4-signal engine, over candidates from the
+  // SERVER (slice 6b); it scored against LeadContext's 50 preloaded leads.
   useEffect(() => {
-    if (!leads) return;
-    // Build a stub Lead from the form for detection
     const stub: Lead = {
       id: '__new__',
       first_name: form.firstName.trim(),
@@ -55,22 +55,28 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
       phone:      form.phone.trim() || undefined,
       company:    form.company.trim() || undefined,
     } as unknown as Lead;
-
-    const candidates = findDuplicates(stub, leads);
-    if (candidates.length === 0) {
-      setDuplicate(null);
-      setDuplicateRisk(null);
-      setDuplicateReason('');
-      setOverrideDuplicate(false);
-      return;
-    }
-    const top = candidates[0];
-    const match = leads.find(l => l.id === top.leadId) ?? null;
-    setDuplicate(match);
-    setDuplicateRisk(computeRisk(candidates));
-    setDuplicateReason(top.signals[0]?.reason ?? 'Similar lead found');
-    if (!match) setOverrideDuplicate(false);
-  }, [form.firstName, form.lastName, form.email, form.phone, form.company, leads]);
+    const clear = () => { setDuplicate(null); setDuplicateRisk(null); setDuplicateReason(''); setOverrideDuplicate(false); };
+    if (!stub.email && !stub.last_name && !(stub.phone && stub.phone.replace(/\D/g, '').length >= 7) && !stub.company) { clear(); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      findLeadDuplicateCandidates(stub)
+        .then(pool => {
+          if (cancelled) return;
+          const candidates = findDuplicates(stub, pool);
+          if (candidates.length === 0) { clear(); return; }
+          const top = candidates[0];
+          const match = pool.find(l => String(l.id) === String(top.leadId)) ?? null;
+          setDuplicate(match);
+          setDuplicateRisk(computeRisk(candidates));
+          setDuplicateReason(top.signals[0]?.reason ?? 'Similar lead found');
+          if (!match) setOverrideDuplicate(false);
+        })
+        // A failed check blocks nothing (the server still refuses a duplicate
+        // email on save) and is not shown as "no duplicate".
+        .catch(() => { if (!cancelled) clear(); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.firstName, form.lastName, form.email, form.phone, form.company]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = e.target;

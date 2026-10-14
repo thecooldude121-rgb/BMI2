@@ -25,10 +25,7 @@ import {
 } from '../../utils/activitiesApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { localDay, parseLocalDay } from '../../utils/dates';
-import TaskFormModal, { type RelatedOption } from '../../components/CRM/TaskFormModal';
-import { fetchContacts } from '../../utils/contactsApi';
-import { fetchAccounts } from '../../utils/accountsApi';
-import { fetchDeals } from '../../utils/dealsApi';
+import TaskFormModal from '../../components/CRM/TaskFormModal';
 
 /**
  * Tasks — Group A item 4, slice 4a (2026-10-11).
@@ -158,11 +155,6 @@ const TasksPage: React.FC = () => {
   const [editing, setEditing] = useState<TaskRecord | null>(null);
   const [defaultDue, setDefaultDue] = useState<string | undefined>(undefined);
 
-  /** Records the task form's "Related to" picker can choose from. */
-  const [relatedRecords, setRelatedRecords] = useState<Record<'contact' | 'company' | 'deal' | 'lead', RelatedOption[]>>({
-    contact: [], company: [], deal: [], lead: [],
-  });
-
   /**
    * `?new=1` opens the create form — the global "+ New → New Task" item and the
    * calendar's "New task" on a selected day (`&due=YYYY-MM-DD` pre-fills the
@@ -218,28 +210,6 @@ const TasksPage: React.FC = () => {
       .catch(e => { if (!cancelled) setSummaryError(e?.message ?? 'Could not load the task counts'); });
     return () => { cancelled = true; };
   }, [filters, bucket, sortId, page, reloadKey]);
-
-  // Loaded once for the form's picker. A failure must not block the page: a
-  // task is still usable without a related record. (Server-side search for
-  // these pickers is slice 6.)
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const [contacts, accounts, deals] = await Promise.all([
-        fetchContacts({ limit: 200 }).catch(() => []),
-        fetchAccounts(200).catch(() => []),
-        fetchDeals(200).catch(() => []),
-      ]);
-      if (cancelled) return;
-      setRelatedRecords({
-        contact: contacts.map(c => ({ id: c.id, label: c.name || c.email || c.id })),
-        company: accounts.map(a => ({ id: a.id, label: a.name || a.id })),
-        deal: deals.map((d: any) => ({ id: d.id, label: d.name || d.title || d.id })),
-        lead: [],
-      });
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   const handleStatusChange = async (task: TaskRecord, next: TaskStatus) => {
     setRowState(s => ({ ...s, [task.id]: { state: 'saving' } }));
@@ -523,7 +493,6 @@ const TasksPage: React.FC = () => {
         onClose={() => { setFormOpen(false); setEditing(null); setDefaultDue(undefined); }}
         task={editing}
         defaultDueDate={defaultDue}
-        relatedRecords={relatedRecords}
         onSaved={handleSaved}
       />
     </div>

@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { escapeLike } from '../utils/listQuery';
 import { pool } from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireTenantId } from '../middleware/tenant';
@@ -101,61 +102,95 @@ async function validateRelation(
 }
 
 /** GET /api/v1/meetings?related_to_type=deal&related_to_id=D001&date_from=&date_to=&order=asc&limit=&offset= */
+/**
+ * The WHERE shared by the list and its summary (slice 6c), so a tile's number
+ * is exactly the total its list answers with. Returns an error message for a
+ * bad filter (a 400), never a silently ignored one.
+ *   related_to_type / related_to_id, date_from / date_to (instants) — as before;
+ *   search  — title, attendees or notes (LIKE wildcards escaped);
+ *   type    — one of the meetings_type_check vocabulary;
+ *   linked  — 'yes' (pushed to a record) or 'no'.
+ */
+function meetingFilter(q: Record<string, unknown>, tenantId: string): { where: string; params: unknown[] } | { error: string } {
+  const params: unknown[] = [tenantId];
+  let where = 'WHERE m.tenant_id = $1';
+  const { related_to_type, related_to_id } = q;
+  if (related_to_type !== undefined) {
+    if (!(VALID_RELATED_TYPES as readonly string[]).includes(String(related_to_type))) {
+      return { error: `related_to_type must be one of: ${VALID_RELATED_TYPES.join(', ')}` };
+    }
+    where += ` AND m.related_to_type = $${params.length + 1}`;
+    params.push(String(related_to_type));
+    // A filter, not a write: an id from elsewhere simply matches nothing, and
+    // validating it would make the list a probe for "not your record".
+    if (related_to_id !== undefined) {
+      where += ` AND m.related_to_id = $${params.length + 1}`;
+      params.push(String(related_to_id));
+    }
+  }
+  // INSTANTS: which calendar day a meeting falls on depends on the viewer's zone.
+  for (const [key, op] of [['date_from', '>='], ['date_to', '<']] as const) {
+    const v = q[key];
+    if (v === undefined || v === '') continue;
+    if (Number.isNaN(Date.parse(String(v)))) return { error: `${key} must be an ISO 8601 timestamp` };
+    where += ` AND m.date ${op} $${params.length + 1}::timestamptz`;
+    params.push(String(v));
+  }
+  if (q.search !== undefined && String(q.search).trim() !== '') {
+    const term = `%${escapeLike(String(q.search).trim())}%`;
+    where += ` AND (m.title ILIKE $${params.length + 1} OR m.attendees ILIKE $${params.length + 1} OR m.notes ILIKE $${params.length + 1})`;
+    params.push(term);
+  }
+  if (q.type !== undefined && q.type !== '') {
+    if (!(VALID_TYPES as readonly string[]).includes(String(q.type))) return { error: `type must be one of: ${VALID_TYPES.join(', ')}` };
+    where += ` AND m.type = $${params.length + 1}`;
+    params.push(String(q.type));
+  }
+  if (q.linked !== undefined && q.linked !== '') {
+    if (q.linked !== 'yes' && q.linked !== 'no') return { error: "linked must be 'yes' or 'no'" };
+    where += q.linked === 'yes' ? ' AND m.related_to_id IS NOT NULL' : ' AND m.related_to_id IS NULL';
+  }
+  return { where, params };
+}
+
 export const getMeetings = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const tenantId = requireTenantId(req);
-    const { related_to_type, related_to_id } = req.query;
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const offset = Number(req.query.offset) || 0;
-
-    const params: unknown[] = [tenantId];
-    let where = 'WHERE m.tenant_id = $1';
-
-    if (related_to_type !== undefined) {
-      if (!(VALID_RELATED_TYPES as readonly string[]).includes(String(related_to_type))) {
-        res.status(400).json({
-          success: false,
-          message: `related_to_type must be one of: ${VALID_RELATED_TYPES.join(', ')}`,
-        });
-        return;
-      }
-      where += ` AND m.related_to_type = $${params.length + 1}`;
-      params.push(String(related_to_type));
-      // The id is NOT validated against the caller's workspace here on
-      // purpose: this is a filter, not a write. An id from elsewhere simply
-      // matches nothing, and validating it would turn a list endpoint into a
-      // probe that distinguishes "no meetings" from "not your record".
-      if (related_to_id !== undefined) {
-        where += ` AND m.related_to_id = $${params.length + 1}`;
-        params.push(String(related_to_id));
-      }
-    }
-
-    // A time window (the calendar's visible days, slice 4a). INSTANTS, not
-    // days: meetings.date is a timestamptz, and which calendar day a meeting
-    // falls on depends on the viewer's zone, so the browser sends its own local
-    // midnights and buckets the rows itself. `total` says when the window held
-    // more than one page, so a calendar can say so instead of looking complete.
-    for (const [key, op] of [['date_from', '>='], ['date_to', '<']] as const) {
-      const v = req.query[key];
-      if (v === undefined || v === '') continue;
-      if (Number.isNaN(Date.parse(String(v)))) {
-        res.status(400).json({ success: false, message: `${key} must be an ISO 8601 timestamp` });
-        return;
-      }
-      where += ` AND m.date ${op} $${params.length + 1}::timestamptz`;
-      params.push(String(v));
-    }
+    // Clamped, the rule the other list endpoints use; garbage falls back.
+    const rawLimit = Number(req.query.limit);
+    const limit = Number.isInteger(rawLimit) && rawLimit >= 1 ? Math.min(rawLimit, 200) : 50;
+    const rawOffset = Number(req.query.offset);
+    const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+    const f = meetingFilter(req.query as Record<string, unknown>, tenantId);
+    if ('error' in f) { res.status(400).json({ success: false, message: f.error }); return; }
     const ascending = req.query.order === 'asc';
 
-    const total = await pool.query(`SELECT COUNT(*)::int AS n ${FROM_JOINS} ${where}`, params);
+    const total = await pool.query(`SELECT COUNT(*)::int AS n ${FROM_JOINS} ${f.where}`, f.params);
     const result = await pool.query(
-      `SELECT ${SELECT_COLUMNS} ${FROM_JOINS} ${where}
-        ORDER BY m.date ${ascending ? 'ASC' : 'DESC'} NULLS LAST, m.created_at DESC
-        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-      [...params, limit, offset],
+      `SELECT ${SELECT_COLUMNS} ${FROM_JOINS} ${f.where}
+        ORDER BY m.date ${ascending ? 'ASC' : 'DESC'} NULLS LAST, m.created_at DESC, m.id
+        LIMIT $${f.params.length + 1} OFFSET $${f.params.length + 2}`,
+      [...f.params, limit, offset],
     );
     res.json({ success: true, data: result.rows, total: total.rows[0].n, limit, offset });
+  } catch (error) { next(error); }
+};
+
+/**
+ * GET /meetings/summary — the list page's tiles (slice 6c), over EVERY meeting
+ * under the same filters (except `linked`, which the tiles split by). It
+ * counted the 50 rows the list happened to load.
+ */
+export const getMeetingSummary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenantId = requireTenantId(req);
+    const { linked: _linked, ...rest } = req.query as Record<string, unknown>;
+    const f = meetingFilter(rest, tenantId);
+    if ('error' in f) { res.status(400).json({ success: false, message: f.error }); return; }
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE m.related_to_id IS NULL)::int AS unlinked
+         ${FROM_JOINS} ${f.where}`, f.params);
+    res.json({ success: true, data: r.rows[0] });
   } catch (error) { next(error); }
 };
 

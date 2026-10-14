@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, User, Building, Mail, Phone, DollarSign, Tag, Globe, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useLeads } from '../../contexts/LeadContext';
 import { fetchUsers, type WorkspaceUser } from '../../utils/usersApi';
+import { checkLeadDuplicates } from '../../utils/leadsApi';
+import { matchToLead } from '../../utils/leadDuplicateCandidates';
 import type { Lead } from '../../types/lead';
 
 // ── Source mode config ────────────────────────────────────────────────────────
@@ -71,7 +73,7 @@ type FormState = typeof INIT_FORM;
 
 export default function AddLeadPage() {
   const navigate = useNavigate();
-  const { createLead, leads, lastWriteErrorRef } = useLeads();
+  const { createLead, lastWriteErrorRef } = useLeads();
 
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [form, setForm] = useState<FormState>(INIT_FORM);
@@ -94,19 +96,26 @@ export default function AddLeadPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Client-side duplicate check
+  // Duplicate check against EVERY lead in the workspace, on the server (slice
+  // 6b). It compared against the 50 leads LeadContext happened to have loaded.
+  const [dupCheckError, setDupCheckError] = useState<string | null>(null);
   useEffect(() => {
-    if (!leads) return;
-    const email = form.email.trim().toLowerCase();
-    const phone = form.phone.trim().replace(/\D/g, '');
-    const match = leads.find(l => {
-      if (email && l.email?.toLowerCase() === email) return true;
-      if (phone.length >= 7 && l.phone?.replace(/\D/g, '') === phone) return true;
-      return false;
-    }) ?? null;
-    setDuplicate(match);
-    if (!match) setOverrideDuplicate(false);
-  }, [form.email, form.phone, leads]);
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+    if (!email && phone.replace(/\D/g, '').length < 7) { setDuplicate(null); setOverrideDuplicate(false); setDupCheckError(null); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      checkLeadDuplicates([{ email: email || undefined, phone: phone || undefined }])
+        .then(([m]) => {
+          if (cancelled) return;
+          setDuplicate(m ? matchToLead(m) : null);
+          if (!m) setOverrideDuplicate(false);
+          setDupCheckError(null);
+        })
+        .catch(e => { if (!cancelled) { setDuplicate(null); setDupCheckError(e?.message ?? 'The duplicate check failed'); } });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.email, form.phone]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
@@ -306,6 +315,11 @@ export default function AddLeadPage() {
                 </div>
               </div>
 
+              {dupCheckError && (
+                <p className="text-xs text-amber-700" role="status">
+                  Could not check for an existing lead ({dupCheckError}). The server still refuses a duplicate email on save.
+                </p>
+              )}
               {/* Duplicate warning */}
               {duplicate && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">

@@ -84,3 +84,20 @@ export function buildValidatedRows(
     return { index, raw, mapped, validation, isDuplicate, duplicateMatch };
   });
 }
+
+/**
+ * Mark rows the SERVER matched to an existing lead (POST /leads/duplicate-check,
+ * slice 6b). `matches[k]` belongs to `rows[k]`; null = no match. Rows keep any
+ * flag they already carry.
+ */
+export function applyServerDuplicates(
+  rows: ParsedRow[],
+  matches: ({ id: number | string; first_name: string | null; last_name: string | null; email: string | null } | null)[],
+): ParsedRow[] {
+  return rows.map((r, k) => {
+    const m = matches[k];
+    if (!m) return r;
+    const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || m.email || String(m.id);
+    return { ...r, isDuplicate: true, duplicateMatch: { id: String(m.id), name, email: m.email ?? undefined } };
+  });
+}
