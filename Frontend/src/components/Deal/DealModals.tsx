@@ -17,11 +17,13 @@ export const MoreOptionsDropdown: React.FC<MoreOptionsDropdownProps> = ({ isOpen
     { id: 'change-stage', label: 'Change Stage', icon: '🔄' },
     { id: 'mark-won', label: 'Mark as Won', icon: '✅', className: 'text-green-700' },
     { id: 'mark-lost', label: 'Mark as Lost', icon: '❌', className: 'text-red-700' },
-    { id: 'archive', label: 'Archive Deal', icon: '📦' },
     { id: 'delete', label: 'Delete Deal', icon: '🗑️', className: 'text-red-700' },
-    { id: 'export-pdf', label: 'Export as PDF', icon: '📄' },
-    { id: 'share', label: 'Share Deal', icon: '🔗' }
-  ];
+    // Not built. They used to toast "Deal archived", "Exporting deal as PDF…" and
+    // "Share link copied to clipboard" over nothing (H2, 2026-10-14).
+    { id: 'archive', label: 'Archive Deal', icon: '📦', soon: true },
+    { id: 'export-pdf', label: 'Export as PDF', icon: '📄', soon: true },
+    { id: 'share', label: 'Share Deal', icon: '🔗', soon: true },
+  ] as { id: string; label: string; icon: string; className?: string; soon?: boolean }[];
 
   return (
     <>
@@ -30,14 +32,17 @@ export const MoreOptionsDropdown: React.FC<MoreOptionsDropdownProps> = ({ isOpen
         {options.map((option) => (
           <button
             key={option.id}
+            disabled={option.soon}
+            title={option.soon ? `${option.label} is coming soon` : undefined}
             onClick={() => {
+              if (option.soon) return;
               onAction(option.id);
               onClose();
             }}
-            className={`w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3 ${option.className || 'text-gray-700'}`}
+            className={`w-full px-4 py-2 text-left flex items-center gap-3 ${option.soon ? 'cursor-not-allowed text-gray-400' : `hover:bg-gray-50 ${option.className || 'text-gray-700'}`}`}
           >
             <span>{option.icon}</span>
-            <span className="text-sm font-medium">{option.label}</span>
+            <span className="text-sm font-medium">{option.label}{option.soon ? ' · Coming soon' : ''}</span>
           </button>
         ))}
       </div>

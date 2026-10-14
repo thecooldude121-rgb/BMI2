@@ -1,7 +1,6 @@
 import React from 'react';
 import { Button } from '../../ui/Button';
 import { CheckCircle, XCircle, GitMerge, AlertTriangle, Zap, UserCheck, Tag } from 'lucide-react';
-import { TEAM_MEMBERS } from '../../../utils/leadOwnerRouting';
 import type { ParsedRow, ImportRules } from './types';
 
 type Props = {
@@ -46,7 +45,7 @@ export default function Step5Confirm({ validatedRows, skipErrors, rules, onConfi
   const toImport = rowsAfterErrors.length - duplicatesSkipped;
   const warnings = validatedRows.filter(r => r.validation.tier === 'warning' && !r.isDuplicate).length;
 
-  const ownerLabel = TEAM_MEMBERS.find(m => m.id === rules.defaultOwnerId)?.label;
+  const ownerLabel = rules.defaultOwnerId ? rules.defaultOwnerLabel : undefined;
 
   return (
     <div className="space-y-6">

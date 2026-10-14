@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/Button';
-import { X, User, Mail, Phone, Building, AlertTriangle, Lightbulb, CheckCircle } from 'lucide-react';
+import { X, User, Mail, Phone, Building, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useLeads } from '../../contexts/LeadContext';
-import { suggestOwner, TEAM_MEMBERS } from '../../utils/leadOwnerRouting';
+import { useLeadOwnerOptions } from '../../hooks/useLeadOwnerOptions';
 import type { Lead } from '../../types/lead';
 import { findDuplicates, computeRisk } from '../../utils/leadDuplicates';
 import type { DuplicateRisk } from '../../utils/leadDuplicates';
@@ -35,17 +35,13 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
   const [duplicateRisk, setDuplicateRisk] = useState<DuplicateRisk | null>(null);
   const [duplicateReason, setDuplicateReason] = useState<string>('');
   const [overrideDuplicate, setOverrideDuplicate] = useState(false);
-  const [ownerTouched, setOwnerTouched] = useState(false);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { firstInputRef.current?.focus(); }, []);
 
-  // Auto-suggest owner when source changes (unless user manually set it)
-  useEffect(() => {
-    if (ownerTouched) return;
-    const suggestion = suggestOwner(form.source);
-    setForm(f => ({ ...f, ownerId: suggestion ? suggestion.id : '' }));
-  }, [form.source, ownerTouched]);
+  // Owners are the workspace's real users. The source-based "suggestion" named
+  // placeholder queues (SDR Team, HR Partner) and is gone with them.
+  const { options: owners, error: ownersError } = useLeadOwnerOptions();
 
   // Client-side duplicate detection — 4-signal engine
   useEffect(() => {
@@ -83,7 +79,6 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
   }
 
   function handleOwnerChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    setOwnerTouched(true);
     setForm(f => ({ ...f, ownerId: e.target.value }));
   }
 
@@ -113,9 +108,9 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
         phone:   form.phone.trim() || undefined,
         company: form.company.trim() || undefined,
         source:  form.source,
-        // 'unassigned' was stored as an owner literally named "unassigned"; no
-        // owner is sent instead. No score: a new lead's is UNKNOWN, not 50.
-        owner_id: form.ownerId || undefined,
+        // A real user id, or nothing (unassigned). No score: a new lead's is
+        // UNKNOWN, not 50.
+        assigned_to_user_id: form.ownerId ? Number(form.ownerId) : undefined,
         status: 'new',
         email_opt_in: true,
         call_opt_in: true,
@@ -139,8 +134,6 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
     return () => document.removeEventListener('keydown', h);
   }, [onClose]);
 
-  const suggestion = suggestOwner(form.source);
-  const ownerLabel = TEAM_MEMBERS.find(m => m.id === form.ownerId)?.label;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -297,23 +290,19 @@ export default function QuickAddLeadModal({ onClose, onSuccess }: Props) {
             {errors.source && <p className="text-xs text-red-600 mt-1">{errors.source}</p>}
           </div>
 
-          {/* Owner with suggestion */}
+          {/* Owner: the workspace's real users */}
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Assigned To</label>
-            {suggestion && !ownerTouched && (
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Lightbulb className="h-3 w-3 text-blue-500" />
-                <span className="text-xs text-blue-600">Suggested: {suggestion.label} based on source</span>
-              </div>
-            )}
             <select aria-label="Assigned To"
               value={form.ownerId}
               onChange={handleOwnerChange}
+              disabled={owners === null}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Unassigned</option>
-              {TEAM_MEMBERS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              <option value="">{owners === null ? 'Loading the team…' : 'Unassigned'}</option>
+              {(owners ?? []).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
+            {ownersError && <p className="text-xs text-red-600 mt-1" role="alert">The team could not load ({ownersError}). The lead can still be saved unassigned.</p>}
           </div>
 
           {/* Footer */}

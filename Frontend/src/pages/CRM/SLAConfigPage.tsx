@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PreviewBanner } from '../../components/common/PreviewBanner';
 import { getSLAConfig, saveSLAConfig, resetSLAConfig, DEFAULT_SLA_CONFIG } from '../../utils/leadSla/config';
 import type { SLAConfig } from '../../utils/leadSla/config';
 
@@ -72,14 +73,22 @@ export default function SLAConfigPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* The header used to say changes "take effect immediately for all lead
+          rows, KPI cards, and filters". They change only the per-row SLA badges,
+          only in this browser; the SLA counts are "Coming soon" (H2, 2026-10-14). */}
+      <div className="max-w-3xl mx-auto px-6 pt-4">
+        <PreviewBanner
+          detail="These settings are stored in this browser only. They change the SLA badges you see on lead rows — nobody else's, and no server-side count."
+          insteadTry="Shared, server-side SLA rules are coming soon."
+        />
+      </div>
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-5">
         <div className="max-w-3xl mx-auto flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">SLA Configuration</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Configure response-time thresholds for first contact, follow-up, and stale lead detection.
-              Changes take effect immediately for all lead rows, KPI cards, and filters.
+              Response-time thresholds for first contact, follow-up and stale-lead detection.
             </p>
           </div>
           <button
@@ -246,8 +255,7 @@ export default function SLAConfigPage() {
         {/* Save bar */}
         <div className="flex items-center justify-between gap-4 bg-white border border-gray-200 rounded-2xl px-6 py-4">
           <p className="text-sm text-gray-500">
-            Settings are saved in your browser and applied immediately.
-            Swap <code className="bg-gray-100 px-1 rounded text-xs">bmi_sla_config</code> for an API call to persist to the backend.
+            Saved in this browser only. Other people, other devices and the server do not see these settings.
           </p>
           <button
             onClick={handleSave}

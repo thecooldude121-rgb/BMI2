@@ -95,4 +95,14 @@ describe('/crm/reports — server totals', () => {
     expect(screen.queryByText(/No deals have been won yet/)).toBeNull();
     expect(screen.queryByText(/No deals have closed yet/)).toBeNull();
   });
+
+  it('H2: the More menu is disabled "Coming soon" and no card claims there is no quota', async () => {
+    const { container } = renderPage();
+    await screen.findByText('$900K + 2 not in USD');
+    await userEvent.click(screen.getByRole('button', { name: /More/ }));
+    for (const label of ['Schedule Report Delivery', 'Export All Reports (PDF)', 'Report Settings', 'Manage Favorites', 'Archived Reports']) {
+      expect(screen.getByRole('button', { name: new RegExp(`${label.replace(/[()]/g, '\\$&')} · Coming soon`) })).toBeDisabled();
+    }
+    expect(container.textContent).not.toMatch(/No quota has been entered/);
+  });
 });

@@ -2376,6 +2376,17 @@ like every other FK here) or stays a slug with a composite FK to a unique
   is the decision that blocks everything else; a `password_resets` table of single-use
   expiring tokens stored **hashed**, so a leaked table is not a set of live keys; rate
   limiting per email and per IP; request and confirm endpoints; and two screens.
+- **BEFORE RUNNING MORE THAN ONE SERVER INSTANCE, the rate limiter needs a SHARED store — decided by
+  Venkat 2026-10-14.** No Redis and no new dependency for now: the in-memory store is correct on ONE
+  server. When a second instance is planned, **compare a Postgres-backed store first** (Postgres is
+  already deployed; a small counters table behind express-rate-limit's `store` seam) **before adding
+  Redis**, which would be a new service plus `rate-limit-redis` and a client library.
+- **The login page's "attempts left" banner reads the SERVER's count (2026-10-14).** The limiters are
+  named (`identifier: 'login-ip'` / `'login-email'`) and CORS exposes `RateLimit`, `RateLimit-Policy`
+  and `Retry-After`, so `AuthContext.login` returns `attemptsRemaining` from the `"login-email"` item.
+  It replaced a browser counter that reset on reload and invented a 5-minute lockout. With N instances
+  the count would be per instance — one more reason for the shared store above.
+  `roundTrip.loginRateLimitHeaders`, `Login.rateLimit.test`, `AuthContext.rateLimit.test`.
 - **Login rate limiting is NOT production-ready.** The limiter works and is verified, but
   its store is in-process memory: counters reset on every deploy and are not shared between
   instances, so N instances multiply every budget by N and a rolling restart clears an

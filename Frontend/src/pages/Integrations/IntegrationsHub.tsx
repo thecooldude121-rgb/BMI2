@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
+import { PreviewBanner } from '../../components/common/PreviewBanner';
 import { useNavigate } from 'react-router-dom';
 import { useIntegrations } from '../../contexts/IntegrationsContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -201,17 +202,24 @@ export const IntegrationsHub: React.FC = () => {
           </nav>
         </div>
 
+        <PreviewBanner
+          detail="No integration is connected in this CRM yet. Connecting, configuring and adding integrations are coming soon; nothing on this page reaches another system."
+          insteadTry="Lead Generation links through Settings › Connected Modules, which is real."
+        />
         <div className="bg-white rounded-lg border border-[#e5e7eb] p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <span className="text-3xl">🔌</span>
               <h1 className="text-[28px] font-bold text-gray-900">Integration Hub</h1>
             </div>
+            {/* Disabled: its modal ended in "Custom integration added successfully"
+                with nothing stored anywhere (H2, 2026-10-14). */}
             <button
-              onClick={() => setAddCustomModalOpen(true)}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#667eea] rounded-lg hover:bg-[#5568d3] transition-all duration-200"
+              disabled
+              title="Custom integrations are coming soon"
+              className="px-4 py-2 text-sm font-medium text-gray-400 bg-gray-100 rounded-lg cursor-not-allowed"
             >
-              + Add Custom
+              + Add Custom · Coming soon
             </button>
           </div>
 
@@ -485,8 +493,9 @@ export const IntegrationsHub: React.FC = () => {
       <AddCustomIntegrationModal
         isOpen={addCustomModalOpen}
         onClose={() => setAddCustomModalOpen(false)}
-        onAdd={(integration) => {
-          showToast('Custom integration added successfully', 'success');
+        onAdd={() => {
+          // Unreachable while "Add Custom" is disabled — and never a success toast:
+          // nothing stores a custom integration.
           setAddCustomModalOpen(false);
         }}
       />

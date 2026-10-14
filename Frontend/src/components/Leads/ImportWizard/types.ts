@@ -52,7 +52,10 @@ export type DuplicateAction = 'skip' | 'merge_review' | 'create_new';
 
 export interface ImportRules {
   defaultStatus: LeadStatus;
+  /** A workspace user's id (GET /users), or '' for unassigned. */
   defaultOwnerId: string;
+  /** That user's display name, for the confirm step. */
+  defaultOwnerLabel?: string;
   sourceOverride: string;
   tags: string[];
   triggerEnrichment: boolean;

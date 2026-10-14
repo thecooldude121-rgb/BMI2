@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Button } from '../../components/ui/Button';
 import PreviewBanner from '../../components/common/PreviewBanner';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Download, Share2, Star, Clock, Filter, RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Activity, Home, ChevronRight, ChevronDown, Mail, FileSpreadsheet, FileText, BarChart3, PieChart, LineChart, Table, Eye, Info, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Calendar, Download, Share2, Star, Filter, RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Activity, Home, ChevronRight, BarChart3, PieChart, LineChart, Table, Eye, Info, CheckCircle } from 'lucide-react';
 import CRMNavigation from '../../components/CRM/CRMNavigation';
 
 const ReportDetailView: React.FC = () => {
@@ -11,34 +10,7 @@ const ReportDetailView: React.FC = () => {
   const [selectedDateRange, setSelectedDateRange] = useState('month');
   const [selectedOwner, setSelectedOwner] = useState('all');
   const [selectedMetric, setSelectedMetric] = useState('all');
-  const [isFavorited, setIsFavorited] = useState(false);
-  const [showExportMenu, setShowExportMenu] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [successToastMessage, setSuccessToastMessage] = useState('');
-  const [showShareModal, setShowShareModal] = useState(false);
-
-  // Schedule modal state
-  const [scheduleFrequency, setScheduleFrequency] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
-  const [scheduleTime, setScheduleTime] = useState('09:00');
-  const [scheduleRecipients, setScheduleRecipients] = useState({
-    alex: true,
-    sarah: true,
-    mike: false,
-  });
-  const [scheduleFormat, setScheduleFormat] = useState<'pdf' | 'excel' | 'csv'>('pdf');
-
-  // Share modal state
-  const [shareSearch, setShareSearch] = useState('');
-  const [shareRecipients, setShareRecipients] = useState({
-    sarah: true,
-    mike: true,
-    emily: false,
-  });
-  const [shareMessage, setShareMessage] = useState('');
-  const [allowEdit, setAllowEdit] = useState(true);
-  const [notifyEmail, setNotifyEmail] = useState(true);
 
   // Convert slug to report name
   const reportName = reportSlug?.split('-').map(word =>
@@ -49,88 +21,16 @@ const ReportDetailView: React.FC = () => {
     navigate('/crm/reports');
   };
 
-  const handleExportPDF = () => {
-    // Was: console.log('Exporting report as PDF'). The menu item looked live
-    // and produced nothing — the dead-button problem. There is no report to
-    // export: every figure on this page is a literal (see getReportData).
-    setShowExportMenu(false);
-    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
-  };
 
-  const handleExportCSV = () => {
-    // Was: console.log('Exporting report as CSV'). The menu item looked live
-    // and produced nothing — the dead-button problem. There is no report to
-    // export: every figure on this page is a literal (see getReportData).
-    setShowExportMenu(false);
-    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
-  };
 
-  const handleExportExcel = () => {
-    // Was: console.log('Exporting report as Excel'). The menu item looked live
-    // and produced nothing — the dead-button problem. There is no report to
-    // export: every figure on this page is a literal (see getReportData).
-    setShowExportMenu(false);
-    window.alert('Export is not built yet. The figures on this page are sample content, so there is nothing to export.');
-  };
 
-  const handlePrint = () => {
-    window.print();
-  };
 
-  const handleSchedule = () => {
-    setShowScheduleModal(true);
-  };
 
-  const handleScheduleConfirm = () => {
-    console.log('Scheduling report:', {
-      frequency: scheduleFrequency,
-      time: scheduleTime,
-      recipients: scheduleRecipients,
-      format: scheduleFormat,
-    });
-    setShowScheduleModal(false);
-    setSuccessToastMessage('Scheduling reports is not available yet — nothing was scheduled.');
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const toggleRecipient = (recipient: 'alex' | 'sarah' | 'mike') => {
-    setScheduleRecipients(prev => ({
-      ...prev,
-      [recipient]: !prev[recipient],
-    }));
-  };
 
-  const toggleShareRecipient = (recipient: 'sarah' | 'mike' | 'emily') => {
-    setShareRecipients(prev => ({
-      ...prev,
-      [recipient]: !prev[recipient],
-    }));
-  };
 
-  const handleShareConfirm = () => {
-    const sharedCount = Object.values(shareRecipients).filter(Boolean).length;
-    console.log('Sharing report:', {
-      recipients: shareRecipients,
-      message: shareMessage,
-      allowEdit,
-      notifyEmail,
-    });
-    setShowShareModal(false);
-    setSuccessToastMessage(`Report shared with ${sharedCount} ${sharedCount === 1 ? 'person' : 'people'}`);
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
-  };
 
-  const handleEmailReport = () => {
-    console.log('Opening email modal');
-    setShowExportMenu(false);
-    // TODO: Implement email modal
-  };
 
-  const handleToggleFavorite = () => {
-    setIsFavorited(!isFavorited);
-  };
 
   const handleRefresh = () => {
     console.log('Refreshing report data');
@@ -213,94 +113,28 @@ const ReportDetailView: React.FC = () => {
               </button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">{reportName}</h1>
-                <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
-                  <Clock className="w-4 h-4" />
-                  <span>Last updated: 5 minutes ago</span>
-                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleToggleFavorite}
-                className={`px-4 py-2 border rounded-lg flex items-center gap-2 transition-all ${
-                  isFavorited
-                    ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Star className={`w-4 h-4 ${isFavorited ? 'fill-yellow-400' : ''}`} />
-                {isFavorited ? 'Favorited' : 'Favorite'}
-              </button>
-
-              <div className="relative">
-                <button
-                  onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                  <ChevronDown className="w-4 h-4" />
+            {/* Every action here is unbuilt (saved reports live on an unmerged branch —
+                see the reports inventory). They were: a Favorite toggle that reset on
+                reload, exports that raised alert(), "Email Report" and "Refresh" that only
+                logged to the console, a Schedule that reported its own failure in a
+                green success toast, and a Share that announced "Report shared with N
+                people" while sending nothing (H2, 2026-10-14). */}
+            <div className="flex flex-wrap items-center gap-3">
+              {[
+                { label: 'Favorite', Icon: Star },
+                { label: 'Export', Icon: Download },
+                { label: 'Share', Icon: Share2 },
+                { label: 'Schedule', Icon: Calendar },
+              ].map(({ label, Icon }) => (
+                <button key={label} type="button" disabled title={`${label} is coming soon`}
+                  className="px-4 py-2 border border-gray-200 rounded-lg flex items-center gap-2 text-gray-400 cursor-not-allowed">
+                  <Icon className="w-4 h-4" aria-hidden="true" />
+                  {label} · Coming soon
                 </button>
-                {showExportMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
-                    <button
-                      onClick={handleExportPDF}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Export as PDF
-                    </button>
-                    <button
-                      onClick={handleExportCSV}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      Export as CSV
-                    </button>
-                    <button
-                      onClick={handleExportExcel}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" />
-                      Export as Excel
-                    </button>
-                    <div className="border-t border-gray-200 my-2"></div>
-                    <button
-                      onClick={handleEmailReport}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Mail className="w-4 h-4" />
-                      Email Report
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowExportMenu(false);
-                        setShowScheduleModal(true);
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                    >
-                      <Clock className="w-4 h-4" />
-                      Schedule Delivery
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Share2 className="w-4 h-4" />
-                Share
-              </button>
-
-              <Button
-                onClick={handleSchedule}
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule
-              </Button>
+              ))}
             </div>
           </div>
 
@@ -627,323 +461,6 @@ const ReportDetailView: React.FC = () => {
           </div>
         </div>
 
-        {/* Schedule Modal */}
-        {showScheduleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Schedule Report Delivery</h3>
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <span className="text-2xl">&times;</span>
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-6 space-y-6">
-                <div className="text-sm text-gray-600">
-                  Report: <span className="font-medium text-gray-900">{reportName}</span>
-                </div>
-
-                {/* Frequency */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Frequency: <span className="text-red-500">*</span>
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={scheduleFrequency === 'daily'}
-                        onChange={() => setScheduleFrequency('daily')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Daily</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={scheduleFrequency === 'weekly'}
-                        onChange={() => setScheduleFrequency('weekly')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Weekly (Every Monday)</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="frequency"
-                        checked={scheduleFrequency === 'monthly'}
-                        onChange={() => setScheduleFrequency('monthly')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Monthly (1st of month)</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Time */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Time:</label>
-                  <select aria-label="Time:"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="00:00">12:00 AM</option>
-                    <option value="01:00">1:00 AM</option>
-                    <option value="02:00">2:00 AM</option>
-                    <option value="03:00">3:00 AM</option>
-                    <option value="04:00">4:00 AM</option>
-                    <option value="05:00">5:00 AM</option>
-                    <option value="06:00">6:00 AM</option>
-                    <option value="07:00">7:00 AM</option>
-                    <option value="08:00">8:00 AM</option>
-                    <option value="09:00">9:00 AM</option>
-                    <option value="10:00">10:00 AM</option>
-                    <option value="11:00">11:00 AM</option>
-                    <option value="12:00">12:00 PM</option>
-                    <option value="13:00">1:00 PM</option>
-                    <option value="14:00">2:00 PM</option>
-                    <option value="15:00">3:00 PM</option>
-                    <option value="16:00">4:00 PM</option>
-                    <option value="17:00">5:00 PM</option>
-                    <option value="18:00">6:00 PM</option>
-                    <option value="19:00">7:00 PM</option>
-                    <option value="20:00">8:00 PM</option>
-                    <option value="21:00">9:00 PM</option>
-                    <option value="22:00">10:00 PM</option>
-                    <option value="23:00">11:00 PM</option>
-                  </select>
-                </div>
-
-                {/* Recipients */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Recipients: <span className="text-red-500">*</span>
-                  </label>
-                  <div className="border border-gray-300 rounded-lg p-3 space-y-2">
-                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={scheduleRecipients.alex}
-                        onChange={() => toggleRecipient('alex')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Alex Rodriguez (me)</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={scheduleRecipients.sarah}
-                        onChange={() => toggleRecipient('sarah')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Sarah Chen</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={scheduleRecipients.mike}
-                        onChange={() => toggleRecipient('mike')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Mike Johnson</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Format */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Format:</label>
-                  <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="format"
-                        checked={scheduleFormat === 'pdf'}
-                        onChange={() => setScheduleFormat('pdf')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">PDF</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="format"
-                        checked={scheduleFormat === 'excel'}
-                        onChange={() => setScheduleFormat('excel')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">Excel</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="format"
-                        checked={scheduleFormat === 'csv'}
-                        onChange={() => setScheduleFormat('csv')}
-                        className="w-4 h-4 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-900">CSV</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowScheduleModal(false)}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={handleScheduleConfirm}
-                  size="lg"
-                >
-                  Schedule
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Share Modal */}
-        {showShareModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Share Report</h3>
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <span className="text-2xl">&times;</span>
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-6 space-y-6">
-                <div className="text-sm text-gray-600">
-                  Report: <span className="font-medium text-gray-900">{reportName}</span>
-                </div>
-
-                {/* Search and Recipients */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Share with:
-                  </label>
-                  <input aria-label="Share with:"
-                    type="text"
-                    placeholder="Search team members..."
-                    value={shareSearch}
-                    onChange={(e) => setShareSearch(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-3"
-                  />
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shareRecipients.sarah}
-                        onChange={() => toggleShareRecipient('sarah')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Sarah Chen</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shareRecipients.mike}
-                        onChange={() => toggleShareRecipient('mike')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Mike Johnson</span>
-                    </label>
-                    <label className="flex items-center gap-3 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={shareRecipients.emily}
-                        onChange={() => toggleShareRecipient('emily')}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-gray-900">Emily Davis</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Message */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Message (optional):
-                  </label>
-                  <textarea aria-label="Message (optional):"
-                    value={shareMessage}
-                    onChange={(e) => setShareMessage(e.target.value)}
-                    placeholder="Add a message..."
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  />
-                </div>
-
-                {/* Options */}
-                <div className="space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={allowEdit}
-                      onChange={(e) => setAllowEdit(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-900">Allow them to edit this report</span>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notifyEmail}
-                      onChange={(e) => setNotifyEmail(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-900">Notify via email</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowShareModal(false)}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  Cancel
-                </button>
-                <Button
-                  onClick={handleShareConfirm}
-                  size="lg"
-                >
-                  Share
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Toast */}
-        {showSuccessToast && (
-          <div className="fixed bottom-8 right-8 z-50 animate-fade-in">
-            <div className="bg-green-600 text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3">
-              <CheckCircle className="w-5 h-5" />
-              <span className="font-medium">{successToastMessage}</span>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

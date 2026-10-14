@@ -41,6 +41,11 @@ export function createApp() {
       cb(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
+    // Without this a browser hides the rate-limit headers from page script
+    // (only CORS-safelisted headers are readable), so the login page could not
+    // show the server's real "attempts left" count. Read-only information the
+    // response already carries; nothing new is disclosed.
+    exposedHeaders: ['RateLimit', 'RateLimit-Policy', 'Retry-After'],
   }));
   // Request logging is noise in a test run; production behaviour is unchanged.
   if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
