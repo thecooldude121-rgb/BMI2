@@ -698,16 +698,28 @@ export interface LeadDuplicateMatch {
 export interface LeadDuplicateRow { email?: string; phone?: string; company?: string; last_name?: string }
 
 /**
- * Match 1..1000 candidate rows against EVERY lead in the workspace — slice 6b.
- * Returns one entry per row, in order (null = no match). THROWS on a non-2xx:
- * "could not check" must never read as "no duplicates".
+ * Rows per request. The server accepts up to 1000, but its JSON body limit is
+ * Express's default 100 KB, and 1000 realistic rows (email, phone, company,
+ * last name) measure ~140 KB — a 413. 200 such rows are ~29 KB.
+ */
+export const DUPLICATE_CHECK_CHUNK = 200;
+
+/**
+ * Match candidate rows against EVERY lead in the workspace — slice 6b. Any
+ * number of rows; sent DUPLICATE_CHECK_CHUNK at a time. Returns one entry per
+ * row, in order (null = no match). THROWS on a non-2xx: "could not check" must
+ * never read as "no duplicates".
  */
 export async function checkLeadDuplicates(rows: LeadDuplicateRow[], excludeId?: string | number): Promise<(LeadDuplicateMatch | null)[]> {
-  const res = await fetch(`${API_BASE}/leads/duplicate-check`, {
-    method: 'POST', headers: getAuthHeaders(),
-    body: JSON.stringify({ rows, exclude_id: excludeId ?? undefined }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.message || `The duplicate check failed (HTTP ${res.status})`);
-  return (json.data ?? []).map((d: { match: LeadDuplicateMatch | null }) => d.match);
+  const out: (LeadDuplicateMatch | null)[] = [];
+  for (let i = 0; i < rows.length; i += DUPLICATE_CHECK_CHUNK) {
+    const res = await fetch(`${API_BASE}/leads/duplicate-check`, {
+      method: 'POST', headers: getAuthHeaders(),
+      body: JSON.stringify({ rows: rows.slice(i, i + DUPLICATE_CHECK_CHUNK), exclude_id: excludeId ?? undefined }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.message || `The duplicate check failed (HTTP ${res.status})`);
+    out.push(...(json.data ?? []).map((d: { match: LeadDuplicateMatch | null }) => d.match));
+  }
+  return out;
 }

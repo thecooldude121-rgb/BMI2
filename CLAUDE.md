@@ -1798,7 +1798,9 @@ old constraint, which fails the shared-name test.
       Existing" is live (contact and/or account pickers). Contact duplicates come from the server
       (`utils/contactDuplicates`, new `GET /contacts?phone_digits=`, domain-only matches dropped); lead
       duplicates from the new `POST /leads/duplicate-check` (1..1000 rows per call — Add Lead, Quick Add,
-      the Import wizard, lead detail, conversion). LeadContext no longer fetches 50 leads on mount.
+      the Import wizard, lead detail, conversion); the client sends 200 rows per request, because the server's
+      JSON body limit is Express's default 100 KB and 1000 realistic rows measured ~140 KB (a 413). LeadContext
+      no longer fetches 50 leads on mount.
     - **6c:** `GET /meetings` gained `search` (title / attendees / notes, wildcards escaped), `type` and
       `linked=yes|no` (bad values 400), a clamped offset; `GET /meetings/summary` = `{ total, unlinked }`
       under the same filters. The Meetings page is one server page of 25 with the shared pager; it loaded

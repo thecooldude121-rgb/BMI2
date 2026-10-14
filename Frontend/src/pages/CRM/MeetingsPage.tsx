@@ -63,11 +63,14 @@ const MeetingsPage: React.FC = () => {
   const seq = useRef(0);
 
   // Search runs on the server, 250 ms after typing stops; a narrower query
-  // starts again at page 1.
+  // starts again at page 1. Only a CHANGED query resets the page — the mount
+  // used to fire this too, 250 ms in, undoing a quick click on Next.
   useEffect(() => {
-    const t = setTimeout(() => { setQuery(search.trim()); setPage(1); }, 250);
+    const next = search.trim();
+    if (next === query) return;
+    const t = setTimeout(() => { setQuery(next); setPage(1); }, 250);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, query]);
 
   const choose = (f: Filter) => { setFilter(f); setPage(1); };
 

@@ -69,7 +69,7 @@ export default function ImportWizard({ onClose }: Props) {
 
   // Step 2 → 3: build validated rows
   // Duplicates are matched on the SERVER against every lead in the workspace,
-  // in one request for the whole file (slice 6b). They were matched against the
+  // in chunked requests for the whole file (slice 6b). They were matched against the
   // 50 leads LeadContext had loaded.
   async function handleMappingNext() {
     if (!parsed) return;
@@ -78,14 +78,11 @@ export default function ImportWizard({ onClose }: Props) {
     setStep(3);
     setDupCheck({ state: 'checking' });
     try {
-      const matches: (LeadDuplicateMatch | null)[] = [];
-      for (let i = 0; i < rows.length; i += 1000) {
-        const chunk = rows.slice(i, i + 1000);
-        matches.push(...await checkLeadDuplicates(chunk.map(r => ({
-          email: r.mapped.email?.trim() || undefined, phone: r.mapped.phone?.trim() || undefined,
-          company: r.mapped.company?.trim() || undefined, last_name: r.mapped.last_name?.trim() || undefined,
-        }))));
-      }
+      // checkLeadDuplicates sends the rows in body-sized chunks.
+      const matches: (LeadDuplicateMatch | null)[] = await checkLeadDuplicates(rows.map(r => ({
+        email: r.mapped.email?.trim() || undefined, phone: r.mapped.phone?.trim() || undefined,
+        company: r.mapped.company?.trim() || undefined, last_name: r.mapped.last_name?.trim() || undefined,
+      })));
       setValidatedRows(applyServerDuplicates(rows, matches));
       setDupCheck({ state: 'done' });
     } catch (e: any) {

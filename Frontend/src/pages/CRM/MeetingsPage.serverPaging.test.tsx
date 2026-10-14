@@ -64,6 +64,19 @@ describe('Meetings list on the server (slice 6c)', () => {
     expect(lastList().searchParams.get('limit')).toBe('25');
   });
 
+  it('a quick Next right after the page loads is not undone by the search debounce', async () => {
+    // The 250 ms search debounce fired once on mount and reset to page 1, so a
+    // click on Next inside that window snapped back. Only a changed query resets.
+    server();
+    render(<MemoryRouter><MeetingsPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByText('Meeting 1')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByText('Meeting 26')).toBeInTheDocument());
+    await new Promise(r => setTimeout(r, 400));
+    expect(screen.getByText('Meeting 26')).toBeInTheDocument();
+    expect(lastList().searchParams.get('offset')).toBe('25');
+  });
+
   it('search, type and "not linked" are sent to the server, and return to page 1', async () => {
     server();
     render(<MemoryRouter><MeetingsPage /></MemoryRouter>);
