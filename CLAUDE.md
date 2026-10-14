@@ -1901,7 +1901,20 @@ old constraint, which fails the shared-name test.
     `bmi_crm_iso_test`. 055 and 056 ARE applied to live (ledger rows dated 20 and 21 Sep: RLS on
     seven tables, the `bmi_reports_ro` role) and main has neither file — main must take 055/056
     BYTE-FOR-BYTE (checksums `8f8f97a7`, `a9f0306c`) or the migration runner refuses to boot.
-  - **a.** Migrations 055-057, unchanged.
+  - **a.** Migrations 055-057, unchanged. **DONE 2026-10-15.** 055/056 added byte-for-byte (runner
+    checksums `8f8f97a7` / `a9f0306c`, equal to both ledgers). **Why 057 had no ledger row:** on 2026-10-03
+    the leadgen session validated it with plain `psql` against `bmi_crm_iso_test` (outside the runner,
+    which writes the ledger row in the same transaction as the SQL), and ran it on live only as a
+    rolled-back dry run. The two orphaned test tables were empty and unreferenced; they were dropped
+    and 057 applied through the runner, to the test DB and then — after a rolled-back dry run — to live
+    (checksum `6e5b3472`). A fresh database builds through all migrations.
+    **Migration 070 (found in step a):** 056's `saved_reports.owner_id` and 057's
+    `saved_report_schedules.created_by` used a bare `ON DELETE SET NULL` on a composite reference,
+    which nulls `tenant_id` too (NOT NULL), so deleting such a user FAILED instead of clearing the
+    owner. 070 switches both to the column-listed form 060/064 use. Applied to the test DB;
+    **live waits for Venkat's OK** (both tables are empty there). `roundTrip.reportsSchema` (5) pins
+    055's RLS (on, not forced), the role's lack of privilege, same-workspace recipients, the weekly
+    CHECK and 070.
   - **b.** The reports connection, its role, and the query builder. **The role's password comes from
     configuration (an env var), never passwordless and never hardcoded**; the server refuses to use
     the reports connection without it.
