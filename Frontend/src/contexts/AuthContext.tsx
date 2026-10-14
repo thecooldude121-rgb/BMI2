@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import { parseRateLimit } from '../utils/rateLimitHeader';
 
 /**
  * Real authentication against POST /auth/login.
@@ -101,6 +102,14 @@ export interface LoginResult {
   ok: boolean;
   /** Server-supplied message, shown verbatim so the user sees the real reason. */
   message?: string;
+  /**
+   * The SERVER's count of sign-in attempts left for this email in the current
+   * window (the per-email limiter, read from the RateLimit header). Absent when
+   * the response did not carry it — never guessed in the browser.
+   */
+  attemptsRemaining?: number;
+  /** Seconds until the per-email window resets, when the server said. */
+  retryAfterSeconds?: number;
 }
 
 interface AuthContextType {
@@ -180,7 +189,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const json = await res.json().catch(() => ({}));
 
       if (!res.ok || !json.token) {
-        return { ok: false, message: json.message || 'Could not sign in. Please try again.' };
+        const perEmail = parseRateLimit(res.headers.get('RateLimit'))['login-email'];
+        const retryAfter = Number(res.headers.get('Retry-After'));
+        return {
+          ok: false,
+          message: json.message || 'Could not sign in. Please try again.',
+          attemptsRemaining: perEmail?.remaining,
+          retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : perEmail?.resetSeconds ?? undefined,
+        };
       }
 
       localStorage.setItem(TOKEN_KEY, json.token);

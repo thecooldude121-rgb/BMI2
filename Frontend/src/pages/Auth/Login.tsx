@@ -60,8 +60,13 @@ const Login: React.FC = () => {
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState<'weak' | 'medium' | 'strong' | null>(null);
   const [touched, setTouched] = useState({ email: false, password: false });
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [rateLimited, setRateLimited] = useState(false);
+  /**
+   * Sign-in attempts left for the typed email, as the SERVER counts them (the
+   * per-email limiter's RateLimit header). It used to be a browser counter that
+   * reset on reload and invented its own 5-minute lockout the server never set.
+   * Null until a failed sign-in reports it.
+   */
+  const [attemptsLeft, setAttemptsLeft] = useState<{ email: string; remaining: number; resetSeconds?: number } | null>(null);
 
   // Redirect once a session exists. Prefers the page the user was trying to
   // reach (RequireAuth passes it in `location.state.from`) over a role-based
@@ -148,17 +153,6 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (loginAttempts >= 5) {
-      setRateLimited(true);
-      setErrors({ general: 'Too many login attempts. Please try again in 5 minutes.' });
-      setTimeout(() => {
-        setRateLimited(false);
-        setLoginAttempts(0);
-        setErrors({});
-      }, 300000);
-      return;
-    }
-
     const emailError = validateEmail(formData.email);
     const passwordError = validatePassword(formData.password);
 
@@ -179,7 +173,7 @@ const Login: React.FC = () => {
       // return a boolean, and `if (result)` on an object is always truthy — the
       // compiler cannot catch that, so a failed sign-in would have looked
       // successful and left the user on a blank app with no session.
-      const { ok, message } = await login(formData.email, formData.password);
+      const { ok, message, attemptsRemaining, retryAfterSeconds } = await login(formData.email, formData.password);
 
       if (ok) {
         if (formData.rememberMe) {
@@ -191,13 +185,13 @@ const Login: React.FC = () => {
         }
         // The redirect is handled by the effect watching `user`.
       } else {
-        setLoginAttempts(prev => prev + 1);
+        setAttemptsLeft(attemptsRemaining === undefined ? null
+          : { email: formData.email.trim().toLowerCase(), remaining: attemptsRemaining, resetSeconds: retryAfterSeconds });
         // Show the server's own reason rather than assuming a bad password —
         // an unreachable server is not the same failure.
         setErrors({ general: message ?? 'Invalid email or password. Please try again.' });
       }
     } catch (error) {
-      setLoginAttempts(prev => prev + 1);
       setErrors({
         general: 'An error occurred during login. Please try again.'
       });
@@ -363,12 +357,16 @@ const Login: React.FC = () => {
           )}
 
           {/* Rate Limit Warning */}
-          {loginAttempts >= 3 && !rateLimited && (
+          {/* Only for the email the count belongs to, and only while some are left —
+              at 0 the server's own "Too many attempts" message is the error above. */}
+          {attemptsLeft && attemptsLeft.remaining > 0 && attemptsLeft.remaining <= 2
+            && attemptsLeft.email === formData.email.trim().toLowerCase() && (
             <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg p-4">
               <div className="flex items-center space-x-2">
                 <AlertCircle className="h-5 w-5 text-orange-600 flex-shrink-0" />
                 <p className="text-sm text-orange-800">
-                  Warning: {5 - loginAttempts} login attempts remaining
+                  {attemptsLeft.remaining} sign-in {attemptsLeft.remaining === 1 ? 'attempt' : 'attempts'} left for this email
+                  {attemptsLeft.resetSeconds ? ` before a pause of about ${Math.max(1, Math.ceil(attemptsLeft.resetSeconds / 60))} minutes` : ''}.
                 </p>
               </div>
             </div>
@@ -523,7 +521,7 @@ const Login: React.FC = () => {
             {/* Sign In Button */}
             <Button
               type="submit"
-              disabled={loading || rateLimited}
+              disabled={loading}
               fullWidth className="border border-transparent shadow-sm font-semibold duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
             >
               {loading ? (

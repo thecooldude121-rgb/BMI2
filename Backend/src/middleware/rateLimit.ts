@@ -62,6 +62,10 @@ const emailKey = (req: Request): string => {
  */
 export const loginIpLimiter = rateLimit({
   ...base,
+  // The draft-8 policy name. Both login limiters append to the same RateLimit
+  // header, so the names are how a client tells them apart: the login page
+  // reads "login-email" to show the attempts left for the address being typed.
+  identifier: 'login-ip',
   windowMs: 15 * 60 * 1000,
   limit: 30,
   skipSuccessfulRequests: true,
@@ -78,6 +82,7 @@ export const loginIpLimiter = rateLimit({
  */
 export const loginEmailLimiter = rateLimit({
   ...base,
+  identifier: 'login-email',
   windowMs: 15 * 60 * 1000,
   limit: 5,
   keyGenerator: emailKey,
