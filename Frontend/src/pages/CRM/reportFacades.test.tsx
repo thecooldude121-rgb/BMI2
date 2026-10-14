@@ -12,16 +12,16 @@ vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ showToast: vi
 import ReportDetailView from './ReportDetailView';
 import CustomReportBuilder from './CustomReportBuilder';
 
-it('Report Detail: Favorite / Export / Share / Schedule are disabled; no "Last updated 5 minutes ago"', () => {
+it('Report Detail is an honest "coming soon" state: no sample figures, and the URL is never shown as a report name', () => {
   const { container } = render(
-    <MemoryRouter initialEntries={['/crm/reports/sales-overview']}>
+    <MemoryRouter initialEntries={['/crm/reports/quarterly-fraud-totals']}>
       <Routes><Route path="/crm/reports/:reportSlug" element={<ReportDetailView />} /></Routes>
     </MemoryRouter>,
   );
-  for (const label of ['Favorite', 'Export', 'Share', 'Schedule']) {
-    expect(screen.getByRole('button', { name: `${label} · Coming soon` })).toBeDisabled();
-  }
-  expect(container.textContent).not.toMatch(/minutes ago|shared with/i);
+  expect(screen.getByText('Detailed report views are coming soon')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Back to Reports' })).toBeEnabled();
+  expect(container.textContent).not.toMatch(/quarterly|fraud/i);
+  expect(container.textContent).not.toMatch(/\$\d|minutes ago|shared with|PREVIEW/i);
 });
 
 it('Custom Report Builder: Save as Draft and Save & Run are disabled; nothing claims a save', () => {

@@ -369,11 +369,9 @@ const ReportsPage: React.FC = () => {
     navigate('/crm/custom-report-builder');
   };
 
-  const handleViewReport = (reportName: string) => {
-    // Navigate to report detail view
-    const reportSlug = reportName.toLowerCase().replace(/\s+/g, '-');
-    navigate(`/crm/reports/${reportSlug}`);
-  };
+  // No "view report" navigation: /crm/reports/:slug rendered sample figures
+  // under a heading built from the URL. Until Report Detail by id lands (reports
+  // replay step e) the cards' View controls are disabled "coming soon".
 
 
 
@@ -570,7 +568,6 @@ const ReportsPage: React.FC = () => {
             def.usesDateRange && dateBounds ? 'expected close date' : null,
             def.usesOwner && ownerKey !== 'all' ? 'owner' : null,
           ].filter(Boolean) as string[]}
-          onView={handleViewReport}
         />
       );
     });
@@ -938,7 +935,6 @@ const ReportsPage: React.FC = () => {
             changeColor="text-gray-600"
             bgColor="bg-green-50"
             reportName="Sales Overview"
-            onView={handleViewReport}
           />
           {/* Was "89% of quota ✅ On track". The quotas table has ZERO rows and
               this page queries it nowhere, so attainment cannot be computed. */}
@@ -950,7 +946,6 @@ const ReportsPage: React.FC = () => {
             changeColor="text-gray-600"
             bgColor="bg-blue-50"
             reportName="Quota Attainment"
-            onView={handleViewReport}
           />
           <QuickStatCard
             icon={<TrendingUp className="w-6 h-6 text-purple-600" />}
@@ -960,7 +955,6 @@ const ReportsPage: React.FC = () => {
             changeColor="text-gray-600"
             bgColor="bg-purple-50"
             reportName="Pipeline Health"
-            onView={handleViewReport}
           />
           {/* Won / decided, not won / all deals — see the note on `stats`. */}
           <QuickStatCard
@@ -973,7 +967,6 @@ const ReportsPage: React.FC = () => {
             changeColor="text-gray-600"
             bgColor="bg-orange-50"
             reportName="Win/Loss Analysis"
-            onView={handleViewReport}
           />
           </div>
         )}
@@ -1259,7 +1252,6 @@ interface QuickStatCardProps {
   changeColor: string;
   bgColor: string;
   reportName: string;
-  onView: (reportName: string) => void;
   /**
    * OPTIONAL and no longer passed by the four headline cards. They used fixed
    * Unicode strings like "━━━▁▃▄▃▅▆▇▄▆▅" that drew a rising trend whatever the
@@ -1277,13 +1269,9 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
   changeColor,
   bgColor,
   reportName,
-  onView,
 }) => {
   return (
-    <div
-      onClick={() => onView(reportName)}
-      className="bg-white rounded-lg border border-gray-200 p-5 h-[140px] shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
-    >
+    <div className="bg-white rounded-lg border border-gray-200 p-5 h-[140px] shadow-sm">
       <div className="flex items-center gap-3 mb-3">
         <div className={`p-2 ${bgColor} rounded-lg`}>
           {icon}
@@ -1294,14 +1282,13 @@ const QuickStatCard: React.FC<QuickStatCardProps> = ({
       <div className={`text-sm font-medium mb-2 ${changeColor}`}>{change}</div>
       <div className="text-xs text-gray-400 mb-2 font-mono tracking-wider">{sparkline}</div>
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onView(reportName);
-        }}
-        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+        type="button"
+        disabled
+        aria-label={`${reportName} detailed view · Coming soon`}
+        title="Detailed report views are coming soon"
+        className="text-sm text-gray-400 font-medium flex items-center gap-1 cursor-not-allowed"
       >
-        View Report
-        <ChevronRight className="w-4 h-4" />
+        Detailed view · Coming soon
       </button>
     </div>
   );
@@ -1344,7 +1331,6 @@ interface ReportCardProps {
   progress?: string;
   highlight?: boolean;
   editable?: boolean;
-  onView: (title: string) => void;
   onEdit?: (title: string) => void;
 }
 
@@ -1360,13 +1346,11 @@ const ReportCard: React.FC<ReportCardProps> = ({
   progress,
   highlight,
   editable,
-  onView,
   onEdit,
 }) => {
   return (
     <div
-      onClick={() => onView(title)}
-      className={`border rounded-lg p-4 min-h-[240px] flex flex-col hover:shadow-lg hover:-translate-y-0.5 hover:border-blue-500 transition-all duration-200 cursor-pointer relative ${
+      className={`border rounded-lg p-4 min-h-[240px] flex flex-col relative ${
         highlight ? 'border-[#ff9800] bg-[#fff3cd]' : 'border-gray-200 bg-white'
       }`}
     >
@@ -1443,19 +1427,21 @@ const ReportCard: React.FC<ReportCardProps> = ({
         someone's evidence. Export comes back when the numbers behind it are
         real.
 
-        `View` stays because /crm/reports/:slug is a real route, and `Edit`
-        because it navigates to the custom-report builder.
+        `View` is disabled "coming soon" (2026-10-15): /crm/reports/:slug showed
+        sample figures under a heading built from the URL. Report Detail by id
+        replaces it (reports replay step e). `Edit` stays because it navigates
+        to the custom-report builder.
       */}
       <div className="flex items-center gap-2 mt-2 flex-shrink-0">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onView(title);
-          }}
-          className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium hover:bg-blue-50 rounded transition-colors"
+          type="button"
+          disabled
+          aria-label={`${title} detailed view · Coming soon`}
+          title="Detailed report views are coming soon"
+          className="px-3 py-1 text-sm text-gray-400 font-medium rounded cursor-not-allowed"
         >
           <Eye className="w-4 h-4 inline mr-1" />
-          View
+          View · Coming soon
         </button>
         {editable && onEdit && (
           <button

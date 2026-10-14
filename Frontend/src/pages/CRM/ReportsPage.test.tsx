@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 /**
  * Group A item 4, slice 5b — /crm/reports reads server totals. Its headline
@@ -106,3 +106,27 @@ describe('/crm/reports — server totals', () => {
     expect(container.textContent).not.toMatch(/No quota has been entered/);
   });
 });
+
+// 2026-10-15: /crm/reports/:slug rendered sample figures under a heading built
+// from the URL. Until Report Detail by id lands (reports replay step e), no card
+// links there — every View control is disabled, and clicking a card goes nowhere.
+describe('/crm/reports — no link to the sample report detail page', () => {
+  it('every View control is disabled "coming soon", and clicking a card does not navigate', async () => {
+    let path = '';
+    const Where = () => { path = useLocation().pathname; return null; };
+    render(
+      <MemoryRouter initialEntries={['/crm/reports']}>
+        <Routes><Route path="*" element={<><ReportsPage /><Where /></>} /></Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('$900K + 2 not in USD');
+    const views = screen.getAllByRole('button', { name: /detailed view · Coming soon$/ });
+    expect(views.length).toBeGreaterThanOrEqual(12); // 4 headline tiles + 8 cards
+    for (const b of views) expect(b).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^(View|View Report)$/ })).toBeNull();
+    await userEvent.click(screen.getByText('REVENUE WON'));
+    await userEvent.click(screen.getByText('Dee Admin: 300'));
+    expect(path).toBe('/crm/reports');
+  });
+});
+
