@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  getMeetings, getMeetingById, createMeeting, updateMeeting,
+  getMeetings, getMeetingSummary, getMeetingById, createMeeting, updateMeeting,
   setMeetingRelation, createActivityFromMeeting,
 } from '../controllers/meetingsController';
 import { protect } from '../middleware/auth';
@@ -10,6 +10,7 @@ const router = Router();
 router.use(protect);
 
 router.get('/', getMeetings);
+router.get('/summary', getMeetingSummary);  // before /:id
 router.post('/', createMeeting);
 router.get('/:id', getMeetingById);
 router.patch('/:id', updateMeeting);

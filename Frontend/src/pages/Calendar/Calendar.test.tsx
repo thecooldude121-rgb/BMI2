@@ -83,7 +83,10 @@ describe('Calendar — exactly the visible weeks, from the server', () => {
   });
 
   it('a real meeting lands on its LOCAL day; a capped window says so', async () => {
-    const at = new Date(now.getFullYear(), now.getMonth(), 15, 10, 30);
+    // The same day as MID — which moves to the 16th when today is the 15th —
+    // so the meeting never lands on today's cell. (Hard-coding the 15th failed
+    // this test on the 15th of every month.)
+    const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() === 15 ? 16 : 15, 10, 30);
     api.fetchMeetingsInWindow.mockImplementation(async (_f: Date, _t: Date, limit: number) =>
       limit === 5 ? { meetings: [], total: 0 }
         : { meetings: [{ id: 'MTG1', title: 'QBR with Kora', date: at.toISOString(), related_to_id: 'D1' }], total: 250 });

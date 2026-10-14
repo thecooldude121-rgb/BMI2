@@ -1008,7 +1008,8 @@ old constraint, which fails the shared-name test.
     does not have.
   - **No "recorded", "live now" or "AI processed" tiles replaced them.** A tile that always
     reads 0 still implies the thing is being measured. The two counts shown — total, and
-    how many are not yet linked — are derived from the rows actually fetched.
+    how many are not yet linked — come from `GET /meetings/summary` over every meeting (slice 6c;
+    they used to count the first 50 rows fetched).
   - **`MeetingTranscriptViewer` is an honest stub, not a deletion.** Transcription is out
     of scope; the route is kept so a bookmark lands on that explanation rather than on a
     convincing transcript of a conversation nobody had.
@@ -1689,7 +1690,7 @@ old constraint, which fails the shared-name test.
       removed and re-counted.
     - **Still open:** the Activities frame (64:17786) side-by-side visual pass, with Tasks / Calendar's, when
       Figma is reconnected (it remained disconnected on 2026-10-12); the record pickers here and on Tasks
-      still list the first 200 records (server search is slice 6).
+      still list the first 200 records (server search is slice 6 — DONE 2026-10-15).
   - **SLICE 5 PLAN — APPROVED IN FULL by Venkat 2026-10-12.** 5a deals summary + main dashboard; 5b
     Reports; 5c Forecast + Team performance; 5d REDIRECT /dashboard -> /crm/dashboard and /analytics ->
     Reports (both confirmed duplicates; not rebuilt). Each sub-slice gated and reported separately.
@@ -1789,6 +1790,25 @@ old constraint, which fails the shared-name test.
       longer reads. Neither is a 500-row load that runs; each is its own small cleanup.
     - Tests: `routes/legacyRedirects.test.tsx` (5, incl. "no redirect chains"); `Dashboard.test.tsx` (23) removed
       with the widgets it tested. Mutation-tested (3, all killed). Typecheck 187 -> 184, no new errors (diffed).
+  - **SLICE 6 DONE (2026-10-15) — pickers and duplicate checks search the server; Meetings pages.**
+    - **6a:** `common/RecordPicker` (ARIA combobox over the list endpoints' `?search=`, "Showing 10 of N —
+      keep typing") replaces every 200-row picker: task form, Log activity, push-to-record, document upload.
+    - **6b:** the deal form's account is a REAL account or none — `company_id` from the picker; typed text
+      no longer creates or name-matches an account, and the field is optional. Conversion's "Link to
+      Existing" is live (contact and/or account pickers). Contact duplicates come from the server
+      (`utils/contactDuplicates`, new `GET /contacts?phone_digits=`, domain-only matches dropped); lead
+      duplicates from the new `POST /leads/duplicate-check` (1..1000 rows per call — Add Lead, Quick Add,
+      the Import wizard, lead detail, conversion). LeadContext no longer fetches 50 leads on mount.
+    - **6c:** `GET /meetings` gained `search` (title / attendees / notes, wildcards escaped), `type` and
+      `linked=yes|no` (bad values 400), a clamped offset; `GET /meetings/summary` = `{ total, unlinked }`
+      under the same filters. The Meetings page is one server page of 25 with the shared pager; it loaded
+      50 and filtered and counted them in the browser.
+    - Tests: `roundTrip.meetingsList` (7, 10,000 meetings vs SQL), `roundTrip.leadDuplicateCheck` (4),
+      `roundTrip.contactPhoneDigits` (2), `MeetingsPage.serverPaging.test` (5) and the picker / duplicate
+      suites. Mutation-tested (5 backend + 4 frontend for 6c, all killed). E2E on `bmi_crm_iso_test`: 62
+      meetings paged 25/25/12 and every filter reached the server; a deal re-pointed to another account
+      stored that `company_id` and survived reload; link-existing conversion set the existing contact and
+      account (none created); an existing email raised "1 possible duplicate". Seed removed, re-counted.
   - **FIXED (migration 068, 2026-10-11) — meetings.id repeated itself past MTG999.** Migration 049 used
     `'MTG' || LPAD(nextval(..)::text, 3, '0')`, the exact pattern 033 removed from the other four tables:
     Postgres lpad() TRUNCATES, so 1041 became MTG104 and every create past 999 collided on the primary
