@@ -31,7 +31,7 @@ it('shows no view/download counts or sorts, and Download hits the content endpoi
   vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} }));
   const { container } = render(<MemoryRouter><DocumentsLibrary /></MemoryRouter>);
   await screen.findAllByText('Kora proposal.pdf');
-  expect(container.textContent).not.toMatch(/\d+ views|\d+ downloads|Most Viewed|Most Downloaded/);
+  expect(container.textContent).not.toMatch(/\d+ views|\d+ downloads|Most Viewed|Most Downloaded|you viewed|View All \(\d+\)/);
   // Both download controls — the recent strip's and the card's — fetch the file.
   const buttons = screen.getAllByTitle('Download');
   expect(buttons.length).toBe(2);

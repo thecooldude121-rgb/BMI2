@@ -272,7 +272,8 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
           <div className="flex items-center gap-2">
             <Pin className="w-5 h-5 text-gray-500" />
             <h2 className="text-base font-semibold text-[#1f2937]">RECENT DOCUMENTS</h2>
-            <span className="text-xs text-gray-500">(Last {recentDocuments.length} you viewed)</span>
+            {/* "Last N you viewed" claimed view tracking; these are the newest UPLOADS. */}
+            <span className="text-xs text-gray-500">(Latest {recentDocuments.length} uploaded)</span>
           </div>
           <div className="flex items-center gap-4">
             {isRecentFilterActive ? (
@@ -288,7 +289,7 @@ const RecentDocumentsSection: React.FC<RecentDocumentsSectionProps> = ({
                 onClick={onViewAll}
                 className="flex items-center gap-1 text-[13px] font-medium text-[#3b82f6] hover:text-blue-700 transition-colors"
               >
-                View All (15)
+                View All
                 <ChevronRight className="w-4 h-4" />
               </button>
             )}
